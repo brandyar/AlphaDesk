@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Vazirmatn', sans-serif;
+}
+
+@layer base {
+  :root {
+    font-family: 'Vazirmatn', sans-serif !important;
+    color-scheme: dark;
+  }
+
+  * {
+    font-family: 'Vazirmatn', sans-serif !important;
+  }
+
+  body {
+    font-family: 'Vazirmatn', sans-serif !important;
+    background-color: #121212;
+    color: #FFFFFF;
+    overflow-x: hidden;
+  }
+
+  input, button, select, textarea {
+    font-family: 'Vazirmatn', sans-serif !important;
+  }
+
+  /* Custom scrollbar for dark Spotify-like interface */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #121212;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #282828;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #535353;
+  }
+}
+

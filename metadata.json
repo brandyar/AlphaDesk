@@ -1,0 +1,6 @@
+{
+  "name": "سامانه مدیریت ارتباط با مشتریان و پرسنل (Green Deck CRM)",
+  "description": "پرتال یکپارچه مدیریت مشتریان، گزارش‌های مذاکره و پیگیری، سرنخ‌های اولیه و گزارش روزانه عملکرد پرسنل",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
