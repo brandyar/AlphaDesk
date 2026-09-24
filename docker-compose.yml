@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: greendeck-crm
+    container_name: alphadesk-crm
     restart: always
     ports:
       - "${PORT:-3000}:3000"

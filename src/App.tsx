@@ -245,7 +245,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-[#121212] text-white overflow-hidden font-sans">
-      {/* Spotify-style Green Deck Sidebar */}
+      {/* Spotify-style AlphaDesk Sidebar */}
       <Sidebar
         activeTab={activeTab}
         onSelectTab={(tab) => {

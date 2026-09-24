@@ -114,12 +114,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div>
               <h1 className="font-extrabold text-white text-base tracking-tight flex items-center gap-1.5">
-                <span>Green Deck</span>
+                <span>AlphaDesk</span>
                 <span className="text-[#1DB954] text-xs font-mono font-normal px-1.5 py-0.5 bg-[#1DB954]/15 rounded">
                   CRM
                 </span>
               </h1>
-              <p className="text-[#A7A7A7] text-[11px]">مدیریت ارتباط و پرسنل</p>
+              <p className="text-[#A7A7A7] text-[11px]">آلفادسک • مدیریت ارتباط و پرسنل</p>
             </div>
           </div>
 

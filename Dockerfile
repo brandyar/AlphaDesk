@@ -1,5 +1,5 @@
 # ========================================================
-# Green Deck CRM - Production Dockerfile for Coolify
+# AlphaDesk CRM - Production Dockerfile for Coolify
 # Fully offline OS build (No apk/apt network calls needed)
 # ========================================================
 
