@@ -1,4 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import {
+  LayoutDashboard,
+  Users,
+  MessageSquareText,
+  PhoneCall,
+  ClipboardCheck
+} from 'lucide-react';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
@@ -42,6 +49,7 @@ import {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Core Data State
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -240,7 +248,10 @@ export default function App() {
       {/* Spotify-style Green Deck Sidebar */}
       <Sidebar
         activeTab={activeTab}
-        onSelectTab={(tab) => setActiveTab(tab)}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          setIsMobileMenuOpen(false);
+        }}
         counts={{
           customers: customers.length,
           expiredCustomers: expiredCount,
@@ -249,6 +260,8 @@ export default function App() {
           adminReports: adminReports.length,
         }}
         currentPersonnel={currentPersonnel}
+        isOpenMobile={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
 
       {/* Main Container */}
@@ -275,10 +288,12 @@ export default function App() {
           onOpenNewLead={() => {
             setActiveTab('cold_leads');
           }}
+          isMobileMenuOpen={isMobileMenuOpen}
+          onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         />
 
         {/* Dynamic Main View */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8">
+        <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 lg:p-8 pb-24 lg:pb-8">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-64 space-y-3">
               <div className="w-8 h-8 rounded-full border-2 border-[#1DB954] border-t-transparent animate-spin" />
@@ -363,6 +378,64 @@ export default function App() {
             </>
           )}
         </main>
+
+        {/* Mobile Bottom Navigation Bar (Phone-friendly) */}
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 h-16 bg-[#0c0c0c]/95 backdrop-blur-md border-t border-[#282828] flex items-center justify-around px-1 select-none">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
+              activeTab === 'dashboard' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4 mb-0.5" />
+            <span>داشبورد</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('customers')}
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors relative ${
+              activeTab === 'customers' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            }`}
+          >
+            <div className="relative">
+              <Users className="w-4 h-4 mb-0.5" />
+              {expiredCount > 0 && (
+                <span className="absolute -top-1 -right-2 w-2 h-2 rounded-full bg-[#E22134] animate-pulse" />
+              )}
+            </div>
+            <span>مشتریان</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('reports')}
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
+              activeTab === 'reports' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            }`}
+          >
+            <MessageSquareText className="w-4 h-4 mb-0.5" />
+            <span>مذاکرات</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('cold_leads')}
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
+              activeTab === 'cold_leads' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            }`}
+          >
+            <PhoneCall className="w-4 h-4 mb-0.5" />
+            <span>لیدها</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('admin_reports')}
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
+              activeTab === 'admin_reports' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            }`}
+          >
+            <ClipboardCheck className="w-4 h-4 mb-0.5" />
+            <span>عملکرد</span>
+          </button>
+        </nav>
       </div>
 
       {/* Customer Registration & Edit Modal */}

@@ -118,10 +118,10 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#181818] border border-[#282828] w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden my-6 max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-[#181818] border border-[#282828] w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-6 max-h-[95vh] sm:max-h-[90vh] flex flex-col">
         {/* Top Header */}
-        <div className="p-6 bg-[#121212] border-b border-[#282828] flex flex-wrap items-center justify-between gap-4">
+        <div className="p-4 sm:p-6 bg-[#121212] border-b border-[#282828] flex flex-wrap items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-12 h-12 rounded-xl bg-[#282828] border border-[#3e3e3e] flex items-center justify-center text-[#1DB954] font-black text-xl flex-shrink-0">
               {customer.company_name.charAt(0)}
@@ -180,7 +180,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
         </div>
 
         {/* Scrollable Content Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1">
           {/* Marketer Assignment Bar & Expiration Timer */}
           <div
             className={`p-4 rounded-xl border flex flex-wrap items-center justify-between gap-4 ${

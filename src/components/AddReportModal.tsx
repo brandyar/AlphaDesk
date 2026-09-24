@@ -67,11 +67,11 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#181818] border border-[#282828] w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden my-8">
-        <div className="p-5 bg-[#121212] border-b border-[#282828] flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-[#181818] border border-[#282828] w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-8 max-h-[95vh] flex flex-col">
+        <div className="p-4 sm:p-5 bg-[#121212] border-b border-[#282828] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#1DB954]/15 text-[#1DB954] flex items-center justify-center border border-[#1DB954]/30">
+            <div className="w-9 h-9 rounded-full bg-[#1DB954]/15 text-[#1DB954] flex items-center justify-center border border-[#1DB954]/30 flex-shrink-0">
               <MessageSquareText className="w-4 h-4" />
             </div>
             <div>
@@ -87,7 +87,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {/* Customer Selection */}
           <div>
             <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">

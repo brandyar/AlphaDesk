@@ -14,14 +14,17 @@ RUN apk add --no-cache libc6-compat
 # Copy package descriptors
 COPY package*.json ./
 
-# Install all dependencies for build phase
-RUN npm ci
+# Install dependencies (robust for any git branch / cache state)
+RUN npm install --legacy-peer-deps
 
 # Copy project source files
 COPY . .
 
 # Build the client SPA into /dist
 RUN npm run build
+
+# Prune devDependencies to keep only production packages
+RUN npm prune --omit=dev
 
 # --- Stage 2: Production Execution Image ---
 FROM node:20-alpine AS runner
@@ -38,11 +41,9 @@ RUN apk add --no-cache wget curl
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 crmuser
 
-# Copy package descriptors
-COPY package*.json ./
-
-# Install runtime dependencies only
-RUN npm ci --omit=dev
+# Copy pruned production node_modules from builder
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
 
 # Copy built static assets from builder
 COPY --from=builder /app/dist ./dist

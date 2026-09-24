@@ -181,19 +181,19 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#181818] border border-[#282828] w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-[#181818] border border-[#282828] w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-8 max-h-[95vh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="p-6 bg-[#121212] border-b border-[#282828] flex items-center justify-between">
+        <div className="p-4 sm:p-6 bg-[#121212] border-b border-[#282828] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954]">
-              <Building className="w-5 h-5" />
+            <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-full bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954] flex-shrink-0">
+              <Building className="w-4 sm:w-5 h-4 sm:h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">
+              <h2 className="text-base sm:text-lg font-bold text-white">
                 {editingCustomer ? 'ویرایش پرونده مشتری' : 'ثبت پرونده مشتری جدید'}
               </h2>
-              <p className="text-xs text-[#A7A7A7]">
+              <p className="text-[11px] sm:text-xs text-[#A7A7A7]">
                 ثبت اطلاعات کامل شرکت، راه‌های ارتباطی، مصاحبه اولیه و مهلت بازاریاب
               </p>
             </div>
@@ -207,11 +207,11 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
         </div>
 
         {/* Tab switcher inside modal */}
-        <div className="flex border-b border-[#282828] bg-[#141414] px-6 pt-2">
+        <div className="flex border-b border-[#282828] bg-[#141414] px-3 sm:px-6 pt-2 overflow-x-auto whitespace-nowrap scrollbar-none">
           <button
             type="button"
             onClick={() => setActiveTab('info')}
-            className={`pb-3 px-4 text-xs font-bold transition-colors relative ${
+            className={`pb-3 px-3 sm:px-4 text-xs font-bold transition-colors relative flex-shrink-0 ${
               activeTab === 'info'
                 ? 'text-[#1DB954]'
                 : 'text-[#A7A7A7] hover:text-white'
@@ -225,7 +225,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('socials')}
-            className={`pb-3 px-4 text-xs font-bold transition-colors relative ${
+            className={`pb-3 px-3 sm:px-4 text-xs font-bold transition-colors relative flex-shrink-0 ${
               activeTab === 'socials'
                 ? 'text-[#1DB954]'
                 : 'text-[#A7A7A7] hover:text-white'
@@ -239,20 +239,20 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('interview')}
-            className={`pb-3 px-4 text-xs font-bold transition-colors relative ${
+            className={`pb-3 px-3 sm:px-4 text-xs font-bold transition-colors relative flex-shrink-0 ${
               activeTab === 'interview'
                 ? 'text-[#1DB954]'
                 : 'text-[#A7A7A7] hover:text-white'
             }`}
           >
-            گزارش مصاحبه و تخصیص بازاریاب
+            گزارش مصاحبه و تخصیص
             {activeTab === 'interview' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1DB954]" />
             )}
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[72vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1">
           {/* TAB 1: General Info & Direct Phones */}
           {activeTab === 'info' && (
             <div className="space-y-6">
