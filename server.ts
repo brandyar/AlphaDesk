@@ -433,6 +433,16 @@ async function directusFetch(path: string, options: RequestInit = {}) {
 
 // ----------------- BFF API ROUTES ----------------- //
 
+// Health check endpoint for Coolify / Docker container monitoring
+app.get('/api/health', (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    port: PORT
+  });
+});
+
 // Directus / BFF Status & Settings
 app.get('/api/bff-status', async (req: Request, res: Response) => {
   let isDirectusReachable = false;
@@ -987,8 +997,13 @@ async function setupViteOrStatic() {
     if (fs.existsSync(distPath)) {
       app.use(express.static(distPath));
       app.get('*', (req, res) => {
+        if (req.path.startsWith('/api')) {
+          return res.status(404).json({ error: 'API endpoint not found' });
+        }
         res.sendFile(path.resolve(distPath, 'index.html'));
       });
+    } else {
+      console.warn('Production build dist folder not found! Run npm run build first.');
     }
   }
 
