@@ -1,13 +1,16 @@
-import React from 'react';
-import { Search, AlertTriangle, Plus, PhoneCall, Menu, X } from 'lucide-react';
-import { Personnel } from '../types';
+import React, { useState } from 'react';
+import { Search, AlertTriangle, Plus, PhoneCall, Menu, X, LogIn, LogOut, ShieldCheck, UserCheck, ChevronDown, Sparkles } from 'lucide-react';
+import { Personnel, AuthUser } from '../types';
 
 interface HeaderProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   personnelList: Personnel[];
   currentPersonnel: Personnel | null;
+  currentUser: AuthUser | null;
   onSelectPersonnel: (p: Personnel) => void;
+  onOpenAuthModal: () => void;
+  onLogout: () => void;
   expiredCount: number;
   onViewExpired: () => void;
   onOpenNewCustomer: () => void;
@@ -21,7 +24,10 @@ export const Header: React.FC<HeaderProps> = ({
   onSearchChange,
   personnelList,
   currentPersonnel,
+  currentUser,
   onSelectPersonnel,
+  onOpenAuthModal,
+  onLogout,
   expiredCount,
   onViewExpired,
   onOpenNewCustomer,
@@ -29,9 +35,15 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleMobileMenu,
   isMobileMenuOpen,
 }) => {
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+
+  const isAdmin = currentUser?.is_admin || currentPersonnel?.role === 'admin' || currentPersonnel?.role === 'sales_manager';
+  const displayName = currentUser?.name || currentPersonnel?.name || 'کاربر مهمان';
+  const initial = displayName.charAt(0) || 'U';
+
   return (
     <header className="h-16 sm:h-18 bg-[#121212] border-b border-[#282828] sticky top-0 z-30 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 select-none">
-      {/* Mobile Hamburger & Brand Mini Toggle */}
+      {/* Mobile Hamburger */}
       <div className="flex items-center gap-2">
         <button
           onClick={onToggleMobileMenu}
@@ -43,7 +55,7 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
       </div>
 
-      {/* Search Input - responsive */}
+      {/* Search Input */}
       <div className="flex-1 max-w-xs sm:max-w-sm md:max-w-md relative min-w-0">
         <input
           type="text"
@@ -98,27 +110,127 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Personnel User Switcher */}
-        <div className="flex items-center gap-1 sm:gap-2 pl-1 pr-1.5 sm:pr-2 py-0.5 sm:py-1 bg-[#181818] border border-[#282828] rounded-full max-w-[130px] sm:max-w-none">
-          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#282828] flex items-center justify-center text-[#1DB954] font-bold text-[11px] sm:text-xs flex-shrink-0">
-            {currentPersonnel ? currentPersonnel.name.charAt(0) : 'U'}
+        {/* User Account / Profile Dropdown */}
+        {currentUser ? (
+          <div className="relative">
+            <button
+              onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+              className="flex items-center gap-1.5 sm:gap-2 pl-2 pr-1.5 py-1 bg-[#181818] hover:bg-[#222222] border border-[#282828] rounded-full transition-colors cursor-pointer group"
+              title="حساب کاربری"
+            >
+              <div
+                className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-sm ${
+                  isAdmin
+                    ? 'bg-[#1DB954] text-black'
+                    : 'bg-[#282828] text-[#1DB954] border border-[#3e3e3e]'
+                }`}
+              >
+                {initial}
+              </div>
+
+              <div className="hidden md:flex flex-col text-right leading-tight pr-0.5">
+                <span className="text-xs font-bold text-white max-w-[110px] truncate">
+                  {displayName}
+                </span>
+                <span className={`text-[10px] ${isAdmin ? 'text-[#1DB954]' : 'text-[#888888]'}`}>
+                  {isAdmin ? 'مدیر سیستم' : 'کارشناس فروش'}
+                </span>
+              </div>
+
+              <ChevronDown className="w-3 h-3 text-[#777777] group-hover:text-white transition-colors" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isProfileMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsProfileMenuOpen(false)}
+                />
+                <div className="absolute left-0 mt-2 w-56 bg-[#181818] border border-[#2e2e2e] rounded-2xl shadow-2xl shadow-black/80 py-2 z-50 animate-fade-in text-right">
+                  <div className="px-3.5 py-2 border-b border-[#282828]">
+                    <div className="text-xs font-bold text-white truncate">{displayName}</div>
+                    <div className="text-[11px] text-[#777777] truncate font-mono" dir="ltr">
+                      {currentUser.email}
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-1">
+                      {isAdmin ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#1DB954]/15 border border-[#1DB954]/30 text-[#1DB954] text-[10px] font-bold">
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>مدیر سیستم (دسترسی کامل)</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#333333] border border-[#444444] text-white text-[10px]">
+                          <UserCheck className="w-3 h-3 text-[#1DB954]" />
+                          <span>کارشناس فروش (اطلاعات خود)</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Switch Active User / Switch personnel (if Admin) */}
+                  {isAdmin && personnelList.length > 0 && (
+                    <div className="px-3.5 py-2 border-b border-[#282828]">
+                      <label className="block text-[10px] text-[#777777] mb-1 font-medium">
+                        مشاهده به عنوان کارشناس:
+                      </label>
+                      <select
+                        aria-label="سوئیچ سریع به عنوان کارشناس"
+                        value={currentPersonnel?.id || ''}
+                        onChange={(e) => {
+                          const selected = personnelList.find((p) => p.id === e.target.value);
+                          if (selected) {
+                            onSelectPersonnel(selected);
+                            setIsProfileMenuOpen(false);
+                          }
+                        }}
+                        className="w-full bg-[#121212] border border-[#282828] rounded-lg px-2 py-1 text-xs text-white focus:outline-none cursor-pointer"
+                      >
+                        {personnelList.map((p) => (
+                          <option key={p.id} value={p.id} className="bg-[#181818] text-white">
+                            {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="px-1 pt-1">
+                    <button
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        onOpenAuthModal();
+                      }}
+                      className="w-full px-3 py-2 text-xs text-[#A7A7A7] hover:text-white hover:bg-[#282828] rounded-xl flex items-center gap-2 transition-colors"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-[#1DB954]" />
+                      <span>تغییر حساب / ورود دیگر</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        onLogout();
+                      }}
+                      className="w-full px-3 py-2 text-xs text-[#E22134] hover:bg-[#E22134]/15 rounded-xl flex items-center gap-2 transition-colors font-medium mt-0.5"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>خروج از حساب</span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-          <select
-            aria-label="انتخاب پرسنل فعال"
-            value={currentPersonnel?.id || ''}
-            onChange={(e) => {
-              const selected = personnelList.find((p) => p.id === e.target.value);
-              if (selected) onSelectPersonnel(selected);
-            }}
-            className="bg-transparent text-[11px] sm:text-xs text-white focus:outline-none cursor-pointer pr-0.5 max-w-[85px] sm:max-w-[140px] truncate"
+        ) : (
+          <button
+            onClick={onOpenAuthModal}
+            className="flex items-center gap-1.5 h-8 sm:h-9 px-3 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20"
           >
-            {personnelList.map((p) => (
-              <option key={p.id} value={p.id} className="bg-[#181818] text-white">
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+            <LogIn className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>ورود / عضویت</span>
+          </button>
+        )}
       </div>
     </header>
   );

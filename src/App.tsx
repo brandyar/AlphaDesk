@@ -21,6 +21,7 @@ import { ShiftsView } from './components/ShiftsView';
 import { CustomerModal } from './components/CustomerModal';
 import { CustomerDetailModal } from './components/CustomerDetailModal';
 import { AddReportModal } from './components/AddReportModal';
+import { AuthModal } from './components/AuthModal';
 
 import {
   Customer,
@@ -31,6 +32,8 @@ import {
   Personnel,
   BffStatus,
   LeadStatus,
+  AuthUser,
+  AuthResponse,
 } from './types';
 
 import {
@@ -52,11 +55,19 @@ import {
   fetchPersonnel,
   fetchBffStatus,
   setApiPersonnelContext,
+  getStoredAuthSession,
+  saveAuthSession,
+  logoutUser,
 } from './api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Authentication State
+  const initialSession = getStoredAuthSession();
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(initialSession.user);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   // Toast Notifications
   const [toast, setToast] = useState<{ id: number; message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -75,7 +86,7 @@ export default function App() {
   const [coldLeads, setColdLeads] = useState<ColdLead[]>([]);
   const [adminReports, setAdminReports] = useState<AdministrativeReport[]>([]);
   const [personnelList, setPersonnelList] = useState<Personnel[]>([]);
-  const [currentPersonnel, setCurrentPersonnel] = useState<Personnel | null>(null);
+  const [currentPersonnel, setCurrentPersonnel] = useState<Personnel | null>(initialSession.personnel);
   const [bffStatus, setBffStatus] = useState<BffStatus | null>(null);
 
   // Filters & Search
@@ -98,7 +109,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   // Initial Data Load
-  const loadAllData = async () => {
+  const loadAllData = async (activeP?: Personnel | null) => {
     try {
       const [pData, cData, rData, lData, aData, bStatus] = await Promise.all([
         fetchPersonnel().catch(() => []),
@@ -110,10 +121,13 @@ export default function App() {
       ]);
 
       setPersonnelList(pData);
-      if (pData.length > 0 && !currentPersonnel) {
-        setCurrentPersonnel(pData[0]);
-        setApiPersonnelContext(pData[0]);
+      
+      const targetPersonnel = activeP || currentPersonnel || (pData.length > 0 ? pData[0] : null);
+      if (targetPersonnel) {
+        setCurrentPersonnel(targetPersonnel);
+        setApiPersonnelContext(targetPersonnel);
       }
+
       setCustomers(cData);
       setReports(rData);
       setColdLeads(lData);
@@ -154,6 +168,23 @@ export default function App() {
       });
     }
   }, [currentPersonnel]);
+
+  const handleAuthSuccess = (authData: AuthResponse) => {
+    setCurrentUser(authData.user);
+    if (authData.personnel) {
+      setCurrentPersonnel(authData.personnel);
+      setApiPersonnelContext(authData.personnel);
+    }
+    showToast(`خوش آمدید ${authData.user.name} (${authData.user.is_admin ? 'مدیر سیستم' : 'کارشناس فروش'})`, 'success');
+    loadAllData(authData.personnel);
+  };
+
+  const handleLogout = () => {
+    logoutUser();
+    setCurrentUser(null);
+    showToast('از حساب کاربری خود خارج شدید.', 'info');
+    loadAllData();
+  };
 
   // Filter customers for current view
   const filteredCustomers = customers.filter((c) => {
@@ -349,6 +380,46 @@ export default function App() {
     }
   };
 
+  // If not authenticated, block dashboard and show full-screen login/register
+  if (!currentUser) {
+    return (
+      <>
+        <AuthModal
+          isOpen={true}
+          isFullScreen={true}
+          canClose={false}
+          onAuthSuccess={handleAuthSuccess}
+        />
+        {toast && (
+          <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] max-w-md w-full px-4 animate-in slide-in-from-top-4 duration-200">
+            <div
+              className={`p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border ${
+                toast.type === 'success'
+                  ? 'bg-[#141414]/95 border-[#1DB954]/50 text-white shadow-[#1DB954]/10'
+                  : toast.type === 'error'
+                  ? 'bg-red-950/95 border-red-500/50 text-white shadow-red-500/20'
+                  : 'bg-[#222222]/95 border-[#444] text-white shadow-black/40'
+              } backdrop-blur-md`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                {toast.type === 'success' && <CheckCircle className="w-5 h-5 text-[#1DB954] flex-shrink-0" />}
+                {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />}
+                {toast.type === 'info' && <Info className="w-5 h-5 text-blue-400 flex-shrink-0" />}
+                <span className="text-xs font-semibold leading-relaxed truncate">{toast.message}</span>
+              </div>
+              <button
+                onClick={() => setToast(null)}
+                className="text-[#888] hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors flex-shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-[#121212] text-white overflow-hidden font-sans">
       {/* Spotify-style AlphaDesk Sidebar */}
@@ -378,7 +449,10 @@ export default function App() {
           onSearchChange={setSearchQuery}
           personnelList={personnelList}
           currentPersonnel={currentPersonnel}
+          currentUser={currentUser}
           onSelectPersonnel={setCurrentPersonnel}
+          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          onLogout={handleLogout}
           expiredCount={expiredCount}
           onViewExpired={() => {
             setActiveTab('customers');
@@ -588,6 +662,13 @@ export default function App() {
         personnelList={personnelList}
         currentPersonnel={currentPersonnel}
         onSaveReport={handleAddCustomerReport}
+      />
+
+      {/* User Login & Registration Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
       />
 
       {/* Floating System Toast Notifications */}

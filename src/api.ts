@@ -9,11 +9,29 @@ import {
   Personnel,
   BffStatus,
   LeadStatus,
+  AuthUser,
+  AuthResponse,
+  RegisterPayload,
 } from './types';
 
 const BASE_URL = '/api';
 
+const AUTH_STORAGE_KEY = 'crm_auth_session';
+
 let currentPersonnelContext: Personnel | null = null;
+let currentAuthUser: AuthUser | null = null;
+let currentAuthToken: string = '';
+
+// Load initial stored auth session if available
+try {
+  const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+  if (saved) {
+    const parsed = JSON.parse(saved);
+    currentAuthToken = parsed.access_token || '';
+    currentAuthUser = parsed.user || null;
+    currentPersonnelContext = parsed.personnel || null;
+  }
+} catch {}
 
 export function setApiPersonnelContext(p: Personnel | null) {
   currentPersonnelContext = p;
@@ -23,15 +41,55 @@ export function getApiPersonnelContext(): Personnel | null {
   return currentPersonnelContext;
 }
 
+export function getStoredAuthSession(): { user: AuthUser | null; personnel: Personnel | null; token: string } {
+  return {
+    user: currentAuthUser,
+    personnel: currentPersonnelContext,
+    token: currentAuthToken,
+  };
+}
+
+export function saveAuthSession(data: AuthResponse) {
+  currentAuthToken = data.access_token || '';
+  currentAuthUser = data.user || null;
+  currentPersonnelContext = data.personnel || null;
+  try {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data));
+  } catch {}
+}
+
+export function clearAuthSession() {
+  currentAuthToken = '';
+  currentAuthUser = null;
+  currentPersonnelContext = null;
+  try {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  } catch {}
+}
+
 function getBffHeaders(customHeaders: Record<string, string> = {}): Record<string, string> {
   const headers: Record<string, string> = {
     ...customHeaders,
   };
-  if (currentPersonnelContext) {
-    headers['x-user-id'] = currentPersonnelContext.id;
-    headers['x-user-role'] = currentPersonnelContext.role;
-    headers['x-user-name'] = encodeURIComponent(currentPersonnelContext.name);
+
+  if (currentAuthToken) {
+    headers['Authorization'] = `Bearer ${currentAuthToken}`;
   }
+
+  if (currentAuthUser) {
+    headers['x-user-id'] = currentAuthUser.id;
+    headers['x-user-role'] = currentAuthUser.app_role || (currentAuthUser.is_admin ? 'admin' : 'marketer');
+    if (currentAuthUser.role_id) headers['x-role-id'] = currentAuthUser.role_id;
+    headers['x-user-email'] = currentAuthUser.email;
+    headers['x-user-name'] = encodeURIComponent(currentAuthUser.name);
+  }
+
+  if (currentPersonnelContext) {
+    headers['x-personnel-id'] = currentPersonnelContext.id;
+    if (!headers['x-user-role']) headers['x-user-role'] = currentPersonnelContext.role;
+    if (!headers['x-user-name']) headers['x-user-name'] = encodeURIComponent(currentPersonnelContext.name);
+  }
+
   return headers;
 }
 
@@ -48,6 +106,47 @@ async function handleResponse<T>(res: globalThis.Response, defaultErrorMsg: stri
   }
   return res.json();
 }
+
+// ----------------- Auth API ----------------- //
+
+export async function loginUser(email: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await handleResponse<AuthResponse>(res, 'خطا در ورود به سامانه');
+  if (data && data.success) {
+    saveAuthSession(data);
+  }
+  return data;
+}
+
+export async function registerUser(payload: RegisterPayload): Promise<AuthResponse> {
+  const res = await fetch(`${BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await handleResponse<AuthResponse>(res, 'خطا در ثبت نام کاربر');
+  if (data && data.success) {
+    saveAuthSession(data);
+  }
+  return data;
+}
+
+export async function getMe(): Promise<any> {
+  const res = await fetch(`${BASE_URL}/auth/me`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse(res, 'خطا در احراز هویت');
+}
+
+export async function logoutUser(): Promise<void> {
+  clearAuthSession();
+}
+
+// ----------------- Core BFF Data APIs ----------------- //
 
 export async function fetchBffStatus(): Promise<BffStatus> {
   const res = await fetch(`${BASE_URL}/bff-status`, {

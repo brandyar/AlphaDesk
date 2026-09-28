@@ -471,8 +471,8 @@ function updateExpirationFlags() {
   customersData = customersData.map(c => computeCustomerExpiration(c));
 }
 
-// Directus API Request Forwarder
-async function directusFetch(path: string, options: RequestInit = {}): Promise<any> {
+// Directus API Request Forwarder with retry and timeout resilience
+async function directusFetch(path: string, options: RequestInit = {}, retries = 2): Promise<any> {
   if (!directusUrl) {
     throw new Error('DIRECTUS_URL_NOT_CONFIGURED');
   }
@@ -489,34 +489,49 @@ async function directusFetch(path: string, options: RequestInit = {}): Promise<a
     headers['Authorization'] = `Bearer ${directusAdminToken}`;
   }
 
-  const res = await fetch(url, {
-    ...options,
-    headers
-  });
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    let parsedMessage = errorText;
+  for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const errJson = JSON.parse(errorText);
-      if (errJson.errors && Array.isArray(errJson.errors) && errJson.errors[0]?.message) {
-        parsedMessage = errJson.errors[0].message;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const res = await fetch(url, {
+        ...options,
+        headers,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        let parsedMessage = errorText;
+        try {
+          const errJson = JSON.parse(errorText);
+          if (errJson.errors && Array.isArray(errJson.errors) && errJson.errors[0]?.message) {
+            parsedMessage = errJson.errors[0].message;
+          }
+        } catch {}
+        throw new Error(parsedMessage);
       }
-    } catch {}
-    throw new Error(parsedMessage);
-  }
 
-  if (res.status === 204) {
-    return { success: true };
-  }
+      if (res.status === 204) {
+        return { success: true };
+      }
 
-  const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    return res.json();
-  }
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        return await res.json();
+      }
 
-  const text = await res.text();
-  return { data: text, text };
+      const text = await res.text();
+      return { data: text, text };
+    } catch (err: any) {
+      if (attempt < retries && (err.name === 'AbortError' || err.message?.includes('fetch failed') || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT')) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 // Auto-seed personnel into Directus so foreign key assigned_marketer_id is always satisfied
@@ -849,14 +864,303 @@ async function asyncCheckContactDuplicate(value: string, channelType?: string, c
   };
 }
 
+const DIRECTUS_ADMIN_ROLE_ID = 'a45beaec-0272-4c29-89ee-122dce37f565';
+const DIRECTUS_STAFF_ROLE_ID = 'b9c11357-4926-47ad-b020-6080cb2a62df';
+
 // ----------------- BFF API & RBAC LAYER ----------------- //
 
 function getRequestUser(req: Request) {
   const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string) || '';
+  const personnelId = (req.headers['x-personnel-id'] as string) || (req.query.personnel_id as string) || userId;
   const userRole = (req.headers['x-user-role'] as string) || (req.query.user_role as string) || 'admin';
+  const roleId = (req.headers['x-role-id'] as string) || (req.query.role_id as string) || '';
   const userName = req.headers['x-user-name'] ? decodeURIComponent(req.headers['x-user-name'] as string) : '';
-  return { userId, userRole, userName };
+  const userEmail = (req.headers['x-user-email'] as string) || '';
+
+  const isAdmin =
+    userRole === 'admin' ||
+    userRole === 'sales_manager' ||
+    roleId === DIRECTUS_ADMIN_ROLE_ID;
+
+  return {
+    userId,
+    personnelId,
+    userRole: isAdmin ? 'admin' : 'marketer',
+    roleId,
+    isAdmin,
+    userName,
+    userEmail
+  };
 }
+
+// Authentication Endpoints
+app.post('/api/auth/register', async (req: Request, res: Response) => {
+  const { email, password, name, phone, first_name, last_name } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'ایمیل و کلمه عبور الزامی هستند.' });
+  }
+
+  if (String(password).length < 6) {
+    return res.status(400).json({ error: 'کلمه عبور باید حداقل ۶ کاراکتر باشد.' });
+  }
+
+  const cleanEmail = String(email).trim().toLowerCase();
+  const fullName = (name || `${first_name || ''} ${last_name || ''}`).trim() || cleanEmail.split('@')[0];
+  const fName = (first_name || fullName.split(' ')[0] || 'کاربر').trim();
+  const lName = (last_name || fullName.split(' ').slice(1).join(' ') || 'جدید').trim();
+  const cleanPhone = (phone || '').trim();
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      // 1. Check if user already exists
+      const existingRes = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(cleanEmail)}`);
+      if (existingRes && Array.isArray(existingRes.data) && existingRes.data.length > 0) {
+        return res.status(400).json({ error: 'این ایمیل قبلاً در سامانه ثبت شده است. لطفاً وارد شوید.' });
+      }
+
+      // 2. Create user with staff role in Directus
+      const newUserPayload = {
+        email: cleanEmail,
+        password: String(password),
+        first_name: fName,
+        last_name: lName,
+        role: DIRECTUS_STAFF_ROLE_ID,
+        status: 'active'
+      };
+
+      const createdUserRes = await directusFetch('/users', {
+        method: 'POST',
+        body: JSON.stringify(newUserPayload)
+      });
+      const createdUser = createdUserRes.data;
+
+      // 3. Create or link Personnel entry with user_id
+      const personnelId = crypto.randomUUID();
+      const personnelPayload = {
+        id: personnelId,
+        name: fullName,
+        email: cleanEmail,
+        phone: cleanPhone,
+        role: 'marketer',
+        status: 'active',
+        user_id: createdUser.id
+      };
+
+      await directusFetch('/items/personnel', {
+        method: 'POST',
+        body: JSON.stringify(personnelPayload)
+      }).catch(async () => {
+        // If id conflict or already exists by email, update it
+        const existP = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(cleanEmail)}`).catch(() => null);
+        if (existP && existP.data && existP.data.length > 0) {
+          await directusFetch(`/items/personnel/${existP.data[0].id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ user_id: createdUser.id, name: fullName, phone: cleanPhone })
+          }).catch(() => {});
+        }
+      });
+
+      // 4. Perform login to get token
+      let loginToken = '';
+      try {
+        const loginRes = await directusFetch('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email: cleanEmail, password: String(password) })
+        });
+        loginToken = loginRes.data?.access_token || '';
+      } catch {}
+
+      return res.status(201).json({
+        success: true,
+        message: 'ثبت نام با موفقیت انجام شد.',
+        access_token: loginToken,
+        user: {
+          id: createdUser.id,
+          email: createdUser.email,
+          first_name: createdUser.first_name,
+          last_name: createdUser.last_name,
+          name: fullName,
+          role_id: DIRECTUS_STAFF_ROLE_ID,
+          is_admin: false,
+          app_role: 'marketer'
+        },
+        personnel: {
+          id: personnelId,
+          name: fullName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          role: 'marketer',
+          status: 'active',
+          user_id: createdUser.id
+        }
+      });
+    } catch (err: any) {
+      console.error('Registration error:', err.message);
+      return res.status(500).json({ error: `خطا در ثبت نام کاربر: ${err.message}` });
+    }
+  }
+
+  // Local fallback
+  const mockUserId = crypto.randomUUID();
+  const mockPersonnel: Personnel = {
+    id: 'p-' + Date.now(),
+    name: fullName,
+    email: cleanEmail,
+    phone: cleanPhone,
+    role: 'marketer',
+    status: 'active',
+    active: true
+  };
+  personnelData.push(mockPersonnel);
+
+  res.status(201).json({
+    success: true,
+    user: {
+      id: mockUserId,
+      email: cleanEmail,
+      name: fullName,
+      role_id: DIRECTUS_STAFF_ROLE_ID,
+      is_admin: false,
+      app_role: 'marketer'
+    },
+    personnel: mockPersonnel,
+    access_token: 'local-token-' + mockUserId
+  });
+});
+
+app.post('/api/auth/login', async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'ایمیل و کلمه عبور را وارد کنید.' });
+  }
+
+  const cleanEmail = String(email).trim().toLowerCase();
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      // 1. Authenticate with Directus
+      let loginToken = '';
+      try {
+        const loginRes = await directusFetch('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email: cleanEmail, password: String(password) })
+        });
+        loginToken = loginRes.data?.access_token || '';
+      } catch (authErr: any) {
+        return res.status(401).json({ error: 'ایمیل یا کلمه عبور اشتباه است.' });
+      }
+
+      // 2. Fetch full user info including role
+      const userRes = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(cleanEmail)}&fields=*,role.*`);
+      if (!userRes || !Array.isArray(userRes.data) || userRes.data.length === 0) {
+        return res.status(404).json({ error: 'اطلاعات کاربری یافت نشد.' });
+      }
+
+      const user = userRes.data[0];
+      const roleId = typeof user.role === 'object' ? user.role?.id : user.role;
+      const isAdmin = roleId === DIRECTUS_ADMIN_ROLE_ID || user.role?.name?.toLowerCase() === 'administrator';
+
+      const fullName = (`${user.first_name || ''} ${user.last_name || ''}`).trim() || user.email;
+
+      // 3. Find or link personnel record
+      let personnelItem: any = null;
+      const pRes = await directusFetch(`/items/personnel?filter[_or][0][user_id][_eq]=${user.id}&filter[_or][1][email][_eq]=${encodeURIComponent(cleanEmail)}`).catch(() => null);
+      if (pRes && Array.isArray(pRes.data) && pRes.data.length > 0) {
+        personnelItem = pRes.data[0];
+        // Ensure user_id is saved
+        if (!personnelItem.user_id) {
+          await directusFetch(`/items/personnel/${personnelItem.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ user_id: user.id })
+          }).catch(() => {});
+        }
+      } else {
+        // Create personnel record if missing
+        const newPId = crypto.randomUUID();
+        const createdP = await directusFetch('/items/personnel', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: newPId,
+            name: fullName,
+            email: cleanEmail,
+            phone: '',
+            role: isAdmin ? 'admin' : 'marketer',
+            status: 'active',
+            user_id: user.id
+          })
+        }).catch(() => null);
+        personnelItem = createdP?.data || {
+          id: newPId,
+          name: fullName,
+          email: cleanEmail,
+          phone: '',
+          role: isAdmin ? 'admin' : 'marketer',
+          status: 'active',
+          user_id: user.id
+        };
+      }
+
+      return res.json({
+        success: true,
+        access_token: loginToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          name: fullName,
+          role_id: roleId,
+          is_admin: isAdmin,
+          app_role: isAdmin ? 'admin' : 'marketer'
+        },
+        personnel: personnelItem
+      });
+    } catch (err: any) {
+      console.error('Login error:', err.message);
+      return res.status(500).json({ error: `خطا در ورود به سامانه: ${err.message}` });
+    }
+  }
+
+  // Fallback if Directus is offline
+  const found = initialPersonnel.find(p => p.email.toLowerCase() === cleanEmail);
+  if (found) {
+    return res.json({
+      success: true,
+      access_token: 'local-token-' + found.id,
+      user: {
+        id: found.id,
+        email: found.email,
+        name: found.name,
+        role_id: found.role === 'admin' ? DIRECTUS_ADMIN_ROLE_ID : DIRECTUS_STAFF_ROLE_ID,
+        is_admin: found.role === 'admin',
+        app_role: found.role
+      },
+      personnel: found
+    });
+  }
+
+  res.status(401).json({ error: 'کاربری با این مشخصات یافت نشد.' });
+});
+
+app.get('/api/auth/me', async (req: Request, res: Response) => {
+  const { userId, personnelId, userRole, isAdmin, userName, userEmail } = getRequestUser(req);
+  if (!userId && !personnelId) {
+    return res.status(401).json({ error: 'کاربر وارد نشده است.' });
+  }
+
+  res.json({
+    user: {
+      id: userId || personnelId,
+      name: userName || 'کاربر سامانه',
+      email: userEmail,
+      is_admin: isAdmin,
+      app_role: userRole
+    },
+    personnel_id: personnelId
+  });
+});
 
 app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({
@@ -1204,7 +1508,7 @@ app.delete('/api/contacts/:id', async (req: Request, res: Response) => {
 // Customers API with BFF Role-Based Access Control
 app.get('/api/customers', async (req: Request, res: Response) => {
   const { search, status, marketer_id, expired_only } = req.query;
-  const { userId, userRole, userName } = getRequestUser(req);
+  const { userId, personnelId, userRole, isAdmin, userName } = getRequestUser(req);
 
   if (directusUrl && directusAdminToken) {
     try {
@@ -1213,17 +1517,13 @@ app.get('/api/customers', async (req: Request, res: Response) => {
         let list = result.data.map((c: any) => computeCustomerExpiration(c));
 
         // Role-Based Filtering:
-        // A marketer can only see:
-        // 1. Their own assigned customers
-        // 2. Expired customers (free to be reclaimed/worked)
-        // 3. Unassigned customers
-        if (userRole === 'marketer' && userId) {
+        // Admin sees ALL customers
+        // Staff/Marketer sees ONLY their own assigned customers
+        if (!isAdmin && (userId || personnelId)) {
           list = list.filter((c: any) =>
+            c.assigned_marketer_id === personnelId ||
             c.assigned_marketer_id === userId ||
-            (userName && c.assigned_marketer_name === userName) ||
-            c.is_expired ||
-            !c.assigned_marketer_id ||
-            c.assigned_marketer_id === 'none'
+            (userName && c.assigned_marketer_name === userName)
           );
         }
 
@@ -1272,6 +1572,14 @@ app.get('/api/customers', async (req: Request, res: Response) => {
     ...c,
     contacts: contactsData.filter(ct => ct.customer_id === c.id)
   }));
+
+  if (!isAdmin && (userId || personnelId)) {
+    filtered = filtered.filter(c =>
+      c.assigned_marketer_id === personnelId ||
+      c.assigned_marketer_id === userId ||
+      (userName && c.assigned_marketer_name === userName)
+    );
+  }
 
   if (search && typeof search === 'string') {
     const s = search.toLowerCase();
@@ -1779,7 +2087,7 @@ app.post('/api/customers/:id/reassign', async (req: Request, res: Response) => {
 // Customer Reports API
 app.get('/api/customer-reports', async (req: Request, res: Response) => {
   const { customer_id } = req.query;
-  const { userId, userRole, userName } = getRequestUser(req);
+  const { userId, personnelId, userRole, isAdmin, userName } = getRequestUser(req);
 
   if (directusUrl && directusAdminToken) {
     try {
@@ -1787,12 +2095,13 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
       const result = await directusFetch(`/items/customer_reports${q}`);
       if (result && Array.isArray(result.data)) {
         let reportsList = result.data;
-        // Marketer only sees their reports or reports for their accessible customers
-        if (userRole === 'marketer' && userName && !customer_id) {
+        // Marketer only sees their own reports when browsing general reports list
+        if (!isAdmin && (userId || personnelId || userName) && !customer_id) {
           reportsList = reportsList.filter((r: any) =>
             r.negotiator_name === userName ||
             r.created_by === userName ||
-            r.created_by === userId
+            r.created_by === userId ||
+            r.created_by === personnelId
           );
         }
         return res.json(reportsList);
@@ -1807,7 +2116,7 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
 
 app.post('/api/customer-reports', async (req: Request, res: Response) => {
   const payload = req.body;
-  const { userId, userName } = getRequestUser(req);
+  const { userId, personnelId, userName } = getRequestUser(req);
   const newReportId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
@@ -1831,7 +2140,7 @@ app.post('/api/customer-reports', async (req: Request, res: Response) => {
     negotiation_score: Number(payload.negotiation_score) || 5,
     next_followup_date: nextFollowup,
     negotiation_status: payload.negotiation_status || 'پیگیری قبل از انقضا',
-    created_by: userName || userId,
+    created_by: userName || personnelId || userId,
     date_created: nowIso
   };
 
@@ -1874,16 +2183,17 @@ app.post('/api/customer-reports', async (req: Request, res: Response) => {
 
 // Cold Leads API
 app.get('/api/cold-leads', async (req: Request, res: Response) => {
-  const { userId, userRole, userName } = getRequestUser(req);
+  const { userId, personnelId, userRole, isAdmin, userName } = getRequestUser(req);
 
   if (directusUrl && directusAdminToken) {
     try {
       const result = await directusFetch('/items/cold_leads?sort=-date_created&limit=500');
       if (result && Array.isArray(result.data)) {
         let leads = result.data;
-        if (userRole === 'marketer' && userName) {
+        if (!isAdmin && (userName || userId || personnelId)) {
           leads = leads.filter((l: any) =>
             l.assigned_to === userName ||
+            l.assigned_to === personnelId ||
             l.assigned_to === userId ||
             !l.assigned_to ||
             l.assigned_to === 'تخصیص نیافته' ||
@@ -1901,6 +2211,7 @@ app.get('/api/cold-leads', async (req: Request, res: Response) => {
 
 app.post('/api/cold-leads', async (req: Request, res: Response) => {
   const payload = req.body;
+  const { userName } = getRequestUser(req);
   const newLeadId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
@@ -1916,7 +2227,7 @@ app.post('/api/cold-leads', async (req: Request, res: Response) => {
     source: payload.source || 'ورود دستی',
     status: payload.status || 'تماس نگرفته',
     notes: (payload.notes || '').trim(),
-    assigned_to: (payload.assigned_to || '').trim(),
+    assigned_to: (payload.assigned_to || userName || '').trim(),
     converted_customer_id: convertedCustId,
     date_created: nowIso
   };
@@ -2048,7 +2359,7 @@ app.post('/api/cold-leads/:id/convert', async (req: Request, res: Response) => {
 
 // Administrative Reports API
 app.get('/api/administrative-reports', async (req: Request, res: Response) => {
-  const { userId, userRole } = getRequestUser(req);
+  const { userId, personnelId, userRole, isAdmin, userName } = getRequestUser(req);
 
   if (directusUrl && directusAdminToken) {
     try {
@@ -2056,8 +2367,12 @@ app.get('/api/administrative-reports', async (req: Request, res: Response) => {
       if (result && Array.isArray(result.data)) {
         let reports = result.data;
         // Marketer only sees their own administrative reports
-        if (userRole === 'marketer' && userId) {
-          reports = reports.filter((r: any) => r.personnel_id === userId);
+        if (!isAdmin && (userId || personnelId)) {
+          reports = reports.filter((r: any) =>
+            r.personnel_id === personnelId ||
+            r.personnel_id === userId ||
+            (userName && r.personnel_name === userName)
+          );
         }
         return res.json(reports);
       }
@@ -2070,13 +2385,13 @@ app.get('/api/administrative-reports', async (req: Request, res: Response) => {
 
 app.post('/api/administrative-reports', async (req: Request, res: Response) => {
   const payload = req.body;
-  const { userId, userName } = getRequestUser(req);
+  const { userId, personnelId, userName } = getRequestUser(req);
   const newAdmId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
   const newReport: AdministrativeReport = {
     id: newAdmId,
-    personnel_id: payload.personnel_id || userId || 'p-1',
+    personnel_id: payload.personnel_id || personnelId || userId || 'p-1',
     personnel_name: payload.personnel_name || userName || 'پرسنل شرکت',
     report_date: payload.report_date || nowIso.split('T')[0],
     calls_count: Number(payload.calls_count) || 0,

@@ -139,6 +139,35 @@ export interface Personnel {
   phone: string;
   avatar?: string;
   active: boolean;
+  user_id?: string | null;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  first_name?: string;
+  last_name?: string;
+  role_id?: string;
+  is_admin: boolean;
+  app_role: 'admin' | 'marketer' | 'sales_manager';
+}
+
+export interface AuthResponse {
+  success: boolean;
+  access_token: string;
+  user: AuthUser;
+  personnel: Personnel;
+  message?: string;
+}
+
+export interface RegisterPayload {
+  email: string;
+  password: string;
+  name: string;
+  phone?: string;
+  first_name?: string;
+  last_name?: string;
 }
 
 export interface BffStatus {
