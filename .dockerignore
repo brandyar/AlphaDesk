@@ -12,3 +12,4 @@ yarn-error.log*
 *.md
 !COOLIFY.md
 scripts
+bun.lock
