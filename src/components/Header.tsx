@@ -64,26 +64,25 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Action Controls & User Profile */}
-      <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
-        {/* Quick Action: New Lead */}
+      <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+        {/* Quick Action: New Lead (Icon only) */}
         <button
           onClick={onOpenNewLead}
-          className="hidden md:inline-flex items-center gap-2 h-9 px-3.5 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-semibold text-white border border-[#3e3e3e] transition-all hover:scale-[1.02]"
-          title="افزودن شماره جدید جهت پیگیری اولیه"
+          className="w-8 sm:w-9 h-8 sm:h-9 rounded-full bg-[#282828] hover:bg-[#333333] text-white border border-[#3e3e3e] flex items-center justify-center transition-all hover:scale-105"
+          title="افزودن شماره"
+          aria-label="افزودن شماره"
         >
-          <PhoneCall className="w-3.5 h-3.5 text-[#1DB954]" />
-          <span>افزودن شماره</span>
+          <PhoneCall className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-[#1DB954]" />
         </button>
 
-        {/* Quick Action: New Customer */}
+        {/* Quick Action: New Customer (Icon only) */}
         <button
           onClick={onOpenNewCustomer}
-          className="inline-flex items-center gap-1.5 sm:gap-2 h-8 sm:h-9 px-2.5 sm:px-4 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-xs font-bold text-black transition-all hover:scale-[1.03] shadow-md shadow-[#1DB954]/20 flex-shrink-0"
+          className="w-8 sm:w-9 h-8 sm:h-9 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold flex items-center justify-center transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex-shrink-0"
           title="ثبت مشتری جدید"
+          aria-label="ثبت مشتری جدید"
         >
-          <Plus className="w-3.5 sm:w-4 h-3.5 sm:h-4 stroke-[3]" />
-          <span className="hidden sm:inline">ثبت مشتری جدید</span>
-          <span className="sm:hidden text-[11px]">مشتری</span>
+          <Plus className="w-4 h-4 stroke-[3]" />
         </button>
 
         {/* Expiration Alert Trigger */}
@@ -98,15 +97,6 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="hidden sm:inline">منقضی</span>
           </button>
         )}
-
-        {/* System Online Status Indicator */}
-        <div
-          className="hidden xl:flex items-center gap-2 h-9 px-3.5 rounded-full bg-[#181818] border border-[#282828] text-xs text-[#B3B3B3]"
-          title="سامانه آنلاین و متصل است"
-        >
-          <div className="w-2 h-2 rounded-full bg-[#1DB954] animate-pulse" />
-          <span>پایگاه داده متصل</span>
-        </div>
 
         {/* Personnel User Switcher */}
         <div className="flex items-center gap-1 sm:gap-2 pl-1 pr-1.5 sm:pr-2 py-0.5 sm:py-1 bg-[#181818] border border-[#282828] rounded-full max-w-[130px] sm:max-w-none">

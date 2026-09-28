@@ -85,54 +85,55 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         </button>
       </div>
 
-      {/* Filter Bar */}
-      <div className="p-4 bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex-1 max-w-sm relative">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="جستجو در متن گزارش، نام شرکت، تلفن..."
-              className="w-full h-9 bg-[#282828] rounded-full pl-3 pr-9 text-xs text-white placeholder-[#A7A7A7] focus:outline-none focus:ring-1 focus:ring-white"
-            />
-            <Search className="w-3.5 h-3.5 text-[#A7A7A7] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+      {/* Clean Single-Row Filter Toolbar: Dropdowns instead of tags */}
+      <div className="p-3 sm:p-4 bg-[#181818] rounded-2xl border border-[#282828] flex flex-wrap items-center justify-between gap-3">
+        <div className="flex-1 max-w-xs sm:max-w-sm relative min-w-[200px]">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="جستجو در متن گزارش، نام شرکت، تلفن..."
+            className="w-full h-9 bg-[#282828] rounded-xl pl-3 pr-9 text-xs text-white placeholder-[#A7A7A7] focus:outline-none focus:border-[#1DB954] border border-[#3e3e3e]"
+          />
+          <Search className="w-3.5 h-3.5 text-[#A7A7A7] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Status Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#A7A7A7]">وضعیت:</span>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+            >
+              <option value="همه">همه وضعیت‌ها</option>
+              {statusList
+                .filter((st) => st !== 'همه')
+                .map((st) => (
+                  <option key={st} value={st} className="bg-[#181818] text-white">
+                    {st}
+                  </option>
+                ))}
+            </select>
           </div>
 
-          {/* Negotiator select */}
+          {/* Negotiator Dropdown */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-[#A7A7A7]">مذاکره‌کننده:</span>
             <select
               value={selectedNegotiator}
               onChange={(e) => setSelectedNegotiator(e.target.value)}
-              className="h-8 px-3 rounded-full bg-[#282828] text-xs text-white border-none focus:outline-none cursor-pointer"
+              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
             >
               <option value="همه">همه کارشناسان</option>
               {personnelList.map((p) => (
-                <option key={p.id} value={p.name}>
+                <option key={p.id} value={p.name} className="bg-[#181818] text-white">
                   {p.name}
                 </option>
               ))}
             </select>
           </div>
-        </div>
-
-        {/* Status Pills */}
-        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-[#282828] overflow-x-auto pb-1">
-          <span className="text-xs font-bold text-[#B3B3B3]">وضعیت:</span>
-          {statusList.map((st) => (
-            <button
-              key={st}
-              onClick={() => setSelectedStatus(st)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                selectedStatus === st
-                  ? 'bg-[#1DB954] text-black font-bold'
-                  : 'bg-[#282828] text-[#B3B3B3] hover:text-white'
-              }`}
-            >
-              {st}
-            </button>
-          ))}
         </div>
       </div>
 

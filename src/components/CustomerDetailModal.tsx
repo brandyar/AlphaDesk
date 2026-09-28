@@ -18,8 +18,10 @@ import {
   Edit2,
   Trash2,
   RefreshCw,
+  Copy,
+  Check,
 } from 'lucide-react';
-import { Customer, CustomerReport, Personnel, NegotiationStatus } from '../types';
+import { Customer, CustomerReport, Personnel, NegotiationStatus, ChannelType, CustomerContact } from '../types';
 import {
   formatTimeRemaining,
   formatPersianDate,
@@ -35,6 +37,7 @@ interface CustomerDetailModalProps {
   onReassign: (customerId: string, marketerId: string, marketerName: string, days: number) => Promise<void>;
   onEdit: (customer: Customer) => void;
   onDelete: (customerId: string) => void;
+  onAddContact?: (contact: Partial<CustomerContact>) => Promise<void>;
   personnelList: Personnel[];
   currentPersonnel: Personnel | null;
 }
@@ -47,6 +50,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   onReassign,
   onEdit,
   onDelete,
+  onAddContact,
   personnelList,
   currentPersonnel,
 }) => {
@@ -66,11 +70,28 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   );
   const [submittingReport, setSubmittingReport] = useState(false);
 
+  // Quick Add Contact form state
+  const [showAddContact, setShowAddContact] = useState(false);
+  const [newContactType, setNewContactType] = useState<ChannelType>('mobile');
+  const [newContactValue, setNewContactValue] = useState('');
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactRole, setNewContactRole] = useState('');
+  const [addingContact, setAddingContact] = useState(false);
+  const [addContactError, setAddContactError] = useState<string | null>(null);
+  const [addContactSuccess, setAddContactSuccess] = useState<string | null>(null);
+
   // Reassignment state
   const [showReassignBox, setShowReassignBox] = useState(false);
   const [selectedMarketerId, setSelectedMarketerId] = useState(personnelList[0]?.id || '');
   const [reassignDays, setReassignDays] = useState(7);
   const [reassigning, setReassigning] = useState(false);
+  const [copiedVal, setCopiedVal] = useState<string | null>(null);
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedVal(text);
+    setTimeout(() => setCopiedVal(null), 1500);
+  };
 
   const timer = formatTimeRemaining(customer.assignment_deadline);
   const statusTheme = getStatusTheme(customer.status);
@@ -114,6 +135,40 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
       alert('خطا در تخصیص مجدد: ' + err.message);
     } finally {
       setReassigning(false);
+    }
+  };
+
+  const handleQuickAddContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddContactError(null);
+    setAddContactSuccess(null);
+    if (!newContactValue.trim()) {
+      setAddContactError('لطفاً مقدار یا شماره تماس را وارد کنید.');
+      return;
+    }
+    setAddingContact(true);
+    try {
+      if (onAddContact) {
+        await onAddContact({
+          customer_id: customer.id,
+          channel_type: newContactType,
+          value: newContactValue.trim(),
+          contact_name: newContactName.trim(),
+          contact_role: newContactRole.trim(),
+        });
+      }
+      setNewContactValue('');
+      setNewContactName('');
+      setNewContactRole('');
+      setAddContactSuccess('شماره جدید با موفقیت به پرونده مشتری افزوده شد.');
+      setTimeout(() => {
+        setAddContactSuccess(null);
+        setShowAddContact(false);
+      }, 1500);
+    } catch (err: any) {
+      setAddContactError(err.message || 'خطا در ثبت شماره جدید');
+    } finally {
+      setAddingContact(false);
     }
   };
 
@@ -267,167 +322,383 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             </div>
           )}
 
-          {/* Quick Contact & Social Bars */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Direct Numbers */}
-            <div className="p-4 rounded-xl bg-[#121212] border border-[#282828] space-y-3">
-              <div className="text-xs font-bold text-[#B3B3B3] flex items-center gap-2">
+          {/* Modular Contacts Directory */}
+          <div className="p-4 rounded-xl bg-[#121212] border border-[#282828] space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs font-bold text-white flex items-center gap-2">
                 <Phone className="w-4 h-4 text-[#1DB954]" />
-                <span>شماره‌های تماس</span>
+                <span>کانال‌های ارتباطی تفکیک‌شده مشتری ({customer.contacts?.length || 0} مورد)</span>
               </div>
-
-              {/* Mobiles */}
-              <div>
-                <span className="text-[11px] text-[#A7A7A7]">موبایل‌ها:</span>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {customer.mobile_numbers.length > 0 ? (
-                    customer.mobile_numbers.map((num, i) => (
-                      <a
-                        key={i}
-                        href={`tel:${num}`}
-                        dir="ltr"
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-mono text-white transition-colors"
-                      >
-                        <Phone className="w-3 h-3 text-[#1DB954]" />
-                        <span>{num}</span>
-                      </a>
-                    ))
-                  ) : (
-                    <span className="text-xs text-[#535353]">-</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Landlines */}
-              {customer.landline_numbers.length > 0 && (
-                <div>
-                  <span className="text-[11px] text-[#A7A7A7]">تلفن‌های ثابت:</span>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {customer.landline_numbers.map((num, i) => (
-                      <a
-                        key={i}
-                        href={`tel:${num}`}
-                        dir="ltr"
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-mono text-white transition-colors"
-                      >
-                        <span>{num}</span>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Manager & Negotiator Contacts */}
-              <div className="pt-2 border-t border-[#282828] grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-[#A7A7A7] block text-[11px]">مدیر:</span>
-                  <span className="font-semibold text-white">{customer.manager_name || 'ثبت نشده'}</span>
-                  {customer.manager_phones.length > 0 && (
-                    <div className="text-[11px] font-mono text-[#1DB954] mt-0.5" dir="ltr">
-                      {customer.manager_phones.join(' , ')}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <span className="text-[#A7A7A7] block text-[11px]">مذاکره‌کننده سمت مشتری:</span>
-                  <span className="font-semibold text-white">{customer.negotiator_name || 'ثبت نشده'}</span>
-                  {customer.negotiator_phones.length > 0 && (
-                    <div className="text-[11px] font-mono text-[#1DB954] mt-0.5" dir="ltr">
-                      {customer.negotiator_phones.join(' , ')}
-                    </div>
-                  )}
-                </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddContact(!showAddContact)}
+                  className="px-3 py-1 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs flex items-center gap-1 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>+ افزودن شماره جدید</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onEdit(customer)}
+                  className="px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333] text-white text-xs font-medium flex items-center gap-1 border border-[#3e3e3e] transition-colors"
+                >
+                  <Edit2 className="w-3 h-3 text-[#1DB954]" />
+                  <span>فرم کامل ویرایش</span>
+                </button>
               </div>
             </div>
 
-            {/* Socials & Web */}
-            <div className="p-4 rounded-xl bg-[#121212] border border-[#282828] space-y-3">
-              <div className="text-xs font-bold text-[#B3B3B3] flex items-center gap-2">
-                <Globe className="w-4 h-4 text-[#1DB954]" />
-                <span>شبکه‌های اجتماعی و وب‌سایت</span>
-              </div>
-
-              {/* Telegram */}
-              <div>
-                <span className="text-[11px] text-[#A7A7A7]">تلگرام:</span>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {customer.telegram_phone && (
-                    <a
-                      href={`https://t.me/+${customer.telegram_phone.replace(/^0/, '98')}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#229ED9]/15 border border-[#229ED9]/30 text-[#229ED9] text-xs font-mono hover:bg-[#229ED9]/25 transition-colors"
-                    >
-                      <Send className="w-3 h-3" />
-                      <span>شماره تلگرام: {customer.telegram_phone}</span>
-                    </a>
-                  )}
-
-                  {customer.telegram_ids.map((tid, i) => (
-                    <a
-                      key={i}
-                      href={`https://t.me/${tid.replace(/^@/, '')}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-mono text-white transition-colors"
-                    >
-                      <Send className="w-3 h-3 text-[#229ED9]" />
-                      <span>@{tid.replace(/^@/, '')}</span>
-                    </a>
-                  ))}
-                  {!customer.telegram_phone && customer.telegram_ids.length === 0 && (
-                    <span className="text-xs text-[#535353]">-</span>
-                  )}
+            {/* Quick Add Contact Form Drawer */}
+            {showAddContact && (
+              <form onSubmit={handleQuickAddContact} className="p-3.5 rounded-xl bg-[#1e1e1e] border border-[#333] space-y-3 animate-in fade-in">
+                <div className="text-xs font-bold text-white flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[#1DB954]">
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                    <span>افزودن سریع شماره تماس یا اکانت ارتباطی</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddContact(false)}
+                    className="text-[#888] hover:text-white p-1"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              </div>
 
-              {/* Instagram */}
-              <div>
-                <span className="text-[11px] text-[#A7A7A7]">اینستاگرام:</span>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {customer.instagram_ids.length > 0 ? (
-                    customer.instagram_ids.map((insta, i) => (
-                      <a
-                        key={i}
-                        href={`https://instagram.com/${insta.replace(/^@/, '')}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E1306C]/15 border border-[#E1306C]/30 text-[#E1306C] text-xs font-mono hover:bg-[#E1306C]/25 transition-colors"
-                      >
-                        <Instagram className="w-3 h-3" />
-                        <span>@{insta.replace(/^@/, '')}</span>
-                      </a>
-                    ))
-                  ) : (
-                    <span className="text-xs text-[#535353]">-</span>
-                  )}
-                </div>
-              </div>
+                {addContactError && (
+                  <div className="p-2.5 rounded-lg bg-red-950/80 border border-red-500/80 text-xs text-red-200 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                    <span>{addContactError}</span>
+                  </div>
+                )}
 
-              {/* Websites */}
-              {customer.websites.length > 0 && (
-                <div>
-                  <span className="text-[11px] text-[#A7A7A7]">وب‌سایت‌ها:</span>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {customer.websites.map((web, i) => (
-                      <a
-                        key={i}
-                        href={web.startsWith('http') ? web : `https://${web}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333333] text-xs text-[#1DB954] hover:underline"
-                        dir="ltr"
-                      >
-                        <Globe className="w-3 h-3" />
-                        <span>{web.replace(/^https?:\/\//, '')}</span>
-                        <ExternalLink className="w-2.5 h-2.5" />
-                      </a>
-                    ))}
+                {addContactSuccess && (
+                  <div className="p-2.5 rounded-lg bg-[#1DB954]/20 border border-[#1DB954]/60 text-xs text-[#1DB954] flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                    <span>{addContactSuccess}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                  <div className="sm:col-span-3">
+                    <label className="block text-[11px] text-[#A7A7A7] mb-1">نوع کانال</label>
+                    <select
+                      value={newContactType}
+                      onChange={(e) => setNewContactType(e.target.value as ChannelType)}
+                      className="w-full h-9 px-2 bg-[#282828] rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                    >
+                      <option value="mobile">تلفن همراه (موبایل)</option>
+                      <option value="landline">تلفن ثابت (دفتر)</option>
+                      <option value="telegram">تلگرام</option>
+                      <option value="instagram">اینستاگرام</option>
+                      <option value="whatsapp">واتساپ</option>
+                      <option value="email">ایمیل</option>
+                      <option value="website">وب‌سایت</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-4">
+                    <label className="block text-[11px] text-[#A7A7A7] mb-1">شماره یا شناسه</label>
+                    <input
+                      type="text"
+                      dir="ltr"
+                      required
+                      value={newContactValue}
+                      onChange={(e) => setNewContactValue(e.target.value)}
+                      placeholder={newContactType === 'mobile' ? '09121234567' : newContactType === 'landline' ? '02188776655' : 'مقدار'}
+                      className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                    />
+                  </div>
+                  <div className="sm:col-span-3">
+                    <label className="block text-[11px] text-[#A7A7A7] mb-1">نام یا عنوان رابط (اختیاری)</label>
+                    <input
+                      type="text"
+                      value={newContactName}
+                      onChange={(e) => setNewContactName(e.target.value)}
+                      placeholder="مثال: مسئول خرید، مدیر فنی"
+                      className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                    />
+                  </div>
+                  <div className="sm:col-span-2 flex items-end">
+                    <button
+                      type="submit"
+                      disabled={addingContact}
+                      className="w-full h-9 rounded bg-[#1DB954] hover:bg-[#1ED760] disabled:bg-[#333] text-black font-bold text-xs transition-colors flex items-center justify-center gap-1 shadow-md"
+                    >
+                      {addingContact ? (
+                        <span>در حال ثبت...</span>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          <span>ثبت شماره</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
-              )}
-            </div>
+              </form>
+            )}
+
+            {customer.contacts && customer.contacts.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {customer.contacts.map((ct, idx) => {
+                  let linkHref = '';
+                  let channelIcon = <Phone className="w-3.5 h-3.5 text-[#1DB954]" />;
+                  let typeLabel = 'موبایل';
+
+                  if (ct.channel_type === 'mobile' || ct.channel_type === 'landline') {
+                    linkHref = `tel:${ct.value}`;
+                    channelIcon =
+                      ct.channel_type === 'mobile' ? (
+                        <Phone className="w-3.5 h-3.5 text-[#1DB954]" />
+                      ) : (
+                        <Phone className="w-3.5 h-3.5 text-blue-400" />
+                      );
+                    typeLabel = ct.channel_type === 'mobile' ? 'تلفن همراه' : 'تلفن ثابت';
+                  } else if (ct.channel_type === 'telegram') {
+                    const cleanTid = ct.value.replace(/^@/, '');
+                    linkHref = /^09\d{9}$/.test(ct.value)
+                      ? `https://t.me/+98${ct.value.substring(1)}`
+                      : `https://t.me/${cleanTid}`;
+                    channelIcon = <Send className="w-3.5 h-3.5 text-[#229ED9]" />;
+                    typeLabel = 'تلگرام';
+                  } else if (ct.channel_type === 'instagram') {
+                    const cleanInsta = ct.value.replace(/^@/, '');
+                    linkHref = `https://instagram.com/${cleanInsta}`;
+                    channelIcon = <Instagram className="w-3.5 h-3.5 text-pink-500" />;
+                    typeLabel = 'اینستاگرام';
+                  } else if (ct.channel_type === 'whatsapp') {
+                    linkHref = `https://wa.me/98${ct.value.replace(/^0/, '')}`;
+                    channelIcon = <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />;
+                    typeLabel = 'واتساپ';
+                  } else if (ct.channel_type === 'email') {
+                    linkHref = `mailto:${ct.value}`;
+                    channelIcon = <Mail className="w-3.5 h-3.5 text-amber-400" />;
+                    typeLabel = 'ایمیل';
+                  } else if (ct.channel_type === 'website') {
+                    linkHref = ct.value.startsWith('http') ? ct.value : `https://${ct.value}`;
+                    channelIcon = <Globe className="w-3.5 h-3.5 text-purple-400" />;
+                    typeLabel = 'وب‌سایت';
+                  }
+
+                  const isCopied = copiedVal === ct.value;
+
+                  return (
+                    <div
+                      key={idx}
+                      className="p-2.5 rounded-lg bg-[#1a1a1a] border border-[#2b2b2b] hover:border-[#383838] transition-all space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="flex items-center gap-1.5 text-[#B3B3B3]">
+                          {channelIcon}
+                          <span className="font-semibold">{typeLabel}</span>
+                        </span>
+                        {ct.is_primary && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#1DB954]/20 text-[#1DB954] border border-[#1DB954]/30 font-bold flex items-center gap-0.5">
+                            <Star className="w-2.5 h-2.5 fill-current" />
+                            اصلی
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between gap-1">
+                        <a
+                          href={linkHref || undefined}
+                          target={linkHref.startsWith('http') ? '_blank' : undefined}
+                          rel="noreferrer"
+                          dir="ltr"
+                          className="font-mono text-xs text-white hover:text-[#1DB954] truncate transition-colors"
+                        >
+                          {ct.value}
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(ct.value)}
+                          className="p-1 rounded hover:bg-[#282828] text-[#888] hover:text-white transition-colors"
+                          title="کپی شماره/اکانت"
+                        >
+                          {isCopied ? <Check className="w-3 h-3 text-[#1DB954]" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+
+                      {(ct.contact_name || ct.contact_role) && (
+                        <div className="text-[10px] text-[#A7A7A7] truncate">
+                          {ct.contact_name && <span className="text-white">{ct.contact_name}</span>}
+                          {ct.contact_name && ct.contact_role && <span> · </span>}
+                          {ct.contact_role && <span>{ct.contact_role}</span>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-3 text-xs text-[#888] bg-[#181818] rounded-lg border border-[#262626]">
+                هیچ شماره‌ای در فهرست تفکیک‌شده ثبت نشده است. از دکمه «+ افزودن شماره جدید» در بالا برای ثبت شماره استفاده کنید.
+              </div>
+            )}
           </div>
+            /* Quick Contact & Social Bars Fallback */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Direct Numbers */}
+              <div className="p-4 rounded-xl bg-[#121212] border border-[#282828] space-y-3">
+                <div className="text-xs font-bold text-[#B3B3B3] flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-[#1DB954]" />
+                  <span>شماره‌های تماس</span>
+                </div>
+
+                {/* Mobiles */}
+                <div>
+                  <span className="text-[11px] text-[#A7A7A7]">موبایل‌ها:</span>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {customer.mobile_numbers.length > 0 ? (
+                      customer.mobile_numbers.map((num, i) => (
+                        <a
+                          key={i}
+                          href={`tel:${num}`}
+                          dir="ltr"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-mono text-white transition-colors"
+                        >
+                          <Phone className="w-3 h-3 text-[#1DB954]" />
+                          <span>{num}</span>
+                        </a>
+                      ))
+                    ) : (
+                      <span className="text-xs text-[#535353]">-</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Landlines */}
+                {customer.landline_numbers.length > 0 && (
+                  <div>
+                    <span className="text-[11px] text-[#A7A7A7]">تلفن‌های ثابت:</span>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {customer.landline_numbers.map((num, i) => (
+                        <a
+                          key={i}
+                          href={`tel:${num}`}
+                          dir="ltr"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-mono text-white transition-colors"
+                        >
+                          <span>{num}</span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Manager & Negotiator Contacts */}
+                <div className="pt-2 border-t border-[#282828] grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-[#A7A7A7] block text-[11px]">مدیر:</span>
+                    <span className="font-semibold text-white">{customer.manager_name || 'ثبت نشده'}</span>
+                    {customer.manager_phones.length > 0 && (
+                      <div className="text-[11px] font-mono text-[#1DB954] mt-0.5" dir="ltr">
+                        {customer.manager_phones.join(' , ')}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-[#A7A7A7] block text-[11px]">مذاکره‌کننده سمت مشتری:</span>
+                    <span className="font-semibold text-white">{customer.negotiator_name || 'ثبت نشده'}</span>
+                    {customer.negotiator_phones.length > 0 && (
+                      <div className="text-[11px] font-mono text-[#1DB954] mt-0.5" dir="ltr">
+                        {customer.negotiator_phones.join(' , ')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Socials & Web */}
+              <div className="p-4 rounded-xl bg-[#121212] border border-[#282828] space-y-3">
+                <div className="text-xs font-bold text-[#B3B3B3] flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-[#1DB954]" />
+                  <span>شبکه‌های اجتماعی و وب‌سایت</span>
+                </div>
+
+                {/* Telegram */}
+                <div>
+                  <span className="text-[11px] text-[#A7A7A7]">تلگرام:</span>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {customer.telegram_phone && (
+                      <a
+                        href={`https://t.me/+${customer.telegram_phone.replace(/^0/, '98')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#229ED9]/15 border border-[#229ED9]/30 text-[#229ED9] text-xs font-mono hover:bg-[#229ED9]/25 transition-colors"
+                      >
+                        <Send className="w-3 h-3" />
+                        <span>شماره تلگرام: {customer.telegram_phone}</span>
+                      </a>
+                    )}
+
+                    {customer.telegram_ids.map((tid, i) => (
+                      <a
+                        key={i}
+                        href={`https://t.me/${tid.replace(/^@/, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-mono text-white transition-colors"
+                      >
+                        <Send className="w-3 h-3 text-[#229ED9]" />
+                        <span>@{tid.replace(/^@/, '')}</span>
+                      </a>
+                    ))}
+                    {!customer.telegram_phone && customer.telegram_ids.length === 0 && (
+                      <span className="text-xs text-[#535353]">-</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Instagram */}
+                <div>
+                  <span className="text-[11px] text-[#A7A7A7]">اینستاگرام:</span>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {customer.instagram_ids.length > 0 ? (
+                      customer.instagram_ids.map((insta, i) => (
+                        <a
+                          key={i}
+                          href={`https://instagram.com/${insta.replace(/^@/, '')}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E1306C]/15 border border-[#E1306C]/30 text-[#E1306C] text-xs font-mono hover:bg-[#E1306C]/25 transition-colors"
+                        >
+                          <Instagram className="w-3 h-3" />
+                          <span>@{insta.replace(/^@/, '')}</span>
+                        </a>
+                      ))
+                    ) : (
+                      <span className="text-xs text-[#535353]">-</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Websites */}
+                {customer.websites.length > 0 && (
+                  <div>
+                    <span className="text-[11px] text-[#A7A7A7]">وب‌سایت‌ها:</span>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {customer.websites.map((web, i) => (
+                        <a
+                          key={i}
+                          href={web.startsWith('http') ? web : `https://${web}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333333] text-xs text-[#1DB954] hover:underline"
+                          dir="ltr"
+                        >
+                          <Globe className="w-3 h-3" />
+                          <span>{web.replace(/^https?:\/\//, '')}</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
 
           {/* First Interview Report Box */}
           <div className="p-5 rounded-xl bg-[#121212] border border-[#282828] space-y-3">

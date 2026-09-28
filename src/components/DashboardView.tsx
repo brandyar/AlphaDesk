@@ -48,7 +48,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     (c) => c.status === 'پیش نویس قرارداد' || c.status === 'پیگیری قرارداد'
   );
   const upcomingFollowups = customers
-    .filter((c) => c.next_followup_date)
+    .filter((c): c is Customer & { next_followup_date: string } => Boolean(c.next_followup_date))
     .sort(
       (a, b) =>
         new Date(a.next_followup_date).getTime() - new Date(b.next_followup_date).getTime()
@@ -74,18 +74,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={onOpenNewLead}
-              className="h-10 px-4 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-semibold text-white border border-[#3e3e3e] transition-colors"
+              className="w-10 h-10 rounded-full bg-[#282828] hover:bg-[#333333] text-white border border-[#3e3e3e] flex items-center justify-center transition-all hover:scale-105"
+              title="افزودن شماره لید"
+              aria-label="افزودن شماره لید"
             >
-              + ثبت شماره لید
+              <PhoneCall className="w-4 h-4 text-[#1DB954]" />
             </button>
             <button
               onClick={onOpenNewCustomer}
-              className="h-10 px-5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-transform hover:scale-105 shadow-lg shadow-[#1DB954]/20"
+              className="w-10 h-10 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold flex items-center justify-center transition-transform hover:scale-105 shadow-lg shadow-[#1DB954]/20"
+              title="ثبت مشتری جدید"
+              aria-label="ثبت مشتری جدید"
             >
-              + ثبت مشتری جدید
+              <Plus className="w-5 h-5 stroke-[3]" />
             </button>
           </div>
         </div>

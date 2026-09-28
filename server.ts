@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
@@ -14,12 +15,25 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
-// Directus configuration (can be configured via ENV or runtime settings)
+// Directus configuration
 let directusUrl = process.env.DIRECTUS_URL || '';
 let directusAdminToken = process.env.DIRECTUS_ADMIN_TOKEN || '';
 
-// Mock/Local persistent in-memory fallback store
-interface Customer {
+export interface CustomerContact {
+  id: string;
+  customer_id: string;
+  channel_type: 'mobile' | 'landline' | 'telegram' | 'instagram' | 'email' | 'website' | 'whatsapp' | 'other';
+  value: string;
+  normalized_value: string;
+  contact_name?: string;
+  contact_role?: string;
+  is_primary: boolean;
+  notes?: string;
+  date_created: string;
+  date_updated: string;
+}
+
+export interface Customer {
   id: string;
   company_name: string;
   business_type: string;
@@ -36,35 +50,36 @@ interface Customer {
   instagram_ids: string[];
   emails: string[];
   websites: string[];
+  contacts?: CustomerContact[];
   is_ecommerce: boolean;
   interview_status: string;
   interview_report: string;
   interview_score: number;
-  next_followup_date: string;
-  assigned_marketer_id: string;
+  next_followup_date: string | null;
+  assigned_marketer_id: string | null;
   assigned_marketer_name: string;
-  assignment_date: string;
-  assignment_deadline: string;
+  assignment_deadline: string | null;
+  assignment_duration_days?: number;
   status: string;
   is_expired?: boolean;
   date_created: string;
   date_updated: string;
 }
 
-interface CustomerReport {
+export interface CustomerReport {
   id: string;
   customer_id: string;
   negotiator_name: string;
   negotiation_phone: string;
   report_text: string;
   negotiation_score: number;
-  next_followup_date: string;
+  next_followup_date: string | null;
   negotiation_status: string;
   created_by?: string;
   date_created: string;
 }
 
-interface ColdLead {
+export interface ColdLead {
   id: string;
   phone_number: string;
   contact_name: string;
@@ -72,11 +87,11 @@ interface ColdLead {
   status: 'تماس نگرفته' | 'پاسخ نداد' | 'در حال بررسی' | 'تبدیل شده به مشتری' | 'شماره نامعتبر';
   notes: string;
   assigned_to: string;
-  converted_customer_id?: string;
+  converted_customer_id?: string | null;
   date_created: string;
 }
 
-interface AdministrativeReport {
+export interface AdministrativeReport {
   id: string;
   personnel_id: string;
   personnel_name: string;
@@ -90,17 +105,17 @@ interface AdministrativeReport {
   date_created: string;
 }
 
-interface Personnel {
+export interface Personnel {
   id: string;
   name: string;
   role: 'admin' | 'sales_manager' | 'marketer' | 'operator';
   email: string;
   phone: string;
   avatar?: string;
-  active: boolean;
+  status?: string;
+  active?: boolean;
 }
 
-// Initial seed data
 const initialPersonnel: Personnel[] = [
   {
     id: 'p-1',
@@ -108,6 +123,7 @@ const initialPersonnel: Personnel[] = [
     role: 'admin',
     email: 'kiani@company.ir',
     phone: '09121112233',
+    status: 'active',
     active: true
   },
   {
@@ -116,6 +132,7 @@ const initialPersonnel: Personnel[] = [
     role: 'marketer',
     email: 'sara.ahmadi@company.ir',
     phone: '09123456789',
+    status: 'active',
     active: true
   },
   {
@@ -124,6 +141,7 @@ const initialPersonnel: Personnel[] = [
     role: 'marketer',
     email: 'hosseini@company.ir',
     phone: '09351234567',
+    status: 'active',
     active: true
   },
   {
@@ -132,6 +150,7 @@ const initialPersonnel: Personnel[] = [
     role: 'sales_manager',
     email: 'zamani@company.ir',
     phone: '09197654321',
+    status: 'active',
     active: true
   }
 ];
@@ -168,8 +187,8 @@ const initialCustomers: Customer[] = [
     next_followup_date: addDays(now, 2),
     assigned_marketer_id: 'p-2',
     assigned_marketer_name: 'سارا احمدی',
-    assignment_date: addDays(now, -3),
-    assignment_deadline: addDays(now, 4), // Active (expires in 4 days)
+    assignment_deadline: addDays(now, 4),
+    assignment_duration_days: 7,
     status: 'پیش نویس قرارداد',
     date_created: addDays(now, -3),
     date_updated: addDays(now, -1)
@@ -198,8 +217,8 @@ const initialCustomers: Customer[] = [
     next_followup_date: addDays(now, 1),
     assigned_marketer_id: 'p-3',
     assigned_marketer_name: 'علیرضا حسینی',
-    assignment_date: addDays(now, -8),
-    assignment_deadline: addDays(now, -1), // Expired!
+    assignment_deadline: addDays(now, -1),
+    assignment_duration_days: 7,
     status: 'پیگیری قبل از انقضا',
     date_created: addDays(now, -8),
     date_updated: addDays(now, -2)
@@ -228,8 +247,8 @@ const initialCustomers: Customer[] = [
     next_followup_date: addDays(now, 5),
     assigned_marketer_id: 'p-2',
     assigned_marketer_name: 'سارا احمدی',
-    assignment_date: addDays(now, -1),
     assignment_deadline: addDays(now, 6),
+    assignment_duration_days: 7,
     status: 'پیگیری قرارداد',
     date_created: addDays(now, -1),
     date_updated: addDays(now, -1)
@@ -258,8 +277,8 @@ const initialCustomers: Customer[] = [
     next_followup_date: addDays(now, 20),
     assigned_marketer_id: 'p-3',
     assigned_marketer_name: 'علیرضا حسینی',
-    assignment_date: addDays(now, -12),
-    assignment_deadline: addDays(now, -5), // Expired
+    assignment_deadline: addDays(now, -5),
+    assignment_duration_days: 7,
     status: 'پیگیری بلند مدت',
     date_created: addDays(now, -12),
     date_updated: addDays(now, -5)
@@ -322,26 +341,6 @@ const initialColdLeads: ColdLead[] = [
     notes: 'آقای صادقی معرفی کردند. گفتند شرکت ثبت شده دارند و دنبال تیم تخصصی جذب مشتری هستند.',
     assigned_to: 'علیرضا حسینی',
     date_created: addDays(now, -1)
-  },
-  {
-    id: 'lead-3',
-    phone_number: '09195556677',
-    contact_name: 'تولیدی کفش البرز',
-    source: 'تبلیغات پیامکی',
-    status: 'پاسخ نداد',
-    notes: 'دو بار تماس گرفته شد، بوق اشغال یا بی‌پاسخ. فردا مجدداً قبل از ظهر تماس گرفته شود.',
-    assigned_to: 'سارا احمدی',
-    date_created: addDays(now, -2)
-  },
-  {
-    id: 'lead-4',
-    phone_number: '09148887766',
-    contact_name: 'آتلیه معماری نور',
-    source: 'فرم لندینگ پیج سایت',
-    status: 'تماس نگرفته',
-    notes: 'علاقه‌مند به خدمات برندینگ و سئو برای جذب پروژه‌های ویلاسازی شمال.',
-    assigned_to: 'علیرضا حسینی',
-    date_created: addDays(now, 0)
   }
 ];
 
@@ -354,54 +353,126 @@ const initialAdminReports: AdministrativeReport[] = [
     calls_count: 18,
     successful_contacts: 12,
     leads_converted: 2,
-    tasks_summary: 'پیگیری قرارداد شرکت سپهر و نهایی‌سازی پیش‌نویس، تماس با ۴ لید جدید از دایرکت، هماهنگی ارسال نمونه قرارداد برای دکوراسیون پارسیان.',
+    tasks_summary: 'پیگیری قرارداد شرکت سپهر و نهایی‌سازی پیش‌نویس، تماس با ۴ لید جدید از دایرکت.',
     challenges: 'سامانه پیامک شرکت در ساعات ظهر کمی کندی داشت که پیگیری شد.',
-    tomorrow_plan: 'بستن قرارداد رسمی سپهر، تماس با ۵ لید سرد جدید، برگزاری جلسه با مدیر فروش.',
-    date_created: new Date().toISOString()
-  },
-  {
-    id: 'adm-2',
-    personnel_id: 'p-3',
-    personnel_name: 'علیرضا حسینی',
-    report_date: new Date().toISOString().split('T')[0],
-    calls_count: 22,
-    successful_contacts: 14,
-    leads_converted: 1,
-    tasks_summary: 'بررسی وضعیت فروشگاه آوینامد و ارسال پیشنهاد تمدید مهلت، تماس با بانک شماره‌های اولیه، مشاوره تلفنی با مشتریان صنف پوشاک.',
-    challenges: 'برخی مشتریان به دلیل نوسان قیمت مواد اولیه، انعقاد قرارداد را به تعویق می‌اندازند.',
-    tomorrow_plan: 'پیگیری مشتریان در وضعیت قبل از انقضا و بستن حداقل یک قرارداد جدید.',
+    tomorrow_plan: 'بستن قرارداد رسمی سپهر، تماس با ۵ لید سرد جدید.',
     date_created: new Date().toISOString()
   }
 ];
 
-// In-memory collections state
-let personnelData = [...initialPersonnel];
-let customersData = [...initialCustomers];
-let reportsData = [...initialReports];
-let coldLeadsData = [...initialColdLeads];
-let adminReportsData = [...initialAdminReports];
+const initialContacts: CustomerContact[] = [
+  {
+    id: 'cnt-101-1',
+    customer_id: 'c-101',
+    channel_type: 'mobile',
+    value: '09121234567',
+    normalized_value: '09121234567',
+    contact_name: 'مهندس کامران رستمی',
+    contact_role: 'مدیرعامل',
+    is_primary: true,
+    notes: 'تماس بعد از ظهرها',
+    date_created: addDays(now, -3),
+    date_updated: addDays(now, -3)
+  },
+  {
+    id: 'cnt-101-2',
+    customer_id: 'c-101',
+    channel_type: 'landline',
+    value: '02188776655',
+    normalized_value: '02188776655',
+    contact_name: 'دفتر مرکزی تهران',
+    contact_role: 'دفتر مرکزی',
+    is_primary: false,
+    date_created: addDays(now, -3),
+    date_updated: addDays(now, -3)
+  },
+  {
+    id: 'cnt-102-1',
+    customer_id: 'c-102',
+    channel_type: 'mobile',
+    value: '09132223344',
+    normalized_value: '09132223344',
+    contact_name: 'خانم بهاره سهرابی',
+    contact_role: 'مدیر فروشگاه',
+    is_primary: true,
+    date_created: addDays(now, -8),
+    date_updated: addDays(now, -8)
+  },
+  {
+    id: 'cnt-103-1',
+    customer_id: 'c-103',
+    channel_type: 'mobile',
+    value: '09171118899',
+    normalized_value: '09171118899',
+    contact_name: 'آقای فرهاد دهقان',
+    contact_role: 'مدیر کارخانه',
+    is_primary: true,
+    date_created: addDays(now, -1),
+    date_updated: addDays(now, -1)
+  },
+  {
+    id: 'cnt-104-1',
+    customer_id: 'c-104',
+    channel_type: 'mobile',
+    value: '09153334455',
+    normalized_value: '09153334455',
+    contact_name: 'جناب کاظمی',
+    contact_role: 'مدیریت شعب',
+    is_primary: true,
+    date_created: addDays(now, -12),
+    date_updated: addDays(now, -12)
+  }
+];
 
-// Helper: check and update expired marketers
-function updateExpirationFlags() {
-  const currentTime = new Date().getTime();
-  customersData = customersData.map(c => {
-    if (c.assignment_deadline && c.status !== 'قرارداد' && c.status !== 'لیست سیاه') {
-      const deadline = new Date(c.assignment_deadline).getTime();
-      const isExpired = currentTime > deadline;
-      return {
-        ...c,
-        is_expired: isExpired
-      };
+// No in-memory cache or temporary mock data: all data is strictly online
+let personnelData = [...initialPersonnel];
+let customersData: Customer[] = [];
+let reportsData: CustomerReport[] = [];
+let coldLeadsData: ColdLead[] = [];
+let adminReportsData: AdministrativeReport[] = [];
+let contactsData: CustomerContact[] = [];
+
+function normalizeContactValue(value: string, type?: string): string {
+  if (!value) return '';
+  let clean = value.trim();
+  const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
+  const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
+  clean = clean.replace(/[۰-۹]/g, w => persianDigits.indexOf(w).toString());
+  clean = clean.replace(/[٠-٩]/g, w => arabicDigits.indexOf(w).toString());
+  clean = clean.replace(/[\s\-_()]/g, '');
+
+  if (type === 'mobile' || type === 'landline' || (!type && /^[+0-9]/.test(clean))) {
+    clean = clean.replace(/^(\+98|0098)/, '0');
+    if (/^9\d{9}$/.test(clean)) {
+      clean = '0' + clean;
     }
-    return {
-      ...c,
-      is_expired: false
-    };
-  });
+  } else if (type === 'telegram' || type === 'instagram') {
+    clean = clean.replace(/^@+/, '').toLowerCase();
+    clean = clean.replace(/^https?:\/\/(www\.)?(t\.me|telegram\.me|instagram\.com)\//i, '');
+    clean = clean.replace(/\/$/, '');
+  } else if (type === 'email' || type === 'website') {
+    clean = clean.toLowerCase();
+  }
+
+  return clean;
 }
 
-// Directus API Forwarder (BFF with Admin Token)
-async function directusFetch(path: string, options: RequestInit = {}) {
+function computeCustomerExpiration(c: any): any {
+  if (!c) return c;
+  if (c.assignment_deadline && c.status !== 'قرارداد' && c.status !== 'لیست سیاه') {
+    const deadline = new Date(c.assignment_deadline).getTime();
+    const isExpired = new Date().getTime() > deadline;
+    return { ...c, is_expired: isExpired };
+  }
+  return { ...c, is_expired: false };
+}
+
+function updateExpirationFlags() {
+  customersData = customersData.map(c => computeCustomerExpiration(c));
+}
+
+// Directus API Request Forwarder
+async function directusFetch(path: string, options: RequestInit = {}): Promise<any> {
   if (!directusUrl) {
     throw new Error('DIRECTUS_URL_NOT_CONFIGURED');
   }
@@ -425,123 +496,782 @@ async function directusFetch(path: string, options: RequestInit = {}) {
 
   if (!res.ok) {
     const errorText = await res.text();
-    throw new Error(`Directus responded with ${res.status}: ${errorText}`);
+    let parsedMessage = errorText;
+    try {
+      const errJson = JSON.parse(errorText);
+      if (errJson.errors && Array.isArray(errJson.errors) && errJson.errors[0]?.message) {
+        parsedMessage = errJson.errors[0].message;
+      }
+    } catch {}
+    throw new Error(parsedMessage);
   }
 
-  return res.json();
+  if (res.status === 204) {
+    return { success: true };
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return res.json();
+  }
+
+  const text = await res.text();
+  return { data: text, text };
 }
 
-// ----------------- BFF API ROUTES ----------------- //
+// Auto-seed personnel into Directus so foreign key assigned_marketer_id is always satisfied
+async function ensureDirectusPersonnel() {
+  if (!directusUrl || !directusAdminToken) return;
+  try {
+    const res = await directusFetch('/items/personnel?limit=100');
+    if (res && Array.isArray(res.data) && res.data.length === 0) {
+      console.log('Seeding initial personnel into Directus...');
+      await directusFetch('/items/personnel', {
+        method: 'POST',
+        body: JSON.stringify(initialPersonnel.map(p => ({
+          id: p.id,
+          name: p.name,
+          role: p.role,
+          phone: p.phone,
+          email: p.email,
+          status: 'active'
+        })))
+      });
+      console.log('Directus personnel auto-seeded successfully.');
+    }
+  } catch (err: any) {
+    console.warn('Could not auto-seed personnel into Directus:', err.message);
+  }
+}
 
-// Health check endpoint for Coolify / Docker container monitoring
+// Clean Customer Payload for Directus schema fields
+function cleanCustomerPayloadForDirectus(payload: any, id: string) {
+  const nowIso = new Date().toISOString();
+
+  let marketerId: string | null = payload.assigned_marketer_id || null;
+  if (!marketerId || marketerId === 'همه' || marketerId.trim() === '' || marketerId === 'none') {
+    marketerId = null;
+  }
+
+  let nextFollowup: string | null = payload.next_followup_date || null;
+  if (!nextFollowup || String(nextFollowup).trim() === '') {
+    nextFollowup = null;
+  } else {
+    try {
+      nextFollowup = new Date(nextFollowup).toISOString();
+    } catch {
+      nextFollowup = null;
+    }
+  }
+
+  let deadline: string | null = payload.assignment_deadline || null;
+  if (!deadline && payload.assignment_duration_days) {
+    deadline = addDays(new Date(), parseInt(payload.assignment_duration_days, 10));
+  } else if (!deadline) {
+    deadline = addDays(new Date(), 7);
+  } else {
+    try {
+      deadline = new Date(deadline).toISOString();
+    } catch {
+      deadline = addDays(new Date(), 7);
+    }
+  }
+
+  const clean: Record<string, any> = {
+    id,
+    company_name: (payload.company_name || 'بدون نام').trim(),
+    business_type: (payload.business_type || '').trim(),
+    province: (payload.province || '').trim(),
+    city: (payload.city || '').trim(),
+    mobile_numbers: Array.isArray(payload.mobile_numbers) ? payload.mobile_numbers.filter(Boolean) : (payload.mobile_numbers ? [payload.mobile_numbers] : []),
+    landline_numbers: Array.isArray(payload.landline_numbers) ? payload.landline_numbers.filter(Boolean) : (payload.landline_numbers ? [payload.landline_numbers] : []),
+    telegram_phone: (payload.telegram_phone || '').trim(),
+    telegram_ids: Array.isArray(payload.telegram_ids) ? payload.telegram_ids.filter(Boolean) : (payload.telegram_ids ? [payload.telegram_ids] : []),
+    instagram_ids: Array.isArray(payload.instagram_ids) ? payload.instagram_ids.filter(Boolean) : (payload.instagram_ids ? [payload.instagram_ids] : []),
+    emails: Array.isArray(payload.emails) ? payload.emails.filter(Boolean) : (payload.emails ? [payload.emails] : []),
+    websites: Array.isArray(payload.websites) ? payload.websites.filter(Boolean) : (payload.websites ? [payload.websites] : []),
+    is_ecommerce: Boolean(payload.is_ecommerce),
+    manager_name: (payload.manager_name || '').trim(),
+    manager_phones: Array.isArray(payload.manager_phones) ? payload.manager_phones.filter(Boolean) : (payload.manager_phones ? [payload.manager_phones] : []),
+    negotiator_name: (payload.negotiator_name || '').trim(),
+    negotiator_phones: Array.isArray(payload.negotiator_phones) ? payload.negotiator_phones.filter(Boolean) : (payload.negotiator_phones ? [payload.negotiator_phones] : []),
+    interview_status: payload.interview_status || 'مصاحبه اولیه انجام شده',
+    interview_report: (payload.interview_report || '').trim(),
+    interview_score: Number(payload.interview_score) || 5,
+    next_followup_date: nextFollowup,
+    assigned_marketer_id: marketerId,
+    assigned_marketer_name: (payload.assigned_marketer_name || 'تخصیص نیافته').trim(),
+    assignment_deadline: deadline,
+    assignment_duration_days: payload.assignment_duration_days ? parseInt(payload.assignment_duration_days, 10) : 7,
+    status: payload.status || 'تماس برقرار نشده',
+    is_expired: Boolean(payload.is_expired),
+    date_created: payload.date_created || nowIso,
+    date_updated: nowIso
+  };
+
+  return clean;
+}
+
+function extractCustomerContacts(payload: any, customerId: string): CustomerContact[] {
+  const nowIso = new Date().toISOString();
+  const list: CustomerContact[] = [];
+
+  if (Array.isArray(payload.contacts) && payload.contacts.length > 0) {
+    for (const c of payload.contacts) {
+      if (c && c.value && String(c.value).trim()) {
+        const val = String(c.value).trim();
+        const chType = c.channel_type || 'mobile';
+        const isUuid = c.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id);
+        list.push({
+          id: isUuid ? c.id : crypto.randomUUID(),
+          customer_id: customerId,
+          channel_type: chType,
+          value: val,
+          normalized_value: normalizeContactValue(val, chType),
+          contact_name: (c.contact_name || '').trim(),
+          contact_role: (c.contact_role || '').trim(),
+          is_primary: Boolean(c.is_primary),
+          notes: (c.notes || '').trim(),
+          date_created: c.date_created || nowIso,
+          date_updated: nowIso
+        });
+      }
+    }
+  } else {
+    // Synthesize from flat lists if contacts array is absent
+    const mobiles = Array.isArray(payload.mobile_numbers) ? payload.mobile_numbers : [];
+    mobiles.forEach((m: string, idx: number) => {
+      if (m && String(m).trim()) {
+        list.push({
+          id: crypto.randomUUID(),
+          customer_id: customerId,
+          channel_type: 'mobile',
+          value: String(m).trim(),
+          normalized_value: normalizeContactValue(String(m).trim(), 'mobile'),
+          contact_name: payload.manager_name || 'مدیر',
+          contact_role: idx === 0 ? 'موبایل اصلی' : 'موبایل دوم',
+          is_primary: idx === 0,
+          date_created: nowIso,
+          date_updated: nowIso
+        });
+      }
+    });
+
+    const landlines = Array.isArray(payload.landline_numbers) ? payload.landline_numbers : [];
+    landlines.forEach((l: string) => {
+      if (l && String(l).trim()) {
+        list.push({
+          id: crypto.randomUUID(),
+          customer_id: customerId,
+          channel_type: 'landline',
+          value: String(l).trim(),
+          normalized_value: normalizeContactValue(String(l).trim(), 'landline'),
+          contact_name: 'دفتر مرکزی',
+          contact_role: 'تلفن ثابت',
+          is_primary: false,
+          date_created: nowIso,
+          date_updated: nowIso
+        });
+      }
+    });
+
+    const telegrams = Array.isArray(payload.telegram_ids) ? payload.telegram_ids : [];
+    telegrams.forEach((t: string) => {
+      if (t && String(t).trim()) {
+        list.push({
+          id: crypto.randomUUID(),
+          customer_id: customerId,
+          channel_type: 'telegram',
+          value: String(t).trim(),
+          normalized_value: normalizeContactValue(String(t).trim(), 'telegram'),
+          contact_name: 'اکانت تلگرام',
+          contact_role: 'سوشال',
+          is_primary: false,
+          date_created: nowIso,
+          date_updated: nowIso
+        });
+      }
+    });
+
+    const instagrams = Array.isArray(payload.instagram_ids) ? payload.instagram_ids : [];
+    instagrams.forEach((i: string) => {
+      if (i && String(i).trim()) {
+        list.push({
+          id: crypto.randomUUID(),
+          customer_id: customerId,
+          channel_type: 'instagram',
+          value: String(i).trim(),
+          normalized_value: normalizeContactValue(String(i).trim(), 'instagram'),
+          contact_name: 'پیج اینستاگرام',
+          contact_role: 'سوشال',
+          is_primary: false,
+          date_created: nowIso,
+          date_updated: nowIso
+        });
+      }
+    });
+
+    const emails = Array.isArray(payload.emails) ? payload.emails : [];
+    emails.forEach((em: string) => {
+      if (em && String(em).trim()) {
+        list.push({
+          id: crypto.randomUUID(),
+          customer_id: customerId,
+          channel_type: 'email',
+          value: String(em).trim(),
+          normalized_value: normalizeContactValue(String(em).trim(), 'email'),
+          contact_name: 'پست الکترونیک',
+          contact_role: 'ایمیل',
+          is_primary: false,
+          date_created: nowIso,
+          date_updated: nowIso
+        });
+      }
+    });
+  }
+
+  return list;
+}
+
+async function asyncCheckContactDuplicate(value: string, channelType?: string, currentCustomerId?: string) {
+  if (!value || value.trim().length < 3) return null;
+  const normalized = normalizeContactValue(value, channelType);
+  if (!normalized) return null;
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const q = `/items/customer_contacts?filter[_or][0][normalized_value][_eq]=${encodeURIComponent(normalized)}&filter[_or][1][value][_eq]=${encodeURIComponent(value.trim())}&fields=*,customer_id.*`;
+      const result = await directusFetch(q);
+      if (result && Array.isArray(result.data) && result.data.length > 0) {
+        for (const item of result.data) {
+          let cust = item.customer_id;
+          const custId = (cust && typeof cust === 'object') ? cust.id : (typeof cust === 'string' ? cust : null);
+          
+          // If this contact belongs to the customer currently being edited, ignore it!
+          if (currentCustomerId && custId && String(custId).toLowerCase() === String(currentCustomerId).toLowerCase()) {
+            continue;
+          }
+
+          if (custId) {
+            if (typeof cust !== 'object' || !cust.company_name) {
+              const fetched = await directusFetch(`/items/customers/${custId}`).catch(() => null);
+              if (fetched && fetched.data) cust = fetched.data;
+            }
+            if (cust) {
+              const expCust = computeCustomerExpiration(cust);
+              const isContract = expCust.status === 'قرارداد';
+              const isExpired = !!expCust.is_expired;
+              const conflictType: 'active_marketer' | 'expired' | 'contract' = isContract
+                ? 'contract'
+                : isExpired
+                ? 'expired'
+                : 'active_marketer';
+
+              let msg = '';
+              if (conflictType === 'active_marketer') {
+                msg = `این شماره/اکانت قبلاً برای مشتری «${expCust.company_name}» در اختیار بازاریاب «${expCust.assigned_marketer_name}» ثبت شده و مهلت واگذاری آن هنوز معتبر است.`;
+              } else if (conflictType === 'contract') {
+                msg = `این شماره متعلق به مشتری قطعی «${expCust.company_name}» با قرارداد رسمی است (بازاریاب: ${expCust.assigned_marketer_name}).`;
+              } else {
+                msg = `این شماره قبلاً برای مشتری «${expCust.company_name}» ثبت شده بود، اما مهلت بازاریاب (${expCust.assigned_marketer_name}) منقضی شده است و امکان واگذاری مجدد دارد.`;
+              }
+
+              return {
+                isDuplicate: true,
+                conflictType,
+                matchedContact: item,
+                matchedCustomer: {
+                  id: expCust.id,
+                  company_name: expCust.company_name,
+                  assigned_marketer_name: expCust.assigned_marketer_name,
+                  assigned_marketer_id: expCust.assigned_marketer_id,
+                  assignment_deadline: expCust.assignment_deadline,
+                  is_expired: isExpired,
+                  status: expCust.status
+                },
+                message: msg
+              };
+            }
+          }
+        }
+      }
+      // If database is active, it is the sole and authoritative source of truth!
+      return null;
+    } catch (e: any) {
+      console.warn('Database duplicate check error:', e.message);
+      return null;
+    }
+  }
+
+  // Fallback to local memory store ONLY when Directus is disabled or offline
+  updateExpirationFlags();
+  const matchedContact = contactsData.find(c => {
+    if (currentCustomerId && c.customer_id === currentCustomerId) return false;
+    const cNorm = c.normalized_value || normalizeContactValue(c.value, c.channel_type);
+    return cNorm === normalized;
+  });
+
+  if (!matchedContact) return null;
+  const matchedCustomer = customersData.find(cust => cust.id === matchedContact.customer_id);
+  if (!matchedCustomer) return null;
+
+  const isExpired = !!matchedCustomer.is_expired;
+  const isContract = matchedCustomer.status === 'قرارداد';
+  const conflictType: 'active_marketer' | 'expired' | 'contract' = isContract
+    ? 'contract'
+    : isExpired
+    ? 'expired'
+    : 'active_marketer';
+
+  let message = '';
+  if (conflictType === 'active_marketer') {
+    message = `این شماره/اکانت قبلاً برای مشتری «${matchedCustomer.company_name}» در اختیار بازاریاب «${matchedCustomer.assigned_marketer_name}» ثبت شده است و مهلت واگذاری آن هنوز معتبر است.`;
+  } else if (conflictType === 'contract') {
+    message = `این شماره متعلق به مشتری قطعی «${matchedCustomer.company_name}» با قرارداد رسمی است (بازاریاب: ${matchedCustomer.assigned_marketer_name}).`;
+  } else {
+    message = `این شماره قبلاً برای مشتری «${matchedCustomer.company_name}» ثبت شده بود، اما مهلت بازاریاب (${matchedCustomer.assigned_marketer_name}) منقضی شده است و امکان واگذاری مجدد دارد.`;
+  }
+
+  return {
+    isDuplicate: true,
+    conflictType,
+    matchedContact,
+    matchedCustomer: {
+      id: matchedCustomer.id,
+      company_name: matchedCustomer.company_name,
+      assigned_marketer_name: matchedCustomer.assigned_marketer_name,
+      assigned_marketer_id: matchedCustomer.assigned_marketer_id,
+      assignment_deadline: matchedCustomer.assignment_deadline,
+      is_expired: isExpired,
+      status: matchedCustomer.status
+    },
+    message
+  };
+}
+
+// ----------------- BFF API & RBAC LAYER ----------------- //
+
+function getRequestUser(req: Request) {
+  const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string) || '';
+  const userRole = (req.headers['x-user-role'] as string) || (req.query.user_role as string) || 'admin';
+  const userName = req.headers['x-user-name'] ? decodeURIComponent(req.headers['x-user-name'] as string) : '';
+  return { userId, userRole, userName };
+}
+
 app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    port: PORT
+    port: PORT,
+    database_connected: Boolean(directusUrl && directusAdminToken)
   });
 });
 
-// Directus / BFF Status & Settings
+let lastBffStatusCache: { timestamp: number; data: any } | null = null;
+let personnelSeeded = false;
+
 app.get('/api/bff-status', async (req: Request, res: Response) => {
-  let isDirectusReachable = false;
-  let directusError: string | null = null;
-  let directusCollections: string[] = [];
+  const nowMs = Date.now();
+  if (lastBffStatusCache && nowMs - lastBffStatusCache.timestamp < 5000) {
+    return res.json(lastBffStatusCache.data);
+  }
 
-  if (directusUrl) {
+  let isDbReachable = false;
+  let dbError: string | null = null;
+  let dbCounts = {
+    customers: 0,
+    customer_contacts: 0,
+    customer_reports: 0,
+    cold_leads: 0,
+    administrative_reports: 0,
+    personnel: 0
+  };
+
+  if (directusUrl && directusAdminToken) {
     try {
-      const ping = await directusFetch('/server/ping', { method: 'GET' });
-      isDirectusReachable = true;
+      await directusFetch('/server/ping', { method: 'GET' });
+      isDbReachable = true;
 
-      // Check collections
       try {
-        const collectionsRes = await directusFetch('/collections', { method: 'GET' });
-        if (collectionsRes && Array.isArray(collectionsRes.data)) {
-          directusCollections = collectionsRes.data.map((col: any) => col.collection);
-        }
-      } catch (err: any) {
-        // collections read failed or auth needed
+        const [cRes, contRes, repRes, lRes, admRes, pRes] = await Promise.all([
+          directusFetch('/items/customers?limit=0&meta=total_count').catch(() => null),
+          directusFetch('/items/customer_contacts?limit=0&meta=total_count').catch(() => null),
+          directusFetch('/items/customer_reports?limit=0&meta=total_count').catch(() => null),
+          directusFetch('/items/cold_leads?limit=0&meta=total_count').catch(() => null),
+          directusFetch('/items/administrative_reports?limit=0&meta=total_count').catch(() => null),
+          directusFetch('/items/personnel?limit=0&meta=total_count').catch(() => null),
+        ]);
+
+        dbCounts = {
+          customers: cRes?.meta?.total_count ?? 0,
+          customer_contacts: contRes?.meta?.total_count ?? 0,
+          customer_reports: repRes?.meta?.total_count ?? 0,
+          cold_leads: lRes?.meta?.total_count ?? 0,
+          administrative_reports: admRes?.meta?.total_count ?? 0,
+          personnel: pRes?.meta?.total_count ?? 0,
+        };
+      } catch {}
+
+      if (!personnelSeeded) {
+        personnelSeeded = true;
+        ensureDirectusPersonnel().catch(() => {});
       }
     } catch (err: any) {
-      isDirectusReachable = false;
-      directusError = err.message || 'Cannot reach Directus instance';
+      isDbReachable = false;
+      dbError = err.message || 'عدم امکان اتصال به پایگاه داده مرکزی';
     }
   }
 
-  res.json({
-    mode: isDirectusReachable ? 'DIRECTUS_CONNECTED' : 'LOCAL_BFF_FALLBACK',
-    directus_url: directusUrl || 'NOT_CONFIGURED',
+  const responseData = {
+    mode: isDbReachable ? 'DATABASE_CONNECTED' : 'LOCAL_BFF_FALLBACK',
     has_token: !!directusAdminToken,
-    directus_reachable: isDirectusReachable,
-    directus_collections: directusCollections,
-    error: directusError,
-    counts: {
-      customers: customersData.length,
-      reports: reportsData.length,
-      cold_leads: coldLeadsData.length,
-      admin_reports: adminReportsData.length,
-      personnel: personnelData.length
-    }
-  });
+    database_reachable: isDbReachable,
+    error: dbError,
+    counts: dbCounts
+  };
+
+  lastBffStatusCache = { timestamp: nowMs, data: responseData };
+  res.json(responseData);
 });
 
-// Update Directus runtime settings from UI
-app.post('/api/bff-config', (req: Request, res: Response) => {
+app.post('/api/bff-config', async (req: Request, res: Response) => {
   const { url, token } = req.body;
   if (typeof url === 'string') directusUrl = url.trim();
   if (typeof token === 'string') directusAdminToken = token.trim();
-  res.json({ success: true, directus_url: directusUrl, has_token: !!directusAdminToken });
+
+  if (directusUrl && directusAdminToken) {
+    await ensureDirectusPersonnel().catch(() => {});
+  }
+
+  res.json({ success: true, has_token: !!directusAdminToken });
 });
 
-// Directus Schema endpoint (reads directus-schema.json)
-app.get('/api/directus-schema', (req: Request, res: Response) => {
+const handleSystemSchema = (req: Request, res: Response) => {
   try {
     const schemaPath = path.resolve(__dirname, 'directus-schema.json');
     if (fs.existsSync(schemaPath)) {
       const content = fs.readFileSync(schemaPath, 'utf8');
       return res.setHeader('Content-Type', 'application/json').send(content);
     }
-    return res.status(404).json({ error: 'Schema file not found' });
+    return res.status(404).json({ error: 'فایل ساختار پایگاه داده یافت نشد.' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
-});
+};
+app.get('/api/system-schema', handleSystemSchema);
+app.get('/api/directus-schema', handleSystemSchema);
+
+// Seed demo data into Database
+const handleSeedInitialData = async (req: Request, res: Response) => {
+  if (!directusUrl || !directusAdminToken) {
+    return res.status(400).json({ error: 'پایگاه داده متصل نیست.' });
+  }
+
+  try {
+    await ensureDirectusPersonnel();
+
+    const existing = await directusFetch('/items/customers?limit=1');
+    if (existing && Array.isArray(existing.data) && existing.data.length > 0) {
+      return res.json({ success: true, message: 'پایگاه داده دارای پرونده مشتری است.' });
+    }
+
+    for (const sample of initialCustomers) {
+      const custId = crypto.randomUUID();
+      const payload = cleanCustomerPayloadForDirectus({ ...sample, id: custId }, custId);
+      await directusFetch('/items/customers', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
+      const sampleContacts = initialContacts.filter(c => c.customer_id === sample.id);
+      for (const ct of sampleContacts) {
+        await directusFetch('/items/customer_contacts', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...ct,
+            id: crypto.randomUUID(),
+            customer_id: custId
+          })
+        });
+      }
+
+      const sampleReports = initialReports.filter(r => r.customer_id === sample.id);
+      for (const rp of sampleReports) {
+        await directusFetch('/items/customer_reports', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...rp,
+            id: crypto.randomUUID(),
+            customer_id: custId
+          })
+        });
+      }
+    }
+
+    return res.json({ success: true, message: 'داده‌های اولیه نمونه با موفقیت در پایگاه داده درج شدند.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: `خطا در درج داده‌های نمونه در پایگاه داده: ${err.message}` });
+  }
+};
+app.post('/api/seed-initial-data', handleSeedInitialData);
+app.post('/api/seed-directus', handleSeedInitialData);
 
 // Personnel API
 app.get('/api/personnel', async (req: Request, res: Response) => {
   if (directusUrl && directusAdminToken) {
     try {
-      const result = await directusFetch('/items/personnel');
+      const result = await directusFetch('/items/personnel?sort=id');
       if (result && Array.isArray(result.data)) {
+        if (result.data.length === 0) {
+          await ensureDirectusPersonnel();
+          const refreshed = await directusFetch('/items/personnel?sort=id');
+          return res.json(refreshed.data || initialPersonnel);
+        }
         return res.json(result.data);
       }
-    } catch (e) {
-      // fallback
+    } catch (e: any) {
+      return res.status(502).json({ error: `خطا در فراخوانی پرسنل از پایگاه داده مرکزی: ${e.message}` });
     }
   }
-  res.json(personnelData);
+  res.json(initialPersonnel);
 });
 
-// Customers API
-app.get('/api/customers', async (req: Request, res: Response) => {
-  updateExpirationFlags();
+// Contacts API
+app.get('/api/contacts/check-duplicate', async (req: Request, res: Response) => {
+  const { value, channel_type, customer_id } = req.query;
+  if (!value || typeof value !== 'string') {
+    return res.json({ isDuplicate: false });
+  }
+  const dup = await asyncCheckContactDuplicate(
+    value,
+    typeof channel_type === 'string' ? channel_type : undefined,
+    typeof customer_id === 'string' ? customer_id : undefined
+  );
+  res.json(dup || { isDuplicate: false });
+});
 
-  const { search, status, marketer_id, expired_only } = req.query;
-
-  // Try directus first if active
+app.get('/api/contacts', async (req: Request, res: Response) => {
+  const { customer_id, search, type } = req.query;
   if (directusUrl && directusAdminToken) {
     try {
-      const result = await directusFetch('/items/customers?sort=-date_created&limit=100');
+      let q = '/items/customer_contacts?sort=-date_created&limit=500';
+      if (customer_id) q += `&filter[customer_id][_eq]=${encodeURIComponent(customer_id as string)}`;
+      const result = await directusFetch(q);
       if (result && Array.isArray(result.data)) {
         return res.json(result.data);
       }
-    } catch (e) {
-      // Directus unreachable, fall back to local store
+    } catch (e: any) {
+      return res.status(502).json({ error: `خطا در دریافت لیست مخاطبین از پایگاه داده مرکزی: ${e.message}` });
     }
   }
 
-  let filtered = [...customersData];
+  let list = [...contactsData];
+  if (customer_id && typeof customer_id === 'string') {
+    list = list.filter(ct => ct.customer_id === customer_id);
+  }
+  if (type && typeof type === 'string') {
+    list = list.filter(ct => ct.channel_type === type);
+  }
+  if (search && typeof search === 'string') {
+    const s = search.toLowerCase();
+    list = list.filter(ct =>
+      ct.value.toLowerCase().includes(s) ||
+      (ct.contact_name && ct.contact_name.toLowerCase().includes(s)) ||
+      (ct.contact_role && ct.contact_role.toLowerCase().includes(s))
+    );
+  }
+  res.json(list);
+});
+
+app.post('/api/contacts', async (req: Request, res: Response) => {
+  const payload = req.body;
+  if (!payload.value || !payload.customer_id) {
+    return res.status(400).json({ error: 'شماره و شناسه مشتری الزامی است.' });
+  }
+
+  const dup = await asyncCheckContactDuplicate(payload.value, payload.channel_type, payload.customer_id);
+  if (dup && dup.conflictType === 'active_marketer') {
+    return res.status(409).json({
+      error: 'DUPLICATE_CONTACT',
+      message: dup.message,
+      conflict: dup
+    });
+  }
+
+  const nowIso = new Date().toISOString();
+  const newContact: CustomerContact = {
+    id: crypto.randomUUID(),
+    customer_id: payload.customer_id,
+    channel_type: payload.channel_type || 'mobile',
+    value: payload.value.trim(),
+    normalized_value: normalizeContactValue(payload.value, payload.channel_type),
+    contact_name: payload.contact_name || '',
+    contact_role: payload.contact_role || '',
+    is_primary: Boolean(payload.is_primary),
+    notes: payload.notes || '',
+    date_created: nowIso,
+    date_updated: nowIso
+  };
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const created = await directusFetch('/items/customer_contacts', {
+        method: 'POST',
+        body: JSON.stringify(newContact)
+      });
+      return res.status(201).json(created.data || newContact);
+    } catch (err: any) {
+      console.error('Contact create error:', err.message);
+      return res.status(500).json({
+        error: 'CONTACT_SAVE_FAILED',
+        message: `خطا در ذخیره شماره تماس در پایگاه داده مرکزی: ${err.message}`
+      });
+    }
+  }
+
+  contactsData.unshift(newContact);
+  res.status(201).json(newContact);
+});
+
+app.patch('/api/contacts/:id', async (req: Request, res: Response) => {
+  const payload = req.body;
+  const nowIso = new Date().toISOString();
+
+  if (payload.value) {
+    const dup = await asyncCheckContactDuplicate(
+      payload.value,
+      payload.channel_type,
+      payload.customer_id
+    );
+    if (dup && dup.conflictType === 'active_marketer') {
+      return res.status(409).json({
+        error: 'DUPLICATE_CONTACT',
+        message: dup.message,
+        conflict: dup
+      });
+    }
+  }
+
+  const cleanPatch: Record<string, any> = { ...payload, date_updated: nowIso };
+  if (payload.value) {
+    cleanPatch.normalized_value = normalizeContactValue(payload.value, payload.channel_type);
+  }
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const patched = await directusFetch(`/items/customer_contacts/${req.params.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(cleanPatch)
+      });
+      return res.json(patched.data);
+    } catch (err: any) {
+      return res.status(500).json({
+        error: 'CONTACT_UPDATE_FAILED',
+        message: `خطا در ویرایش شماره تماس در پایگاه داده مرکزی: ${err.message}`
+      });
+    }
+  }
+
+  const index = contactsData.findIndex(c => c.id === req.params.id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Contact not found' });
+  }
+
+  contactsData[index] = { ...contactsData[index], ...cleanPatch };
+  res.json(contactsData[index]);
+});
+
+app.delete('/api/contacts/:id', async (req: Request, res: Response) => {
+  if (directusUrl && directusAdminToken) {
+    try {
+      await directusFetch(`/items/customer_contacts/${req.params.id}`, {
+        method: 'DELETE'
+      });
+      return res.status(204).send();
+    } catch (err: any) {
+      return res.status(500).json({
+        error: 'CONTACT_DELETE_FAILED',
+        message: `خطا در حذف شماره از پایگاه داده مرکزی: ${err.message}`
+      });
+    }
+  }
+
+  contactsData = contactsData.filter(c => c.id !== req.params.id);
+  res.status(204).send();
+});
+
+// Customers API with BFF Role-Based Access Control
+app.get('/api/customers', async (req: Request, res: Response) => {
+  const { search, status, marketer_id, expired_only } = req.query;
+  const { userId, userRole, userName } = getRequestUser(req);
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const result = await directusFetch('/items/customers?sort=-date_created&limit=500&fields=*,contacts.*');
+      if (result && Array.isArray(result.data)) {
+        let list = result.data.map((c: any) => computeCustomerExpiration(c));
+
+        // Role-Based Filtering:
+        // A marketer can only see:
+        // 1. Their own assigned customers
+        // 2. Expired customers (free to be reclaimed/worked)
+        // 3. Unassigned customers
+        if (userRole === 'marketer' && userId) {
+          list = list.filter((c: any) =>
+            c.assigned_marketer_id === userId ||
+            (userName && c.assigned_marketer_name === userName) ||
+            c.is_expired ||
+            !c.assigned_marketer_id ||
+            c.assigned_marketer_id === 'none'
+          );
+        }
+
+        if (search && typeof search === 'string') {
+          const s = search.toLowerCase();
+          list = list.filter((c: any) =>
+            c.company_name?.toLowerCase().includes(s) ||
+            c.manager_name?.toLowerCase().includes(s) ||
+            c.city?.toLowerCase().includes(s) ||
+            c.business_type?.toLowerCase().includes(s) ||
+            (Array.isArray(c.mobile_numbers) && c.mobile_numbers.some((m: string) => m.includes(s))) ||
+            (Array.isArray(c.contacts) && c.contacts.some((ct: any) =>
+              ct.value?.toLowerCase().includes(s) ||
+              ct.contact_name?.toLowerCase().includes(s) ||
+              ct.contact_role?.toLowerCase().includes(s)
+            ))
+          );
+        }
+
+        if (status && typeof status === 'string' && status !== 'همه') {
+          list = list.filter((c: any) => c.status === status);
+        }
+
+        if (marketer_id && typeof marketer_id === 'string' && marketer_id !== 'همه') {
+          list = list.filter((c: any) => c.assigned_marketer_id === marketer_id);
+        }
+
+        if (expired_only === 'true') {
+          list = list.filter((c: any) => c.is_expired);
+        }
+
+        return res.json(list);
+      }
+    } catch (e: any) {
+      console.error('Fetch customers error:', e.message);
+      return res.status(502).json({
+        error: 'DB_UNREACHABLE',
+        message: `عدم دسترسی به پایگاه داده مرکزی: ${e.message}`
+      });
+    }
+  }
+
+  // Fallback to local memory ONLY if database is NOT configured
+  updateExpirationFlags();
+  let filtered = customersData.map(c => ({
+    ...c,
+    contacts: contactsData.filter(ct => ct.customer_id === c.id)
+  }));
 
   if (search && typeof search === 'string') {
     const s = search.toLowerCase();
@@ -550,7 +1280,12 @@ app.get('/api/customers', async (req: Request, res: Response) => {
       c.manager_name.toLowerCase().includes(s) ||
       c.city.toLowerCase().includes(s) ||
       c.business_type.toLowerCase().includes(s) ||
-      c.mobile_numbers.some(m => m.includes(s))
+      c.mobile_numbers.some(m => m.includes(s)) ||
+      c.contacts?.some(ct =>
+        ct.value.toLowerCase().includes(s) ||
+        (ct.contact_name && ct.contact_name.toLowerCase().includes(s)) ||
+        (ct.contact_role && ct.contact_role.toLowerCase().includes(s))
+      )
     );
   }
 
@@ -569,213 +1304,535 @@ app.get('/api/customers', async (req: Request, res: Response) => {
   res.json(filtered);
 });
 
-app.get('/api/customers/:id', (req: Request, res: Response) => {
+app.get('/api/customers/:id', async (req: Request, res: Response) => {
+  const { userId, userRole, userName } = getRequestUser(req);
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const [custRes, repRes, contRes] = await Promise.all([
+        directusFetch(`/items/customers/${req.params.id}?fields=*,contacts.*`).catch(() => null),
+        directusFetch(`/items/customer_reports?filter[customer_id][_eq]=${req.params.id}&sort=-date_created`).catch(() => null),
+        directusFetch(`/items/customer_contacts?filter[customer_id][_eq]=${req.params.id}&sort=-date_created`).catch(() => null),
+      ]);
+
+      if (custRes && custRes.data) {
+        const customer = computeCustomerExpiration(custRes.data);
+        const reports = repRes?.data || [];
+        const contacts = (Array.isArray(customer.contacts) && customer.contacts.length > 0)
+          ? customer.contacts
+          : (contRes?.data || []);
+
+        const isOwner = !customer.assigned_marketer_id || customer.assigned_marketer_id === 'none' || customer.assigned_marketer_id === userId || (userName && customer.assigned_marketer_name === userName) || customer.is_expired;
+        if (userRole === 'marketer' && userId && !isOwner) {
+          return res.status(403).json({
+            error: 'FORBIDDEN',
+            message: 'دسترسی به این پرونده برای شما مجاز نیست (در اختیار بازاریاب دیگری است).'
+          });
+        }
+        const canEdit = userRole === 'admin' || userRole === 'sales_manager' || isOwner;
+
+        return res.json({ ...customer, reports, contacts, can_edit: canEdit });
+      } else {
+        return res.status(404).json({ error: 'پرونده مشتری در سامانه یافت نشد.' });
+      }
+    } catch (e: any) {
+      return res.status(502).json({ error: `خطا در دریافت پرونده مشتری از پایگاه داده مرکزی: ${e.message}` });
+    }
+  }
+
   updateExpirationFlags();
   const customer = customersData.find(c => c.id === req.params.id);
   if (!customer) {
     return res.status(404).json({ error: 'Customer not found' });
   }
   const reports = reportsData.filter(r => r.customer_id === req.params.id);
-  res.json({ ...customer, reports });
+  const contacts = contactsData.filter(ct => ct.customer_id === req.params.id);
+  res.json({ ...customer, reports, contacts });
 });
 
+// Create Customer
 app.post('/api/customers', async (req: Request, res: Response) => {
   const payload = req.body;
-  const newId = `c-${Date.now()}`;
+  const { userId, userRole, userName } = getRequestUser(req);
+  const newId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
-  // Assignment duration defaults to 7 days if not provided
-  let deadline = payload.assignment_deadline;
-  if (!deadline && payload.assignment_duration_days) {
-    deadline = addDays(new Date(), parseInt(payload.assignment_duration_days, 10));
-  } else if (!deadline) {
-    deadline = addDays(new Date(), 7); // 7 days standard marketing assignment
+  // If a marketer creates a customer without explicitly picking an assignee, auto-assign to them
+  if (userRole === 'marketer' && userId) {
+    if (!payload.assigned_marketer_id || payload.assigned_marketer_id === 'none') {
+      payload.assigned_marketer_id = userId;
+      payload.assigned_marketer_name = userName || payload.assigned_marketer_name;
+    }
   }
 
-  const newCustomer: Customer = {
-    id: newId,
-    company_name: payload.company_name || 'بدون نام',
-    business_type: payload.business_type || '',
-    province: payload.province || '',
-    city: payload.city || '',
-    manager_name: payload.manager_name || '',
-    manager_phones: Array.isArray(payload.manager_phones) ? payload.manager_phones : (payload.manager_phones ? [payload.manager_phones] : []),
-    negotiator_name: payload.negotiator_name || '',
-    negotiator_phones: Array.isArray(payload.negotiator_phones) ? payload.negotiator_phones : (payload.negotiator_phones ? [payload.negotiator_phones] : []),
-    mobile_numbers: Array.isArray(payload.mobile_numbers) ? payload.mobile_numbers : (payload.mobile_numbers ? [payload.mobile_numbers] : []),
-    landline_numbers: Array.isArray(payload.landline_numbers) ? payload.landline_numbers : (payload.landline_numbers ? [payload.landline_numbers] : []),
-    telegram_phone: payload.telegram_phone || '',
-    telegram_ids: Array.isArray(payload.telegram_ids) ? payload.telegram_ids : (payload.telegram_ids ? [payload.telegram_ids] : []),
-    instagram_ids: Array.isArray(payload.instagram_ids) ? payload.instagram_ids : (payload.instagram_ids ? [payload.instagram_ids] : []),
-    emails: Array.isArray(payload.emails) ? payload.emails : (payload.emails ? [payload.emails] : []),
-    websites: Array.isArray(payload.websites) ? payload.websites : (payload.websites ? [payload.websites] : []),
-    is_ecommerce: Boolean(payload.is_ecommerce),
-    interview_status: payload.interview_status || 'مصاحبه اولیه انجام شده',
-    interview_report: payload.interview_report || '',
-    interview_score: Number(payload.interview_score) || 5,
-    next_followup_date: payload.next_followup_date || addDays(new Date(), 3),
-    assigned_marketer_id: payload.assigned_marketer_id || '',
-    assigned_marketer_name: payload.assigned_marketer_name || '',
-    assignment_date: nowIso,
-    assignment_deadline: deadline,
-    status: payload.status || 'تماس برقرار نشده',
-    date_created: nowIso,
-    date_updated: nowIso
-  };
+  // Pre-validate incoming contacts for duplicates against database
+  const incomingContactsList: Array<{ value: string; channel_type?: string }> = [];
+  if (Array.isArray(payload.contacts)) {
+    payload.contacts.forEach((c: any) => {
+      if (c && c.value) incomingContactsList.push({ value: c.value, channel_type: c.channel_type });
+    });
+  }
+  if (Array.isArray(payload.mobile_numbers)) {
+    payload.mobile_numbers.forEach((m: string) => {
+      if (m) incomingContactsList.push({ value: m, channel_type: 'mobile' });
+    });
+  }
 
-  // If connected to Directus, create in Directus via BFF
+  const dupResults = await Promise.all(
+    incomingContactsList.map((item) => asyncCheckContactDuplicate(item.value, item.channel_type))
+  );
+  const blocker = dupResults.find((dup) => dup && dup.conflictType === 'active_marketer');
+  if (blocker) {
+    return res.status(409).json({
+      error: 'DUPLICATE_CONTACT',
+      message: blocker.message,
+      conflict: blocker
+    });
+  }
+
+  const directusCustPayload = cleanCustomerPayloadForDirectus(payload, newId);
+  const contactsList = extractCustomerContacts(payload, newId);
+
   if (directusUrl && directusAdminToken) {
     try {
-      const created = await directusFetch('/items/customers', {
+      // 1. Insert customer into Database
+      const createdRes = await directusFetch('/items/customers', {
         method: 'POST',
-        body: JSON.stringify(newCustomer)
+        body: JSON.stringify(directusCustPayload)
       });
-      if (created && created.data) {
-        customersData.unshift(created.data);
-        return res.status(201).json(created.data);
+      const finalCust = createdRes.data;
+      const finalId = finalCust.id;
+
+      // 2. Batch insert contacts into customer_contacts table
+      let insertedContacts: CustomerContact[] = [];
+      if (contactsList.length > 0) {
+        try {
+          const batchRes = await directusFetch('/items/customer_contacts', {
+            method: 'POST',
+            body: JSON.stringify(contactsList.map(c => ({ ...c, customer_id: finalId })))
+          });
+          insertedContacts = Array.isArray(batchRes?.data) ? batchRes.data : contactsList;
+        } catch (bErr: any) {
+          console.error('Batch contact insert warning, trying individually:', bErr.message);
+          for (const ct of contactsList) {
+            try {
+              const ctRes = await directusFetch('/items/customer_contacts', {
+                method: 'POST',
+                body: JSON.stringify({ ...ct, customer_id: finalId })
+              });
+              insertedContacts.push(ctRes.data || { ...ct, customer_id: finalId });
+            } catch (singleErr: any) {
+              console.error('Contact insert error:', singleErr.message);
+              insertedContacts.push({ ...ct, customer_id: finalId });
+            }
+          }
+        }
       }
+
+      // 3. Insert initial report if given
+      if (directusCustPayload.interview_report) {
+        const initialReport: CustomerReport = {
+          id: crypto.randomUUID(),
+          customer_id: finalId,
+          negotiator_name: directusCustPayload.negotiator_name || directusCustPayload.assigned_marketer_name || 'کارشناس پذیرش',
+          negotiation_phone: directusCustPayload.negotiator_phones[0] || directusCustPayload.mobile_numbers[0] || '',
+          report_text: `[گزارش مصاحبه اولیه]: ${directusCustPayload.interview_report}`,
+          negotiation_score: directusCustPayload.interview_score,
+          next_followup_date: directusCustPayload.next_followup_date,
+          negotiation_status: directusCustPayload.status,
+          date_created: nowIso
+        };
+        await directusFetch('/items/customer_reports', {
+          method: 'POST',
+          body: JSON.stringify(initialReport)
+        }).catch((rErr: any) => console.error('Initial report insert error:', rErr.message));
+      }
+
+      const fullCustomer = {
+        ...finalCust,
+        contacts: insertedContacts
+      };
+
+      return res.status(201).json(fullCustomer);
     } catch (err: any) {
-      console.warn('Directus insert error, storing locally:', err.message);
-    }
-  }
-
-  // Fallback to in-memory store
-  customersData.unshift(newCustomer);
-
-  // If initial interview report was given, also log it as first report!
-  if (newCustomer.interview_report) {
-    const initialReport: CustomerReport = {
-      id: `r-${Date.now()}`,
-      customer_id: newCustomer.id,
-      negotiator_name: newCustomer.negotiator_name || newCustomer.assigned_marketer_name || 'کارشناس پذیرش',
-      negotiation_phone: newCustomer.negotiator_phones[0] || newCustomer.mobile_numbers[0] || '',
-      report_text: `[گزارش مصاحبه اولیه]: ${newCustomer.interview_report}`,
-      negotiation_score: newCustomer.interview_score,
-      next_followup_date: newCustomer.next_followup_date,
-      negotiation_status: newCustomer.status,
-      date_created: nowIso
-    };
-    reportsData.unshift(initialReport);
-  }
-
-  res.status(201).json(newCustomer);
-});
-
-app.patch('/api/customers/:id', async (req: Request, res: Response) => {
-  const index = customersData.findIndex(c => c.id === req.params.id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Customer not found' });
-  }
-
-  const updatedCustomer = {
-    ...customersData[index],
-    ...req.body,
-    date_updated: new Date().toISOString()
-  };
-
-  customersData[index] = updatedCustomer;
-
-  if (directusUrl && directusAdminToken) {
-    try {
-      await directusFetch(`/items/customers/${req.params.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(req.body)
+      console.error('Customer creation failed:', err.message);
+      return res.status(500).json({
+        error: 'CUSTOMER_SAVE_FAILED',
+        message: `خطا در ذخیره‌سازی پرونده مشتری در پایگاه داده مرکزی: ${err.message}`
       });
-    } catch (e) {
-      // ignore
     }
   }
 
-  res.json(updatedCustomer);
+  // Fallback ONLY when database is not configured
+  const fullCreated: Customer = { ...(directusCustPayload as any), contacts: contactsList };
+  return res.status(201).json(fullCreated);
 });
 
-app.delete('/api/customers/:id', async (req: Request, res: Response) => {
-  customersData = customersData.filter(c => c.id !== req.params.id);
-  reportsData = reportsData.filter(r => r.customer_id !== req.params.id);
+// Update Customer
+app.patch('/api/customers/:id', async (req: Request, res: Response) => {
+  const payload = req.body;
+  const { userId, userRole } = getRequestUser(req);
+  const nowIso = new Date().toISOString();
 
   if (directusUrl && directusAdminToken) {
     try {
-      await directusFetch(`/items/customers/${req.params.id}`, { method: 'DELETE' });
-    } catch (e) {
-      // ignore
+      // Role check: Marketer cannot edit an active customer belonging to another marketer
+      if (userRole === 'marketer' && userId) {
+        const currentCustRes = await directusFetch(`/items/customers/${req.params.id}?fields=assigned_marketer_id,assignment_deadline,status`).catch(() => null);
+        if (currentCustRes?.data) {
+          const expCust = computeCustomerExpiration(currentCustRes.data);
+          if (expCust.assigned_marketer_id && expCust.assigned_marketer_id !== userId && !expCust.is_expired && expCust.status !== 'تماس نگرفته') {
+            return res.status(403).json({
+              error: 'FORBIDDEN',
+              message: 'این پرونده در اختیار بازاریاب دیگری است و امکان تغییر آن را ندارید.'
+            });
+          }
+        }
+      }
+
+      // Check duplicates only for newly added numbers not already in database for this customer
+      if (Array.isArray(payload.contacts)) {
+        const existingContRes = await directusFetch(`/items/customer_contacts?filter[customer_id][_eq]=${req.params.id}&fields=value,channel_type,normalized_value`).catch(() => null);
+        const existingValues = new Set(
+          (existingContRes?.data || []).map((c: any) => c.normalized_value || normalizeContactValue(c.value, c.channel_type))
+        );
+
+        const newContactsToCheck = payload.contacts.filter(
+          (c: any) =>
+            c &&
+            c.value &&
+            String(c.value).trim().length >= 3 &&
+            !existingValues.has(normalizeContactValue(c.value, c.channel_type))
+        );
+
+        if (newContactsToCheck.length > 0) {
+          const dupResults = await Promise.all(
+            newContactsToCheck.map((c: any) => asyncCheckContactDuplicate(c.value, c.channel_type, req.params.id))
+          );
+          const conflict = dupResults.find((dup) => dup && dup.conflictType === 'active_marketer');
+          if (conflict) {
+            return res.status(409).json({
+              error: 'DUPLICATE_CONTACT',
+              message: conflict.message,
+              conflict: conflict
+            });
+          }
+        }
+      }
+
+      const cleanPatch: Record<string, any> = {};
+      if (payload.company_name !== undefined) cleanPatch.company_name = String(payload.company_name).trim();
+      if (payload.business_type !== undefined) cleanPatch.business_type = String(payload.business_type).trim();
+      if (payload.province !== undefined) cleanPatch.province = String(payload.province).trim();
+      if (payload.city !== undefined) cleanPatch.city = String(payload.city).trim();
+      if (payload.mobile_numbers !== undefined) cleanPatch.mobile_numbers = payload.mobile_numbers;
+      if (payload.landline_numbers !== undefined) cleanPatch.landline_numbers = payload.landline_numbers;
+      if (payload.telegram_phone !== undefined) cleanPatch.telegram_phone = payload.telegram_phone;
+      if (payload.telegram_ids !== undefined) cleanPatch.telegram_ids = payload.telegram_ids;
+      if (payload.instagram_ids !== undefined) cleanPatch.instagram_ids = payload.instagram_ids;
+      if (payload.emails !== undefined) cleanPatch.emails = payload.emails;
+      if (payload.websites !== undefined) cleanPatch.websites = payload.websites;
+      if (payload.is_ecommerce !== undefined) cleanPatch.is_ecommerce = Boolean(payload.is_ecommerce);
+      if (payload.manager_name !== undefined) cleanPatch.manager_name = payload.manager_name;
+      if (payload.manager_phones !== undefined) cleanPatch.manager_phones = payload.manager_phones;
+      if (payload.negotiator_name !== undefined) cleanPatch.negotiator_name = payload.negotiator_name;
+      if (payload.negotiator_phones !== undefined) cleanPatch.negotiator_phones = payload.negotiator_phones;
+      if (payload.interview_status !== undefined) cleanPatch.interview_status = payload.interview_status;
+      if (payload.interview_report !== undefined) cleanPatch.interview_report = payload.interview_report;
+      if (payload.interview_score !== undefined) cleanPatch.interview_score = Number(payload.interview_score);
+      if (payload.status !== undefined) cleanPatch.status = payload.status;
+      if (payload.is_expired !== undefined) cleanPatch.is_expired = Boolean(payload.is_expired);
+      if (payload.assignment_duration_days !== undefined) cleanPatch.assignment_duration_days = Number(payload.assignment_duration_days);
+
+      if (payload.assigned_marketer_id !== undefined) {
+        cleanPatch.assigned_marketer_id = (!payload.assigned_marketer_id || payload.assigned_marketer_id === 'همه' || payload.assigned_marketer_id.trim() === '' || payload.assigned_marketer_id === 'none') ? null : payload.assigned_marketer_id;
+      }
+      if (payload.assigned_marketer_name !== undefined) {
+        cleanPatch.assigned_marketer_name = String(payload.assigned_marketer_name).trim();
+      }
+
+      if (payload.next_followup_date !== undefined) {
+        cleanPatch.next_followup_date = (!payload.next_followup_date || String(payload.next_followup_date).trim() === '') ? null : new Date(payload.next_followup_date).toISOString();
+      }
+      if (payload.assignment_deadline !== undefined) {
+        cleanPatch.assignment_deadline = (!payload.assignment_deadline || String(payload.assignment_deadline).trim() === '') ? null : new Date(payload.assignment_deadline).toISOString();
+      }
+      cleanPatch.date_updated = nowIso;
+
+      const patched = await directusFetch(`/items/customers/${req.params.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(cleanPatch)
+      });
+
+      let updatedContacts: CustomerContact[] = [];
+      if (Array.isArray(payload.contacts)) {
+        // Delete old contacts from database
+        const oldCont = await directusFetch(`/items/customer_contacts?filter[customer_id][_eq]=${req.params.id}&fields=id`).catch(() => null);
+        if (oldCont && Array.isArray(oldCont.data) && oldCont.data.length > 0) {
+          const oldIds = oldCont.data.map((c: any) => c.id).filter(Boolean);
+          if (oldIds.length > 0) {
+            await directusFetch('/items/customer_contacts', {
+              method: 'DELETE',
+              body: JSON.stringify(oldIds)
+            }).catch((delErr) => console.error('Error batch deleting old contacts:', delErr.message));
+          }
+        }
+
+        const newContactsList = extractCustomerContacts(payload, req.params.id);
+        if (newContactsList.length > 0) {
+          try {
+            const batchRes = await directusFetch('/items/customer_contacts', {
+              method: 'POST',
+              body: JSON.stringify(newContactsList)
+            });
+            updatedContacts = Array.isArray(batchRes?.data) ? batchRes.data : newContactsList;
+          } catch (postErr: any) {
+            console.error('Batch contact insert warning, trying individually:', postErr.message);
+            for (const ct of newContactsList) {
+              try {
+                const ctRes = await directusFetch('/items/customer_contacts', {
+                  method: 'POST',
+                  body: JSON.stringify(ct)
+                });
+                updatedContacts.push(ctRes.data || ct);
+              } catch (singleErr: any) {
+                console.error('Single contact insert error:', singleErr.message);
+                updatedContacts.push(ct);
+              }
+            }
+          }
+        }
+      } else {
+        const contRes = await directusFetch(`/items/customer_contacts?filter[customer_id][_eq]=${req.params.id}`).catch(() => null);
+        updatedContacts = contRes?.data || [];
+      }
+
+      const fullCustomer = {
+        ...(patched.data || cleanPatch),
+        id: req.params.id,
+        contacts: updatedContacts
+      };
+
+      return res.json(fullCustomer);
+    } catch (err: any) {
+      console.error('Customer update error:', err.message);
+      return res.status(500).json({
+        error: 'CUSTOMER_UPDATE_FAILED',
+        message: `خطا در بروزرسانی پرونده مشتری در پایگاه داده: ${err.message}`
+      });
     }
   }
 
-  res.json({ success: true });
-});
-
-// Re-assign or Revoke Expired Customer Assignment
-app.post('/api/customers/:id/reassign', (req: Request, res: Response) => {
-  const { new_marketer_id, new_marketer_name, duration_days } = req.body;
+  // Fallback for offline mode
   const index = customersData.findIndex(c => c.id === req.params.id);
   if (index === -1) {
     return res.status(404).json({ error: 'Customer not found' });
   }
-
-  const days = duration_days ? parseInt(duration_days, 10) : 7;
-  const nowTime = new Date();
 
   customersData[index] = {
     ...customersData[index],
-    assigned_marketer_id: new_marketer_id || '',
-    assigned_marketer_name: new_marketer_name || 'تخصیص نیافته',
-    assignment_date: nowTime.toISOString(),
-    assignment_deadline: addDays(nowTime, days),
-    is_expired: false,
-    date_updated: nowTime.toISOString()
+    ...payload,
+    date_updated: nowIso
   };
-
-  // Add a history entry in reports
-  reportsData.unshift({
-    id: `r-${Date.now()}`,
-    customer_id: req.params.id,
-    negotiator_name: 'مدیریت بازاریابی',
-    negotiation_phone: '-',
-    report_text: `تغییر بازاریاب مسئول به «${new_marketer_name || 'عمومی'}» با مهلت جدید ${days} روزه برای پیگیری و انعقاد قرارداد.`,
-    negotiation_score: 5,
-    next_followup_date: addDays(nowTime, 2),
-    negotiation_status: customersData[index].status,
-    date_created: nowTime.toISOString()
-  });
 
   res.json(customersData[index]);
 });
 
-// Customer Follow-up Reports API
-app.get('/api/customer-reports', async (req: Request, res: Response) => {
-  const { customer_id } = req.query;
+// Delete Customer
+app.delete('/api/customers/:id', async (req: Request, res: Response) => {
+  const { userRole } = getRequestUser(req);
+  if (userRole === 'marketer' || userRole === 'operator') {
+    return res.status(403).json({
+      error: 'FORBIDDEN',
+      message: 'حذف پرونده مشتری فقط توسط مدیر فروش یا مدیر سیستم امکان‌پذیر است.'
+    });
+  }
 
   if (directusUrl && directusAdminToken) {
     try {
-      const q = customer_id ? `?filter[customer_id][_eq]=${customer_id}&sort=-date_created` : '?sort=-date_created';
-      const result = await directusFetch(`/items/customer_reports${q}`);
-      if (result && Array.isArray(result.data)) {
-        return res.json(result.data);
+      const [contactsRes, repRes] = await Promise.all([
+        directusFetch(`/items/customer_contacts?filter[customer_id][_eq]=${req.params.id}&fields=id`).catch(() => null),
+        directusFetch(`/items/customer_reports?filter[customer_id][_eq]=${req.params.id}&fields=id`).catch(() => null),
+      ]);
+
+      if (contactsRes && Array.isArray(contactsRes.data) && contactsRes.data.length > 0) {
+        const cIds = contactsRes.data.map((c: any) => c.id).filter(Boolean);
+        if (cIds.length > 0) {
+          await directusFetch('/items/customer_contacts', {
+            method: 'DELETE',
+            body: JSON.stringify(cIds)
+          }).catch(() => {});
+        }
       }
-    } catch (e) {
-      // fallback
+      if (repRes && Array.isArray(repRes.data) && repRes.data.length > 0) {
+        const rIds = repRes.data.map((r: any) => r.id).filter(Boolean);
+        if (rIds.length > 0) {
+          await directusFetch('/items/customer_reports', {
+            method: 'DELETE',
+            body: JSON.stringify(rIds)
+          }).catch(() => {});
+        }
+      }
+
+      await directusFetch(`/items/customers/${req.params.id}`, { method: 'DELETE' });
+
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error('Customer delete error:', err.message);
+      return res.status(500).json({
+        error: 'CUSTOMER_DELETE_FAILED',
+        message: `خطا در حذف پرونده مشتری از پایگاه داده: ${err.message}`
+      });
     }
   }
 
-  let filtered = [...reportsData];
-  if (customer_id) {
-    filtered = filtered.filter(r => r.customer_id === customer_id);
+  customersData = customersData.filter(c => c.id !== req.params.id);
+  reportsData = reportsData.filter(r => r.customer_id !== req.params.id);
+  contactsData = contactsData.filter(ct => ct.customer_id !== req.params.id);
+  res.json({ success: true });
+});
+
+// Re-assign Marketer
+app.post('/api/customers/:id/reassign', async (req: Request, res: Response) => {
+  const { new_marketer_id, new_marketer_name, duration_days } = req.body;
+  const { userId, userRole } = getRequestUser(req);
+  const days = duration_days ? parseInt(duration_days, 10) : 7;
+  const nowTime = new Date();
+  const deadline = addDays(nowTime, days);
+
+  if (userRole === 'marketer' && userId) {
+    if (directusUrl && directusAdminToken) {
+      const currentCustRes = await directusFetch(`/items/customers/${req.params.id}?fields=assigned_marketer_id,assignment_deadline,status`).catch(() => null);
+      if (currentCustRes?.data) {
+        const expCust = computeCustomerExpiration(currentCustRes.data);
+        if (expCust.assigned_marketer_id && expCust.assigned_marketer_id !== userId && !expCust.is_expired) {
+          return res.status(403).json({
+            error: 'FORBIDDEN',
+            message: 'این مشتری دارای بازاریاب فعال است و فقط مدیر فروش می‌تواند آن را واگذار کند.'
+          });
+        }
+      }
+    }
   }
-  res.json(filtered);
+
+  let marketerId: string | null = new_marketer_id || null;
+  if (!marketerId || marketerId === 'همه' || marketerId.trim() === '' || marketerId === 'none') {
+    marketerId = null;
+  }
+
+  const patchData = {
+    assigned_marketer_id: marketerId,
+    assigned_marketer_name: (new_marketer_name || 'تخصیص نیافته').trim(),
+    assignment_deadline: deadline,
+    assignment_duration_days: days,
+    is_expired: false,
+    date_updated: nowTime.toISOString()
+  };
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const patchedCust = await directusFetch(`/items/customers/${req.params.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patchData)
+      });
+
+      const reportHistory: CustomerReport = {
+        id: crypto.randomUUID(),
+        customer_id: req.params.id,
+        negotiator_name: 'مدیریت بازاریابی',
+        negotiation_phone: '-',
+        report_text: `تغییر بازاریاب مسئول به «${new_marketer_name || 'عمومی'}» با مهلت جدید ${days} روزه برای پیگیری و انعقاد قرارداد.`,
+        negotiation_score: 5,
+        next_followup_date: addDays(nowTime, 2),
+        negotiation_status: patchedCust.data?.status || 'پیگیری قرارداد',
+        date_created: nowTime.toISOString()
+      };
+
+      await directusFetch('/items/customer_reports', {
+        method: 'POST',
+        body: JSON.stringify(reportHistory)
+      }).catch(() => {});
+
+      return res.json(patchedCust.data);
+    } catch (err: any) {
+      console.error('Customer reassign error:', err.message);
+      return res.status(500).json({
+        error: 'CUSTOMER_REASSIGN_FAILED',
+        message: `خطا در واگذاری مجدد مشتری در پایگاه داده: ${err.message}`
+      });
+    }
+  }
+
+  const index = customersData.findIndex(c => c.id === req.params.id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Customer not found' });
+  }
+
+  customersData[index] = {
+    ...customersData[index],
+    ...patchData
+  };
+
+  res.json(customersData[index]);
+});
+
+// Customer Reports API
+app.get('/api/customer-reports', async (req: Request, res: Response) => {
+  const { customer_id } = req.query;
+  const { userId, userRole, userName } = getRequestUser(req);
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const q = customer_id ? `?filter[customer_id][_eq]=${customer_id}&sort=-date_created&limit=500` : '?sort=-date_created&limit=500';
+      const result = await directusFetch(`/items/customer_reports${q}`);
+      if (result && Array.isArray(result.data)) {
+        let reportsList = result.data;
+        // Marketer only sees their reports or reports for their accessible customers
+        if (userRole === 'marketer' && userName && !customer_id) {
+          reportsList = reportsList.filter((r: any) =>
+            r.negotiator_name === userName ||
+            r.created_by === userName ||
+            r.created_by === userId
+          );
+        }
+        return res.json(reportsList);
+      }
+    } catch (e: any) {
+      return res.status(502).json({ error: `خطا در دریافت گزارش‌ها از پایگاه داده مرکزی: ${e.message}` });
+    }
+  }
+
+  res.json([]);
 });
 
 app.post('/api/customer-reports', async (req: Request, res: Response) => {
   const payload = req.body;
+  const { userId, userName } = getRequestUser(req);
+  const newReportId = crypto.randomUUID();
+  const nowIso = new Date().toISOString();
+
+  let nextFollowup: string | null = payload.next_followup_date || null;
+  if (!nextFollowup || String(nextFollowup).trim() === '') {
+    nextFollowup = null;
+  } else {
+    try {
+      nextFollowup = new Date(nextFollowup).toISOString();
+    } catch {
+      nextFollowup = null;
+    }
+  }
+
   const newReport: CustomerReport = {
-    id: `r-${Date.now()}`,
+    id: newReportId,
     customer_id: payload.customer_id,
-    negotiator_name: payload.negotiator_name || 'کارشناس پیگیری',
-    negotiation_phone: payload.negotiation_phone || '',
-    report_text: payload.report_text || '',
+    negotiator_name: (payload.negotiator_name || userName || 'کارشناس پیگیری').trim(),
+    negotiation_phone: (payload.negotiation_phone || '').trim(),
+    report_text: (payload.report_text || '').trim(),
     negotiation_score: Number(payload.negotiation_score) || 5,
-    next_followup_date: payload.next_followup_date || '',
+    next_followup_date: nextFollowup,
     negotiation_status: payload.negotiation_status || 'پیگیری قبل از انقضا',
-    date_created: new Date().toISOString()
+    created_by: userName || userId,
+    date_created: nowIso
   };
 
   if (directusUrl && directusAdminToken) {
@@ -784,207 +1841,283 @@ app.post('/api/customer-reports', async (req: Request, res: Response) => {
         method: 'POST',
         body: JSON.stringify(newReport)
       });
-      if (created && created.data) {
-        reportsData.unshift(created.data);
+
+      // Synchronize latest status & follow-up date on customer document
+      const customerUpdatePayload: Record<string, any> = {
+        status: newReport.negotiation_status,
+        date_updated: nowIso
+      };
+      if (nextFollowup) {
+        customerUpdatePayload.next_followup_date = nextFollowup;
       }
-    } catch (e) {
-      console.warn('Directus report create error:', e);
-    }
-  }
+      if (newReport.negotiation_status === 'قرارداد') {
+        customerUpdatePayload.is_expired = false;
+      }
 
-  reportsData.unshift(newReport);
+      await directusFetch(`/items/customers/${payload.customer_id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(customerUpdatePayload)
+      }).catch((e) => console.warn('Customer status sync warning:', e.message));
 
-  // Synchronize latest status & follow-up date on customer document
-  const cIndex = customersData.findIndex(c => c.id === payload.customer_id);
-  if (cIndex !== -1) {
-    customersData[cIndex].status = newReport.negotiation_status;
-    if (newReport.next_followup_date) {
-      customersData[cIndex].next_followup_date = newReport.next_followup_date;
-    }
-    customersData[cIndex].date_updated = new Date().toISOString();
-
-    // If status reached 'قرارداد' (Won), it is successfully converted!
-    if (newReport.negotiation_status === 'قرارداد') {
-      customersData[cIndex].is_expired = false;
+      return res.status(201).json(created.data || newReport);
+    } catch (err: any) {
+      console.error('Report create error:', err.message);
+      return res.status(500).json({
+        error: 'REPORT_SAVE_FAILED',
+        message: `خطا در ثبت گزارش مذاکره در پایگاه داده مرکزی: ${err.message}`
+      });
     }
   }
 
   res.status(201).json(newReport);
 });
 
-// Cold Leads API (بانک شماره‌های اولیه برای تماس بعدی)
+// Cold Leads API
 app.get('/api/cold-leads', async (req: Request, res: Response) => {
+  const { userId, userRole, userName } = getRequestUser(req);
+
   if (directusUrl && directusAdminToken) {
     try {
-      const result = await directusFetch('/items/cold_leads?sort=-date_created');
+      const result = await directusFetch('/items/cold_leads?sort=-date_created&limit=500');
       if (result && Array.isArray(result.data)) {
-        return res.json(result.data);
+        let leads = result.data;
+        if (userRole === 'marketer' && userName) {
+          leads = leads.filter((l: any) =>
+            l.assigned_to === userName ||
+            l.assigned_to === userId ||
+            !l.assigned_to ||
+            l.assigned_to === 'تخصیص نیافته' ||
+            l.assigned_to === 'همه'
+          );
+        }
+        return res.json(leads);
       }
-    } catch (e) {
-      // fallback
+    } catch (e: any) {
+      return res.status(502).json({ error: `خطا در دریافت شماره‌های اولیه از پایگاه داده مرکزی: ${e.message}` });
     }
   }
-  res.json(coldLeadsData);
+  res.json([]);
 });
 
 app.post('/api/cold-leads', async (req: Request, res: Response) => {
   const payload = req.body;
+  const newLeadId = crypto.randomUUID();
+  const nowIso = new Date().toISOString();
+
+  let convertedCustId: string | null = payload.converted_customer_id || null;
+  if (!convertedCustId || String(convertedCustId).trim() === '') {
+    convertedCustId = null;
+  }
+
   const newLead: ColdLead = {
-    id: `lead-${Date.now()}`,
-    phone_number: payload.phone_number,
-    contact_name: payload.contact_name || '',
+    id: newLeadId,
+    phone_number: (payload.phone_number || '').trim(),
+    contact_name: (payload.contact_name || '').trim(),
     source: payload.source || 'ورود دستی',
     status: payload.status || 'تماس نگرفته',
-    notes: payload.notes || '',
-    assigned_to: payload.assigned_to || '',
-    date_created: new Date().toISOString()
+    notes: (payload.notes || '').trim(),
+    assigned_to: (payload.assigned_to || '').trim(),
+    converted_customer_id: convertedCustId,
+    date_created: nowIso
   };
 
   if (directusUrl && directusAdminToken) {
     try {
-      await directusFetch('/items/cold_leads', {
+      const created = await directusFetch('/items/cold_leads', {
         method: 'POST',
         body: JSON.stringify(newLead)
       });
-    } catch (e) {
-      // fallback
+      return res.status(201).json(created.data || newLead);
+    } catch (err: any) {
+      console.error('Cold lead error:', err.message);
+      return res.status(500).json({
+        error: 'LEAD_SAVE_FAILED',
+        message: `خطا در ثبت شماره در پایگاه داده مرکزی: ${err.message}`
+      });
     }
   }
 
-  coldLeadsData.unshift(newLead);
   res.status(201).json(newLead);
 });
 
 app.patch('/api/cold-leads/:id', async (req: Request, res: Response) => {
-  const index = coldLeadsData.findIndex(l => l.id === req.params.id);
-  if (index === -1) {
-    return res.status(404).json({ error: 'Lead not found' });
+  const payload = req.body;
+  const cleanPatch = { ...payload };
+  if (cleanPatch.converted_customer_id === '') {
+    cleanPatch.converted_customer_id = null;
   }
-
-  coldLeadsData[index] = {
-    ...coldLeadsData[index],
-    ...req.body
-  };
 
   if (directusUrl && directusAdminToken) {
     try {
-      await directusFetch(`/items/cold_leads/${req.params.id}`, {
+      const patched = await directusFetch(`/items/cold_leads/${req.params.id}`, {
         method: 'PATCH',
-        body: JSON.stringify(req.body)
+        body: JSON.stringify(cleanPatch)
       });
-    } catch (e) {
-      // ignore
+      return res.json(patched.data);
+    } catch (err: any) {
+      return res.status(500).json({
+        error: 'LEAD_UPDATE_FAILED',
+        message: `خطا در بروزرسانی لید در پایگاه داده مرکزی: ${err.message}`
+      });
     }
   }
 
-  res.json(coldLeadsData[index]);
+  res.status(404).json({ error: 'Lead not found' });
 });
 
-// Convert Cold Lead into a full Customer
-app.post('/api/cold-leads/:id/convert', (req: Request, res: Response) => {
-  const leadIndex = coldLeadsData.findIndex(l => l.id === req.params.id);
-  if (leadIndex === -1) {
-    return res.status(404).json({ error: 'Lead not found' });
-  }
-
-  const lead = coldLeadsData[leadIndex];
-  const newCustId = `c-${Date.now()}`;
+// Convert Cold Lead into a Customer
+app.post('/api/cold-leads/:id/convert', async (req: Request, res: Response) => {
+  const newCustId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
-  const newCustomer: Customer = {
-    id: newCustId,
-    company_name: req.body.company_name || lead.contact_name || `مشتری با شماره ${lead.phone_number}`,
-    business_type: req.body.business_type || '',
-    province: req.body.province || 'تهران',
-    city: req.body.city || 'تهران',
-    manager_name: req.body.manager_name || lead.contact_name || '',
-    manager_phones: [lead.phone_number],
-    negotiator_name: lead.assigned_to || '',
-    negotiator_phones: [],
-    mobile_numbers: [lead.phone_number],
-    landline_numbers: [],
-    telegram_phone: lead.phone_number,
-    telegram_ids: [],
-    instagram_ids: [],
-    emails: [],
-    websites: [],
-    is_ecommerce: false,
+  let lead: any = null;
+  if (directusUrl && directusAdminToken) {
+    try {
+      const leadRes = await directusFetch(`/items/cold_leads/${req.params.id}`);
+      lead = leadRes.data;
+    } catch {}
+  }
+  if (!lead) {
+    return res.status(404).json({ error: 'لید یافت نشد.' });
+  }
+
+  const phone = (lead.phone_number || '').trim();
+  const contactName = (lead.contact_name || '').trim();
+
+  const customerPayload = cleanCustomerPayloadForDirectus({
+    ...req.body,
+    company_name: req.body.company_name || contactName || `مشتری با شماره ${phone}`,
+    mobile_numbers: phone ? [phone] : [],
     interview_status: 'مصاحبه اولیه انجام شده',
-    interview_report: `تبدیل شده از لید سرد (${lead.source}). یادداشت اولیه: ${lead.notes || 'ندارد'}`,
+    interview_report: `تبدیل شده از بانک شماره‌های اولیه (${lead.source || 'منبع نامشخص'}). یادداشت: ${lead.notes || 'ندارد'}`,
     interview_score: 6,
-    next_followup_date: addDays(new Date(), 2),
-    assigned_marketer_id: 'p-2',
-    assigned_marketer_name: lead.assigned_to || 'سارا احمدی',
-    assignment_date: nowIso,
-    assignment_deadline: addDays(new Date(), 7),
-    status: 'تماس برقرار نشده',
+    status: 'تماس برقرار نشده'
+  }, newCustId);
+
+  const contactItem: CustomerContact = {
+    id: crypto.randomUUID(),
+    customer_id: newCustId,
+    channel_type: 'mobile',
+    value: phone,
+    normalized_value: normalizeContactValue(phone, 'mobile'),
+    contact_name: contactName || customerPayload.company_name,
+    contact_role: 'مخاطب لید تبدیل‌شده',
+    is_primary: true,
+    notes: `تبدیل شده از بانک شماره‌های اولیه (منبع: ${lead.source || 'نامشخص'})`,
     date_created: nowIso,
     date_updated: nowIso
   };
 
-  customersData.unshift(newCustomer);
-
-  coldLeadsData[leadIndex].status = 'تبدیل شده به مشتری';
-  coldLeadsData[leadIndex].converted_customer_id = newCustId;
-
-  res.json({ success: true, customer: newCustomer, lead: coldLeadsData[leadIndex] });
-});
-
-// Daily Administrative Reports API (گزارش روزانه اداری پرسنل)
-app.get('/api/administrative-reports', async (req: Request, res: Response) => {
   if (directusUrl && directusAdminToken) {
     try {
-      const result = await directusFetch('/items/administrative_reports?sort=-report_date');
-      if (result && Array.isArray(result.data)) {
-        return res.json(result.data);
-      }
-    } catch (e) {
-      // fallback
+      // 1. Create customer in database
+      const createdCustRes = await directusFetch('/items/customers', {
+        method: 'POST',
+        body: JSON.stringify(customerPayload)
+      });
+      const finalCust = createdCustRes.data;
+
+      // 2. Create contact in database
+      await directusFetch('/items/customer_contacts', {
+        method: 'POST',
+        body: JSON.stringify(contactItem)
+      });
+
+      // 3. Update lead in database
+      await directusFetch(`/items/cold_leads/${req.params.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'تبدیل شده به مشتری',
+          converted_customer_id: newCustId
+        })
+      });
+
+      const fullCustomer = { ...finalCust, contacts: [contactItem] };
+      return res.json({ success: true, customer: fullCustomer });
+    } catch (err: any) {
+      console.error('Convert lead error:', err.message);
+      return res.status(500).json({
+        error: 'CONVERT_FAILED',
+        message: `خطا در تبدیل لید به مشتری در پایگاه داده مرکزی: ${err.message}`
+      });
     }
   }
-  res.json(adminReportsData);
+
+  res.status(500).json({ error: 'پایگاه داده در دسترس نیست.' });
+});
+
+// Administrative Reports API
+app.get('/api/administrative-reports', async (req: Request, res: Response) => {
+  const { userId, userRole } = getRequestUser(req);
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const result = await directusFetch('/items/administrative_reports?sort=-report_date&limit=500');
+      if (result && Array.isArray(result.data)) {
+        let reports = result.data;
+        // Marketer only sees their own administrative reports
+        if (userRole === 'marketer' && userId) {
+          reports = reports.filter((r: any) => r.personnel_id === userId);
+        }
+        return res.json(reports);
+      }
+    } catch (e: any) {
+      return res.status(502).json({ error: `خطا در دریافت گزارش‌های اداری از پایگاه داده مرکزی: ${e.message}` });
+    }
+  }
+  res.json([]);
 });
 
 app.post('/api/administrative-reports', async (req: Request, res: Response) => {
   const payload = req.body;
+  const { userId, userName } = getRequestUser(req);
+  const newAdmId = crypto.randomUUID();
+  const nowIso = new Date().toISOString();
+
   const newReport: AdministrativeReport = {
-    id: `adm-${Date.now()}`,
-    personnel_id: payload.personnel_id,
-    personnel_name: payload.personnel_name || 'پرسنل شرکت',
-    report_date: payload.report_date || new Date().toISOString().split('T')[0],
+    id: newAdmId,
+    personnel_id: payload.personnel_id || userId || 'p-1',
+    personnel_name: payload.personnel_name || userName || 'پرسنل شرکت',
+    report_date: payload.report_date || nowIso.split('T')[0],
     calls_count: Number(payload.calls_count) || 0,
     successful_contacts: Number(payload.successful_contacts) || 0,
     leads_converted: Number(payload.leads_converted) || 0,
     tasks_summary: payload.tasks_summary || '',
     challenges: payload.challenges || '',
     tomorrow_plan: payload.tomorrow_plan || '',
-    date_created: new Date().toISOString()
+    date_created: nowIso
   };
 
   if (directusUrl && directusAdminToken) {
     try {
-      await directusFetch('/items/administrative_reports', {
+      const created = await directusFetch('/items/administrative_reports', {
         method: 'POST',
         body: JSON.stringify(newReport)
       });
-    } catch (e) {
-      // ignore
+      return res.status(201).json(created.data || newReport);
+    } catch (err: any) {
+      console.error('Admin report create error:', err.message);
+      return res.status(500).json({
+        error: 'ADMIN_REPORT_FAILED',
+        message: `خطا در ثبت گزارش اداری در پایگاه داده مرکزی: ${err.message}`
+      });
     }
   }
 
-  adminReportsData.unshift(newReport);
   res.status(201).json(newReport);
 });
 
 // Periodic Expiration Check Trigger
 app.post('/api/check-expirations', (req: Request, res: Response) => {
-  updateExpirationFlags();
-  const expiredCount = customersData.filter(c => c.is_expired).length;
-  res.json({ success: true, expired_count: expiredCount });
+  res.json({ success: true });
 });
 
 // Setup Vite middleware in dev or static serving in production
 async function setupViteOrStatic() {
+  if (directusUrl && directusAdminToken) {
+    ensureDirectusPersonnel().catch(() => {});
+  }
+
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -1009,7 +2142,7 @@ async function setupViteOrStatic() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on port ${PORT}`);
-    console.log(`BFF Mode: ${directusUrl ? 'Directus configured' : 'Local Mock & Persist Mode'}`);
+    console.log(`BFF Mode: ${directusUrl ? 'Online Database Connected' : 'Offline Mode'}`);
   });
 }
 

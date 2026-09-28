@@ -116,10 +116,11 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
 
         <button
           onClick={() => setShowAddForm(!showAddForm)}
-          className="h-9 px-4 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex items-center gap-1.5"
+          className="w-9 h-9 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold flex items-center justify-center transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex-shrink-0"
+          title="افزودن شماره جدید"
+          aria-label="افزودن شماره جدید"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
-          <span>افزودن شماره جدید</span>
         </button>
       </div>
 
@@ -246,33 +247,35 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
         </form>
       )}
 
-      {/* Filter Row */}
-      <div className="p-4 bg-[#181818] rounded-2xl border border-[#282828] flex flex-wrap items-center justify-between gap-3">
-        <div className="flex-1 max-w-sm relative">
+      {/* Clean Single-Row Filter Toolbar: Dropdown instead of tags */}
+      <div className="p-3 sm:p-4 bg-[#181818] rounded-2xl border border-[#282828] flex flex-wrap items-center justify-between gap-3">
+        <div className="flex-1 max-w-sm relative min-w-[200px]">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="جستجو در شماره، نام، منبع یا یادداشت..."
-            className="w-full h-9 bg-[#282828] rounded-full pl-3 pr-9 text-xs text-white placeholder-[#A7A7A7] focus:outline-none focus:ring-1 focus:ring-white"
+            className="w-full h-9 bg-[#282828] rounded-xl pl-3 pr-9 text-xs text-white placeholder-[#A7A7A7] focus:outline-none focus:border-[#1DB954] border border-[#3e3e3e]"
           />
           <Search className="w-3.5 h-3.5 text-[#A7A7A7] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {leadStatuses.map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                statusFilter === st
-                  ? 'bg-[#1DB954] text-black font-bold'
-                  : 'bg-[#282828] text-[#B3B3B3] hover:text-white'
-              }`}
-            >
-              {st}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[#A7A7A7]">وضعیت شماره:</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+          >
+            <option value="همه">همه وضعیت‌ها</option>
+            {leadStatuses
+              .filter((st) => st !== 'همه')
+              .map((st) => (
+                <option key={st} value={st} className="bg-[#181818] text-white">
+                  {st}
+                </option>
+              ))}
+          </select>
         </div>
       </div>
 

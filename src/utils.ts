@@ -1,6 +1,6 @@
 import { NegotiationStatus, LeadStatus } from './types';
 
-export function formatTimeRemaining(deadlineIso: string): {
+export function formatTimeRemaining(deadlineIso?: string | null): {
   text: string;
   isExpired: boolean;
   hoursLeft: number;
@@ -50,7 +50,7 @@ export function formatTimeRemaining(deadlineIso: string): {
   }
 }
 
-export function formatPersianDate(isoString: string): string {
+export function formatPersianDate(isoString?: string | null): string {
   if (!isoString) return '-';
   try {
     const d = new Date(isoString);

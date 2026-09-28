@@ -16,6 +16,46 @@ export type LeadStatus =
   | 'تبدیل شده به مشتری'
   | 'شماره نامعتبر';
 
+export type ChannelType =
+  | 'mobile'
+  | 'landline'
+  | 'telegram'
+  | 'instagram'
+  | 'email'
+  | 'website'
+  | 'whatsapp'
+  | 'other';
+
+export interface CustomerContact {
+  id: string;
+  customer_id: string;
+  channel_type: ChannelType;
+  value: string;
+  normalized_value?: string;
+  contact_name?: string;
+  contact_role?: string;
+  is_primary: boolean;
+  notes?: string;
+  date_created?: string;
+  date_updated?: string;
+}
+
+export interface DuplicateCheckResult {
+  isDuplicate: boolean;
+  conflictType?: 'active_marketer' | 'expired' | 'contract';
+  matchedContact?: CustomerContact;
+  matchedCustomer?: {
+    id: string;
+    company_name: string;
+    assigned_marketer_name: string;
+    assigned_marketer_id: string;
+    assignment_deadline: string;
+    is_expired: boolean;
+    status: string;
+  };
+  message?: string;
+}
+
 export interface Customer {
   id: string;
   company_name: string;
@@ -33,15 +73,17 @@ export interface Customer {
   instagram_ids: string[];
   emails: string[];
   websites: string[];
+  contacts?: CustomerContact[];
   is_ecommerce: boolean;
   interview_status: string;
   interview_report: string;
   interview_score: number;
-  next_followup_date: string;
-  assigned_marketer_id: string;
+  next_followup_date?: string | null;
+  assigned_marketer_id?: string | null;
   assigned_marketer_name: string;
-  assignment_date: string;
-  assignment_deadline: string;
+  assignment_date?: string;
+  assignment_deadline?: string | null;
+  assignment_duration_days?: number;
   status: NegotiationStatus;
   is_expired?: boolean;
   date_created: string;
@@ -56,7 +98,7 @@ export interface CustomerReport {
   negotiation_phone: string;
   report_text: string;
   negotiation_score: number;
-  next_followup_date: string;
+  next_followup_date?: string | null;
   negotiation_status: NegotiationStatus;
   created_by?: string;
   date_created: string;
@@ -100,11 +142,10 @@ export interface Personnel {
 }
 
 export interface BffStatus {
-  mode: 'DIRECTUS_CONNECTED' | 'LOCAL_BFF_FALLBACK';
-  directus_url: string;
+  mode: 'DATABASE_CONNECTED' | 'DIRECTUS_CONNECTED' | 'LOCAL_BFF_FALLBACK';
   has_token: boolean;
-  directus_reachable: boolean;
-  directus_collections: string[];
+  database_reachable?: boolean;
+  directus_reachable?: boolean;
   error: string | null;
   counts: {
     customers: number;

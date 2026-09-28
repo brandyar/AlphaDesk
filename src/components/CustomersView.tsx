@@ -74,84 +74,76 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Expired Filter Toggle */}
           <button
             onClick={() => onToggleExpiredOnly(!showExpiredOnly)}
-            className={`h-9 px-3.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
+            className={`h-9 px-3 sm:px-3.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
               showExpiredOnly
                 ? 'bg-[#E22134] text-white shadow-lg shadow-[#E22134]/30'
                 : 'bg-[#282828] text-[#B3B3B3] hover:text-white border border-[#3e3e3e]'
             }`}
+            title="نمایش پرونده‌های با مهلت منقضی شده"
           >
-            <AlertTriangle className="w-3.5 h-3.5" />
-            <span>فقط منقضی شده‌ها</span>
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="hidden sm:inline">منقضی شده‌ها</span>
           </button>
 
-          {/* New Customer Button */}
+          {/* New Customer Button (Icon only) */}
           <button
             onClick={onOpenNewCustomerModal}
-            className="h-9 px-4 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex items-center gap-1.5"
+            className="w-9 h-9 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold flex items-center justify-center transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex-shrink-0"
+            title="ثبت مشتری جدید"
+            aria-label="ثبت مشتری جدید"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
-            <span>ثبت مشتری جدید</span>
           </button>
         </div>
       </div>
 
-      {/* Filter Row: Marketer & Status Chips (Spotify style) */}
-      <div className="space-y-3 p-4 bg-[#181818] rounded-2xl border border-[#282828]">
-        {/* Marketer Selector */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs font-bold text-[#B3B3B3] flex items-center gap-1.5">
-            <Filter className="w-3.5 h-3.5 text-[#1DB954]" />
-            <span>فیلتر بازاریاب:</span>
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => onSelectMarketerId('همه')}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                selectedMarketerId === 'همه'
-                  ? 'bg-white text-black font-bold'
-                  : 'bg-[#282828] text-[#B3B3B3] hover:text-white'
-              }`}
+      {/* Clean Single-Row Filter Toolbar: Dropdowns instead of tags */}
+      <div className="p-3 sm:p-4 bg-[#181818] rounded-2xl border border-[#282828] flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+          {/* Marketer Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#A7A7A7] flex items-center gap-1">
+              <Filter className="w-3.5 h-3.5 text-[#1DB954]" />
+              <span>بازاریاب:</span>
+            </span>
+            <select
+              value={selectedMarketerId}
+              onChange={(e) => onSelectMarketerId(e.target.value)}
+              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
             >
-              همه بازاریاب‌ها
-            </button>
-            {personnelList.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => onSelectMarketerId(p.id)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                  selectedMarketerId === p.id
-                    ? 'bg-white text-black font-bold'
-                    : 'bg-[#282828] text-[#B3B3B3] hover:text-white'
-                }`}
-              >
-                {p.name}
-              </button>
-            ))}
+              <option value="همه">همه بازاریاب‌ها</option>
+              {personnelList.map((p) => (
+                <option key={p.id} value={p.id} className="bg-[#181818] text-white">
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#A7A7A7]">وضعیت پرونده:</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => onSelectStatusFilter(e.target.value)}
+              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+            >
+              {statusOptions.map((st) => (
+                <option key={st} value={st} className="bg-[#181818] text-white">
+                  {st === 'همه' ? 'همه وضعیت‌ها' : st}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {/* Status Chips */}
-        <div className="flex items-center gap-3 flex-wrap pt-2 border-t border-[#282828]">
-          <span className="text-xs font-bold text-[#B3B3B3]">وضعیت:</span>
-          <div className="flex flex-wrap gap-1.5 overflow-x-auto pb-1">
-            {statusOptions.map((st) => (
-              <button
-                key={st}
-                onClick={() => onSelectStatusFilter(st)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                  statusFilter === st
-                    ? 'bg-[#1DB954] text-black font-bold'
-                    : 'bg-[#282828] text-[#B3B3B3] hover:text-white'
-                }`}
-              >
-                {st}
-              </button>
-            ))}
-          </div>
+        {/* Reset / Count preview */}
+        <div className="text-xs text-[#888888] font-mono">
+          نمایش <span className="text-[#1DB954] font-bold">{customers.length}</span> پرونده
         </div>
       </div>
 
@@ -237,44 +229,61 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   {/* Quick Channels Strip */}
                   <div className="flex items-center justify-between pt-2">
                     <div className="flex items-center gap-2">
-                      {c.mobile_numbers[0] && (
-                        <a
-                          href={`tel:${c.mobile_numbers[0]}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-7 h-7 rounded-full bg-[#282828] hover:bg-[#1DB954] hover:text-black text-[#B3B3B3] flex items-center justify-center transition-colors"
-                          title={`تماس با ${c.mobile_numbers[0]}`}
-                        >
-                          <Phone className="w-3.5 h-3.5" />
-                        </a>
-                      )}
-                      {(c.telegram_phone || c.telegram_ids[0]) && (
-                        <a
-                          href={
-                            c.telegram_phone
-                              ? `https://t.me/+${c.telegram_phone.replace(/^0/, '98')}`
-                              : `https://t.me/${c.telegram_ids[0]?.replace(/^@/, '')}`
-                          }
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-7 h-7 rounded-full bg-[#282828] hover:bg-[#229ED9] hover:text-white text-[#B3B3B3] flex items-center justify-center transition-colors"
-                          title="ارسال پیام در تلگرام"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                        </a>
-                      )}
-                      {c.instagram_ids[0] && (
-                        <a
-                          href={`https://instagram.com/${c.instagram_ids[0].replace(/^@/, '')}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-7 h-7 rounded-full bg-[#282828] hover:bg-[#E1306C] hover:text-white text-[#B3B3B3] flex items-center justify-center transition-colors"
-                          title="مشاهده پیج اینستاگرام"
-                        >
-                          <Instagram className="w-3.5 h-3.5" />
-                        </a>
-                      )}
+                      {(() => {
+                        const primaryPhone =
+                          c.contacts?.find((ct) => ct.channel_type === 'mobile' || ct.channel_type === 'landline')
+                            ?.value || c.mobile_numbers[0];
+                        const primaryTelegram =
+                          c.contacts?.find((ct) => ct.channel_type === 'telegram')?.value ||
+                          c.telegram_phone ||
+                          c.telegram_ids[0];
+                        const primaryInsta =
+                          c.contacts?.find((ct) => ct.channel_type === 'instagram')?.value ||
+                          c.instagram_ids[0];
+
+                        return (
+                          <>
+                            {primaryPhone && (
+                              <a
+                                href={`tel:${primaryPhone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-7 h-7 rounded-full bg-[#282828] hover:bg-[#1DB954] hover:text-black text-[#B3B3B3] flex items-center justify-center transition-colors"
+                                title={`تماس با ${primaryPhone}`}
+                              >
+                                <Phone className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                            {primaryTelegram && (
+                              <a
+                                href={
+                                  /^09\d{9}$/.test(primaryTelegram)
+                                    ? `https://t.me/+98${primaryTelegram.substring(1)}`
+                                    : `https://t.me/${primaryTelegram.replace(/^@/, '')}`
+                                }
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-7 h-7 rounded-full bg-[#282828] hover:bg-[#229ED9] hover:text-white text-[#B3B3B3] flex items-center justify-center transition-colors"
+                                title="ارسال پیام در تلگرام"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                            {primaryInsta && (
+                              <a
+                                href={`https://instagram.com/${primaryInsta.replace(/^@/, '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-7 h-7 rounded-full bg-[#282828] hover:bg-[#E1306C] hover:text-white text-[#B3B3B3] flex items-center justify-center transition-colors"
+                                title="مشاهده پیج اینستاگرام"
+                              >
+                                <Instagram className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
 
                     <div className="text-xs text-[#1DB954] font-semibold group-hover:underline flex items-center gap-1">

@@ -4,7 +4,11 @@ import {
   Users,
   MessageSquareText,
   PhoneCall,
-  ClipboardCheck
+  ClipboardCheck,
+  CheckCircle,
+  AlertCircle,
+  Info,
+  X
 } from 'lucide-react';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -20,6 +24,7 @@ import { AddReportModal } from './components/AddReportModal';
 
 import {
   Customer,
+  CustomerContact,
   CustomerReport,
   ColdLead,
   AdministrativeReport,
@@ -35,6 +40,7 @@ import {
   updateCustomer,
   deleteCustomer,
   reassignCustomer,
+  createCustomerContact,
   fetchCustomerReports,
   createCustomerReport,
   fetchColdLeads,
@@ -45,11 +51,23 @@ import {
   createAdminReport,
   fetchPersonnel,
   fetchBffStatus,
+  setApiPersonnelContext,
 } from './api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Toast Notifications
+  const [toast, setToast] = useState<{ id: number; message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    const id = Date.now();
+    setToast({ id, message, type });
+    setTimeout(() => {
+      setToast((curr) => (curr?.id === id ? null : curr));
+    }, 4500);
+  };
 
   // Core Data State
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -94,6 +112,7 @@ export default function App() {
       setPersonnelList(pData);
       if (pData.length > 0 && !currentPersonnel) {
         setCurrentPersonnel(pData[0]);
+        setApiPersonnelContext(pData[0]);
       }
       setCustomers(cData);
       setReports(rData);
@@ -118,6 +137,24 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // When active personnel (role/user) switches, update BFF context and reload role-scoped data
+  useEffect(() => {
+    if (currentPersonnel) {
+      setApiPersonnelContext(currentPersonnel);
+      Promise.all([
+        fetchCustomers().catch(() => []),
+        fetchCustomerReports().catch(() => []),
+        fetchColdLeads().catch(() => []),
+        fetchAdminReports().catch(() => []),
+      ]).then(([cData, rData, lData, aData]) => {
+        setCustomers(cData);
+        setReports(rData);
+        setColdLeads(lData);
+        setAdminReports(aData);
+      });
+    }
+  }, [currentPersonnel]);
+
   // Filter customers for current view
   const filteredCustomers = customers.filter((c) => {
     if (showExpiredOnly && !c.is_expired) return false;
@@ -130,7 +167,13 @@ export default function App() {
       const matchCity = c.city?.toLowerCase().includes(q);
       const matchJob = c.business_type?.toLowerCase().includes(q);
       const matchPhone = c.mobile_numbers.some((m) => m.includes(q));
-      if (!matchCompany && !matchManager && !matchCity && !matchJob && !matchPhone) return false;
+      const matchContact = c.contacts?.some(
+        (ct) =>
+          ct.value.toLowerCase().includes(q) ||
+          (ct.contact_name && ct.contact_name.toLowerCase().includes(q)) ||
+          (ct.contact_role && ct.contact_role.toLowerCase().includes(q))
+      );
+      if (!matchCompany && !matchManager && !matchCity && !matchJob && !matchPhone && !matchContact) return false;
     }
     return true;
   });
@@ -141,47 +184,80 @@ export default function App() {
   const handleSaveCustomer = async (
     customerData: Partial<Customer> & { assignment_duration_days?: number }
   ) => {
-    if (editingCustomer) {
-      const updated = await updateCustomer(editingCustomer.id, customerData);
-      setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-      if (selectedCustomer?.id === updated.id) {
-        setSelectedCustomer(updated);
-      }
-    } else {
-      const created = await createCustomer(customerData);
-      setCustomers((prev) => [created, ...prev]);
+    try {
+      if (editingCustomer) {
+        const updated = await updateCustomer(editingCustomer.id, customerData);
+        setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+        if (selectedCustomer?.id === updated.id) {
+          setSelectedCustomer(updated);
+        }
+        showToast('پرونده و شماره‌های مشتری با موفقیت ذخیره شدند.', 'success');
+      } else {
+        const created = await createCustomer(customerData);
+        setCustomers((prev) => [created, ...prev]);
 
-      // If created from a lead, mark lead as converted
-      if (prefilledLeadPhone) {
-        const lead = coldLeads.find((l) => l.phone_number === prefilledLeadPhone);
-        if (lead) {
-          await updateColdLead(lead.id, {
-            status: 'تبدیل شده به مشتری',
-            converted_customer_id: created.id,
-          });
-          setColdLeads((prev) =>
-            prev.map((l) =>
-              l.id === lead.id
-                ? { ...l, status: 'تبدیل شده به مشتری', converted_customer_id: created.id }
-                : l
-            )
-          );
+        // If created from a lead, mark lead as converted
+        if (prefilledLeadPhone) {
+          const lead = coldLeads.find((l) => l.phone_number === prefilledLeadPhone);
+          if (lead) {
+            await updateColdLead(lead.id, {
+              status: 'تبدیل شده به مشتری',
+              converted_customer_id: created.id,
+            }).catch(() => {});
+            setColdLeads((prev) =>
+              prev.map((l) =>
+                l.id === lead.id
+                  ? { ...l, status: 'تبدیل شده به مشتری', converted_customer_id: created.id }
+                  : l
+              )
+            );
+          }
+        }
+        showToast('پرونده مشتری جدید با موفقیت در سامانه ثبت شد.', 'success');
+      }
+      setEditingCustomer(null);
+      setPrefilledLeadPhone('');
+      setPrefilledLeadName('');
+      setPrefilledLeadNotes('');
+
+      // Synchronize latest state
+      fetchCustomers().then(setCustomers).catch(() => {});
+      fetchCustomerReports().then(setReports).catch(() => {});
+      fetchBffStatus().then(setBffStatus).catch(() => {});
+    } catch (err: any) {
+      showToast(err.message || 'خطا در ذخیره‌سازی اطلاعات مشتری', 'error');
+      throw err;
+    }
+  };
+
+  const handleAddCustomerContact = async (contactData: Partial<CustomerContact>) => {
+    try {
+      const created = await createCustomerContact(contactData);
+      if (contactData.customer_id) {
+        const updated = await fetchCustomerById(contactData.customer_id);
+        setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+        if (selectedCustomer?.id === updated.id) {
+          setSelectedCustomer(updated);
         }
       }
+      showToast(`شماره تماس «${created.value}» با موفقیت افزوده شد.`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'خطا در ثبت شماره تماس', 'error');
+      throw err;
     }
-    setEditingCustomer(null);
-    setPrefilledLeadPhone('');
-    setPrefilledLeadName('');
-    setPrefilledLeadNotes('');
-    // Refresh reports list in case initial interview report was added
-    fetchCustomerReports().then(setReports).catch(() => {});
   };
 
   const handleDeleteCustomer = async (id: string) => {
-    await deleteCustomer(id);
-    setCustomers((prev) => prev.filter((c) => c.id !== id));
-    setReports((prev) => prev.filter((r) => r.customer_id !== id));
-    setSelectedCustomer(null);
+    try {
+      await deleteCustomer(id);
+      setCustomers((prev) => prev.filter((c) => c.id !== id));
+      setReports((prev) => prev.filter((r) => r.customer_id !== id));
+      setSelectedCustomer(null);
+      fetchBffStatus().then(setBffStatus).catch(() => {});
+      showToast('پرونده مشتری با موفقیت حذف شد.', 'info');
+    } catch (err: any) {
+      showToast('خطا در حذف پرونده مشتری: ' + (err.message || 'خطای نامشخص'), 'error');
+    }
   };
 
   const handleReassignCustomer = async (
@@ -190,34 +266,58 @@ export default function App() {
     marketerName: string,
     days: number
   ) => {
-    const updated = await reassignCustomer(customerId, marketerId, marketerName, days);
-    setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-    setSelectedCustomer(updated);
-    fetchCustomerReports().then(setReports).catch(() => {});
+    try {
+      const updated = await reassignCustomer(customerId, marketerId, marketerName, days);
+      setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+      setSelectedCustomer(updated);
+      fetchCustomerReports().then(setReports).catch(() => {});
+      fetchBffStatus().then(setBffStatus).catch(() => {});
+      showToast('مشتری با موفقیت به بازاریاب جدید واگذار شد.', 'success');
+    } catch (err: any) {
+      showToast('خطا در واگذاری مجدد مشتری: ' + (err.message || 'خطای نامشخص'), 'error');
+    }
   };
 
   // Handlers for Customer Follow-up Reports
   const handleAddCustomerReport = async (reportData: Partial<CustomerReport>) => {
-    const created = await createCustomerReport(reportData);
-    setReports((prev) => [created, ...prev]);
+    try {
+      const created = await createCustomerReport(reportData);
+      setReports((prev) => [created, ...prev]);
 
-    // Refresh customer list to get updated status and followup date
-    const updatedCustomer = await fetchCustomerById(reportData.customer_id!);
-    setCustomers((prev) => prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)));
-    if (selectedCustomer?.id === updatedCustomer.id) {
-      setSelectedCustomer(updatedCustomer);
+      // Refresh customer list to get updated status and followup date
+      const updatedCustomer = await fetchCustomerById(reportData.customer_id!);
+      setCustomers((prev) => prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)));
+      if (selectedCustomer?.id === updatedCustomer.id) {
+        setSelectedCustomer(updatedCustomer);
+      }
+      fetchBffStatus().then(setBffStatus).catch(() => {});
+      showToast('گزارش پیگیری با موفقیت در سامانه ثبت شد.', 'success');
+    } catch (err: any) {
+      showToast('خطا در ثبت گزارش مذاکره: ' + (err.message || 'خطای نامشخص'), 'error');
     }
   };
 
   // Handlers for Cold Leads
   const handleAddColdLead = async (leadData: Partial<ColdLead>) => {
-    const created = await createColdLead(leadData);
-    setColdLeads((prev) => [created, ...prev]);
+    try {
+      const created = await createColdLead(leadData);
+      setColdLeads((prev) => [created, ...prev]);
+      fetchBffStatus().then(setBffStatus).catch(() => {});
+      showToast('شماره جدید به بانک لید اولیه افزوده شد.', 'success');
+    } catch (err: any) {
+      showToast('خطا در ثبت شماره: ' + (err.message || 'خطای نامشخص'), 'error');
+    }
   };
 
   const handleUpdateLeadStatus = async (leadId: string, status: LeadStatus) => {
-    const updated = await updateColdLead(leadId, { status });
-    setColdLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+    try {
+      const updated = await updateColdLead(leadId, { status });
+      setColdLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+      fetchBffStatus().then(setBffStatus).catch(() => {});
+      showToast('وضعیت لید بروزرسانی شد.', 'success');
+    } catch (err: any) {
+      showToast('خطا در بروزرسانی وضعیت لید: ' + (err.message || 'خطای نامشخص'), 'error');
+    }
   };
 
   const handleConvertToCustomer = (lead: ColdLead) => {
@@ -230,8 +330,14 @@ export default function App() {
 
   // Handler for Daily Admin Reports
   const handleSubmitAdminReport = async (reportData: Partial<AdministrativeReport>) => {
-    const created = await createAdminReport(reportData);
-    setAdminReports((prev) => [created, ...prev]);
+    try {
+      const created = await createAdminReport(reportData);
+      setAdminReports((prev) => [created, ...prev]);
+      fetchBffStatus().then(setBffStatus).catch(() => {});
+      showToast('گزارش عملکرد اداری با موفقیت ثبت شد.', 'success');
+    } catch (err: any) {
+      showToast('خطا در ثبت گزارش اداری: ' + (err.message || 'خطای نامشخص'), 'error');
+    }
   };
 
   const openCustomerDetail = async (customer: Customer) => {
@@ -463,6 +569,7 @@ export default function App() {
         onClose={() => setSelectedCustomer(null)}
         onAddReport={handleAddCustomerReport}
         onReassign={handleReassignCustomer}
+        onAddContact={handleAddCustomerContact}
         onEdit={(cust) => {
           setSelectedCustomer(null);
           setEditingCustomer(cust);
@@ -482,6 +589,34 @@ export default function App() {
         currentPersonnel={currentPersonnel}
         onSaveReport={handleAddCustomerReport}
       />
+
+      {/* Floating System Toast Notifications */}
+      {toast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] max-w-md w-full px-4 animate-in slide-in-from-top-4 duration-200">
+          <div
+            className={`p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border ${
+              toast.type === 'success'
+                ? 'bg-[#141414]/95 border-[#1DB954]/50 text-white shadow-[#1DB954]/10'
+                : toast.type === 'error'
+                ? 'bg-red-950/95 border-red-500/50 text-white shadow-red-500/20'
+                : 'bg-[#222222]/95 border-[#444] text-white shadow-black/40'
+            } backdrop-blur-md`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              {toast.type === 'success' && <CheckCircle className="w-5 h-5 text-[#1DB954] flex-shrink-0" />}
+              {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />}
+              {toast.type === 'info' && <Info className="w-5 h-5 text-blue-400 flex-shrink-0" />}
+              <span className="text-xs font-semibold leading-relaxed truncate">{toast.message}</span>
+            </div>
+            <button
+              onClick={() => setToast(null)}
+              className="text-[#888] hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors flex-shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
