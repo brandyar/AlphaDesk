@@ -18,8 +18,10 @@ import {
   AlertCircle,
   Star,
   MessageSquare,
+  Lock,
+  ShieldCheck,
 } from 'lucide-react';
-import { Customer, CustomerContact, Personnel, NegotiationStatus, ChannelType, DuplicateCheckResult } from '../types';
+import { Customer, CustomerContact, Personnel, NegotiationStatus, ChannelType, DuplicateCheckResult, AuthUser } from '../types';
 import { checkDuplicateContact } from '../api';
 
 interface CustomerModalProps {
@@ -28,6 +30,9 @@ interface CustomerModalProps {
   onSave: (customerData: Partial<Customer> & { assignment_duration_days?: number }) => Promise<void>;
   editingCustomer?: Customer | null;
   personnelList: Personnel[];
+  currentPersonnel?: Personnel | null;
+  currentUser?: AuthUser | null;
+  isAdmin?: boolean;
   prefilledPhone?: string;
   prefilledName?: string;
   prefilledNotes?: string;
@@ -62,11 +67,24 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   onSave,
   editingCustomer,
   personnelList,
+  currentPersonnel,
+  currentUser,
+  isAdmin,
   prefilledPhone,
   prefilledName,
   prefilledNotes,
 }) => {
   if (!isOpen) return null;
+
+  // Determine if the current user has Administrator privileges
+  const userIsAdmin = Boolean(
+    isAdmin ||
+    currentUser?.is_admin ||
+    currentUser?.app_role === 'admin' ||
+    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+    currentPersonnel?.role === 'admin'
+  );
 
   // Form State
   const [companyName, setCompanyName] = useState(editingCustomer?.company_name || prefilledName || '');
@@ -216,10 +234,15 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   );
 
   // Marketer Assignment & Duration
-  const [assignedMarketerId, setAssignedMarketerId] = useState(
-    editingCustomer?.assigned_marketer_id || personnelList[0]?.id || ''
+  const [assignedMarketerId, setAssignedMarketerId] = useState(() => {
+    if (editingCustomer?.assigned_marketer_id) return editingCustomer.assigned_marketer_id;
+    if (currentPersonnel?.id) return currentPersonnel.id;
+    if (currentUser?.id) return currentUser.id;
+    return personnelList[0]?.id || '';
+  });
+  const [assignmentDurationDays, setAssignmentDurationDays] = useState<number>(
+    editingCustomer?.assignment_duration_days || 7
   );
-  const [assignmentDurationDays, setAssignmentDurationDays] = useState<number>(7);
 
   // Overall status
   const [status, setStatus] = useState<NegotiationStatus>(
@@ -227,6 +250,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   );
 
   const [saving, setSaving] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [activeTab, setActiveTab] = useState<'info' | 'contacts' | 'interview'>('info');
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -321,36 +345,62 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    setSaving(true);
+
     setSubmitError(null);
 
     if (!companyName.trim()) {
       setSubmitError('لطفاً نام شرکت یا فروشگاه را وارد کنید.');
       setActiveTab('info');
+      isSubmittingRef.current = false;
+      setSaving(false);
       return;
     }
 
     // Clean contacts
     const cleanContacts: CustomerContact[] = contacts
       .filter((c) => c.value && c.value.trim().length > 0)
-      .map((c, idx) => ({
-        id: c.id || `cnt-${Date.now()}-${idx}`,
-        customer_id: editingCustomer?.id || '',
-        channel_type: c.channel_type,
-        value: c.value.trim(),
-        normalized_value: c.value.trim(),
-        contact_name: c.contact_name?.trim() || '',
-        contact_role: c.contact_role?.trim() || '',
-        is_primary: !!c.is_primary,
-        notes: c.notes?.trim() || '',
-      }));
+      .map((c) => {
+        const isUuid = c.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id);
+        return {
+          id: isUuid ? c.id : undefined as any,
+          customer_id: editingCustomer?.id || '',
+          channel_type: c.channel_type,
+          value: c.value.trim(),
+          normalized_value: c.value.trim(),
+          contact_name: c.contact_name?.trim() || '',
+          contact_role: c.contact_role?.trim() || '',
+          is_primary: !!c.is_primary,
+          notes: c.notes?.trim() || '',
+        };
+      });
 
     if (cleanContacts.length === 0) {
       setSubmitError('حداقل یک شماره تماس معتبر برای این مشتری وارد کنید.');
       setActiveTab('contacts');
+      isSubmittingRef.current = false;
+      setSaving(false);
       return;
     }
 
-    // Check if any contact has a blocker duplicate conflict
+    // Check for internal duplicates within this form's own contact rows
+    const seenFormContacts = new Set<string>();
+    for (const c of cleanContacts) {
+      const cleanVal = (c.normalized_value || c.value || '').trim();
+      const key = `${c.channel_type}:${cleanVal}`;
+      if (seenFormContacts.has(key)) {
+        setSubmitError(`شماره یا نشانی ارتباطی «${c.value}» بیش از یک بار در فرم ثبت شده است.`);
+        setActiveTab('contacts');
+        isSubmittingRef.current = false;
+        setSaving(false);
+        return;
+      }
+      seenFormContacts.add(key);
+    }
+
+    // Check if any contact has a blocker duplicate conflict with another active marketer
     const activeConflicts = contacts.filter(
       (c) => c.duplicateWarning && c.duplicateWarning.conflictType === 'active_marketer'
     );
@@ -364,12 +414,29 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
         .join(' | ');
       setSubmitError(`خطای ثبت شماره تکراری: ${conflictMsg} (امکان تخصیص شماره مشتری به دو بازاریاب فعال وجود ندارد)`);
       setActiveTab('contacts');
+      isSubmittingRef.current = false;
+      setSaving(false);
       return;
     }
 
-    setSaving(true);
     try {
+      let finalMarketerId = assignedMarketerId && assignedMarketerId !== 'none' ? assignedMarketerId : null;
       const selectedMarketer = personnelList.find((p) => p.id === assignedMarketerId);
+      let finalMarketerName = selectedMarketer?.name || 'تخصیص نیافته';
+      let finalDurationDays = assignmentDurationDays;
+
+      // If user is not admin, they cannot set assignee or custom duration
+      if (!userIsAdmin) {
+        if (editingCustomer) {
+          finalMarketerId = editingCustomer.assigned_marketer_id || null;
+          finalMarketerName = editingCustomer.assigned_marketer_name || 'تخصیص نیافته';
+          finalDurationDays = editingCustomer.assignment_duration_days || 7;
+        } else {
+          finalMarketerId = currentPersonnel?.id || currentUser?.id || null;
+          finalMarketerName = currentPersonnel?.name || currentUser?.name || 'کارشناس فروش';
+          finalDurationDays = 7;
+        }
+      }
 
       // Separate arrays for backward-compatible views
       const mobiles = cleanContacts.filter((c) => c.channel_type === 'mobile').map((c) => c.value);
@@ -401,17 +468,21 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
         interview_report: interviewReport.trim(),
         interview_score: Number(interviewScore),
         next_followup_date: nextFollowupDate ? new Date(nextFollowupDate).toISOString() : null,
-        assigned_marketer_id: assignedMarketerId && assignedMarketerId !== 'none' ? assignedMarketerId : null,
-        assigned_marketer_name: selectedMarketer?.name || 'تخصیص نیافته',
-        assignment_duration_days: assignmentDurationDays,
+        assigned_marketer_id: finalMarketerId,
+        assigned_marketer_name: finalMarketerName,
+        assignment_duration_days: finalDurationDays,
         status,
       });
       onClose();
     } catch (err: any) {
-      console.error('Customer save error:', err);
-      setSubmitError('خطا در ذخیره‌سازی اطلاعات مشتری: ' + (err.message || 'خطای نامشخص در ارتباط با سرور'));
+      const msg = err.message || 'خطای نامشخص در ثبت اطلاعات مشتری';
+      setSubmitError(msg);
+      if (msg.includes('شماره') || msg.includes('تکراری') || msg.includes('DUPLICATE')) {
+        setActiveTab('contacts');
+      }
     } finally {
       setSaving(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -653,7 +724,9 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                   <Clock className="w-4 h-4 text-[#1DB954]" />
                   <span>تخصیص مشتری به بازاریاب و تعیین مهلت</span>
                 </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Marketer Field */}
                   <div>
                     <label className="block text-[11px] text-[#A7A7A7] mb-1">
                       بازاریاب مسئول این پرونده
@@ -661,15 +734,19 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                     <select
                       value={assignedMarketerId}
                       onChange={(e) => setAssignedMarketerId(e.target.value)}
-                      className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                      disabled={!userIsAdmin}
+                      className="w-full h-10 px-3 bg-[#282828] disabled:bg-[#202020] disabled:text-[#777] disabled:border-[#333] disabled:cursor-not-allowed rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954] border border-transparent transition-colors"
                     >
+                      <option value="none">تخصیص نیافته (عمومی)</option>
                       {personnelList.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name} ({p.role === 'marketer' ? 'بازاریاب' : 'پرسنل'})
+                          {p.name} ({p.role === 'marketer' ? 'بازاریاب' : p.role === 'admin' ? 'مدیر سیستم' : 'پرسنل'})
                         </option>
                       ))}
                     </select>
                   </div>
+
+                  {/* Deadline Duration Field */}
                   <div>
                     <label className="block text-[11px] text-[#A7A7A7] mb-1">
                       مهلت واگذاری به بازاریاب
@@ -677,7 +754,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                     <select
                       value={assignmentDurationDays}
                       onChange={(e) => setAssignmentDurationDays(Number(e.target.value))}
-                      className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                      disabled={!userIsAdmin}
+                      className="w-full h-10 px-3 bg-[#282828] disabled:bg-[#202020] disabled:text-[#777] disabled:border-[#333] disabled:cursor-not-allowed rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954] border border-transparent transition-colors"
                     >
                       <option value={3}>۳ روز (پیگیری فوری)</option>
                       <option value={7}>۷ روز (استاندارد)</option>
@@ -993,16 +1071,17 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-full bg-[#282828] hover:bg-[#333] text-xs font-semibold text-[#B3B3B3] hover:text-white transition-colors"
+                disabled={saving || isSubmittingRef.current}
+                className="px-4 py-2 rounded-full bg-[#282828] hover:bg-[#333] text-xs font-semibold text-[#B3B3B3] hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 انصراف
               </button>
               <button
                 type="submit"
-                disabled={saving}
-                className="px-6 py-2 rounded-full bg-[#1DB954] hover:bg-[#1ED760] disabled:bg-[#333] disabled:text-[#666] text-black text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+                disabled={saving || isSubmittingRef.current}
+                className="px-6 py-2 rounded-full bg-[#1DB954] hover:bg-[#1ED760] disabled:bg-[#333] disabled:text-[#666] disabled:cursor-not-allowed text-black text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
               >
-                {saving ? 'در حال ذخیره اطلاعات مشتری...' : editingCustomer ? 'ذخیره تغییرات و شماره‌ها' : 'ثبت قطعی پرونده'}
+                {saving || isSubmittingRef.current ? 'در حال ثبت اطلاعات پرونده...' : editingCustomer ? 'ذخیره تغییرات و شماره‌ها' : 'ثبت قطعی پرونده'}
               </button>
             </div>
           </div>

@@ -21,7 +21,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
-import { Customer, CustomerReport, Personnel, NegotiationStatus, ChannelType, CustomerContact } from '../types';
+import { Customer, CustomerReport, Personnel, NegotiationStatus, ChannelType, CustomerContact, AuthUser } from '../types';
 import {
   formatTimeRemaining,
   formatPersianDate,
@@ -40,6 +40,8 @@ interface CustomerDetailModalProps {
   onAddContact?: (contact: Partial<CustomerContact>) => Promise<void>;
   personnelList: Personnel[];
   currentPersonnel: Personnel | null;
+  currentUser?: AuthUser | null;
+  isAdmin?: boolean;
 }
 
 export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
@@ -53,14 +55,27 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   onAddContact,
   personnelList,
   currentPersonnel,
+  currentUser,
+  isAdmin,
 }) => {
   if (!isOpen || !customer) return null;
+
+  const userIsAdmin = Boolean(
+    isAdmin ||
+    currentUser?.is_admin ||
+    currentUser?.app_role === 'admin' ||
+    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+    currentPersonnel?.role === 'admin'
+  );
 
   // New report form state
   const [showAddReport, setShowAddReport] = useState(false);
   const [negotiatorName, setNegotiatorName] = useState(currentPersonnel?.name || customer.negotiator_name || '');
   const [negotiationPhone, setNegotiationPhone] = useState(
-    customer.mobile_numbers[0] || customer.manager_phones[0] || ''
+    (Array.isArray(customer.mobile_numbers) ? customer.mobile_numbers[0] : '') ||
+    (Array.isArray(customer.manager_phones) ? customer.manager_phones[0] : '') ||
+    ''
   );
   const [reportText, setReportText] = useState('');
   const [negotiationScore, setNegotiationScore] = useState<number>(7);
@@ -105,9 +120,13 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
     setSubmittingReport(true);
     try {
+      const finalNegotiator = userIsAdmin
+        ? (negotiatorName || currentPersonnel?.name || currentUser?.name || 'مدیر')
+        : (currentPersonnel?.name || currentUser?.name || customer.assigned_marketer_name || 'کارشناس پیگیری');
+
       await onAddReport({
         customer_id: customer.id,
-        negotiator_name: negotiatorName,
+        negotiator_name: finalNegotiator,
         negotiation_phone: negotiationPhone,
         report_text: reportText.trim(),
         negotiation_score: negotiationScore,
@@ -263,14 +282,16 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               </div>
             </div>
 
-            {/* Reassign action */}
-            <button
-              onClick={() => setShowReassignBox(!showReassignBox)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-semibold text-white transition-all hover:scale-105 border border-[#3e3e3e]"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-[#1DB954]" />
-              <span>تغییر بازاریاب یا تمدید مهلت</span>
-            </button>
+            {/* Reassign action (Admin only) */}
+            {userIsAdmin && (
+              <button
+                onClick={() => setShowReassignBox(!showReassignBox)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-semibold text-white transition-all hover:scale-105 border border-[#3e3e3e]"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-[#1DB954]" />
+                <span>تغییر بازاریاب یا تمدید مهلت (مدیر)</span>
+              </button>
+            )}
           </div>
 
           {/* Reassign Box Drawer */}
@@ -551,7 +572,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 <div>
                   <span className="text-[11px] text-[#A7A7A7]">موبایل‌ها:</span>
                   <div className="flex flex-wrap gap-2 mt-1">
-                    {customer.mobile_numbers.length > 0 ? (
+                    {Array.isArray(customer.mobile_numbers) && customer.mobile_numbers.length > 0 ? (
                       customer.mobile_numbers.map((num, i) => (
                         <a
                           key={i}
@@ -760,16 +781,18 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   ثبت گزارش مذاکره جدید برای این پرونده
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                  <div>
-                    <label className="block text-[11px] text-[#A7A7A7] mb-1">مذاکره‌کننده</label>
-                    <input
-                      type="text"
-                      value={negotiatorName}
-                      onChange={(e) => setNegotiatorName(e.target.value)}
-                      className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white focus:outline-none"
-                    />
-                  </div>
+                <div className={`grid gap-3 ${userIsAdmin ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'}`}>
+                  {userIsAdmin && (
+                    <div>
+                      <label className="block text-[11px] text-[#A7A7A7] mb-1">مذاکره‌کننده</label>
+                      <input
+                        type="text"
+                        value={negotiatorName}
+                        onChange={(e) => setNegotiatorName(e.target.value)}
+                        className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white focus:outline-none"
+                      />
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-[11px] text-[#A7A7A7] mb-1">شماره تماس مذاکره</label>

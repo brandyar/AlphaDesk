@@ -142,6 +142,9 @@ export interface Personnel {
   user_id?: string | null;
 }
 
+export const DIRECTUS_ADMIN_ROLE_ID = '59e261e1-56f4-401e-9889-4971e2c3c4ce';
+export const ADMIN_ROLE_ID = '59e261e1-56f4-401e-9889-4971e2c3c4ce';
+
 export interface AuthUser {
   id: string;
   email: string;

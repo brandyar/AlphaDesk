@@ -432,6 +432,17 @@ let coldLeadsData: ColdLead[] = [];
 let adminReportsData: AdministrativeReport[] = [];
 let contactsData: CustomerContact[] = [];
 
+// Concurrency mutex and recent creation cache to prevent double-registration
+const activeCustomerCreationLocks = new Set<string>();
+interface RecentCustomerCache {
+  id: string;
+  company_name: string;
+  phones: string[];
+  customer: any;
+  timestamp: number;
+}
+const recentCustomerCreations: RecentCustomerCache[] = [];
+
 function normalizeContactValue(value: string, type?: string): string {
   if (!value) return '';
   let clean = value.trim();
@@ -459,12 +470,32 @@ function normalizeContactValue(value: string, type?: string): string {
 
 function computeCustomerExpiration(c: any): any {
   if (!c) return c;
-  if (c.assignment_deadline && c.status !== 'قرارداد' && c.status !== 'لیست سیاه') {
-    const deadline = new Date(c.assignment_deadline).getTime();
-    const isExpired = new Date().getTime() > deadline;
-    return { ...c, is_expired: isExpired };
-  }
-  return { ...c, is_expired: false };
+  const isExpired = Boolean(
+    c.assignment_deadline &&
+    c.status !== 'قرارداد' &&
+    c.status !== 'لیست سیاه' &&
+    new Date().getTime() > new Date(c.assignment_deadline).getTime()
+  );
+
+  return {
+    ...c,
+    company_name: c.company_name || 'بدون نام',
+    business_type: c.business_type || '',
+    city: c.city || 'نامشخص',
+    province: c.province || '',
+    status: c.status || 'تماس برقرار نشده',
+    assigned_marketer_name: c.assigned_marketer_name || 'تخصیص نیافته',
+    mobile_numbers: Array.isArray(c.mobile_numbers) ? c.mobile_numbers : (typeof c.mobile_numbers === 'string' ? [c.mobile_numbers] : []),
+    landline_numbers: Array.isArray(c.landline_numbers) ? c.landline_numbers : (typeof c.landline_numbers === 'string' ? [c.landline_numbers] : []),
+    telegram_ids: Array.isArray(c.telegram_ids) ? c.telegram_ids : (typeof c.telegram_ids === 'string' ? [c.telegram_ids] : []),
+    instagram_ids: Array.isArray(c.instagram_ids) ? c.instagram_ids : (typeof c.instagram_ids === 'string' ? [c.instagram_ids] : []),
+    emails: Array.isArray(c.emails) ? c.emails : (typeof c.emails === 'string' ? [c.emails] : []),
+    websites: Array.isArray(c.websites) ? c.websites : (typeof c.websites === 'string' ? [c.websites] : []),
+    manager_phones: Array.isArray(c.manager_phones) ? c.manager_phones : (typeof c.manager_phones === 'string' ? [c.manager_phones] : []),
+    negotiator_phones: Array.isArray(c.negotiator_phones) ? c.negotiator_phones : (typeof c.negotiator_phones === 'string' ? [c.negotiator_phones] : []),
+    contacts: Array.isArray(c.contacts) ? c.contacts : [],
+    is_expired: isExpired,
+  };
 }
 
 function updateExpirationFlags() {
@@ -559,12 +590,84 @@ async function ensureDirectusPersonnel() {
   }
 }
 
+// Resolve any raw ID / user_id / email / name to a valid personnel.id in Directus
+async function resolvePersonnelId(rawIdentifier: string | null | undefined, fallbackName?: string): Promise<{ personnelId: string | null; personnelName?: string }> {
+  if (!rawIdentifier || rawIdentifier === 'none' || rawIdentifier === 'همه' || String(rawIdentifier).trim() === '') {
+    return { personnelId: null };
+  }
+  const clean = String(rawIdentifier).trim();
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      // 1. Direct match on personnel ID
+      const byId = await directusFetch(`/items/personnel/${encodeURIComponent(clean)}`).catch(() => null);
+      if (byId?.data?.id) {
+        return { personnelId: byId.data.id, personnelName: byId.data.name };
+      }
+
+      // 2. Check if clean matches user_id in personnel
+      const byUserId = await directusFetch(`/items/personnel?filter[user_id][_eq]=${encodeURIComponent(clean)}`).catch(() => null);
+      if (byUserId?.data && Array.isArray(byUserId.data) && byUserId.data.length > 0) {
+        return { personnelId: byUserId.data[0].id, personnelName: byUserId.data[0].name };
+      }
+
+      // 3. Check if clean matches email
+      const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(clean)}`).catch(() => null);
+      if (byEmail?.data && Array.isArray(byEmail.data) && byEmail.data.length > 0) {
+        return { personnelId: byEmail.data[0].id, personnelName: byEmail.data[0].name };
+      }
+
+      // 4. Check if clean matches name
+      if (fallbackName || clean.length > 2) {
+        const searchName = fallbackName || clean;
+        const byName = await directusFetch(`/items/personnel?filter[name][_eq]=${encodeURIComponent(searchName)}`).catch(() => null);
+        if (byName?.data && Array.isArray(byName.data) && byName.data.length > 0) {
+          return { personnelId: byName.data[0].id, personnelName: byName.data[0].name };
+        }
+      }
+
+      // 5. If it is a UUID but not found in personnel, check if it is a directus_users id
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) {
+        const userRes = await directusFetch(`/users/${clean}`).catch(() => null);
+        if (userRes?.data?.id) {
+          const u = userRes.data;
+          const uName = (`${u.first_name || ''} ${u.last_name || ''}`).trim() || u.email;
+          const newPId = crypto.randomUUID();
+          await directusFetch('/items/personnel', {
+            method: 'POST',
+            body: JSON.stringify({
+              id: newPId,
+              name: uName,
+              email: u.email,
+              phone: '',
+              role: 'marketer',
+              status: 'active',
+              user_id: u.id
+            })
+          }).catch(() => {});
+          return { personnelId: newPId, personnelName: uName };
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Fallback in local data
+  const local = personnelData.find(p => p.id === clean || (p as any).user_id === clean || p.email === clean || p.name === clean);
+  if (local) {
+    return { personnelId: local.id, personnelName: local.name };
+  }
+
+  return { personnelId: null };
+}
+
 // Clean Customer Payload for Directus schema fields
-function cleanCustomerPayloadForDirectus(payload: any, id: string) {
+function cleanCustomerPayloadForDirectus(payload: any, id: string, resolvedMarketerId?: string | null, resolvedMarketerName?: string) {
   const nowIso = new Date().toISOString();
 
-  let marketerId: string | null = payload.assigned_marketer_id || null;
-  if (!marketerId || marketerId === 'همه' || marketerId.trim() === '' || marketerId === 'none') {
+  let marketerId: string | null = resolvedMarketerId !== undefined ? resolvedMarketerId : (payload.assigned_marketer_id || null);
+  if (!marketerId || marketerId === 'همه' || String(marketerId).trim() === '' || marketerId === 'none') {
     marketerId = null;
   }
 
@@ -615,7 +718,7 @@ function cleanCustomerPayloadForDirectus(payload: any, id: string) {
     interview_score: Number(payload.interview_score) || 5,
     next_followup_date: nextFollowup,
     assigned_marketer_id: marketerId,
-    assigned_marketer_name: (payload.assigned_marketer_name || 'تخصیص نیافته').trim(),
+    assigned_marketer_name: (resolvedMarketerName || payload.assigned_marketer_name || 'تخصیص نیافته').trim(),
     assignment_deadline: deadline,
     assignment_duration_days: payload.assignment_duration_days ? parseInt(payload.assignment_duration_days, 10) : 7,
     status: payload.status || 'تماس برقرار نشده',
@@ -630,119 +733,98 @@ function cleanCustomerPayloadForDirectus(payload: any, id: string) {
 function extractCustomerContacts(payload: any, customerId: string): CustomerContact[] {
   const nowIso = new Date().toISOString();
   const list: CustomerContact[] = [];
+  const seenContacts = new Set<string>();
+
+  const appendContactSafe = (c: any, defaultType: string = 'mobile') => {
+    if (!c || !c.value || !String(c.value).trim()) return;
+    const val = String(c.value).trim();
+    const chType = c.channel_type || defaultType;
+    const norm = normalizeContactValue(val, chType);
+    const key = `${chType}:${norm || val.toLowerCase()}`;
+    if (seenContacts.has(key)) return;
+    seenContacts.add(key);
+
+    const isUuid = c.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id);
+    list.push({
+      id: isUuid ? c.id : crypto.randomUUID(),
+      customer_id: customerId,
+      channel_type: chType,
+      value: val,
+      normalized_value: norm,
+      contact_name: (c.contact_name || '').trim(),
+      contact_role: (c.contact_role || '').trim(),
+      is_primary: Boolean(c.is_primary),
+      notes: (c.notes || '').trim(),
+      date_created: c.date_created || nowIso,
+      date_updated: nowIso
+    });
+  };
 
   if (Array.isArray(payload.contacts) && payload.contacts.length > 0) {
     for (const c of payload.contacts) {
-      if (c && c.value && String(c.value).trim()) {
-        const val = String(c.value).trim();
-        const chType = c.channel_type || 'mobile';
-        const isUuid = c.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id);
-        list.push({
-          id: isUuid ? c.id : crypto.randomUUID(),
-          customer_id: customerId,
-          channel_type: chType,
-          value: val,
-          normalized_value: normalizeContactValue(val, chType),
-          contact_name: (c.contact_name || '').trim(),
-          contact_role: (c.contact_role || '').trim(),
-          is_primary: Boolean(c.is_primary),
-          notes: (c.notes || '').trim(),
-          date_created: c.date_created || nowIso,
-          date_updated: nowIso
-        });
-      }
+      appendContactSafe(c, c.channel_type || 'mobile');
     }
   } else {
     // Synthesize from flat lists if contacts array is absent
     const mobiles = Array.isArray(payload.mobile_numbers) ? payload.mobile_numbers : [];
     mobiles.forEach((m: string, idx: number) => {
-      if (m && String(m).trim()) {
-        list.push({
-          id: crypto.randomUUID(),
-          customer_id: customerId,
-          channel_type: 'mobile',
-          value: String(m).trim(),
-          normalized_value: normalizeContactValue(String(m).trim(), 'mobile'),
-          contact_name: payload.manager_name || 'مدیر',
-          contact_role: idx === 0 ? 'موبایل اصلی' : 'موبایل دوم',
-          is_primary: idx === 0,
-          date_created: nowIso,
-          date_updated: nowIso
-        });
-      }
+      appendContactSafe({
+        value: String(m).trim(),
+        channel_type: 'mobile',
+        contact_name: payload.manager_name || 'مدیر',
+        contact_role: idx === 0 ? 'موبایل اصلی' : 'موبایل دوم',
+        is_primary: idx === 0,
+      }, 'mobile');
     });
 
     const landlines = Array.isArray(payload.landline_numbers) ? payload.landline_numbers : [];
     landlines.forEach((l: string) => {
-      if (l && String(l).trim()) {
-        list.push({
-          id: crypto.randomUUID(),
-          customer_id: customerId,
-          channel_type: 'landline',
-          value: String(l).trim(),
-          normalized_value: normalizeContactValue(String(l).trim(), 'landline'),
-          contact_name: 'دفتر مرکزی',
-          contact_role: 'تلفن ثابت',
-          is_primary: false,
-          date_created: nowIso,
-          date_updated: nowIso
-        });
-      }
+      appendContactSafe({
+        value: String(l).trim(),
+        channel_type: 'landline',
+        contact_name: 'دفتر مرکزی',
+        contact_role: 'تلفن ثابت',
+        is_primary: false,
+      }, 'landline');
     });
 
     const telegrams = Array.isArray(payload.telegram_ids) ? payload.telegram_ids : [];
     telegrams.forEach((t: string) => {
-      if (t && String(t).trim()) {
-        list.push({
-          id: crypto.randomUUID(),
-          customer_id: customerId,
-          channel_type: 'telegram',
-          value: String(t).trim(),
-          normalized_value: normalizeContactValue(String(t).trim(), 'telegram'),
-          contact_name: 'اکانت تلگرام',
-          contact_role: 'سوشال',
-          is_primary: false,
-          date_created: nowIso,
-          date_updated: nowIso
-        });
-      }
+      appendContactSafe({
+        value: String(t).trim(),
+        channel_type: 'telegram',
+        contact_name: 'اکانت تلگرام',
+        contact_role: 'سوشال',
+        is_primary: false,
+      }, 'telegram');
     });
 
     const instagrams = Array.isArray(payload.instagram_ids) ? payload.instagram_ids : [];
     instagrams.forEach((i: string) => {
-      if (i && String(i).trim()) {
-        list.push({
-          id: crypto.randomUUID(),
-          customer_id: customerId,
-          channel_type: 'instagram',
-          value: String(i).trim(),
-          normalized_value: normalizeContactValue(String(i).trim(), 'instagram'),
-          contact_name: 'پیج اینستاگرام',
-          contact_role: 'سوشال',
-          is_primary: false,
-          date_created: nowIso,
-          date_updated: nowIso
-        });
-      }
+      appendContactSafe({
+        value: String(i).trim(),
+        channel_type: 'instagram',
+        contact_name: 'پیج اینستاگرام',
+        contact_role: 'سوشال',
+        is_primary: false,
+      }, 'instagram');
     });
 
     const emails = Array.isArray(payload.emails) ? payload.emails : [];
     emails.forEach((em: string) => {
-      if (em && String(em).trim()) {
-        list.push({
-          id: crypto.randomUUID(),
-          customer_id: customerId,
-          channel_type: 'email',
-          value: String(em).trim(),
-          normalized_value: normalizeContactValue(String(em).trim(), 'email'),
-          contact_name: 'پست الکترونیک',
-          contact_role: 'ایمیل',
-          is_primary: false,
-          date_created: nowIso,
-          date_updated: nowIso
-        });
-      }
+      appendContactSafe({
+        value: String(em).trim(),
+        channel_type: 'email',
+        contact_name: 'پست الکترونیک',
+        contact_role: 'ایمیل',
+        is_primary: false,
+      }, 'email');
     });
+  }
+
+  // Ensure at least one contact is marked as primary if any exist
+  if (list.length > 0 && !list.some((c) => c.is_primary)) {
+    list[0].is_primary = true;
   }
 
   return list;
@@ -864,7 +946,11 @@ async function asyncCheckContactDuplicate(value: string, channelType?: string, c
   };
 }
 
-const DIRECTUS_ADMIN_ROLE_ID = 'a45beaec-0272-4c29-89ee-122dce37f565';
+const DIRECTUS_ADMIN_ROLE_IDS = [
+  '59e261e1-56f4-401e-9889-4971e2c3c4ce',
+  'a45beaec-0272-4c29-89ee-122dce37f565'
+];
+const DIRECTUS_ADMIN_ROLE_ID = '59e261e1-56f4-401e-9889-4971e2c3c4ce';
 const DIRECTUS_STAFF_ROLE_ID = 'b9c11357-4926-47ad-b020-6080cb2a62df';
 
 // ----------------- BFF API & RBAC LAYER ----------------- //
@@ -880,7 +966,7 @@ function getRequestUser(req: Request) {
   const isAdmin =
     userRole === 'admin' ||
     userRole === 'sales_manager' ||
-    roleId === DIRECTUS_ADMIN_ROLE_ID;
+    DIRECTUS_ADMIN_ROLE_IDS.includes(roleId);
 
   return {
     userId,
@@ -1661,16 +1747,24 @@ app.get('/api/customers/:id', async (req: Request, res: Response) => {
 // Create Customer
 app.post('/api/customers', async (req: Request, res: Response) => {
   const payload = req.body;
-  const { userId, userRole, userName } = getRequestUser(req);
+  const { userId, personnelId, userRole, userName, isAdmin } = getRequestUser(req);
   const newId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
-  // If a marketer creates a customer without explicitly picking an assignee, auto-assign to them
-  if (userRole === 'marketer' && userId) {
-    if (!payload.assigned_marketer_id || payload.assigned_marketer_id === 'none') {
-      payload.assigned_marketer_id = userId;
-      payload.assigned_marketer_name = userName || payload.assigned_marketer_name;
-    }
+  // ONLY Admin can assign the customer to arbitrary marketers or customize assignment duration.
+  // Non-admin marketers always auto-assign newly registered customers to themselves with standard duration.
+  let rawMarketerId = payload.assigned_marketer_id;
+  let rawMarketerName = payload.assigned_marketer_name;
+  let rawDurationDays = payload.assignment_duration_days ? parseInt(payload.assignment_duration_days, 10) : 7;
+
+  if (!isAdmin) {
+    rawMarketerId = personnelId || userId;
+    rawMarketerName = userName || rawMarketerName || 'بازاریاب';
+    rawDurationDays = 7;
+    payload.assignment_duration_days = 7;
+  } else if (!rawMarketerId || rawMarketerId === 'none' || rawMarketerId === 'همه') {
+    rawMarketerId = null;
+    rawMarketerName = 'تخصیص نیافته';
   }
 
   // Pre-validate incoming contacts for duplicates against database
@@ -1686,110 +1780,179 @@ app.post('/api/customers', async (req: Request, res: Response) => {
     });
   }
 
-  const dupResults = await Promise.all(
-    incomingContactsList.map((item) => asyncCheckContactDuplicate(item.value, item.channel_type))
+  const normalizedPhones = Array.from(
+    new Set(
+      incomingContactsList
+        .map((item) => normalizeContactValue(item.value, item.channel_type))
+        .filter(Boolean)
+    )
   );
-  const blocker = dupResults.find((dup) => dup && dup.conflictType === 'active_marketer');
-  if (blocker) {
-    return res.status(409).json({
-      error: 'DUPLICATE_CONTACT',
-      message: blocker.message,
-      conflict: blocker
-    });
+  const normalizedCompanyName = (payload.company_name || '').trim().toLowerCase();
+
+  // 1. Idempotency Check: if exact same company or phones were created within the last 15 seconds, return the already created customer
+  const existingRecent = recentCustomerCreations.find((rc) => {
+    if (Date.now() - rc.timestamp > 15000) return false;
+    if (normalizedCompanyName && rc.company_name === normalizedCompanyName) return true;
+    if (normalizedPhones.length > 0 && rc.phones.some((p) => normalizedPhones.includes(p))) return true;
+    return false;
+  });
+
+  if (existingRecent) {
+    return res.status(200).json(existingRecent.customer);
   }
 
-  const directusCustPayload = cleanCustomerPayloadForDirectus(payload, newId);
-  const contactsList = extractCustomerContacts(payload, newId);
+  // 2. Concurrency Lock: prevent parallel double-submissions from duplicate clicks
+  const lockKey = `${normalizedCompanyName}::${normalizedPhones.slice().sort().join(',')}`;
+  if (activeCustomerCreationLocks.has(lockKey)) {
+    return res.status(409).json({
+      error: 'CREATION_IN_PROGRESS',
+      message: 'فرآیند ثبت این پرونده مشتری هم‌اکنون در دست اقدام است. لطفاً چند لحظه شکیبا باشید.'
+    });
+  }
+  activeCustomerCreationLocks.add(lockKey);
 
-  if (directusUrl && directusAdminToken) {
-    try {
-      // 1. Insert customer into Database
-      const createdRes = await directusFetch('/items/customers', {
-        method: 'POST',
-        body: JSON.stringify(directusCustPayload)
+  try {
+    const dupResults = await Promise.all(
+      incomingContactsList.map((item) => asyncCheckContactDuplicate(item.value, item.channel_type))
+    );
+    const blocker = dupResults.find((dup) => dup && dup.conflictType === 'active_marketer');
+    if (blocker) {
+      return res.status(409).json({
+        error: 'DUPLICATE_CONTACT',
+        message: blocker.message,
+        conflict: blocker
       });
-      const finalCust = createdRes.data;
-      const finalId = finalCust.id;
+    }
 
-      // 2. Batch insert contacts into customer_contacts table
-      let insertedContacts: CustomerContact[] = [];
-      if (contactsList.length > 0) {
-        try {
-          const batchRes = await directusFetch('/items/customer_contacts', {
-            method: 'POST',
-            body: JSON.stringify(contactsList.map(c => ({ ...c, customer_id: finalId })))
-          });
-          insertedContacts = Array.isArray(batchRes?.data) ? batchRes.data : contactsList;
-        } catch (bErr: any) {
-          console.error('Batch contact insert warning, trying individually:', bErr.message);
-          for (const ct of contactsList) {
-            try {
-              const ctRes = await directusFetch('/items/customer_contacts', {
-                method: 'POST',
-                body: JSON.stringify({ ...ct, customer_id: finalId })
-              });
-              insertedContacts.push(ctRes.data || { ...ct, customer_id: finalId });
-            } catch (singleErr: any) {
-              console.error('Contact insert error:', singleErr.message);
-              insertedContacts.push({ ...ct, customer_id: finalId });
+    // Resolve assigned marketer to a verified personnel.id
+    const resolvedMarketer = await resolvePersonnelId(rawMarketerId, rawMarketerName);
+    const directusCustPayload = cleanCustomerPayloadForDirectus(
+      payload,
+      newId,
+      resolvedMarketer.personnelId,
+      resolvedMarketer.personnelName || rawMarketerName
+    );
+    const contactsList = extractCustomerContacts(payload, newId);
+
+    if (directusUrl && directusAdminToken) {
+      try {
+        // 1. Insert customer into Database
+        const createdRes = await directusFetch('/items/customers', {
+          method: 'POST',
+          body: JSON.stringify(directusCustPayload)
+        });
+        const finalCust = createdRes.data;
+        const finalId = finalCust.id;
+
+        // 2. Batch insert contacts into customer_contacts table
+        let insertedContacts: CustomerContact[] = [];
+        if (contactsList.length > 0) {
+          try {
+            const batchRes = await directusFetch('/items/customer_contacts', {
+              method: 'POST',
+              body: JSON.stringify(contactsList.map(c => ({ ...c, customer_id: finalId })))
+            });
+            insertedContacts = Array.isArray(batchRes?.data) ? batchRes.data : contactsList;
+          } catch (bErr: any) {
+            console.error('Batch contact insert warning, trying individually:', bErr.message);
+            for (const ct of contactsList) {
+              try {
+                const ctRes = await directusFetch('/items/customer_contacts', {
+                  method: 'POST',
+                  body: JSON.stringify({ ...ct, customer_id: finalId })
+                });
+                insertedContacts.push(ctRes.data || { ...ct, customer_id: finalId });
+              } catch (singleErr: any) {
+                console.error('Contact insert error:', singleErr.message);
+                insertedContacts.push({ ...ct, customer_id: finalId });
+              }
             }
           }
         }
-      }
 
-      // 3. Insert initial report if given
-      if (directusCustPayload.interview_report) {
-        const initialReport: CustomerReport = {
-          id: crypto.randomUUID(),
-          customer_id: finalId,
-          negotiator_name: directusCustPayload.negotiator_name || directusCustPayload.assigned_marketer_name || 'کارشناس پذیرش',
-          negotiation_phone: directusCustPayload.negotiator_phones[0] || directusCustPayload.mobile_numbers[0] || '',
-          report_text: `[گزارش مصاحبه اولیه]: ${directusCustPayload.interview_report}`,
-          negotiation_score: directusCustPayload.interview_score,
-          next_followup_date: directusCustPayload.next_followup_date,
-          negotiation_status: directusCustPayload.status,
-          date_created: nowIso
+        // 3. Insert initial report if given
+        if (directusCustPayload.interview_report) {
+          const initialReport: CustomerReport = {
+            id: crypto.randomUUID(),
+            customer_id: finalId,
+            negotiator_name: directusCustPayload.negotiator_name || directusCustPayload.assigned_marketer_name || 'کارشناس پذیرش',
+            negotiation_phone: directusCustPayload.negotiator_phones[0] || directusCustPayload.mobile_numbers[0] || '',
+            report_text: `[گزارش مصاحبه اولیه]: ${directusCustPayload.interview_report}`,
+            negotiation_score: directusCustPayload.interview_score,
+            next_followup_date: directusCustPayload.next_followup_date,
+            negotiation_status: directusCustPayload.status,
+            date_created: nowIso
+          };
+          await directusFetch('/items/customer_reports', {
+            method: 'POST',
+            body: JSON.stringify(initialReport)
+          }).catch((rErr: any) => console.error('Initial report insert error:', rErr.message));
+        }
+
+        const fullCustomer = {
+          ...finalCust,
+          contacts: insertedContacts
         };
-        await directusFetch('/items/customer_reports', {
-          method: 'POST',
-          body: JSON.stringify(initialReport)
-        }).catch((rErr: any) => console.error('Initial report insert error:', rErr.message));
+
+        // Cache recently created customer for idempotency
+        recentCustomerCreations.push({
+          id: finalId,
+          company_name: normalizedCompanyName,
+          phones: normalizedPhones,
+          customer: fullCustomer,
+          timestamp: Date.now()
+        });
+        if (recentCustomerCreations.length > 50) {
+          recentCustomerCreations.splice(0, recentCustomerCreations.length - 50);
+        }
+
+        return res.status(201).json(fullCustomer);
+      } catch (err: any) {
+        console.error('Customer creation failed:', err.message);
+        return res.status(500).json({
+          error: 'CUSTOMER_SAVE_FAILED',
+          message: `خطا در ذخیره‌سازی پرونده مشتری در پایگاه داده مرکزی: ${err.message}`
+        });
       }
-
-      const fullCustomer = {
-        ...finalCust,
-        contacts: insertedContacts
-      };
-
-      return res.status(201).json(fullCustomer);
-    } catch (err: any) {
-      console.error('Customer creation failed:', err.message);
-      return res.status(500).json({
-        error: 'CUSTOMER_SAVE_FAILED',
-        message: `خطا در ذخیره‌سازی پرونده مشتری در پایگاه داده مرکزی: ${err.message}`
-      });
     }
-  }
 
-  // Fallback ONLY when database is not configured
-  const fullCreated: Customer = { ...(directusCustPayload as any), contacts: contactsList };
-  return res.status(201).json(fullCreated);
+    // Fallback ONLY when database is not configured
+    const fullCreated: Customer = { ...(directusCustPayload as any), contacts: contactsList };
+    customersData.unshift(fullCreated);
+    contactsData.push(...contactsList);
+
+    recentCustomerCreations.push({
+      id: newId,
+      company_name: normalizedCompanyName,
+      phones: normalizedPhones,
+      customer: fullCreated,
+      timestamp: Date.now()
+    });
+    if (recentCustomerCreations.length > 50) {
+      recentCustomerCreations.splice(0, recentCustomerCreations.length - 50);
+    }
+
+    return res.status(201).json(fullCreated);
+  } finally {
+    activeCustomerCreationLocks.delete(lockKey);
+  }
 });
 
 // Update Customer
 app.patch('/api/customers/:id', async (req: Request, res: Response) => {
   const payload = req.body;
-  const { userId, userRole } = getRequestUser(req);
+  const { userId, personnelId, userRole, isAdmin } = getRequestUser(req);
   const nowIso = new Date().toISOString();
 
   if (directusUrl && directusAdminToken) {
     try {
       // Role check: Marketer cannot edit an active customer belonging to another marketer
-      if (userRole === 'marketer' && userId) {
+      if (!isAdmin && (userId || personnelId)) {
         const currentCustRes = await directusFetch(`/items/customers/${req.params.id}?fields=assigned_marketer_id,assignment_deadline,status`).catch(() => null);
         if (currentCustRes?.data) {
           const expCust = computeCustomerExpiration(currentCustRes.data);
-          if (expCust.assigned_marketer_id && expCust.assigned_marketer_id !== userId && !expCust.is_expired && expCust.status !== 'تماس نگرفته') {
+          const isAssignedToMe = expCust.assigned_marketer_id === personnelId || expCust.assigned_marketer_id === userId || !expCust.assigned_marketer_id;
+          if (!isAssignedToMe && !expCust.is_expired && expCust.status !== 'تماس نگرفته') {
             return res.status(403).json({
               error: 'FORBIDDEN',
               message: 'این پرونده در اختیار بازاریاب دیگری است و امکان تغییر آن را ندارید.'
@@ -1850,20 +2013,30 @@ app.patch('/api/customers/:id', async (req: Request, res: Response) => {
       if (payload.interview_score !== undefined) cleanPatch.interview_score = Number(payload.interview_score);
       if (payload.status !== undefined) cleanPatch.status = payload.status;
       if (payload.is_expired !== undefined) cleanPatch.is_expired = Boolean(payload.is_expired);
-      if (payload.assignment_duration_days !== undefined) cleanPatch.assignment_duration_days = Number(payload.assignment_duration_days);
 
-      if (payload.assigned_marketer_id !== undefined) {
-        cleanPatch.assigned_marketer_id = (!payload.assigned_marketer_id || payload.assigned_marketer_id === 'همه' || payload.assigned_marketer_id.trim() === '' || payload.assigned_marketer_id === 'none') ? null : payload.assigned_marketer_id;
-      }
-      if (payload.assigned_marketer_name !== undefined) {
-        cleanPatch.assigned_marketer_name = String(payload.assigned_marketer_name).trim();
+      // ONLY Admin can change assigned marketer and assignment deadline/duration
+      if (isAdmin) {
+        if (payload.assignment_duration_days !== undefined) cleanPatch.assignment_duration_days = Number(payload.assignment_duration_days);
+
+        if (payload.assigned_marketer_id !== undefined) {
+          const resolved = await resolvePersonnelId(payload.assigned_marketer_id, payload.assigned_marketer_name);
+          cleanPatch.assigned_marketer_id = resolved.personnelId;
+          if (resolved.personnelName) {
+            cleanPatch.assigned_marketer_name = resolved.personnelName;
+          } else if (payload.assigned_marketer_name !== undefined) {
+            cleanPatch.assigned_marketer_name = String(payload.assigned_marketer_name).trim();
+          }
+        } else if (payload.assigned_marketer_name !== undefined) {
+          cleanPatch.assigned_marketer_name = String(payload.assigned_marketer_name).trim();
+        }
+
+        if (payload.assignment_deadline !== undefined) {
+          cleanPatch.assignment_deadline = (!payload.assignment_deadline || String(payload.assignment_deadline).trim() === '') ? null : new Date(payload.assignment_deadline).toISOString();
+        }
       }
 
       if (payload.next_followup_date !== undefined) {
         cleanPatch.next_followup_date = (!payload.next_followup_date || String(payload.next_followup_date).trim() === '') ? null : new Date(payload.next_followup_date).toISOString();
-      }
-      if (payload.assignment_deadline !== undefined) {
-        cleanPatch.assignment_deadline = (!payload.assignment_deadline || String(payload.assignment_deadline).trim() === '') ? null : new Date(payload.assignment_deadline).toISOString();
       }
       cleanPatch.date_updated = nowIso;
 
@@ -1937,9 +2110,17 @@ app.patch('/api/customers/:id', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Customer not found' });
   }
 
+  const offlinePatch = { ...payload };
+  if (!isAdmin) {
+    delete offlinePatch.assigned_marketer_id;
+    delete offlinePatch.assigned_marketer_name;
+    delete offlinePatch.assignment_duration_days;
+    delete offlinePatch.assignment_deadline;
+  }
+
   customersData[index] = {
     ...customersData[index],
-    ...payload,
+    ...offlinePatch,
     date_updated: nowIso
   };
 
@@ -2003,17 +2184,18 @@ app.delete('/api/customers/:id', async (req: Request, res: Response) => {
 // Re-assign Marketer
 app.post('/api/customers/:id/reassign', async (req: Request, res: Response) => {
   const { new_marketer_id, new_marketer_name, duration_days } = req.body;
-  const { userId, userRole } = getRequestUser(req);
+  const { userId, personnelId, userRole } = getRequestUser(req);
   const days = duration_days ? parseInt(duration_days, 10) : 7;
   const nowTime = new Date();
   const deadline = addDays(nowTime, days);
 
-  if (userRole === 'marketer' && userId) {
+  if (userRole === 'marketer' && (userId || personnelId)) {
     if (directusUrl && directusAdminToken) {
       const currentCustRes = await directusFetch(`/items/customers/${req.params.id}?fields=assigned_marketer_id,assignment_deadline,status`).catch(() => null);
       if (currentCustRes?.data) {
         const expCust = computeCustomerExpiration(currentCustRes.data);
-        if (expCust.assigned_marketer_id && expCust.assigned_marketer_id !== userId && !expCust.is_expired) {
+        const isMine = expCust.assigned_marketer_id === personnelId || expCust.assigned_marketer_id === userId;
+        if (!isMine && !expCust.is_expired) {
           return res.status(403).json({
             error: 'FORBIDDEN',
             message: 'این مشتری دارای بازاریاب فعال است و فقط مدیر فروش می‌تواند آن را واگذار کند.'
@@ -2023,14 +2205,11 @@ app.post('/api/customers/:id/reassign', async (req: Request, res: Response) => {
     }
   }
 
-  let marketerId: string | null = new_marketer_id || null;
-  if (!marketerId || marketerId === 'همه' || marketerId.trim() === '' || marketerId === 'none') {
-    marketerId = null;
-  }
+  const resolved = await resolvePersonnelId(new_marketer_id, new_marketer_name);
 
   const patchData = {
-    assigned_marketer_id: marketerId,
-    assigned_marketer_name: (new_marketer_name || 'تخصیص نیافته').trim(),
+    assigned_marketer_id: resolved.personnelId,
+    assigned_marketer_name: (resolved.personnelName || new_marketer_name || 'تخصیص نیافته').trim(),
     assignment_deadline: deadline,
     assignment_duration_days: days,
     is_expired: false,
@@ -2049,7 +2228,7 @@ app.post('/api/customers/:id/reassign', async (req: Request, res: Response) => {
         customer_id: req.params.id,
         negotiator_name: 'مدیریت بازاریابی',
         negotiation_phone: '-',
-        report_text: `تغییر بازاریاب مسئول به «${new_marketer_name || 'عمومی'}» با مهلت جدید ${days} روزه برای پیگیری و انعقاد قرارداد.`,
+        report_text: `تغییر بازاریاب مسئول به «${patchData.assigned_marketer_name}» با مهلت جدید ${days} روزه برای پیگیری و انعقاد قرارداد.`,
         negotiation_score: 5,
         next_followup_date: addDays(nowTime, 2),
         negotiation_status: patchedCust.data?.status || 'پیگیری قرارداد',
@@ -2095,13 +2274,13 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
       const result = await directusFetch(`/items/customer_reports${q}`);
       if (result && Array.isArray(result.data)) {
         let reportsList = result.data;
-        // Marketer only sees their own reports when browsing general reports list
+        // Non-admin Marketer/Staff only sees their own reports when browsing general reports list
         if (!isAdmin && (userId || personnelId || userName) && !customer_id) {
           reportsList = reportsList.filter((r: any) =>
-            r.negotiator_name === userName ||
+            (userName && r.negotiator_name === userName) ||
             r.created_by === userName ||
-            r.created_by === userId ||
-            r.created_by === personnelId
+            (userId && r.created_by === userId) ||
+            (personnelId && r.created_by === personnelId)
           );
         }
         return res.json(reportsList);
@@ -2111,12 +2290,23 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
     }
   }
 
-  res.json([]);
+  let repList = reportsData;
+  if (customer_id) {
+    repList = repList.filter(r => r.customer_id === customer_id);
+  } else if (!isAdmin && (userId || personnelId || userName)) {
+    repList = repList.filter(r =>
+      (userName && r.negotiator_name === userName) ||
+      r.created_by === userName ||
+      (userId && r.created_by === userId) ||
+      (personnelId && r.created_by === personnelId)
+    );
+  }
+  res.json(repList);
 });
 
 app.post('/api/customer-reports', async (req: Request, res: Response) => {
   const payload = req.body;
-  const { userId, personnelId, userName } = getRequestUser(req);
+  const { userId, personnelId, userName, isAdmin } = getRequestUser(req);
   const newReportId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
@@ -2131,10 +2321,14 @@ app.post('/api/customer-reports', async (req: Request, res: Response) => {
     }
   }
 
+  const finalNegotiatorName = isAdmin
+    ? (payload.negotiator_name || userName || 'کارشناس پیگیری').trim()
+    : (userName || 'کارشناس پیگیری').trim();
+
   const newReport: CustomerReport = {
     id: newReportId,
     customer_id: payload.customer_id,
-    negotiator_name: (payload.negotiator_name || userName || 'کارشناس پیگیری').trim(),
+    negotiator_name: finalNegotiatorName,
     negotiation_phone: (payload.negotiation_phone || '').trim(),
     report_text: (payload.report_text || '').trim(),
     negotiation_score: Number(payload.negotiation_score) || 5,
@@ -2389,10 +2583,13 @@ app.post('/api/administrative-reports', async (req: Request, res: Response) => {
   const newAdmId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
+  const rawPId = payload.personnel_id || personnelId || userId;
+  const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
+
   const newReport: AdministrativeReport = {
     id: newAdmId,
-    personnel_id: payload.personnel_id || personnelId || userId || 'p-1',
-    personnel_name: payload.personnel_name || userName || 'پرسنل شرکت',
+    personnel_id: resolved.personnelId || 'p-1',
+    personnel_name: resolved.personnelName || payload.personnel_name || userName || 'پرسنل شرکت',
     report_date: payload.report_date || nowIso.split('T')[0],
     calls_count: Number(payload.calls_count) || 0,
     successful_contacts: Number(payload.successful_contacts) || 0,

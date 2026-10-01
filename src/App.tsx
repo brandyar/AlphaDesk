@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -68,6 +68,7 @@ export default function App() {
   const initialSession = getStoredAuthSession();
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(initialSession.user);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const isSavingCustomerRef = useRef(false);
 
   // Toast Notifications
   const [toast, setToast] = useState<{ id: number; message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -188,21 +189,22 @@ export default function App() {
 
   // Filter customers for current view
   const filteredCustomers = customers.filter((c) => {
+    if (!c) return false;
     if (showExpiredOnly && !c.is_expired) return false;
     if (selectedMarketerId !== 'همه' && c.assigned_marketer_id !== selectedMarketerId) return false;
     if (statusFilter !== 'همه' && c.status !== statusFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchCompany = c.company_name.toLowerCase().includes(q);
+      const matchCompany = c.company_name?.toLowerCase().includes(q);
       const matchManager = c.manager_name?.toLowerCase().includes(q);
       const matchCity = c.city?.toLowerCase().includes(q);
       const matchJob = c.business_type?.toLowerCase().includes(q);
-      const matchPhone = c.mobile_numbers.some((m) => m.includes(q));
-      const matchContact = c.contacts?.some(
+      const matchPhone = Array.isArray(c.mobile_numbers) && c.mobile_numbers.some((m) => m && m.includes(q));
+      const matchContact = Array.isArray(c.contacts) && c.contacts.some(
         (ct) =>
-          ct.value.toLowerCase().includes(q) ||
-          (ct.contact_name && ct.contact_name.toLowerCase().includes(q)) ||
-          (ct.contact_role && ct.contact_role.toLowerCase().includes(q))
+          (ct?.value && ct.value.toLowerCase().includes(q)) ||
+          (ct?.contact_name && ct.contact_name.toLowerCase().includes(q)) ||
+          (ct?.contact_role && ct.contact_role.toLowerCase().includes(q))
       );
       if (!matchCompany && !matchManager && !matchCity && !matchJob && !matchPhone && !matchContact) return false;
     }
@@ -215,6 +217,8 @@ export default function App() {
   const handleSaveCustomer = async (
     customerData: Partial<Customer> & { assignment_duration_days?: number }
   ) => {
+    if (isSavingCustomerRef.current) return;
+    isSavingCustomerRef.current = true;
     try {
       if (editingCustomer) {
         const updated = await updateCustomer(editingCustomer.id, customerData);
@@ -225,7 +229,10 @@ export default function App() {
         showToast('پرونده و شماره‌های مشتری با موفقیت ذخیره شدند.', 'success');
       } else {
         const created = await createCustomer(customerData);
-        setCustomers((prev) => [created, ...prev]);
+        setCustomers((prev) => {
+          const filtered = prev.filter((c) => c.id !== created.id);
+          return [created, ...filtered];
+        });
 
         // If created from a lead, mark lead as converted
         if (prefilledLeadPhone) {
@@ -246,6 +253,7 @@ export default function App() {
         }
         showToast('پرونده مشتری جدید با موفقیت در سامانه ثبت شد.', 'success');
       }
+      setIsCustomerModalOpen(false);
       setEditingCustomer(null);
       setPrefilledLeadPhone('');
       setPrefilledLeadName('');
@@ -258,6 +266,8 @@ export default function App() {
     } catch (err: any) {
       showToast(err.message || 'خطا در ذخیره‌سازی اطلاعات مشتری', 'error');
       throw err;
+    } finally {
+      isSavingCustomerRef.current = false;
     }
   };
 
@@ -503,6 +513,15 @@ export default function App() {
                 <CustomersView
                   customers={filteredCustomers}
                   personnelList={personnelList}
+                  currentPersonnel={currentPersonnel}
+                  currentUser={currentUser}
+                  isAdmin={Boolean(
+                    currentUser?.is_admin ||
+                    currentUser?.app_role === 'admin' ||
+                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                    currentPersonnel?.role === 'admin'
+                  )}
                   onSelectCustomer={openCustomerDetail}
                   onOpenNewCustomerModal={() => {
                     setEditingCustomer(null);
@@ -525,6 +544,15 @@ export default function App() {
                   reports={reports}
                   customers={customers}
                   personnelList={personnelList}
+                  currentPersonnel={currentPersonnel}
+                  currentUser={currentUser}
+                  isAdmin={Boolean(
+                    currentUser?.is_admin ||
+                    currentUser?.app_role === 'admin' ||
+                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                    currentPersonnel?.role === 'admin'
+                  )}
                   onOpenAddReportModal={() => setIsAddReportModalOpen(true)}
                   onSelectCustomer={openCustomerDetail}
                 />
@@ -545,6 +573,14 @@ export default function App() {
                   adminReports={adminReports}
                   personnelList={personnelList}
                   currentPersonnel={currentPersonnel}
+                  currentUser={currentUser}
+                  isAdmin={Boolean(
+                    currentUser?.is_admin ||
+                    currentUser?.app_role === 'admin' ||
+                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                    currentPersonnel?.role === 'admin'
+                  )}
                   onSubmitReport={handleSubmitAdminReport}
                 />
               )}
@@ -631,6 +667,15 @@ export default function App() {
         onSave={handleSaveCustomer}
         editingCustomer={editingCustomer}
         personnelList={personnelList}
+        currentPersonnel={currentPersonnel}
+        currentUser={currentUser}
+        isAdmin={Boolean(
+          currentUser?.is_admin ||
+          currentUser?.app_role === 'admin' ||
+          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+          currentPersonnel?.role === 'admin'
+        )}
         prefilledPhone={prefilledLeadPhone}
         prefilledName={prefilledLeadName}
         prefilledNotes={prefilledLeadNotes}
@@ -652,6 +697,14 @@ export default function App() {
         onDelete={handleDeleteCustomer}
         personnelList={personnelList}
         currentPersonnel={currentPersonnel}
+        currentUser={currentUser}
+        isAdmin={Boolean(
+          currentUser?.is_admin ||
+          currentUser?.app_role === 'admin' ||
+          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+          currentPersonnel?.role === 'admin'
+        )}
       />
 
       {/* Standalone Add Report Modal */}
@@ -661,6 +714,14 @@ export default function App() {
         customers={customers}
         personnelList={personnelList}
         currentPersonnel={currentPersonnel}
+        currentUser={currentUser}
+        isAdmin={Boolean(
+          currentUser?.is_admin ||
+          currentUser?.app_role === 'admin' ||
+          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+          currentPersonnel?.role === 'admin'
+        )}
         onSaveReport={handleAddCustomerReport}
       />
 

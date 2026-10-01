@@ -15,12 +15,15 @@ import {
   ExternalLink,
   ChevronLeft,
 } from 'lucide-react';
-import { Customer, Personnel, NegotiationStatus } from '../types';
+import { Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
 import { formatTimeRemaining, formatPersianDate, getStatusTheme } from '../utils';
 
 interface CustomersViewProps {
   customers: Customer[];
   personnelList: Personnel[];
+  currentPersonnel?: Personnel | null;
+  currentUser?: AuthUser | null;
+  isAdmin?: boolean;
   onSelectCustomer: (customer: Customer) => void;
   onOpenNewCustomerModal: () => void;
   selectedMarketerId: string;
@@ -47,6 +50,9 @@ const statusOptions: string[] = [
 export const CustomersView: React.FC<CustomersViewProps> = ({
   customers,
   personnelList,
+  currentPersonnel,
+  currentUser,
+  isAdmin,
   onSelectCustomer,
   onOpenNewCustomerModal,
   selectedMarketerId,
@@ -57,6 +63,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   onToggleExpiredOnly,
 }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+
+  const userIsAdmin = Boolean(
+    isAdmin ||
+    currentUser?.is_admin ||
+    currentUser?.app_role === 'admin' ||
+    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+    currentPersonnel?.role === 'admin'
+  );
 
   return (
     <div className="space-y-6">
@@ -104,25 +119,27 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       {/* Clean Single-Row Filter Toolbar: Dropdowns instead of tags */}
       <div className="p-3 sm:p-4 bg-[#181818] rounded-2xl border border-[#282828] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
-          {/* Marketer Dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[#A7A7A7] flex items-center gap-1">
-              <Filter className="w-3.5 h-3.5 text-[#1DB954]" />
-              <span>بازاریاب:</span>
-            </span>
-            <select
-              value={selectedMarketerId}
-              onChange={(e) => onSelectMarketerId(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
-            >
-              <option value="همه">همه بازاریاب‌ها</option>
-              {personnelList.map((p) => (
-                <option key={p.id} value={p.id} className="bg-[#181818] text-white">
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Marketer Dropdown - ONLY for Admin */}
+          {userIsAdmin && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#A7A7A7] flex items-center gap-1">
+                <Filter className="w-3.5 h-3.5 text-[#1DB954]" />
+                <span>بازاریاب:</span>
+              </span>
+              <select
+                value={selectedMarketerId}
+                onChange={(e) => onSelectMarketerId(e.target.value)}
+                className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+              >
+                <option value="همه">همه بازاریاب‌ها</option>
+                {personnelList.map((p) => (
+                  <option key={p.id} value={p.id} className="bg-[#181818] text-white">
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Status Dropdown */}
           <div className="flex items-center gap-2">
@@ -230,16 +247,21 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   <div className="flex items-center justify-between pt-2">
                     <div className="flex items-center gap-2">
                       {(() => {
+                        const contactsArr = Array.isArray(c.contacts) ? c.contacts : [];
+                        const mobilesArr = Array.isArray(c.mobile_numbers) ? c.mobile_numbers : [];
+                        const telegramsArr = Array.isArray(c.telegram_ids) ? c.telegram_ids : [];
+                        const instasArr = Array.isArray(c.instagram_ids) ? c.instagram_ids : [];
+
                         const primaryPhone =
-                          c.contacts?.find((ct) => ct.channel_type === 'mobile' || ct.channel_type === 'landline')
-                            ?.value || c.mobile_numbers[0];
+                          contactsArr.find((ct) => ct && (ct.channel_type === 'mobile' || ct.channel_type === 'landline'))
+                            ?.value || mobilesArr[0] || '';
                         const primaryTelegram =
-                          c.contacts?.find((ct) => ct.channel_type === 'telegram')?.value ||
+                          contactsArr.find((ct) => ct && ct.channel_type === 'telegram')?.value ||
                           c.telegram_phone ||
-                          c.telegram_ids[0];
+                          telegramsArr[0] || '';
                         const primaryInsta =
-                          c.contacts?.find((ct) => ct.channel_type === 'instagram')?.value ||
-                          c.instagram_ids[0];
+                          contactsArr.find((ct) => ct && ct.channel_type === 'instagram')?.value ||
+                          instasArr[0] || '';
 
                         return (
                           <>

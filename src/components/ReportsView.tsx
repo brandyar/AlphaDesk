@@ -11,13 +11,16 @@ import {
   CheckCircle,
   Building,
 } from 'lucide-react';
-import { CustomerReport, Customer, Personnel, NegotiationStatus } from '../types';
+import { CustomerReport, Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
 import { formatPersianDate, formatPersianDateTime, getStatusTheme } from '../utils';
 
 interface ReportsViewProps {
   reports: CustomerReport[];
   customers: Customer[];
   personnelList: Personnel[];
+  currentPersonnel?: Personnel | null;
+  currentUser?: AuthUser | null;
+  isAdmin?: boolean;
   onOpenAddReportModal: () => void;
   onSelectCustomer: (customer: Customer) => void;
 }
@@ -26,12 +29,24 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   reports,
   customers,
   personnelList,
+  currentPersonnel,
+  currentUser,
+  isAdmin,
   onOpenAddReportModal,
   onSelectCustomer,
 }) => {
   const [selectedStatus, setSelectedStatus] = useState<string>('همه');
   const [selectedNegotiator, setSelectedNegotiator] = useState<string>('همه');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const userIsAdmin = Boolean(
+    isAdmin ||
+    currentUser?.is_admin ||
+    currentUser?.app_role === 'admin' ||
+    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+    currentPersonnel?.role === 'admin'
+  );
 
   const statusList: string[] = [
     'همه',
@@ -47,13 +62,33 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   ];
 
   const filteredReports = reports.filter((rep) => {
+    // Non-admin staff can only see their own reports
+    if (!userIsAdmin) {
+      const isMyReport =
+        (currentPersonnel?.name && rep.negotiator_name === currentPersonnel.name) ||
+        (currentUser?.name && rep.negotiator_name === currentUser.name) ||
+        (currentPersonnel?.id && rep.created_by === currentPersonnel.id) ||
+        (currentUser?.id && rep.created_by === currentUser.id);
+
+      // Also allow if the customer itself is assigned to this marketer
+      const customer = customers.find((c) => c.id === rep.customer_id);
+      const isMyCustomer = customer && (
+        customer.assigned_marketer_id === currentPersonnel?.id ||
+        customer.assigned_marketer_id === currentUser?.id ||
+        customer.assigned_marketer_name === currentPersonnel?.name ||
+        customer.assigned_marketer_name === currentUser?.name
+      );
+
+      if (!isMyReport && !isMyCustomer) return false;
+    }
+
     if (selectedStatus !== 'همه' && rep.negotiation_status !== selectedStatus) return false;
-    if (selectedNegotiator !== 'همه' && rep.negotiator_name !== selectedNegotiator) return false;
+    if (userIsAdmin && selectedNegotiator !== 'همه' && rep.negotiator_name !== selectedNegotiator) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const customer = customers.find((c) => c.id === rep.customer_id);
-      const matchCompany = customer?.company_name.toLowerCase().includes(q);
-      const matchReport = rep.report_text.toLowerCase().includes(q);
+      const matchCompany = customer?.company_name?.toLowerCase().includes(q);
+      const matchReport = rep.report_text?.toLowerCase().includes(q);
       const matchPhone = rep.negotiation_phone?.includes(q);
       if (!matchCompany && !matchReport && !matchPhone) return false;
     }
@@ -72,7 +107,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </span>
           </h2>
           <p className="text-xs text-[#A7A7A7] mt-1">
-            ثبت لحظه‌ای مکالمات، توافقات، امتیاز مذاکره، موعد پیگیری و تغییر وضعیت مشتریان
+            {userIsAdmin
+              ? 'ثبت و پایش لحظه‌ای مکالمات، امتیاز مذاکره و وضعیت مشتریان تمامی کارشناسان'
+              : 'ثبت و مرور لحظه‌ای مکالمات، امتیاز مذاکره، موعد پیگیری و تغییر وضعیت مشتریان شما'}
           </p>
         </div>
 
@@ -118,22 +155,24 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </select>
           </div>
 
-          {/* Negotiator Dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[#A7A7A7]">مذاکره‌کننده:</span>
-            <select
-              value={selectedNegotiator}
-              onChange={(e) => setSelectedNegotiator(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
-            >
-              <option value="همه">همه کارشناسان</option>
-              {personnelList.map((p) => (
-                <option key={p.id} value={p.name} className="bg-[#181818] text-white">
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Negotiator Dropdown - ONLY for Admin */}
+          {userIsAdmin && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#A7A7A7]">مذاکره‌کننده:</span>
+              <select
+                value={selectedNegotiator}
+                onChange={(e) => setSelectedNegotiator(e.target.value)}
+                className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+              >
+                <option value="همه">همه کارشناسان</option>
+                {personnelList.map((p) => (
+                  <option key={p.id} value={p.name} className="bg-[#181818] text-white">
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 

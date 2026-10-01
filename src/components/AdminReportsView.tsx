@@ -12,13 +12,15 @@ import {
   Send,
   Award,
 } from 'lucide-react';
-import { AdministrativeReport, Personnel } from '../types';
+import { AdministrativeReport, Personnel, AuthUser } from '../types';
 import { formatPersianDate, formatPersianDateTime } from '../utils';
 
 interface AdminReportsViewProps {
   adminReports: AdministrativeReport[];
   personnelList: Personnel[];
   currentPersonnel: Personnel | null;
+  currentUser?: AuthUser | null;
+  isAdmin?: boolean;
   onSubmitReport: (report: Partial<AdministrativeReport>) => Promise<void>;
 }
 
@@ -26,6 +28,8 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
   adminReports,
   personnelList,
   currentPersonnel,
+  currentUser,
+  isAdmin,
   onSubmitReport,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -39,10 +43,29 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
   const [tomorrowPlan, setTomorrowPlan] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const userIsAdmin = Boolean(
+    isAdmin ||
+    currentUser?.is_admin ||
+    currentUser?.app_role === 'admin' ||
+    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+    currentPersonnel?.role === 'admin'
+  );
+
+  const visibleReports = adminReports.filter((r) => {
+    if (userIsAdmin) return true;
+    return (
+      r.personnel_id === currentPersonnel?.id ||
+      r.personnel_id === currentUser?.id ||
+      r.personnel_name === currentPersonnel?.name ||
+      r.personnel_name === currentUser?.name
+    );
+  });
+
   // Aggregated KPIs
-  const totalCalls = adminReports.reduce((acc, r) => acc + (r.calls_count || 0), 0);
-  const totalSuccess = adminReports.reduce((acc, r) => acc + (r.successful_contacts || 0), 0);
-  const totalConverted = adminReports.reduce((acc, r) => acc + (r.leads_converted || 0), 0);
+  const totalCalls = visibleReports.reduce((acc, r) => acc + (r.calls_count || 0), 0);
+  const totalSuccess = visibleReports.reduce((acc, r) => acc + (r.successful_contacts || 0), 0);
+  const totalConverted = visibleReports.reduce((acc, r) => acc + (r.leads_converted || 0), 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,10 +76,15 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
 
     setSubmitting(true);
     try {
-      const selectedPerson = personnelList.find((p) => p.id === personnelId);
+      const targetPId = userIsAdmin ? personnelId : (currentPersonnel?.id || currentUser?.id || personnelId);
+      const selectedPerson = personnelList.find((p) => p.id === targetPId);
+      const targetPName = userIsAdmin
+        ? (selectedPerson?.name || 'کارشناس')
+        : (currentPersonnel?.name || currentUser?.name || selectedPerson?.name || 'کارشناس');
+
       await onSubmitReport({
-        personnel_id: personnelId,
-        personnel_name: selectedPerson?.name || 'کارشناس',
+        personnel_id: targetPId,
+        personnel_name: targetPName,
         report_date: reportDate,
         calls_count: Number(callsCount),
         successful_contacts: Number(successfulContacts),
@@ -136,13 +164,13 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
 
       {/* Reports Feed */}
       <div className="space-y-4">
-        {adminReports.length === 0 ? (
+        {visibleReports.length === 0 ? (
           <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
             <ClipboardCheck className="w-10 h-10 text-[#535353] mx-auto" />
             <p className="text-xs text-[#A7A7A7]">هنوز هیچ گزارش اداری ثبت نشده است.</p>
           </div>
         ) : (
-          adminReports.map((report) => (
+          visibleReports.map((report) => (
             <div
               key={report.id}
               className="bg-[#181818] rounded-2xl p-5 border border-[#282828] space-y-4 hover:border-[#3e3e3e] transition-colors"
@@ -235,23 +263,25 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
             </div>
 
             <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    نام پرسنل
-                  </label>
-                  <select
-                    value={personnelId}
-                    onChange={(e) => setPersonnelId(e.target.value)}
-                    className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none"
-                  >
-                    {personnelList.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className={`grid gap-4 ${userIsAdmin ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                {userIsAdmin && (
+                  <div>
+                    <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                      نام پرسنل (ویژه مدیر)
+                    </label>
+                    <select
+                      value={personnelId}
+                      onChange={(e) => setPersonnelId(e.target.value)}
+                      className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none"
+                    >
+                      {personnelList.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
                     تاریخ روز کاری

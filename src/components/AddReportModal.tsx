@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, MessageSquareText, Building, User, Calendar, Phone } from 'lucide-react';
-import { Customer, CustomerReport, Personnel, NegotiationStatus } from '../types';
+import { Customer, CustomerReport, Personnel, NegotiationStatus, AuthUser } from '../types';
 
 interface AddReportModalProps {
   isOpen: boolean;
@@ -8,6 +8,8 @@ interface AddReportModalProps {
   customers: Customer[];
   personnelList: Personnel[];
   currentPersonnel: Personnel | null;
+  currentUser?: AuthUser | null;
+  isAdmin?: boolean;
   onSaveReport: (report: Partial<CustomerReport>) => Promise<void>;
   preselectedCustomerId?: string;
 }
@@ -18,13 +20,26 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
   customers,
   personnelList,
   currentPersonnel,
+  currentUser,
+  isAdmin,
   onSaveReport,
   preselectedCustomerId,
 }) => {
   if (!isOpen) return null;
 
+  const userIsAdmin = Boolean(
+    isAdmin ||
+    currentUser?.is_admin ||
+    currentUser?.app_role === 'admin' ||
+    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+    currentPersonnel?.role === 'admin'
+  );
+
   const [customerId, setCustomerId] = useState(preselectedCustomerId || customers[0]?.id || '');
-  const [negotiatorName, setNegotiatorName] = useState(currentPersonnel?.name || 'کارشناس پیگیری');
+  const [negotiatorName, setNegotiatorName] = useState(
+    currentPersonnel?.name || currentUser?.name || 'کارشناس پیگیری'
+  );
   const [negotiationPhone, setNegotiationPhone] = useState('');
   const [reportText, setReportText] = useState('');
   const [negotiationScore, setNegotiationScore] = useState<number>(7);
@@ -49,10 +64,14 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
 
     setSaving(true);
     try {
+      const finalNegotiator = userIsAdmin
+        ? (negotiatorName || currentPersonnel?.name || currentUser?.name || 'مدیر سیستم')
+        : (currentPersonnel?.name || currentUser?.name || 'کارشناس پیگیری');
+
       await onSaveReport({
         customer_id: customerId,
-        negotiator_name: negotiatorName,
-        negotiation_phone: negotiationPhone || selectedCustomer?.mobile_numbers[0] || '',
+        negotiator_name: finalNegotiator,
+        negotiation_phone: negotiationPhone || (Array.isArray(selectedCustomer?.mobile_numbers) ? selectedCustomer.mobile_numbers[0] : '') || '',
         report_text: reportText.trim(),
         negotiation_score: Number(negotiationScore),
         next_followup_date: nextFollowupDate ? new Date(nextFollowupDate).toISOString() : '',
@@ -98,7 +117,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
               onChange={(e) => {
                 setCustomerId(e.target.value);
                 const c = customers.find((cust) => cust.id === e.target.value);
-                if (c && c.mobile_numbers[0]) {
+                if (c && Array.isArray(c.mobile_numbers) && c.mobile_numbers[0]) {
                   setNegotiationPhone(c.mobile_numbers[0]);
                 }
               }}
@@ -112,20 +131,26 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
             </select>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Negotiator Name */}
-            <div>
-              <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                مذاکره‌کننده
-              </label>
-              <input
-                type="text"
-                required
-                value={negotiatorName}
-                onChange={(e) => setNegotiatorName(e.target.value)}
-                className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
-              />
-            </div>
+          <div className={`grid gap-4 ${userIsAdmin ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+            {/* Negotiator Name - ONLY for Admin */}
+            {userIsAdmin && (
+              <div>
+                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                  مذاکره‌کننده (ویژه مدیر)
+                </label>
+                <select
+                  value={negotiatorName}
+                  onChange={(e) => setNegotiatorName(e.target.value)}
+                  className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                >
+                  {personnelList.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Negotiation Phone */}
             <div>
