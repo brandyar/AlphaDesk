@@ -25,6 +25,24 @@
     font-family: 'Vazirmatn', sans-serif !important;
   }
 
+  /* Force pointer cursor on all clickable elements throughout the whole app */
+  button,
+  a,
+  select,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="file"],
+  input[type="button"],
+  input[type="submit"],
+  label[for],
+  .clickable,
+  summary {
+    cursor: pointer !important;
+  }
+
   /* Custom scrollbar for dark Spotify-like interface */
   ::-webkit-scrollbar {
     width: 6px;
@@ -41,4 +59,3 @@
     background: #535353;
   }
 }
-

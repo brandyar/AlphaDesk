@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, AlertTriangle, Plus, PhoneCall, Menu, X, LogIn, LogOut, ShieldCheck, UserCheck, ChevronDown, Sparkles } from 'lucide-react';
+import { Search, AlertTriangle, Plus, PhoneCall, Menu, X, LogIn, LogOut, ShieldCheck, UserCheck, ChevronDown, Sparkles, CalendarDays } from 'lucide-react';
 import { Personnel, AuthUser } from '../types';
 
 interface HeaderProps {
@@ -17,6 +17,7 @@ interface HeaderProps {
   onOpenNewLead: () => void;
   onToggleMobileMenu?: () => void;
   isMobileMenuOpen?: boolean;
+  onNavigateToPortal?: (subTab: 'profile' | 'leave' | 'advance') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -34,6 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewLead,
   onToggleMobileMenu,
   isMobileMenuOpen,
+  onNavigateToPortal,
 }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
@@ -195,7 +197,44 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                   )}
 
-                  <div className="px-1 pt-1">
+                  <div className="px-1 pt-1 space-y-0.5">
+                    {onNavigateToPortal && (
+                      <>
+                        <button
+                          onClick={() => {
+                            setIsProfileMenuOpen(false);
+                            onNavigateToPortal('profile');
+                          }}
+                          className="w-full px-3 py-2 text-xs text-[#ccc] hover:text-white hover:bg-[#282828] rounded-xl flex items-center gap-2 transition-colors"
+                        >
+                          <UserCheck className="w-3.5 h-3.5 text-[#1DB954]" />
+                          <span>پروفایل و تغییر رمز</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setIsProfileMenuOpen(false);
+                            onNavigateToPortal('leave');
+                          }}
+                          className="w-full px-3 py-2 text-xs text-[#ccc] hover:text-white hover:bg-[#282828] rounded-xl flex items-center gap-2 transition-colors"
+                        >
+                          <CalendarDays className="w-3.5 h-3.5 text-blue-400" />
+                          <span>درخواست‌های مرخصی</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setIsProfileMenuOpen(false);
+                            onNavigateToPortal('advance');
+                          }}
+                          className="w-full px-3 py-2 text-xs text-[#ccc] hover:text-white hover:bg-[#282828] rounded-xl flex items-center gap-2 transition-colors"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                          <span>درخواست‌های مساعده</span>
+                        </button>
+                      </>
+                    )}
+
                     <button
                       onClick={() => {
                         setIsProfileMenuOpen(false);

@@ -14,9 +14,10 @@ import {
   CheckCircle2,
   ExternalLink,
   ChevronLeft,
+  GitMerge,
 } from 'lucide-react';
 import { Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
-import { formatTimeRemaining, formatPersianDate, getStatusTheme } from '../utils';
+import { formatTimeRemaining, formatPersianDate, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS } from '../utils';
 
 interface CustomersViewProps {
   customers: Customer[];
@@ -26,6 +27,7 @@ interface CustomersViewProps {
   isAdmin?: boolean;
   onSelectCustomer: (customer: Customer) => void;
   onOpenNewCustomerModal: () => void;
+  onOpenMergeModal?: () => void;
   selectedMarketerId: string;
   onSelectMarketerId: (id: string) => void;
   statusFilter: string;
@@ -33,19 +35,6 @@ interface CustomersViewProps {
   showExpiredOnly: boolean;
   onToggleExpiredOnly: (val: boolean) => void;
 }
-
-const statusOptions: string[] = [
-  'همه',
-  'تماس برقرار نشده',
-  'پیگیری قبل از انقضا',
-  'پیش نویس قرارداد',
-  'پیگیری قرارداد',
-  'قرارداد',
-  'پاسخ نمیدهد',
-  'نمیخواد',
-  'پیگیری بلند مدت',
-  'لیست سیاه',
-];
 
 export const CustomersView: React.FC<CustomersViewProps> = ({
   customers,
@@ -55,6 +44,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   isAdmin,
   onSelectCustomer,
   onOpenNewCustomerModal,
+  onOpenMergeModal,
   selectedMarketerId,
   onSelectMarketerId,
   statusFilter,
@@ -104,6 +94,18 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <span className="hidden sm:inline">منقضی شده‌ها</span>
           </button>
 
+          {/* Merge Customers Button - Admin only */}
+          {userIsAdmin && onOpenMergeModal && (
+            <button
+              onClick={onOpenMergeModal}
+              className="h-9 px-3 sm:px-4 rounded-full bg-[#282828] hover:bg-[#1DB954] text-[#B3B3B3] hover:text-black font-bold text-xs transition-all border border-[#3e3e3e] hover:border-[#1DB954] flex items-center gap-1.5 flex-shrink-0"
+              title="ادغام پرونده‌های مشتریان تکراری"
+            >
+              <GitMerge className="w-3.5 h-3.5" />
+              <span>ادغام پرونده‌ها</span>
+            </button>
+          )}
+
           {/* New Customer Button (Icon only) */}
           <button
             onClick={onOpenNewCustomerModal}
@@ -149,9 +151,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               onChange={(e) => onSelectStatusFilter(e.target.value)}
               className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
             >
-              {statusOptions.map((st) => (
-                <option key={st} value={st} className="bg-[#181818] text-white">
-                  {st === 'همه' ? 'همه وضعیت‌ها' : st}
+              <option value="همه" className="bg-[#181818] text-white">همه وضعیت‌ها</option>
+              {NEGOTIATION_STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value} className="bg-[#181818] text-white">
+                  {opt.label}
                 </option>
               ))}
             </select>
@@ -211,7 +214,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     <span
                       className={`text-[11px] px-2.5 py-0.5 rounded-full border ${statusTheme.bg} ${statusTheme.color} font-medium flex-shrink-0`}
                     >
-                      {c.status}
+                      {formatStatusLabel(c.status)}
                     </span>
                   </div>
 

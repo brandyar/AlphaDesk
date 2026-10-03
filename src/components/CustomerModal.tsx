@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Customer, CustomerContact, Personnel, NegotiationStatus, ChannelType, DuplicateCheckResult, AuthUser } from '../types';
 import { checkDuplicateContact } from '../api';
+import { PersianDatePicker } from './PersianDatePicker';
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -999,7 +1000,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                   <option value="پیگیری قبل از انقضا">پیگیری قبل از انقضا</option>
                   <option value="پیش نویس قرارداد">پیش نویس قرارداد</option>
                   <option value="پیگیری قرارداد">پیگیری قرارداد</option>
-                  <option value="قرارداد">قرارداد نهایی شده</option>
+                  <option value="قرارداد">قرارداد / فاکتور</option>
                   <option value="پاسخ نمیدهد">پاسخ نمیدهد</option>
                   <option value="نمیخواد">عدم تمایل (نمیخواد)</option>
                   <option value="پیگیری بلند مدت">پیگیری بلند مدت</option>
@@ -1029,15 +1030,10 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
 
               {/* Next follow up date */}
               <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5 flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-[#1DB954]" />
-                  <span>تاریخ پیگیری بعدی</span>
-                </label>
-                <input
-                  type="date"
+                <PersianDatePicker
+                  label="تاریخ پیگیری بعدی (شمسی)"
                   value={nextFollowupDate}
-                  onChange={(e) => setNextFollowupDate(e.target.value)}
-                  className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none"
+                  onChange={(iso) => setNextFollowupDate(iso)}
                 />
               </div>
 

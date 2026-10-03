@@ -6,6 +6,7 @@ export type NegotiationStatus =
   | 'پیگیری بلند مدت'
   | 'پیگیری قرارداد'
   | 'پیش نویس قرارداد'
+  | 'قرارداد / فاکتور'
   | 'قرارداد'
   | 'لیست سیاه';
 
@@ -103,6 +104,10 @@ export interface CustomerReport {
   created_by?: string;
   date_created: string;
   customer_name?: string;
+  contract_number?: string | null;
+  contract_date?: string | null;
+  contract_items?: string | null;
+  contract_amount?: number | null;
 }
 
 export interface ColdLead {
@@ -112,9 +117,18 @@ export interface ColdLead {
   source: string;
   status: LeadStatus;
   notes: string;
-  assigned_to: string;
-  converted_customer_id?: string;
+  assigned_to: any;
+  assigned_to_id?: string | null;
+  assigned_to_name?: string | null;
+  assigned_to_detail?: Partial<Personnel> | null;
+  converted_customer_id?: string | null;
   date_created: string;
+}
+
+export interface HourlyWorkLog {
+  slot: string; // e.g. "۰۹:۰۰ الی ۱۰:۰۰"
+  activity: string; // Description of calls/tasks performed
+  calls_count?: number; // Optional number of calls
 }
 
 export interface AdministrativeReport {
@@ -128,6 +142,7 @@ export interface AdministrativeReport {
   tasks_summary: string;
   challenges: string;
   tomorrow_plan: string;
+  hourly_logs?: HourlyWorkLog[] | string | null;
   date_created: string;
 }
 
@@ -139,7 +154,65 @@ export interface Personnel {
   phone: string;
   avatar?: string;
   active: boolean;
+  status?: string;
   user_id?: string | null;
+  bank_card_number?: string;
+  iban?: string;
+  national_id?: string;
+}
+
+export type LeaveType = 'daily' | 'hourly';
+export type RequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface LeaveRequest {
+  id: string;
+  personnel_id: string;
+  personnel_name: string;
+  leave_type: LeaveType;
+  start_date: string;
+  end_date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  hours_count?: number | null;
+  days_count?: number | null;
+  reason: string;
+  status: RequestStatus;
+  manager_note?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  date_created: string;
+}
+
+export interface SalaryAdvanceRequest {
+  id: string;
+  personnel_id: string;
+  personnel_name: string;
+  amount: number;
+  target_month?: string;
+  needed_date?: string | null;
+  reason: string;
+  bank_card_number?: string | null;
+  iban?: string | null;
+  status: RequestStatus;
+  approved_amount?: number | null;
+  manager_note?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  date_created: string;
+}
+
+export interface UserProfileUpdatePayload {
+  name?: string;
+  phone?: string;
+  avatar?: string;
+  bank_card_number?: string;
+  iban?: string;
+  national_id?: string;
+}
+
+export interface PasswordChangePayload {
+  current_password?: string;
+  new_password: string;
 }
 
 export const DIRECTUS_ADMIN_ROLE_ID = '59e261e1-56f4-401e-9889-4971e2c3c4ce';
@@ -171,6 +244,22 @@ export interface RegisterPayload {
   phone?: string;
   first_name?: string;
   last_name?: string;
+}
+
+export type TeamSubTab =
+  | 'new_colleague'
+  | 'colleagues_list'
+  | 'extend_ownership'
+  | 'switch_ownership'
+  | 'leave_approvals';
+
+export interface CreateColleaguePayload {
+  name: string;
+  email: string;
+  phone?: string;
+  role: 'admin' | 'sales_manager' | 'marketer' | 'operator';
+  password?: string;
+  status?: string;
 }
 
 export interface BffStatus {

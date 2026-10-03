@@ -5,6 +5,8 @@ import {
   MessageSquareText,
   PhoneCall,
   ClipboardCheck,
+  BarChart3,
+  User,
   CheckCircle,
   AlertCircle,
   Info,
@@ -15,12 +17,15 @@ import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { CustomersView } from './components/CustomersView';
 import { ReportsView } from './components/ReportsView';
+import { AnalyticsView } from './components/AnalyticsView';
 import { ColdLeadsView } from './components/ColdLeadsView';
 import { AdminReportsView } from './components/AdminReportsView';
-import { ShiftsView } from './components/ShiftsView';
+import { PersonalPortalView, PortalTab } from './components/PersonalPortalView';
+import { TeamManagementView } from './components/TeamManagementView';
 import { CustomerModal } from './components/CustomerModal';
 import { CustomerDetailModal } from './components/CustomerDetailModal';
 import { AddReportModal } from './components/AddReportModal';
+import { MergeCustomersModal } from './components/MergeCustomersModal';
 import { AuthModal } from './components/AuthModal';
 
 import {
@@ -34,6 +39,13 @@ import {
   LeadStatus,
   AuthUser,
   AuthResponse,
+  LeaveRequest,
+  SalaryAdvanceRequest,
+  RequestStatus,
+  UserProfileUpdatePayload,
+  PasswordChangePayload,
+  TeamSubTab,
+  CreateColleaguePayload,
 } from './types';
 
 import {
@@ -43,21 +55,40 @@ import {
   updateCustomer,
   deleteCustomer,
   reassignCustomer,
+  mergeCustomers,
   createCustomerContact,
   fetchCustomerReports,
   createCustomerReport,
   fetchColdLeads,
   createColdLead,
   updateColdLead,
+  bulkAssignColdLeads,
+  deleteColdLead,
   convertColdLead,
   fetchAdminReports,
   createAdminReport,
   fetchPersonnel,
+  createPersonnel,
+  updatePersonnel,
+  deletePersonnel,
+  bulkExtendOwnership,
+  bulkSwitchOwnership,
   fetchBffStatus,
   setApiPersonnelContext,
   getStoredAuthSession,
   saveAuthSession,
   logoutUser,
+  fetchLeaveRequests,
+  createLeaveRequest,
+  updateLeaveRequestStatus,
+  deleteLeaveRequest,
+  fetchAdvanceRequests,
+  createAdvanceRequest,
+  updateAdvanceRequestStatus,
+  deleteAdvanceRequest,
+  updateUserProfile,
+  uploadAvatar,
+  changeUserPassword,
 } from './api';
 
 export default function App() {
@@ -86,6 +117,10 @@ export default function App() {
   const [reports, setReports] = useState<CustomerReport[]>([]);
   const [coldLeads, setColdLeads] = useState<ColdLead[]>([]);
   const [adminReports, setAdminReports] = useState<AdministrativeReport[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [advanceRequests, setAdvanceRequests] = useState<SalaryAdvanceRequest[]>([]);
+  const [portalSubTab, setPortalSubTab] = useState<PortalTab>('profile');
+  const [teamSubTab, setTeamSubTab] = useState<TeamSubTab>('colleagues_list');
   const [personnelList, setPersonnelList] = useState<Personnel[]>([]);
   const [currentPersonnel, setCurrentPersonnel] = useState<Personnel | null>(initialSession.personnel);
   const [bffStatus, setBffStatus] = useState<BffStatus | null>(null);
@@ -101,6 +136,9 @@ export default function App() {
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isAddReportModalOpen, setIsAddReportModalOpen] = useState(false);
+  const [reportPreselectedCustomerId, setReportPreselectedCustomerId] = useState<string | undefined>(undefined);
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
+  const [mergeInitialCustomerIds, setMergeInitialCustomerIds] = useState<string[]>([]);
 
   // Pre-fill state when converting a lead
   const [prefilledLeadPhone, setPrefilledLeadPhone] = useState('');
@@ -108,22 +146,53 @@ export default function App() {
   const [prefilledLeadNotes, setPrefilledLeadNotes] = useState('');
 
   const [loading, setLoading] = useState(true);
+  const [displayedTab, setDisplayedTab] = useState<NavTab>(activeTab);
+  const [isTabTransitioning, setIsTabTransitioning] = useState(false);
+
+  // Smooth Tab Transition Handler
+  useEffect(() => {
+    if (activeTab !== displayedTab) {
+      setIsTabTransitioning(true);
+      const timer = setTimeout(() => {
+        setDisplayedTab(activeTab);
+        setIsTabTransitioning(false);
+      }, 140);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, displayedTab]);
 
   // Initial Data Load
   const loadAllData = async (activeP?: Personnel | null) => {
     try {
-      const [pData, cData, rData, lData, aData, bStatus] = await Promise.all([
+      const [pData, cData, rData, lData, aData, bStatus, lrData, arData] = await Promise.all([
         fetchPersonnel().catch(() => []),
         fetchCustomers().catch(() => []),
         fetchCustomerReports().catch(() => []),
         fetchColdLeads().catch(() => []),
         fetchAdminReports().catch(() => []),
         fetchBffStatus().catch(() => null),
+        fetchLeaveRequests().catch(() => []),
+        fetchAdvanceRequests().catch(() => []),
       ]);
 
       setPersonnelList(pData);
       
-      const targetPersonnel = activeP || currentPersonnel || (pData.length > 0 ? pData[0] : null);
+      // Accurately match logged-in user to their specific personnel record
+      let targetPersonnel = activeP;
+      if (!targetPersonnel && currentUser) {
+        targetPersonnel = pData.find(
+          (p) =>
+            (currentUser.email && p.email?.toLowerCase() === currentUser.email?.toLowerCase()) ||
+            (currentUser.id && (p.id === currentUser.id || p.user_id === currentUser.id))
+        ) || null;
+      }
+      if (!targetPersonnel && currentPersonnel) {
+        targetPersonnel = pData.find((p) => p.id === currentPersonnel.id) || currentPersonnel;
+      }
+      if (!targetPersonnel && !currentUser && pData.length > 0) {
+        targetPersonnel = pData[0];
+      }
+
       if (targetPersonnel) {
         setCurrentPersonnel(targetPersonnel);
         setApiPersonnelContext(targetPersonnel);
@@ -134,6 +203,8 @@ export default function App() {
       setColdLeads(lData);
       setAdminReports(aData);
       setBffStatus(bStatus);
+      setLeaveRequests(lrData);
+      setAdvanceRequests(arData);
     } catch (e) {
       console.error('Error loading data:', e);
     } finally {
@@ -192,7 +263,15 @@ export default function App() {
     if (!c) return false;
     if (showExpiredOnly && !c.is_expired) return false;
     if (selectedMarketerId !== 'همه' && c.assigned_marketer_id !== selectedMarketerId) return false;
-    if (statusFilter !== 'همه' && c.status !== statusFilter) return false;
+    if (statusFilter !== 'همه') {
+      if (statusFilter === 'قرارداد' || statusFilter === 'قرارداد / فاکتور') {
+        const stStr = String(c.status);
+        const isContract = stStr === 'قرارداد' || stStr === 'قرارداد / فاکتور' || stStr === 'قرارداد/فاکتور';
+        if (!isContract) return false;
+      } else if (c.status !== statusFilter) {
+        return false;
+      }
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchCompany = c.company_name?.toLowerCase().includes(q);
@@ -319,6 +398,34 @@ export default function App() {
     }
   };
 
+  const handleMergeCustomers = async (
+    primaryCustomerId: string,
+    mergedCustomerIds: string[],
+    assignedMarketerId?: string,
+    assignedMarketerName?: string,
+    notes?: string
+  ) => {
+    try {
+      const res = await mergeCustomers(
+        primaryCustomerId,
+        mergedCustomerIds,
+        assignedMarketerId,
+        assignedMarketerName,
+        notes
+      );
+      showToast(res.message || 'پرونده‌های مشتری با موفقیت ادغام شدند.', 'success');
+      await loadAllData();
+      setIsMergeModalOpen(false);
+      setMergeInitialCustomerIds([]);
+      if (selectedCustomer) {
+        setSelectedCustomer(null);
+      }
+    } catch (err: any) {
+      showToast('خطا در ادغام پرونده‌های مشتریان: ' + (err.message || 'خطای نامشخص'), 'error');
+      throw err;
+    }
+  };
+
   // Handlers for Customer Follow-up Reports
   const handleAddCustomerReport = async (reportData: Partial<CustomerReport>) => {
     try {
@@ -361,6 +468,29 @@ export default function App() {
     }
   };
 
+  const handleUpdateLeadAssignedTo = async (leadId: string, assignedToId: string) => {
+    try {
+      const updated = await updateColdLead(leadId, { assigned_to: assignedToId });
+      setColdLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+      fetchBffStatus().then(setBffStatus).catch(() => {});
+    } catch (err: any) {
+      showToast('خطا در تغییر بازاریاب لید: ' + (err.message || 'خطای نامشخص'), 'error');
+    }
+  };
+
+  const handleBulkAssignLeads = async (leadIds: string[], targetMarketerId: string) => {
+    await bulkAssignColdLeads(leadIds, targetMarketerId);
+    const refreshed = await fetchColdLeads();
+    setColdLeads(refreshed);
+    fetchBffStatus().then(setBffStatus).catch(() => {});
+  };
+
+  const handleDeleteLead = async (leadId: string) => {
+    await deleteColdLead(leadId);
+    setColdLeads((prev) => prev.filter((l) => l.id !== leadId));
+    fetchBffStatus().then(setBffStatus).catch(() => {});
+  };
+
   const handleConvertToCustomer = (lead: ColdLead) => {
     setPrefilledLeadPhone(lead.phone_number);
     setPrefilledLeadName(lead.contact_name || '');
@@ -379,6 +509,108 @@ export default function App() {
     } catch (err: any) {
       showToast('خطا در ثبت گزارش اداری: ' + (err.message || 'خطای نامشخص'), 'error');
     }
+  };
+
+  // Handlers for Personal Portal (Leave, Advance, Profile)
+  const handleCreateLeaveRequest = async (payload: Partial<LeaveRequest>) => {
+    const created = await createLeaveRequest(payload);
+    setLeaveRequests((prev) => [created, ...prev]);
+  };
+
+  const handleUpdateLeaveStatus = async (id: string, status: RequestStatus, managerNote?: string) => {
+    const updated = await updateLeaveRequestStatus(id, status, managerNote);
+    setLeaveRequests((prev) => prev.map((r) => (r.id === id ? updated : r)));
+  };
+
+  const handleDeleteLeaveRequest = async (id: string) => {
+    await deleteLeaveRequest(id);
+    setLeaveRequests((prev) => prev.filter((r) => r.id !== id));
+    showToast('درخواست مرخصی با موفقیت حذف شد.', 'info');
+  };
+
+  const handleCreateAdvanceRequest = async (payload: Partial<SalaryAdvanceRequest>) => {
+    const created = await createAdvanceRequest(payload);
+    setAdvanceRequests((prev) => [created, ...prev]);
+  };
+
+  const handleUpdateAdvanceStatus = async (
+    id: string,
+    status: RequestStatus,
+    approvedAmount?: number,
+    managerNote?: string
+  ) => {
+    const updated = await updateAdvanceRequestStatus(id, status, approvedAmount, managerNote);
+    setAdvanceRequests((prev) => prev.map((r) => (r.id === id ? updated : r)));
+  };
+
+  const handleDeleteAdvanceRequest = async (id: string) => {
+    await deleteAdvanceRequest(id);
+    setAdvanceRequests((prev) => prev.filter((r) => r.id !== id));
+    showToast('درخواست مساعده با موفقیت حذف شد.', 'info');
+  };
+
+  const handleUpdateProfile = async (payload: UserProfileUpdatePayload) => {
+    const res = await updateUserProfile(payload);
+    if (res.personnel) {
+      setCurrentPersonnel(res.personnel);
+      setApiPersonnelContext(res.personnel);
+      if (currentUser) {
+        const updatedUser = {
+          ...currentUser,
+          name: res.personnel.name || currentUser.name,
+        };
+        setCurrentUser(updatedUser);
+        saveAuthSession({
+          success: true,
+          access_token: getStoredAuthSession().token,
+          user: updatedUser,
+          personnel: res.personnel,
+        });
+      }
+      setPersonnelList((prev) =>
+        prev.map((p) => (p.id === res.personnel.id ? { ...p, ...res.personnel } : p))
+      );
+    }
+  };
+
+  const handleChangePassword = async (payload: PasswordChangePayload) => {
+    await changeUserPassword(payload);
+  };
+
+  // Colleague & Ownership Handlers
+  const handleCreatePersonnel = async (payload: CreateColleaguePayload) => {
+    const created = await createPersonnel(payload);
+    setPersonnelList((prev) => [...prev, created]);
+  };
+
+  const handleUpdatePersonnel = async (id: string, payload: Partial<Personnel>) => {
+    const updated = await updatePersonnel(id, payload);
+    setPersonnelList((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    if (currentPersonnel?.id === id) {
+      setCurrentPersonnel(updated);
+    }
+  };
+
+  const handleDeletePersonnel = async (id: string) => {
+    await deletePersonnel(id);
+    setPersonnelList((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const handleBulkExtendOwnership = async (customerIds: string[], days: number) => {
+    await bulkExtendOwnership(customerIds, days);
+    const refreshed = await fetchCustomers();
+    setCustomers(refreshed);
+  };
+
+  const handleBulkSwitchOwnership = async (
+    customerIds: string[],
+    targetPersonnelId: string,
+    targetPersonnelName: string,
+    days: number
+  ) => {
+    await bulkSwitchOwnership(customerIds, targetPersonnelId, targetPersonnelName, days);
+    const refreshed = await fetchCustomers();
+    setCustomers(refreshed);
   };
 
   const openCustomerDetail = async (customer: Customer) => {
@@ -435,8 +667,12 @@ export default function App() {
       {/* Spotify-style AlphaDesk Sidebar */}
       <Sidebar
         activeTab={activeTab}
-        onSelectTab={(tab) => {
+        portalSubTab={portalSubTab}
+        teamSubTab={teamSubTab}
+        onSelectTab={(tab, sub) => {
           setActiveTab(tab);
+          if (tab === 'personal_portal' && sub) setPortalSubTab(sub as PortalTab);
+          if (tab === 'team' && sub) setTeamSubTab(sub as TeamSubTab);
           setIsMobileMenuOpen(false);
         }}
         counts={{
@@ -445,10 +681,21 @@ export default function App() {
           coldLeads: coldLeads.length,
           reports: reports.length,
           adminReports: adminReports.length,
+          pendingLeaves: leaveRequests.filter((r) => r.status === 'pending').length,
+          pendingAdvances: advanceRequests.filter((r) => r.status === 'pending').length,
+          totalPersonnel: personnelList.length,
         }}
         currentPersonnel={currentPersonnel}
+        isAdmin={Boolean(
+          currentUser?.is_admin ||
+          currentUser?.app_role === 'admin' ||
+          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+          currentPersonnel?.role === 'admin'
+        )}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
+        onLogout={handleLogout}
       />
 
       {/* Main Container */}
@@ -480,18 +727,33 @@ export default function App() {
           }}
           isMobileMenuOpen={isMobileMenuOpen}
           onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          onNavigateToPortal={(sub) => {
+            setActiveTab('personal_portal');
+            setPortalSubTab(sub as PortalTab);
+          }}
         />
 
         {/* Dynamic Main View */}
-        <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 lg:p-8 pb-24 lg:pb-8">
+        <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 lg:p-8 pb-24 lg:pb-8 relative">
+          {/* Subtle Top Loading Line for Page Transitions */}
+          {isTabTransitioning && (
+            <div className="fixed top-16 sm:top-18 left-0 right-0 z-40 h-[3px] bg-gradient-to-r from-transparent via-[#1DB954] to-transparent animate-pulse shadow-sm shadow-[#1DB954]/50" />
+          )}
+
           {loading ? (
             <div className="flex flex-col items-center justify-center h-64 space-y-3">
               <div className="w-8 h-8 rounded-full border-2 border-[#1DB954] border-t-transparent animate-spin" />
               <div className="text-xs text-[#A7A7A7]">در حال بارگذاری اطلاعات سامانه...</div>
             </div>
           ) : (
-            <>
-              {activeTab === 'dashboard' && (
+            <div
+              className={`transition-all duration-150 ease-out ${
+                isTabTransitioning
+                  ? 'opacity-40 translate-y-1 blur-[0.5px]'
+                  : 'opacity-100 translate-y-0 blur-0'
+              }`}
+            >
+              {displayedTab === 'dashboard' && (
                 <DashboardView
                   customers={customers}
                   reports={reports}
@@ -505,11 +767,18 @@ export default function App() {
                     setIsCustomerModalOpen(true);
                   }}
                   onOpenNewLead={() => setActiveTab('cold_leads')}
-                  onNavigateToTab={setActiveTab}
+                  onOpenAddReport={() => {
+                    setReportPreselectedCustomerId(undefined);
+                    setIsAddReportModalOpen(true);
+                  }}
+                  onNavigateToTab={(tab, sub) => {
+                    setActiveTab(tab);
+                    if (sub) setPortalSubTab(sub as PortalTab);
+                  }}
                 />
               )}
 
-              {activeTab === 'customers' && (
+              {displayedTab === 'customers' && (
                 <CustomersView
                   customers={filteredCustomers}
                   personnelList={personnelList}
@@ -530,6 +799,10 @@ export default function App() {
                     setPrefilledLeadNotes('');
                     setIsCustomerModalOpen(true);
                   }}
+                  onOpenMergeModal={() => {
+                    setMergeInitialCustomerIds([]);
+                    setIsMergeModalOpen(true);
+                  }}
                   selectedMarketerId={selectedMarketerId}
                   onSelectMarketerId={setSelectedMarketerId}
                   statusFilter={statusFilter}
@@ -539,7 +812,7 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'reports' && (
+              {displayedTab === 'reports' && (
                 <ReportsView
                   reports={reports}
                   customers={customers}
@@ -553,22 +826,56 @@ export default function App() {
                     currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
                     currentPersonnel?.role === 'admin'
                   )}
-                  onOpenAddReportModal={() => setIsAddReportModalOpen(true)}
+                  onOpenAddReportModal={(customerId?: string) => {
+                    setReportPreselectedCustomerId(customerId);
+                    setIsAddReportModalOpen(true);
+                  }}
                   onSelectCustomer={openCustomerDetail}
                 />
               )}
 
-              {activeTab === 'cold_leads' && (
-                <ColdLeadsView
-                  coldLeads={coldLeads}
+              {displayedTab === 'analytics' && (
+                <AnalyticsView
+                  reports={reports}
+                  customers={customers}
                   personnelList={personnelList}
-                  onAddLead={handleAddColdLead}
-                  onUpdateLeadStatus={handleUpdateLeadStatus}
-                  onConvertToCustomer={handleConvertToCustomer}
+                  currentPersonnel={currentPersonnel}
+                  currentUser={currentUser}
+                  isAdmin={Boolean(
+                    currentUser?.is_admin ||
+                    currentUser?.app_role === 'admin' ||
+                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                    currentPersonnel?.role === 'admin'
+                  )}
+                  onSelectCustomer={openCustomerDetail}
                 />
               )}
 
-              {activeTab === 'admin_reports' && (
+              {displayedTab === 'cold_leads' && (
+                <ColdLeadsView
+                  coldLeads={coldLeads}
+                  personnelList={personnelList}
+                  currentPersonnel={currentPersonnel}
+                  currentUser={currentUser}
+                  isAdmin={Boolean(
+                    currentUser?.is_admin ||
+                    currentUser?.app_role === 'admin' ||
+                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                    currentPersonnel?.role === 'admin'
+                  )}
+                  onAddLead={handleAddColdLead}
+                  onUpdateLeadStatus={handleUpdateLeadStatus}
+                  onUpdateLeadAssignedTo={handleUpdateLeadAssignedTo}
+                  onBulkAssignLeads={handleBulkAssignLeads}
+                  onDeleteLead={handleDeleteLead}
+                  onConvertToCustomer={handleConvertToCustomer}
+                  showToast={showToast}
+                />
+              )}
+
+              {displayedTab === 'admin_reports' && (
                 <AdminReportsView
                   adminReports={adminReports}
                   personnelList={personnelList}
@@ -585,13 +892,59 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'shifts' && (
-                <ShiftsView
+              {displayedTab === 'team' && (
+                <TeamManagementView
+                  initialSubTab={teamSubTab}
                   personnelList={personnelList}
+                  customers={customers}
+                  leaveRequests={leaveRequests}
                   currentPersonnel={currentPersonnel}
+                  isAdmin={Boolean(
+                    currentUser?.is_admin ||
+                    currentUser?.app_role === 'admin' ||
+                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                    currentPersonnel?.role === 'admin'
+                  )}
+                  onCreatePersonnel={handleCreatePersonnel}
+                  onUpdatePersonnel={handleUpdatePersonnel}
+                  onDeletePersonnel={handleDeletePersonnel}
+                  onBulkExtendOwnership={handleBulkExtendOwnership}
+                  onBulkSwitchOwnership={handleBulkSwitchOwnership}
+                  onUpdateLeaveStatus={handleUpdateLeaveStatus}
+                  onSelectCustomer={openCustomerDetail}
+                  showToast={showToast}
                 />
               )}
-            </>
+
+              {displayedTab === 'personal_portal' && (
+                <PersonalPortalView
+                  currentPersonnel={currentPersonnel}
+                  currentUser={currentUser}
+                  isAdmin={Boolean(
+                    currentUser?.is_admin ||
+                    currentUser?.app_role === 'admin' ||
+                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                    currentPersonnel?.role === 'admin'
+                  )}
+                  leaveRequests={leaveRequests}
+                  advanceRequests={advanceRequests}
+                  personnelList={personnelList}
+                  initialTab={portalSubTab}
+                  onUpdateProfile={handleUpdateProfile}
+                  onChangePassword={handleChangePassword}
+                  onCreateLeaveRequest={handleCreateLeaveRequest}
+                  onUpdateLeaveStatus={handleUpdateLeaveStatus}
+                  onDeleteLeaveRequest={handleDeleteLeaveRequest}
+                  onCreateAdvanceRequest={handleCreateAdvanceRequest}
+                  onUpdateAdvanceStatus={handleUpdateAdvanceStatus}
+                  onDeleteAdvanceRequest={handleDeleteAdvanceRequest}
+                  onLogout={handleLogout}
+                  showToast={showToast}
+                />
+              )}
+            </div>
           )}
         </main>
 
@@ -633,6 +986,16 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('analytics')}
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
+              activeTab === 'analytics' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4 mb-0.5" />
+            <span>نمودارها</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('cold_leads')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
               activeTab === 'cold_leads' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
@@ -650,6 +1013,18 @@ export default function App() {
           >
             <ClipboardCheck className="w-4 h-4 mb-0.5" />
             <span>عملکرد</span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('personal_portal');
+              setPortalSubTab('profile');
+            }}
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
+              activeTab === 'personal_portal' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            }`}
+          >
+            <User className="w-4 h-4 mb-0.5" />
+            <span>پنل من</span>
           </button>
         </nav>
       </div>
@@ -695,6 +1070,10 @@ export default function App() {
           setIsCustomerModalOpen(true);
         }}
         onDelete={handleDeleteCustomer}
+        onOpenMerge={(customerId) => {
+          setMergeInitialCustomerIds([customerId]);
+          setIsMergeModalOpen(true);
+        }}
         personnelList={personnelList}
         currentPersonnel={currentPersonnel}
         currentUser={currentUser}
@@ -710,7 +1089,10 @@ export default function App() {
       {/* Standalone Add Report Modal */}
       <AddReportModal
         isOpen={isAddReportModalOpen}
-        onClose={() => setIsAddReportModalOpen(false)}
+        onClose={() => {
+          setIsAddReportModalOpen(false);
+          setReportPreselectedCustomerId(undefined);
+        }}
         customers={customers}
         personnelList={personnelList}
         currentPersonnel={currentPersonnel}
@@ -723,6 +1105,21 @@ export default function App() {
           currentPersonnel?.role === 'admin'
         )}
         onSaveReport={handleAddCustomerReport}
+        preselectedCustomerId={reportPreselectedCustomerId}
+      />
+
+      {/* Admin Customer Merge Modal */}
+      <MergeCustomersModal
+        isOpen={isMergeModalOpen}
+        onClose={() => {
+          setIsMergeModalOpen(false);
+          setMergeInitialCustomerIds([]);
+        }}
+        customers={customers}
+        reports={reports}
+        personnelList={personnelList}
+        initialSelectedCustomerIds={mergeInitialCustomerIds}
+        onMerge={handleMergeCustomers}
       />
 
       {/* User Login & Registration Modal */}

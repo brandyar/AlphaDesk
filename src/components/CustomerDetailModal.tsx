@@ -20,6 +20,11 @@ import {
   RefreshCw,
   Copy,
   Check,
+  GitMerge,
+  FileCheck2,
+  Hash,
+  DollarSign,
+  PackageCheck,
 } from 'lucide-react';
 import { Customer, CustomerReport, Personnel, NegotiationStatus, ChannelType, CustomerContact, AuthUser } from '../types';
 import {
@@ -27,7 +32,10 @@ import {
   formatPersianDate,
   formatPersianDateTime,
   getStatusTheme,
+  formatToman,
+  formatStatusLabel,
 } from '../utils';
+import { PersianDatePicker } from './PersianDatePicker';
 
 interface CustomerDetailModalProps {
   customer: Customer | null;
@@ -37,6 +45,7 @@ interface CustomerDetailModalProps {
   onReassign: (customerId: string, marketerId: string, marketerName: string, days: number) => Promise<void>;
   onEdit: (customer: Customer) => void;
   onDelete: (customerId: string) => void;
+  onOpenMerge?: (customerId: string) => void;
   onAddContact?: (contact: Partial<CustomerContact>) => Promise<void>;
   personnelList: Personnel[];
   currentPersonnel: Personnel | null;
@@ -52,6 +61,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   onReassign,
   onEdit,
   onDelete,
+  onOpenMerge,
   onAddContact,
   personnelList,
   currentPersonnel,
@@ -83,6 +93,11 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const [nextFollowupDate, setNextFollowupDate] = useState(
     new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
+  // Contract / Invoice fields
+  const [contractNumber, setContractNumber] = useState('');
+  const [contractDate, setContractDate] = useState(new Date().toISOString().split('T')[0]);
+  const [contractItems, setContractItems] = useState('');
+  const [contractAmount, setContractAmount] = useState<string>('');
   const [submittingReport, setSubmittingReport] = useState(false);
 
   // Quick Add Contact form state
@@ -124,6 +139,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
         ? (negotiatorName || currentPersonnel?.name || currentUser?.name || 'مدیر')
         : (currentPersonnel?.name || currentUser?.name || customer.assigned_marketer_name || 'کارشناس پیگیری');
 
+      const isContract = negotiationStatus === 'قرارداد / فاکتور' || negotiationStatus === 'قرارداد';
+      const numericAmount = contractAmount ? parseFloat(contractAmount.replace(/,/g, '')) : undefined;
+
       await onAddReport({
         customer_id: customer.id,
         negotiator_name: finalNegotiator,
@@ -132,8 +150,15 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
         negotiation_score: negotiationScore,
         next_followup_date: nextFollowupDate ? new Date(nextFollowupDate).toISOString() : '',
         negotiation_status: negotiationStatus,
+        contract_number: isContract && contractNumber ? contractNumber.trim() : undefined,
+        contract_date: isContract && contractDate ? contractDate : undefined,
+        contract_items: isContract && contractItems ? contractItems.trim() : undefined,
+        contract_amount: isContract && !isNaN(numericAmount as number) ? numericAmount : undefined,
       });
       setReportText('');
+      setContractNumber('');
+      setContractItems('');
+      setContractAmount('');
       setShowAddReport(false);
     } catch (err: any) {
       alert('خطا در ثبت گزارش: ' + err.message);
@@ -210,7 +235,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusTheme.bg} ${statusTheme.color}`}
                 >
                   <span className={`w-2 h-2 rounded-full ${statusTheme.dot}`} />
-                  <span>{customer.status}</span>
+                  <span>{formatStatusLabel(customer.status)}</span>
                 </div>
                 {customer.is_ecommerce && (
                   <span className="text-[11px] px-2 py-0.5 rounded bg-[#1DB954]/15 text-[#1DB954] font-medium border border-[#1DB954]/30">
@@ -225,6 +250,15 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {userIsAdmin && onOpenMerge && (
+              <button
+                onClick={() => onOpenMerge(customer.id)}
+                className="p-2 rounded-full bg-[#282828] hover:bg-[#1DB954] text-[#B3B3B3] hover:text-black transition-colors"
+                title="ادغام این مشتری با پرونده دیگر"
+              >
+                <GitMerge className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={() => onEdit(customer)}
               className="p-2 rounded-full bg-[#282828] hover:bg-[#333333] text-[#B3B3B3] hover:text-white transition-colors"
@@ -819,7 +853,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       <option value="پیگیری بلند مدت">پیگیری بلند مدت</option>
                       <option value="پیگیری قرارداد">پیگیری قرارداد</option>
                       <option value="پیش نویس قرارداد">پیش نویس قرارداد</option>
-                      <option value="قرارداد">قرارداد (موفقیت‌آمیز)</option>
+                      <option value="قرارداد">قرارداد / فاکتور (موفقیت‌آمیز)</option>
                       <option value="لیست سیاه">لیست سیاه</option>
                     </select>
                   </div>
@@ -839,6 +873,64 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </div>
                 </div>
 
+                {/* Contract / Invoice Details Box */}
+                {(negotiationStatus === 'قرارداد / فاکتور' || negotiationStatus === 'قرارداد') && (
+                  <div className="p-3.5 rounded-xl bg-[#1DB954]/10 border border-[#1DB954]/30 space-y-3 animate-in fade-in">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-[#1DB954] border-b border-[#1DB954]/20 pb-1.5">
+                      <FileCheck2 className="w-4 h-4" />
+                      <span>اطلاعات تکمیلی قرارداد / فاکتور</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <label className="block text-[10px] text-[#A7A7A7] mb-1">شماره قرارداد / فاکتور</label>
+                        <input
+                          type="text"
+                          dir="ltr"
+                          value={contractNumber}
+                          onChange={(e) => setContractNumber(e.target.value)}
+                          placeholder="مثلاً: CNT-1403/102"
+                          className="w-full h-8 px-2.5 bg-[#181818] rounded text-xs text-white border border-[#2a2a2a] focus:border-[#1DB954] focus:outline-none font-mono"
+                        />
+                      </div>
+                      <div>
+                        <PersianDatePicker
+                          label="تاریخ قرارداد / فاکتور"
+                          value={contractDate}
+                          onChange={(iso) => setContractDate(iso || new Date().toISOString().split('T')[0])}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-[#A7A7A7] mb-1">
+                          مبلغ نهایی: <span className="text-[#1DB954] font-mono">{formatToman(contractAmount)}</span>
+                        </label>
+                        <input
+                          type="text"
+                          dir="ltr"
+                          value={contractAmount}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^\d]/g, '');
+                            setContractAmount(raw ? parseInt(raw, 10).toLocaleString('en-US') : '');
+                          }}
+                          placeholder="مثلاً: 25,000,000"
+                          className="w-full h-8 px-2.5 bg-[#181818] rounded text-xs text-white border border-[#2a2a2a] focus:border-[#1DB954] focus:outline-none font-mono text-left font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-[#A7A7A7] mb-1">اقلام، خدمات یا بندهای فاکتور</label>
+                      <input
+                        type="text"
+                        value={contractItems}
+                        onChange={(e) => setContractItems(e.target.value)}
+                        placeholder="شرح اقلام (مثلاً: طراحی سایت فروشگاهی + درگاه پرداخت + پشتیبانی ۱ ساله)..."
+                        className="w-full h-8 px-2.5 bg-[#181818] rounded text-xs text-white border border-[#2a2a2a] focus:border-[#1DB954] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   <div className="md:col-span-3">
                     <label className="block text-[11px] text-[#A7A7A7] mb-1">متن گزارش مذاکره</label>
@@ -852,14 +944,12 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-[#A7A7A7] mb-1">تاریخ پیگیری بعدی</label>
-                    <input
-                      type="date"
+                    <PersianDatePicker
+                      label="تاریخ پیگیری بعدی (شمسی)"
                       value={nextFollowupDate}
-                      onChange={(e) => setNextFollowupDate(e.target.value)}
-                      className="w-full h-9 px-2 bg-[#282828] rounded text-xs text-white focus:outline-none"
+                      onChange={(iso) => setNextFollowupDate(iso)}
                     />
-                    <div className="mt-4 flex gap-2">
+                    <div className="mt-3 flex gap-2">
                       <button
                         type="submit"
                         disabled={submittingReport}
@@ -901,7 +991,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           <span
                             className={`text-[11px] px-2.5 py-0.5 rounded-full border ${repTheme.bg} ${repTheme.color} font-medium`}
                           >
-                            {rep.negotiation_status}
+                            {formatStatusLabel(rep.negotiation_status)}
                           </span>
                         </div>
                         <div className="flex items-center gap-3 text-[11px] text-[#A7A7A7]">
@@ -914,6 +1004,43 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       <p className="text-xs text-[#B3B3B3] leading-relaxed whitespace-pre-wrap">
                         {rep.report_text}
                       </p>
+
+                      {/* Contract / Invoice Details Card */}
+                      {(rep.contract_number || rep.contract_amount || rep.contract_items || rep.contract_date) && (
+                        <div className="p-3 rounded-xl bg-[#1DB954]/10 border border-[#1DB954]/25 space-y-2 text-xs">
+                          <div className="flex items-center justify-between font-bold text-[#1DB954] border-b border-[#1DB954]/20 pb-1.5">
+                            <span className="flex items-center gap-1.5">
+                              <FileCheck2 className="w-4 h-4" />
+                              <span>اطلاعات سند قرارداد / فاکتور</span>
+                            </span>
+                            {rep.contract_number && (
+                              <span className="font-mono bg-[#181818] px-2 py-0.5 rounded border border-[#1DB954]/30 text-white">
+                                شماره: {rep.contract_number}
+                              </span>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                            {rep.contract_date && (
+                              <div>
+                                <span className="text-[#888]">تاریخ قرارداد: </span>
+                                <span className="font-mono text-white font-semibold">{formatPersianDate(rep.contract_date)}</span>
+                              </div>
+                            )}
+                            {rep.contract_amount && (
+                              <div>
+                                <span className="text-[#888]">مبلغ نهایی: </span>
+                                <span className="font-bold text-[#1DB954] font-mono">{formatToman(rep.contract_amount)}</span>
+                              </div>
+                            )}
+                          </div>
+                          {rep.contract_items && (
+                            <div className="text-[11px] bg-[#121212] p-2 rounded-lg border border-[#222]">
+                              <span className="text-[#888]">اقلام و خدمات: </span>
+                              <span className="text-white">{rep.contract_items}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {rep.next_followup_date && (
                         <div className="text-[11px] text-[#A7A7A7] pt-1">

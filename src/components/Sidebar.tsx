@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -6,43 +6,71 @@ import {
   PhoneCall,
   ClipboardCheck,
   CalendarDays,
-  ShieldCheck,
   Building2,
-  X
+  BarChart3,
+  User,
+  Wallet,
+  LogOut,
+  ChevronDown,
+  KeyRound,
+  X,
+  Users2,
+  UserPlus,
+  ArrowLeftRight,
+  Clock,
+  CalendarCheck,
+  ShieldAlert,
 } from 'lucide-react';
-import { Personnel } from '../types';
+import { Personnel, TeamSubTab } from '../types';
 
 export type NavTab =
   | 'dashboard'
   | 'customers'
   | 'reports'
+  | 'analytics'
   | 'cold_leads'
   | 'admin_reports'
-  | 'shifts';
+  | 'team'
+  | 'personal_portal';
 
 interface SidebarProps {
   activeTab: NavTab;
-  onSelectTab: (tab: NavTab) => void;
+  portalSubTab?: 'profile' | 'leave' | 'advance' | 'logout';
+  teamSubTab?: TeamSubTab;
+  onSelectTab: (tab: NavTab, subTab?: string) => void;
   counts: {
     customers: number;
     expiredCustomers: number;
     coldLeads: number;
     reports: number;
     adminReports: number;
+    pendingLeaves?: number;
+    pendingAdvances?: number;
+    totalPersonnel?: number;
   };
   currentPersonnel: Personnel | null;
+  isAdmin?: boolean;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
+  portalSubTab = 'profile',
+  teamSubTab = 'colleagues_list',
   onSelectTab,
   counts,
   currentPersonnel,
+  isAdmin = false,
   isOpenMobile,
   onCloseMobile,
+  onLogout,
 }) => {
+  // Collapsible states (closed by default)
+  const [isTeamExpanded, setIsTeamExpanded] = useState(false);
+  const [isPortalExpanded, setIsPortalExpanded] = useState(false);
+
   const navItems: {
     id: NavTab;
     label: string;
@@ -70,6 +98,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       count: counts.reports,
     },
     {
+      id: 'analytics',
+      label: 'گزارشات نموداری',
+      icon: BarChart3,
+    },
+    {
       id: 'cold_leads',
       label: 'بانک شماره‌های اولیه',
       icon: PhoneCall,
@@ -81,13 +114,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: ClipboardCheck,
       count: counts.adminReports,
     },
-    {
-      id: 'shifts',
-      label: 'شیفت‌ها و مرخصی‌ها',
-      icon: CalendarDays,
-      badgeText: 'فاز بعدی',
-    },
   ];
+
+  const totalPortalPending = (counts.pendingLeaves || 0) + (counts.pendingAdvances || 0);
+  const isTeamActive = activeTab === 'team';
+  const isPortalActive = activeTab === 'personal_portal';
 
   return (
     <>
@@ -135,8 +166,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Navigation Links */}
         <nav className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
-          <div className="px-3 pb-2 text-[10px] font-bold tracking-wider text-[#A7A7A7] uppercase">
-            بخش‌های اصلی
+          <div className="px-3 pb-1.5 text-[10px] font-bold tracking-wider text-[#777] uppercase">
+            بخش‌های اصلی سامانه
           </div>
 
           {navItems.map((item) => {
@@ -186,35 +217,297 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             );
           })}
+
+          {/* -------------------------------------------------------- */}
+          {/* Admin Accordion: همکاران (Colleagues & Ownership)       */}
+          {/* -------------------------------------------------------- */}
+          {isAdmin && (
+            <div>
+              <button
+                onClick={() => {
+                  setIsTeamExpanded(!isTeamExpanded);
+                  onSelectTab('team', teamSubTab || 'colleagues_list');
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group ${
+                  isTeamActive
+                    ? 'bg-[#282828] text-white shadow-sm'
+                    : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Users2
+                    className={`w-4 h-4 transition-colors ${
+                      isTeamActive ? 'text-[#1DB954]' : 'text-[#A7A7A7] group-hover:text-white'
+                    }`}
+                  />
+                  <span>همکاران</span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  {counts.pendingLeaves !== undefined && counts.pendingLeaves > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500 text-black font-mono font-bold">
+                      {counts.pendingLeaves}
+                    </span>
+                  )}
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-[#888] transition-transform duration-200 ${
+                      isTeamExpanded ? 'rotate-180 text-white' : ''
+                    }`}
+                  />
+                </div>
+              </button>
+
+              {/* Team Sub-menu Items */}
+              {isTeamExpanded && (
+                <div className="mt-1 mr-3 pr-2.5 border-r-2 border-[#282828] space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                  {/* 1. Register New Colleague */}
+                  <button
+                    onClick={() => {
+                      onSelectTab('team', 'new_colleague');
+                      onCloseMobile?.();
+                    }}
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      isTeamActive && teamSubTab === 'new_colleague'
+                        ? 'bg-[#1DB954]/15 text-[#1DB954]'
+                        : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <UserPlus className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'new_colleague' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                      <span>ثبت همکار جدید</span>
+                    </div>
+                  </button>
+
+                  {/* 2. Colleagues List */}
+                  <button
+                    onClick={() => {
+                      onSelectTab('team', 'colleagues_list');
+                      onCloseMobile?.();
+                    }}
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      isTeamActive && teamSubTab === 'colleagues_list'
+                        ? 'bg-[#1DB954]/15 text-[#1DB954]'
+                        : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Users2 className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'colleagues_list' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                      <span>لیست همکاران</span>
+                    </div>
+                  </button>
+
+                  {/* 3. Extend Ownership */}
+                  <button
+                    onClick={() => {
+                      onSelectTab('team', 'extend_ownership');
+                      onCloseMobile?.();
+                    }}
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      isTeamActive && teamSubTab === 'extend_ownership'
+                        ? 'bg-[#1DB954]/15 text-[#1DB954]'
+                        : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Clock className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'extend_ownership' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                      <span>تمدید مالکیت</span>
+                    </div>
+                  </button>
+
+                  {/* 4. Switch Ownership */}
+                  <button
+                    onClick={() => {
+                      onSelectTab('team', 'switch_ownership');
+                      onCloseMobile?.();
+                    }}
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      isTeamActive && teamSubTab === 'switch_ownership'
+                        ? 'bg-[#1DB954]/15 text-[#1DB954]'
+                        : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <ArrowLeftRight className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'switch_ownership' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                      <span>سوئیچ مالکیت</span>
+                    </div>
+                  </button>
+
+                  {/* 5. Leave Approvals */}
+                  <button
+                    onClick={() => {
+                      onSelectTab('team', 'leave_approvals');
+                      onCloseMobile?.();
+                    }}
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      isTeamActive && teamSubTab === 'leave_approvals'
+                        ? 'bg-[#1DB954]/15 text-[#1DB954]'
+                        : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <CalendarCheck className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'leave_approvals' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                      <span>درخواست‌های مرخصی</span>
+                    </div>
+                    {counts.pendingLeaves !== undefined && counts.pendingLeaves > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 font-mono font-bold">
+                        {counts.pendingLeaves}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* -------------------------------------------------------- */}
+          {/* Collapsible Accordion: پنل شخصی (Personal Portal)        */}
+          {/* -------------------------------------------------------- */}
+          <div>
+            {/* Main Collapsible Trigger Button */}
+            <button
+              onClick={() => {
+                setIsPortalExpanded(!isPortalExpanded);
+                onSelectTab('personal_portal', portalSubTab || 'profile');
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group ${
+                isPortalActive
+                  ? 'bg-[#282828] text-white shadow-sm'
+                  : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <User
+                  className={`w-4 h-4 transition-colors ${
+                    isPortalActive ? 'text-[#1DB954]' : 'text-[#A7A7A7] group-hover:text-white'
+                  }`}
+                />
+                <span>پنل شخصی</span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                {totalPortalPending > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500 text-black font-mono font-bold">
+                    {totalPortalPending}
+                  </span>
+                )}
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-[#888] transition-transform duration-200 ${
+                    isPortalExpanded ? 'rotate-180 text-white' : ''
+                  }`}
+                />
+              </div>
+            </button>
+
+            {/* Sub-menu Items (Dropdown) */}
+            {isPortalExpanded && (
+              <div className="mt-1 mr-3 pr-2.5 border-r-2 border-[#282828] space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                {/* 1. Profile Sub-item */}
+                <button
+                  onClick={() => {
+                    onSelectTab('personal_portal', 'profile');
+                    onCloseMobile?.();
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    isPortalActive && portalSubTab === 'profile'
+                      ? 'bg-[#1DB954]/15 text-[#1DB954]'
+                      : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <KeyRound className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'profile' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                    <span>پروفایل و تغییر رمز</span>
+                  </div>
+                </button>
+
+                {/* 2. Leave Requests Sub-item */}
+                <button
+                  onClick={() => {
+                    onSelectTab('personal_portal', 'leave');
+                    onCloseMobile?.();
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    isPortalActive && portalSubTab === 'leave'
+                      ? 'bg-[#1DB954]/15 text-[#1DB954]'
+                      : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <CalendarDays className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'leave' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                    <span>درخواست مرخصی</span>
+                  </div>
+                  {counts.pendingLeaves !== undefined && counts.pendingLeaves > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 font-mono font-bold">
+                      {counts.pendingLeaves}
+                    </span>
+                  )}
+                </button>
+
+                {/* 3. Salary Advance Sub-item */}
+                <button
+                  onClick={() => {
+                    onSelectTab('personal_portal', 'advance');
+                    onCloseMobile?.();
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    isPortalActive && portalSubTab === 'advance'
+                      ? 'bg-[#1DB954]/15 text-[#1DB954]'
+                      : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Wallet className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'advance' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                    <span>درخواست مساعده</span>
+                  </div>
+                  {counts.pendingAdvances !== undefined && counts.pendingAdvances > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 font-mono font-bold">
+                      {counts.pendingAdvances}
+                    </span>
+                  )}
+                </button>
+
+                {/* 4. Logout Sub-item */}
+                <button
+                  onClick={() => {
+                    if (onLogout) onLogout();
+                    else onSelectTab('personal_portal', 'logout');
+                    onCloseMobile?.();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-rose-400/90 hover:text-rose-300 hover:bg-rose-500/10 transition-all"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>خروج از حساب</span>
+                </button>
+              </div>
+            )}
+          </div>
         </nav>
 
-        {/* Expiration Rules Reminder Banner */}
-        <div className="p-3 mx-3 mb-3 rounded-lg bg-[#181818] border border-[#282828] text-[11px] text-[#A7A7A7] leading-relaxed hidden sm:block">
-          <div className="flex items-center gap-1.5 text-white font-medium mb-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#1DB954]" />
-            <span>قانون بازاریابی</span>
-          </div>
-          <p>
-            مشتریان دارای مهلت زمانی هستند. در صورت عدم تبدیل، سلب امتیاز و به لیست اشتراکی بازمی‌گردند.
-          </p>
-        </div>
-
-        {/* User Info Bar */}
-        <div className="p-4 border-t border-[#282828] bg-[#0c0c0c] flex items-center justify-between">
+        {/* User Info Bar at bottom of sidebar */}
+        <div
+          onClick={() => {
+            onSelectTab('personal_portal', 'profile');
+            onCloseMobile?.();
+          }}
+          className="p-3 border-t border-[#282828] bg-[#0c0c0c] flex items-center justify-between cursor-pointer hover:bg-[#151515] transition-colors"
+        >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-[#282828] flex items-center justify-center text-[#1DB954] font-bold text-xs border border-[#3e3e3e] flex-shrink-0">
-              {currentPersonnel ? currentPersonnel.name.charAt(0) : 'U'}
+            <div className="w-8 h-8 rounded-full bg-[#282828] flex items-center justify-center text-[#1DB954] font-bold text-xs border border-[#3e3e3e] flex-shrink-0 overflow-hidden">
+              {currentPersonnel?.avatar ? (
+                <img src={currentPersonnel.avatar} alt="avatar" className="w-full h-full object-cover" />
+              ) : (
+                currentPersonnel ? currentPersonnel.name.charAt(0) : 'U'
+              )}
             </div>
             <div className="truncate">
-              <div className="text-xs font-bold text-white truncate">
-                {currentPersonnel?.name || 'کاربر سیستم'}
+              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
+                <span>{currentPersonnel?.name || 'کاربر سیستم'}</span>
               </div>
-              <div className="text-[11px] text-[#A7A7A7] truncate">
+              <div className="text-[10px] text-[#888] truncate">
                 {currentPersonnel?.role === 'admin'
-                  ? 'مدیر ارشد'
+                  ? 'مدیر سیستم'
                   : currentPersonnel?.role === 'sales_manager'
                   ? 'مدیر فروش'
-                  : 'کارشناس بازاریابی'}
+                  : 'کارشناس فروش'}
               </div>
             </div>
           </div>

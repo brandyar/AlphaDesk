@@ -77,6 +77,10 @@ export interface CustomerReport {
   negotiation_status: string;
   created_by?: string;
   date_created: string;
+  contract_number?: string | null;
+  contract_date?: string | null;
+  contract_items?: string | null;
+  contract_amount?: number | null;
 }
 
 export interface ColdLead {
@@ -102,6 +106,44 @@ export interface AdministrativeReport {
   tasks_summary: string;
   challenges: string;
   tomorrow_plan: string;
+  hourly_logs?: any;
+  date_created: string;
+}
+
+export interface LeaveRequest {
+  id: string;
+  personnel_id: string;
+  personnel_name: string;
+  leave_type: 'daily' | 'hourly';
+  start_date: string;
+  end_date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  hours_count?: number | null;
+  days_count?: number | null;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  manager_note?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  date_created: string;
+}
+
+export interface SalaryAdvanceRequest {
+  id: string;
+  personnel_id: string;
+  personnel_name: string;
+  amount: number;
+  target_month?: string;
+  needed_date?: string | null;
+  reason: string;
+  bank_card_number?: string | null;
+  iban?: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  approved_amount?: number | null;
+  manager_note?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
   date_created: string;
 }
 
@@ -114,6 +156,10 @@ export interface Personnel {
   avatar?: string;
   status?: string;
   active?: boolean;
+  user_id?: string | null;
+  bank_card_number?: string;
+  iban?: string;
+  national_id?: string;
 }
 
 const initialPersonnel: Personnel[] = [
@@ -431,6 +477,68 @@ let reportsData: CustomerReport[] = [];
 let coldLeadsData: ColdLead[] = [];
 let adminReportsData: AdministrativeReport[] = [];
 let contactsData: CustomerContact[] = [];
+
+const initialLeaveRequests: LeaveRequest[] = [
+  {
+    id: 'lr-1',
+    personnel_id: 'p-2',
+    personnel_name: 'سارا احمدی',
+    leave_type: 'hourly',
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: null,
+    start_time: '10:00',
+    end_time: '12:30',
+    hours_count: 2.5,
+    days_count: null,
+    reason: 'مراجعه به پزشک و درمانگاه',
+    status: 'pending',
+    manager_note: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    date_created: new Date().toISOString()
+  },
+  {
+    id: 'lr-2',
+    personnel_id: 'p-3',
+    personnel_name: 'علیرضا حسینی',
+    leave_type: 'daily',
+    start_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    end_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    start_time: null,
+    end_time: null,
+    hours_count: null,
+    days_count: 2,
+    reason: 'امور اداری و ثبت اسناد',
+    status: 'approved',
+    manager_note: 'با مرخصی شما به مدت ۲ روز موافقت شد.',
+    reviewed_by: 'محمدرضا کیانی',
+    reviewed_at: new Date().toISOString(),
+    date_created: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  }
+];
+
+const initialAdvanceRequests: SalaryAdvanceRequest[] = [
+  {
+    id: 'ar-1',
+    personnel_id: 'p-2',
+    personnel_name: 'سارا احمدی',
+    amount: 5000000,
+    target_month: 'مهر ۱۴۰۵',
+    needed_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    reason: 'پرداخت قسط شهریه دانشگاه',
+    bank_card_number: '6037-9975-1234-5678',
+    iban: 'IR120170000000123456789012',
+    status: 'pending',
+    approved_amount: null,
+    manager_note: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    date_created: new Date().toISOString()
+  }
+];
+
+let leaveRequestsData: LeaveRequest[] = [...initialLeaveRequests];
+let advanceRequestsData: SalaryAdvanceRequest[] = [...initialAdvanceRequests];
 
 // Concurrency mutex and recent creation cache to prevent double-registration
 const activeCustomerCreationLocks = new Set<string>();
@@ -1427,6 +1535,295 @@ app.get('/api/personnel', async (req: Request, res: Response) => {
   res.json(initialPersonnel);
 });
 
+// Create new Colleague / Personnel
+app.post('/api/personnel', async (req: Request, res: Response) => {
+  const { name, email, phone, role, password, status } = req.body;
+  const { isAdmin } = getRequestUser(req);
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'فقط مدیر سیستم اجازه ثبت همکار جدید را دارد.' });
+  }
+
+  if (!name || !email) {
+    return res.status(400).json({ error: 'نام و ایمیل همکار الزامی است.' });
+  }
+
+  const cleanEmail = String(email).trim().toLowerCase();
+  const cleanName = String(name).trim();
+  const cleanPhone = String(phone || '').trim();
+  const colleagueRole = role || 'marketer';
+  const newPId = crypto.randomUUID();
+
+  let directusUserId: string | null = null;
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      // Create user account if password given or user doesn't exist
+      if (password) {
+        const roleId = colleagueRole === 'admin' ? DIRECTUS_ADMIN_ROLE_ID : DIRECTUS_STAFF_ROLE_ID;
+        const createdUser = await directusFetch('/users', {
+          method: 'POST',
+          body: JSON.stringify({
+            first_name: cleanName.split(' ')[0] || cleanName,
+            last_name: cleanName.split(' ').slice(1).join(' ') || '',
+            email: cleanEmail,
+            password: String(password),
+            role: roleId,
+            status: 'active'
+          })
+        }).catch(() => null);
+        if (createdUser?.data?.id) {
+          directusUserId = createdUser.data.id;
+        }
+      }
+
+      const newPersonnelDoc = {
+        id: newPId,
+        name: cleanName,
+        email: cleanEmail,
+        phone: cleanPhone,
+        role: colleagueRole,
+        status: status || 'active',
+        user_id: directusUserId
+      };
+
+      const created = await directusFetch('/items/personnel', {
+        method: 'POST',
+        body: JSON.stringify(newPersonnelDoc)
+      });
+
+      const finalItem = created?.data || newPersonnelDoc;
+      personnelData.push(finalItem);
+      return res.status(201).json(finalItem);
+    } catch (err: any) {
+      console.error('Create colleague error in Directus:', err.message);
+    }
+  }
+
+  const localItem: Personnel = {
+    id: newPId,
+    name: cleanName,
+    email: cleanEmail,
+    phone: cleanPhone,
+    role: colleagueRole,
+    status: status || 'active',
+    active: true
+  };
+  personnelData.push(localItem);
+  res.status(201).json(localItem);
+});
+
+// Update Colleague / Personnel
+app.patch('/api/personnel/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, email, phone, role, status } = req.body;
+  const { isAdmin } = getRequestUser(req);
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'فقط مدیر سیستم اجازه ویرایش مشخصات همکاران را دارد.' });
+  }
+
+  const patchPayload: Record<string, any> = {};
+  if (name) patchPayload.name = String(name).trim();
+  if (email) patchPayload.email = String(email).trim().toLowerCase();
+  if (phone !== undefined) patchPayload.phone = String(phone).trim();
+  if (role) patchPayload.role = role;
+  if (status) patchPayload.status = status;
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const updated = await directusFetch(`/items/personnel/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patchPayload)
+      });
+      if (updated?.data) {
+        const idx = personnelData.findIndex(p => p.id === id);
+        if (idx >= 0) personnelData[idx] = { ...personnelData[idx], ...updated.data };
+        return res.json(updated.data);
+      }
+    } catch (err: any) {}
+  }
+
+  const idx = personnelData.findIndex(p => p.id === id);
+  if (idx >= 0) {
+    personnelData[idx] = { ...personnelData[idx], ...patchPayload };
+    return res.json(personnelData[idx]);
+  }
+
+  res.status(404).json({ error: 'همکار مورد نظر یافت نشد.' });
+});
+
+// Delete Colleague / Personnel
+app.delete('/api/personnel/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { isAdmin } = getRequestUser(req);
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'فقط مدیر سیستم اجازه حذف همکاران را دارد.' });
+  }
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      await directusFetch(`/items/personnel/${id}`, { method: 'DELETE' });
+    } catch {}
+  }
+
+  personnelData = personnelData.filter(p => p.id !== id);
+  res.json({ success: true, message: 'همکار با موفقیت حذف شد.' });
+});
+
+// Bulk Extend Ownership (تمدید مالکیت گروهی مشتریان)
+app.post('/api/customers/bulk-extend', async (req: Request, res: Response) => {
+  const { customer_ids, extend_days } = req.body;
+  const { isAdmin } = getRequestUser(req);
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'فقط مدیر سیستم اجازه تمدید مالکیت پرونده‌ها را دارد.' });
+  }
+
+  if (!Array.isArray(customer_ids) || customer_ids.length === 0) {
+    return res.status(400).json({ error: 'حداقل یک مشتری را برای تمدید مهلت انتخاب کنید.' });
+  }
+
+  const days = parseInt(extend_days, 10) || 7;
+  const nowTime = new Date();
+  const newDeadline = addDays(nowTime, days);
+
+  let updatedCount = 0;
+
+  for (const cId of customer_ids) {
+    const patchData = {
+      assignment_deadline: newDeadline,
+      assignment_duration_days: days,
+      is_expired: false,
+      date_updated: nowTime.toISOString()
+    };
+
+    if (directusUrl && directusAdminToken) {
+      try {
+        await directusFetch(`/items/customers/${cId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(patchData)
+        });
+
+        // Add note to report history
+        const reportHistory: CustomerReport = {
+          id: crypto.randomUUID(),
+          customer_id: cId,
+          negotiator_name: 'مدیریت سامانه',
+          negotiation_phone: '-',
+          report_text: `مهلت مالکیت پرونده توسط مدیریت به مدت ${days} روز دیگر تمدید شد. (سررسید جدید: ${newDeadline.split('T')[0]})`,
+          negotiation_score: 5,
+          next_followup_date: addDays(nowTime, 2),
+          negotiation_status: 'پیگیری قبل از انقضا',
+          date_created: nowTime.toISOString()
+        };
+        await directusFetch('/items/customer_reports', {
+          method: 'POST',
+          body: JSON.stringify(reportHistory)
+        }).catch(() => {});
+
+        updatedCount++;
+      } catch {}
+    } else {
+      const idx = customersData.findIndex(c => c.id === cId);
+      if (idx >= 0) {
+        customersData[idx] = {
+          ...customersData[idx],
+          ...patchData
+        };
+        updatedCount++;
+      }
+    }
+  }
+
+  res.json({
+    success: true,
+    updatedCount,
+    message: `مهلت مالکیت ${updatedCount} پرونده با موفقیت به مدت ${days} روز تمدید شد.`
+  });
+});
+
+// Bulk Switch Ownership (سوئیچ و واگذاری مالکیت گروهی مشتریان)
+app.post('/api/customers/bulk-switch', async (req: Request, res: Response) => {
+  const { customer_ids, new_marketer_id, new_marketer_name, duration_days } = req.body;
+  const { isAdmin } = getRequestUser(req);
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'فقط مدیر سیستم اجازه انتقال مالکیت پرونده‌ها را دارد.' });
+  }
+
+  if (!Array.isArray(customer_ids) || customer_ids.length === 0) {
+    return res.status(400).json({ error: 'حداقل یک پرونده مشتری را انتخاب کنید.' });
+  }
+
+  if (!new_marketer_id) {
+    return res.status(400).json({ error: 'همکار مقصد برای انتقال پرونده‌ها مشخص نشده است.' });
+  }
+
+  const days = parseInt(duration_days, 10) || 7;
+  const nowTime = new Date();
+  const newDeadline = addDays(nowTime, days);
+
+  const resolved = await resolvePersonnelId(new_marketer_id, new_marketer_name);
+  const targetMarketerName = (resolved.personnelName || new_marketer_name || 'تخصیص نیافته').trim();
+
+  let updatedCount = 0;
+
+  for (const cId of customer_ids) {
+    const patchData = {
+      assigned_marketer_id: resolved.personnelId,
+      assigned_marketer_name: targetMarketerName,
+      assignment_deadline: newDeadline,
+      assignment_duration_days: days,
+      is_expired: false,
+      date_updated: nowTime.toISOString()
+    };
+
+    if (directusUrl && directusAdminToken) {
+      try {
+        await directusFetch(`/items/customers/${cId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(patchData)
+        });
+
+        const reportHistory: CustomerReport = {
+          id: crypto.randomUUID(),
+          customer_id: cId,
+          negotiator_name: 'مدیریت سامانه',
+          negotiation_phone: '-',
+          report_text: `مالکیت پرونده توسط مدیریت به همکار «${targetMarketerName}» انتقال یافت با مهلت جدید ${days} روزه.`,
+          negotiation_score: 5,
+          next_followup_date: addDays(nowTime, 2),
+          negotiation_status: 'پیگیری قبل از انقضا',
+          date_created: nowTime.toISOString()
+        };
+        await directusFetch('/items/customer_reports', {
+          method: 'POST',
+          body: JSON.stringify(reportHistory)
+        }).catch(() => {});
+
+        updatedCount++;
+      } catch {}
+    } else {
+      const idx = customersData.findIndex(c => c.id === cId);
+      if (idx >= 0) {
+        customersData[idx] = {
+          ...customersData[idx],
+          ...patchData
+        };
+        updatedCount++;
+      }
+    }
+  }
+
+  res.json({
+    success: true,
+    updatedCount,
+    message: `مالکیت ${updatedCount} پرونده مشتری با موفقیت به «${targetMarketerName}» واگذار شد.`
+  });
+});
+
 // Contacts API
 app.get('/api/contacts/check-duplicate', async (req: Request, res: Response) => {
   const { value, channel_type, customer_id } = req.query;
@@ -2263,7 +2660,253 @@ app.post('/api/customers/:id/reassign', async (req: Request, res: Response) => {
   res.json(customersData[index]);
 });
 
-// Customer Reports API
+// Merge Customers API (Admin only)
+app.post('/api/customers/merge', async (req: Request, res: Response) => {
+  const { primary_customer_id, merged_customer_ids, assigned_marketer_id, assigned_marketer_name, notes } = req.body;
+  const { userRole, isAdmin, userName } = getRequestUser(req);
+
+  if (!isAdmin && userRole !== 'admin' && userRole !== 'sales_manager') {
+    return res.status(403).json({
+      error: 'FORBIDDEN',
+      message: 'فقط مدیر سیستم یا مدیر فروش مجاز به ادغام پرونده‌های مشتریان هستند.'
+    });
+  }
+
+  if (!primary_customer_id) {
+    return res.status(400).json({ error: 'INVALID_REQUEST', message: 'شناسه مشتری اصلی مشخص نشده است.' });
+  }
+
+  if (!Array.isArray(merged_customer_ids) || merged_customer_ids.length === 0) {
+    return res.status(400).json({ error: 'INVALID_REQUEST', message: 'حداقل یک مشتری برای ادغام باید انتخاب شود.' });
+  }
+
+  const nowTime = new Date();
+  const nowIso = nowTime.toISOString();
+
+  // Deduplicate array helper
+  const mergeUnique = (base: any[], ...others: any[][]) => {
+    const set = new Set<string>();
+    const result: string[] = [];
+    const addVal = (v: any) => {
+      if (v === null || v === undefined) return;
+      const str = String(v).trim();
+      if (!str) return;
+      if (!set.has(str)) {
+        set.add(str);
+        result.push(str);
+      }
+    };
+    (base || []).forEach(addVal);
+    others.forEach(list => (list || []).forEach(addVal));
+    return result;
+  };
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      // 1. Fetch primary customer
+      const primaryRes = await directusFetch(`/items/customers/${primary_customer_id}`);
+      if (!primaryRes?.data) {
+        return res.status(404).json({ error: 'PRIMARY_NOT_FOUND', message: 'مشتری اصلی یافت نشد.' });
+      }
+      const primaryCust: Customer = primaryRes.data;
+
+      // 2. Fetch all merged customers
+      const mergedQuery = merged_customer_ids.map(id => `filter[id][_in]=${id}`).join('&');
+      const mergedRes = await directusFetch(`/items/customers?filter[id][_in]=${merged_customer_ids.join(',')}`);
+      const sourceCustomers: Customer[] = Array.isArray(mergedRes?.data) ? mergedRes.data : [];
+
+      if (sourceCustomers.length === 0) {
+        return res.status(404).json({ error: 'SOURCE_CUSTOMERS_NOT_FOUND', message: 'هیچ‌یک از مشتریان فرعی جهت ادغام یافت نشدند.' });
+      }
+
+      // 3. Resolve assigned marketer
+      let targetMarketerId = primaryCust.assigned_marketer_id;
+      let targetMarketerName = primaryCust.assigned_marketer_name;
+      if (assigned_marketer_id || assigned_marketer_name) {
+        const resolved = await resolvePersonnelId(assigned_marketer_id, assigned_marketer_name);
+        targetMarketerId = resolved.personnelId;
+        targetMarketerName = resolved.personnelName || assigned_marketer_name || targetMarketerName;
+      }
+
+      // 4. Combine all contacts & phones
+      const combinedMobiles = mergeUnique(primaryCust.mobile_numbers, ...sourceCustomers.map(c => c.mobile_numbers));
+      const combinedLandlines = mergeUnique(primaryCust.landline_numbers, ...sourceCustomers.map(c => c.landline_numbers));
+      const combinedManagerPhones = mergeUnique(primaryCust.manager_phones, ...sourceCustomers.map(c => c.manager_phones));
+      const combinedNegotiatorPhones = mergeUnique(primaryCust.negotiator_phones, ...sourceCustomers.map(c => c.negotiator_phones));
+      const combinedTelegramIds = mergeUnique(primaryCust.telegram_ids, ...sourceCustomers.map(c => c.telegram_ids));
+      const combinedInstagramIds = mergeUnique(primaryCust.instagram_ids, ...sourceCustomers.map(c => c.instagram_ids));
+      const combinedEmails = mergeUnique(primaryCust.emails, ...sourceCustomers.map(c => c.emails));
+      const combinedWebsites = mergeUnique(primaryCust.websites, ...sourceCustomers.map(c => c.websites));
+
+      // 5. Update all reports of source customers to point to primary_customer_id
+      const sourceReportsRes = await directusFetch(`/items/customer_reports?filter[customer_id][_in]=${merged_customer_ids.join(',')}`).catch(() => null);
+      const sourceReports: CustomerReport[] = Array.isArray(sourceReportsRes?.data) ? sourceReportsRes.data : [];
+
+      for (const rep of sourceReports) {
+        await directusFetch(`/items/customer_reports/${rep.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            customer_id: primary_customer_id
+          })
+        }).catch(err => console.error('Error transferring report to merged customer:', err.message));
+      }
+
+      // 6. Update all contacts of source customers to point to primary_customer_id
+      const sourceContactsRes = await directusFetch(`/items/customer_contacts?filter[customer_id][_in]=${merged_customer_ids.join(',')}`).catch(() => null);
+      const sourceContacts: CustomerContact[] = Array.isArray(sourceContactsRes?.data) ? sourceContactsRes.data : [];
+
+      for (const ct of sourceContacts) {
+        await directusFetch(`/items/customer_contacts/${ct.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            customer_id: primary_customer_id
+          })
+        }).catch(err => console.error('Error transferring contact to merged customer:', err.message));
+      }
+
+      // 7. Add Merge Audit Report
+      const mergedNamesList = sourceCustomers.map(c => `«${c.company_name}» (${c.assigned_marketer_name || 'بدون بازاریاب'})`).join('، ');
+      const mergeAuditReport: CustomerReport = {
+        id: crypto.randomUUID(),
+        customer_id: primary_customer_id,
+        negotiator_name: userName || 'مدیریت سیستم',
+        negotiation_phone: primaryCust.manager_phones?.[0] || primaryCust.mobile_numbers?.[0] || '-',
+        report_text: `[ادغام سیستمی پرونده‌ها]: پرونده مشتریان ${mergedNamesList} با این پرونده ادغام شد.\nکلیه شماره‌ها (${combinedMobiles.length} همراه، ${combinedLandlines.length} ثابت) و سوابق پیگیری منتقل گردید و پرونده با مالکیت «${targetMarketerName}» تجمیع شد.${notes ? `\nتوضیحات مدیر: ${notes}` : ''}`,
+        negotiation_score: 8,
+        next_followup_date: primaryCust.next_followup_date || addDays(nowTime, 2),
+        negotiation_status: primaryCust.status || 'پیگیری قبل از انقضا',
+        date_created: nowIso
+      };
+
+      await directusFetch('/items/customer_reports', {
+        method: 'POST',
+        body: JSON.stringify(mergeAuditReport)
+      }).catch(() => {});
+
+      // 8. Update Primary Customer in Directus
+      const primaryPatchPayload = {
+        assigned_marketer_id: targetMarketerId,
+        assigned_marketer_name: targetMarketerName,
+        mobile_numbers: combinedMobiles,
+        landline_numbers: combinedLandlines,
+        manager_phones: combinedManagerPhones,
+        negotiator_phones: combinedNegotiatorPhones,
+        telegram_ids: combinedTelegramIds,
+        instagram_ids: combinedInstagramIds,
+        emails: combinedEmails,
+        websites: combinedWebsites,
+        manager_name: primaryCust.manager_name || sourceCustomers.find(c => c.manager_name)?.manager_name || '',
+        business_type: primaryCust.business_type || sourceCustomers.find(c => c.business_type)?.business_type || '',
+        province: primaryCust.province || sourceCustomers.find(c => c.province)?.province || '',
+        city: primaryCust.city || sourceCustomers.find(c => c.city)?.city || '',
+        date_updated: nowIso
+      };
+
+      const updatedPrimaryRes = await directusFetch(`/items/customers/${primary_customer_id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(primaryPatchPayload)
+      });
+
+      // 9. Delete Source Customers from Directus
+      for (const sourceId of merged_customer_ids) {
+        await directusFetch(`/items/customers/${sourceId}`, {
+          method: 'DELETE'
+        }).catch(err => console.error('Error deleting merged source customer:', err.message));
+      }
+
+      // 10. Fetch updated contacts
+      const updatedContactsRes = await directusFetch(`/items/customer_contacts?filter[customer_id][_eq]=${primary_customer_id}`).catch(() => null);
+      const finalCustomer = {
+        ...(updatedPrimaryRes.data || primaryPatchPayload),
+        id: primary_customer_id,
+        contacts: updatedContactsRes?.data || []
+      };
+
+      return res.json({
+        success: true,
+        message: `تعداد ${sourceCustomers.length} پرونده با موفقیت در پرونده «${primaryCust.company_name}» ادغام گردیدند.`,
+        customer: finalCustomer
+      });
+    } catch (err: any) {
+      console.error('Merge customers error:', err.message);
+      return res.status(500).json({
+        error: 'MERGE_FAILED',
+        message: `خطا در ادغام پرونده‌های مشتریان: ${err.message}`
+      });
+    }
+  }
+
+  // Offline Fallback
+  const primaryIndex = customersData.findIndex(c => c.id === primary_customer_id);
+  if (primaryIndex === -1) {
+    return res.status(404).json({ error: 'PRIMARY_NOT_FOUND', message: 'مشتری اصلی یافت نشد.' });
+  }
+
+  const primaryCust = customersData[primaryIndex];
+  const sourceCustomers = customersData.filter(c => merged_customer_ids.includes(c.id));
+
+  let targetMarketerId = primaryCust.assigned_marketer_id;
+  let targetMarketerName = primaryCust.assigned_marketer_name;
+  if (assigned_marketer_id || assigned_marketer_name) {
+    targetMarketerId = assigned_marketer_id || targetMarketerId;
+    targetMarketerName = assigned_marketer_name || targetMarketerName;
+  }
+
+  const combinedMobiles = mergeUnique(primaryCust.mobile_numbers, ...sourceCustomers.map(c => c.mobile_numbers));
+  const combinedLandlines = mergeUnique(primaryCust.landline_numbers, ...sourceCustomers.map(c => c.landline_numbers));
+  const combinedManagerPhones = mergeUnique(primaryCust.manager_phones, ...sourceCustomers.map(c => c.manager_phones));
+  const combinedNegotiatorPhones = mergeUnique(primaryCust.negotiator_phones, ...sourceCustomers.map(c => c.negotiator_phones));
+
+  // Transfer reports
+  reportsData = reportsData.map(rep => {
+    if (merged_customer_ids.includes(rep.customer_id)) {
+      return { ...rep, customer_id: primary_customer_id };
+    }
+    return rep;
+  });
+
+  // Transfer contacts
+  contactsData = contactsData.map(ct => {
+    if (merged_customer_ids.includes(ct.customer_id)) {
+      return { ...ct, customer_id: primary_customer_id };
+    }
+    return ct;
+  });
+
+  // Add merge audit report
+  reportsData.unshift({
+    id: 'rep-' + Date.now(),
+    customer_id: primary_customer_id,
+    negotiator_name: userName || 'مدیریت سیستم',
+    negotiation_phone: primaryCust.manager_phones?.[0] || primaryCust.mobile_numbers?.[0] || '-',
+    report_text: `[ادغام سیستمی پرونده‌ها]: سوابق و شماره‌های تماس ${sourceCustomers.length} پرونده مشتری با این پرونده ادغام شد.`,
+    negotiation_score: 8,
+    next_followup_date: primaryCust.next_followup_date || addDays(nowTime, 2),
+    negotiation_status: primaryCust.status as any,
+    date_created: nowIso
+  });
+
+  // Update primary
+  customersData[primaryIndex] = {
+    ...primaryCust,
+    assigned_marketer_id: targetMarketerId,
+    assigned_marketer_name: targetMarketerName,
+    mobile_numbers: combinedMobiles,
+    landline_numbers: combinedLandlines,
+    manager_phones: combinedManagerPhones,
+    negotiator_phones: combinedNegotiatorPhones,
+    date_updated: nowIso
+  };
+
+  // Remove source customers
+  customersData = customersData.filter(c => !merged_customer_ids.includes(c.id));
+
+  return res.json({
+    success: true,
+    message: 'ادغام مشتریان با موفقیت انجام شد.',
+    customer: customersData[primaryIndex]
+  });
+});
 app.get('/api/customer-reports', async (req: Request, res: Response) => {
   const { customer_id } = req.query;
   const { userId, personnelId, userRole, isAdmin, userName } = getRequestUser(req);
@@ -2335,7 +2978,13 @@ app.post('/api/customer-reports', async (req: Request, res: Response) => {
     next_followup_date: nextFollowup,
     negotiation_status: payload.negotiation_status || 'پیگیری قبل از انقضا',
     created_by: userName || personnelId || userId,
-    date_created: nowIso
+    date_created: nowIso,
+    contract_number: payload.contract_number ? String(payload.contract_number).trim() : null,
+    contract_date: payload.contract_date ? String(payload.contract_date).trim() : null,
+    contract_items: payload.contract_items ? String(payload.contract_items).trim() : null,
+    contract_amount: payload.contract_amount !== undefined && payload.contract_amount !== null && payload.contract_amount !== ''
+      ? Number(payload.contract_amount)
+      : null,
   };
 
   if (directusUrl && directusAdminToken) {
@@ -2353,7 +3002,7 @@ app.post('/api/customer-reports', async (req: Request, res: Response) => {
       if (nextFollowup) {
         customerUpdatePayload.next_followup_date = nextFollowup;
       }
-      if (newReport.negotiation_status === 'قرارداد') {
+      if (newReport.negotiation_status === 'قرارداد' || newReport.negotiation_status === 'قرارداد / فاکتور') {
         customerUpdatePayload.is_expired = false;
       }
 
@@ -2381,17 +3030,42 @@ app.get('/api/cold-leads', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      const result = await directusFetch('/items/cold_leads?sort=-date_created&limit=500');
+      const result = await directusFetch('/items/cold_leads?fields=*,assigned_to.*&sort=-date_created&limit=1000');
       if (result && Array.isArray(result.data)) {
-        let leads = result.data;
+        let leads = result.data.map((l: any) => {
+          let aId: string | null = null;
+          let aName = 'تخصیص نیافته';
+          let aDetail: any = null;
+
+          if (l.assigned_to && typeof l.assigned_to === 'object') {
+            aId = l.assigned_to.id;
+            aName = l.assigned_to.name || l.assigned_to.first_name || 'کارشناس';
+            aDetail = l.assigned_to;
+          } else if (l.assigned_to && typeof l.assigned_to === 'string') {
+            aId = l.assigned_to;
+            const pMatch = personnelData.find(p => p.id === l.assigned_to || p.name === l.assigned_to || p.user_id === l.assigned_to);
+            if (pMatch) {
+              aName = pMatch.name;
+              aDetail = pMatch;
+            } else {
+              aName = l.assigned_to;
+            }
+          }
+
+          return {
+            ...l,
+            assigned_to_id: aId,
+            assigned_to_name: aName,
+            assigned_to_detail: aDetail
+          };
+        });
+
+        // Non-admin Marketer only sees their own assigned leads
         if (!isAdmin && (userName || userId || personnelId)) {
           leads = leads.filter((l: any) =>
-            l.assigned_to === userName ||
-            l.assigned_to === personnelId ||
-            l.assigned_to === userId ||
-            !l.assigned_to ||
-            l.assigned_to === 'تخصیص نیافته' ||
-            l.assigned_to === 'همه'
+            (personnelId && (l.assigned_to_id === personnelId || l.assigned_to === personnelId)) ||
+            (userId && (l.assigned_to_id === userId || l.assigned_to === userId)) ||
+            (userName && (l.assigned_to_name === userName || l.assigned_to === userName))
           );
         }
         return res.json(leads);
@@ -2400,12 +3074,21 @@ app.get('/api/cold-leads', async (req: Request, res: Response) => {
       return res.status(502).json({ error: `خطا در دریافت شماره‌های اولیه از پایگاه داده مرکزی: ${e.message}` });
     }
   }
-  res.json([]);
+
+  // Fallback in-memory
+  let leads = coldLeadsData;
+  if (!isAdmin && (userName || userId || personnelId)) {
+    leads = leads.filter((l) =>
+      (personnelId && l.assigned_to === personnelId) ||
+      (userName && l.assigned_to === userName)
+    );
+  }
+  res.json(leads);
 });
 
 app.post('/api/cold-leads', async (req: Request, res: Response) => {
   const payload = req.body;
-  const { userName } = getRequestUser(req);
+  const { userId, personnelId, userName, isAdmin } = getRequestUser(req);
   const newLeadId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
@@ -2414,14 +3097,20 @@ app.post('/api/cold-leads', async (req: Request, res: Response) => {
     convertedCustId = null;
   }
 
-  const newLead: ColdLead = {
+  // If regular marketer adds lead, it is automatically assigned to them
+  const rawAssigned = isAdmin ? (payload.assigned_to || personnelId || userId || userName) : (personnelId || userId || userName);
+  const resolved = await resolvePersonnelId(rawAssigned, userName);
+  const finalAssignedId = resolved.personnelId || null;
+  const finalAssignedName = resolved.personnelName || userName || 'تخصیص نیافته';
+
+  const newLead: any = {
     id: newLeadId,
     phone_number: (payload.phone_number || '').trim(),
     contact_name: (payload.contact_name || '').trim(),
     source: payload.source || 'ورود دستی',
     status: payload.status || 'تماس نگرفته',
     notes: (payload.notes || '').trim(),
-    assigned_to: (payload.assigned_to || userName || '').trim(),
+    assigned_to: finalAssignedId,
     converted_customer_id: convertedCustId,
     date_created: nowIso
   };
@@ -2432,7 +3121,12 @@ app.post('/api/cold-leads', async (req: Request, res: Response) => {
         method: 'POST',
         body: JSON.stringify(newLead)
       });
-      return res.status(201).json(created.data || newLead);
+      const returned = created?.data || newLead;
+      return res.status(201).json({
+        ...returned,
+        assigned_to_id: finalAssignedId,
+        assigned_to_name: finalAssignedName
+      });
     } catch (err: any) {
       console.error('Cold lead error:', err.message);
       return res.status(500).json({
@@ -2442,14 +3136,30 @@ app.post('/api/cold-leads', async (req: Request, res: Response) => {
     }
   }
 
+  coldLeadsData.unshift({
+    ...newLead,
+    assigned_to: finalAssignedName,
+    assigned_to_id: finalAssignedId,
+    assigned_to_name: finalAssignedName
+  });
   res.status(201).json(newLead);
 });
 
 app.patch('/api/cold-leads/:id', async (req: Request, res: Response) => {
   const payload = req.body;
-  const cleanPatch = { ...payload };
+  const cleanPatch: Record<string, any> = { ...payload };
+
   if (cleanPatch.converted_customer_id === '') {
     cleanPatch.converted_customer_id = null;
+  }
+
+  if (cleanPatch.assigned_to !== undefined) {
+    if (!cleanPatch.assigned_to || cleanPatch.assigned_to === 'none' || cleanPatch.assigned_to === 'تخصیص نیافته') {
+      cleanPatch.assigned_to = null;
+    } else {
+      const resolved = await resolvePersonnelId(cleanPatch.assigned_to);
+      cleanPatch.assigned_to = resolved.personnelId || null;
+    }
   }
 
   if (directusUrl && directusAdminToken) {
@@ -2467,7 +3177,70 @@ app.patch('/api/cold-leads/:id', async (req: Request, res: Response) => {
     }
   }
 
+  const idx = coldLeadsData.findIndex(l => l.id === req.params.id);
+  if (idx >= 0) {
+    coldLeadsData[idx] = { ...coldLeadsData[idx], ...cleanPatch };
+    return res.json(coldLeadsData[idx]);
+  }
+
   res.status(404).json({ error: 'Lead not found' });
+});
+
+// Bulk Assign Cold Leads to Marketer (تخصیص گروهی شماره‌ها به بازاریاب)
+app.post('/api/cold-leads/bulk-assign', async (req: Request, res: Response) => {
+  const { lead_ids, target_marketer_id } = req.body;
+  const { isAdmin } = getRequestUser(req);
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'فقط مدیر سیستم اجازه انتقال و تخصیص گروهی شماره‌ها را دارد.' });
+  }
+
+  if (!Array.isArray(lead_ids) || lead_ids.length === 0) {
+    return res.status(400).json({ error: 'حداقل یک شماره را برای تخصیص انتخاب کنید.' });
+  }
+
+  const resolved = await resolvePersonnelId(target_marketer_id);
+  const finalAssignedId = resolved.personnelId || null;
+  const targetMarketerName = resolved.personnelName || 'تخصیص نیافته';
+
+  let updatedCount = 0;
+
+  for (const lId of lead_ids) {
+    if (directusUrl && directusAdminToken) {
+      try {
+        await directusFetch(`/items/cold_leads/${lId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ assigned_to: finalAssignedId })
+        });
+        updatedCount++;
+      } catch {}
+    } else {
+      const idx = coldLeadsData.findIndex(l => l.id === lId);
+      if (idx >= 0) {
+        coldLeadsData[idx].assigned_to = targetMarketerName;
+        updatedCount++;
+      }
+    }
+  }
+
+  res.json({
+    success: true,
+    updatedCount,
+    message: `${updatedCount} شماره با موفقیت به «${targetMarketerName}» تخصیص داده شد.`
+  });
+});
+
+app.delete('/api/cold-leads/:id', async (req: Request, res: Response) => {
+  const { isAdmin } = getRequestUser(req);
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      await directusFetch(`/items/cold_leads/${req.params.id}`, { method: 'DELETE' });
+    } catch {}
+  }
+
+  coldLeadsData = coldLeadsData.filter(l => l.id !== req.params.id);
+  res.json({ success: true, message: 'شماره با موفقیت حذف شد.' });
 });
 
 // Convert Cold Lead into a Customer
@@ -2555,11 +3328,37 @@ app.post('/api/cold-leads/:id/convert', async (req: Request, res: Response) => {
 app.get('/api/administrative-reports', async (req: Request, res: Response) => {
   const { userId, personnelId, userRole, isAdmin, userName } = getRequestUser(req);
 
+  const normalizeReport = (r: any) => {
+    let hourly = r.hourly_logs;
+    if (typeof hourly === 'string' && hourly.startsWith('[')) {
+      try {
+        hourly = JSON.parse(hourly);
+      } catch {}
+    }
+    if (!hourly && r.tasks_summary && r.tasks_summary.includes('ساعت')) {
+      const lines = r.tasks_summary.split('\n');
+      const parsed: any[] = [];
+      lines.forEach((line: string) => {
+        const match = line.match(/(?:•\s*)?(ساعت\s*[\d\u06F0-\u06F9]+\s*(?:الی|تا)\s*[\d\u06F0-\u06F9]+)\s*[:：]\s*(.*)/i);
+        if (match) {
+          parsed.push({ slot: match[1].trim(), activity: match[2].trim() });
+        }
+      });
+      if (parsed.length > 0) {
+        hourly = parsed;
+      }
+    }
+    return {
+      ...r,
+      hourly_logs: Array.isArray(hourly) ? hourly : null
+    };
+  };
+
   if (directusUrl && directusAdminToken) {
     try {
       const result = await directusFetch('/items/administrative_reports?sort=-report_date&limit=500');
       if (result && Array.isArray(result.data)) {
-        let reports = result.data;
+        let reports = result.data.map(normalizeReport);
         // Marketer only sees their own administrative reports
         if (!isAdmin && (userId || personnelId)) {
           reports = reports.filter((r: any) =>
@@ -2597,17 +3396,31 @@ app.post('/api/administrative-reports', async (req: Request, res: Response) => {
     tasks_summary: payload.tasks_summary || '',
     challenges: payload.challenges || '',
     tomorrow_plan: payload.tomorrow_plan || '',
+    hourly_logs: payload.hourly_logs || null,
     date_created: nowIso
   };
 
   if (directusUrl && directusAdminToken) {
     try {
+      const directusReportPayload = { ...newReport };
+      // If hourly_logs is an object/array, Directus JSON field or stringified JSON
       const created = await directusFetch('/items/administrative_reports', {
         method: 'POST',
-        body: JSON.stringify(newReport)
+        body: JSON.stringify(directusReportPayload)
       });
       return res.status(201).json(created.data || newReport);
     } catch (err: any) {
+      // If Directus rejected due to unknown hourly_logs field, retry without hourly_logs but keep in tasks_summary
+      if (err.message && err.message.toLowerCase().includes('hourly_logs')) {
+        try {
+          const { hourly_logs, ...fallbackReport } = newReport;
+          const created = await directusFetch('/items/administrative_reports', {
+            method: 'POST',
+            body: JSON.stringify(fallbackReport)
+          });
+          return res.status(201).json({ ...(created.data || fallbackReport), hourly_logs: newReport.hourly_logs });
+        } catch {}
+      }
       console.error('Admin report create error:', err.message);
       return res.status(500).json({
         error: 'ADMIN_REPORT_FAILED',
@@ -2617,6 +3430,496 @@ app.post('/api/administrative-reports', async (req: Request, res: Response) => {
   }
 
   res.status(201).json(newReport);
+});
+
+// -------------------------------------------------------------
+// LEAVE REQUESTS API (درخواست‌های مرخصی)
+// -------------------------------------------------------------
+app.get('/api/leave-requests', async (req: Request, res: Response) => {
+  const { userId, personnelId, isAdmin, userName } = getRequestUser(req);
+  if (directusUrl && directusAdminToken) {
+    try {
+      const resp = await directusFetch('/items/leave_requests?sort=-date_created&limit=200');
+      if (resp && Array.isArray(resp.data)) {
+        let list: LeaveRequest[] = resp.data.map((r: any) => ({
+          ...r,
+          personnel_id: typeof r.personnel_id === 'object' && r.personnel_id !== null ? r.personnel_id.id : String(r.personnel_id || ''),
+          personnel_name: r.personnel_name || (typeof r.personnel_id === 'object' && r.personnel_id !== null ? (r.personnel_id.name || r.personnel_id.first_name) : 'کارشناس شرکت')
+        }));
+        if (!isAdmin) {
+          list = list.filter(
+            (r) =>
+              r.personnel_id === personnelId ||
+              r.personnel_id === userId ||
+              (userName && r.personnel_name === userName)
+          );
+        }
+        return res.json(list);
+      }
+    } catch (err: any) {
+      // Directus collection might not exist yet, fallback to in-memory
+    }
+  }
+
+  // In-memory fallback
+  let list = [...leaveRequestsData];
+  if (!isAdmin) {
+    list = list.filter(
+      (r) =>
+        r.personnel_id === personnelId ||
+        r.personnel_id === userId ||
+        (userName && r.personnel_name === userName)
+    );
+  }
+  res.json(list);
+});
+
+app.post('/api/leave-requests', async (req: Request, res: Response) => {
+  const payload = req.body;
+  const { userId, personnelId, userName } = getRequestUser(req);
+  const newId = crypto.randomUUID();
+  const nowIso = new Date().toISOString();
+
+  const rawPId = payload.personnel_id || personnelId || userId;
+  const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
+
+  const newRequest: LeaveRequest = {
+    id: newId,
+    personnel_id: resolved.personnelId || personnelId || userId || 'p-1',
+    personnel_name: resolved.personnelName || payload.personnel_name || userName || 'کارشناس شرکت',
+    leave_type: payload.leave_type === 'hourly' ? 'hourly' : 'daily',
+    start_date: payload.start_date || nowIso.split('T')[0],
+    end_date: payload.leave_type === 'daily' ? payload.end_date || null : null,
+    start_time: payload.leave_type === 'hourly' ? payload.start_time || null : null,
+    end_time: payload.leave_type === 'hourly' ? payload.end_time || null : null,
+    hours_count: payload.leave_type === 'hourly' ? Number(payload.hours_count) || null : null,
+    days_count: payload.leave_type === 'daily' ? Number(payload.days_count) || 1 : null,
+    reason: payload.reason || '',
+    status: 'pending',
+    manager_note: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    date_created: nowIso
+  };
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const created = await directusFetch('/items/leave_requests', {
+        method: 'POST',
+        body: JSON.stringify(newRequest)
+      });
+      if (created?.data) {
+        leaveRequestsData.unshift(created.data);
+        return res.status(201).json(created.data);
+      }
+    } catch (err: any) {
+      // Fallback
+    }
+  }
+
+  leaveRequestsData.unshift(newRequest);
+  res.status(201).json(newRequest);
+});
+
+app.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status, manager_note } = req.body;
+  const { userName, isAdmin } = getRequestUser(req);
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'فقط مدیر سیستم اجازه تغییر وضعیت درخواست را دارد.' });
+  }
+
+  const nowIso = new Date().toISOString();
+  const updatePayload = {
+    status: status || 'pending',
+    manager_note: manager_note || null,
+    reviewed_by: userName || 'مدیر سیستم',
+    reviewed_at: nowIso
+  };
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const updated = await directusFetch(`/items/leave_requests/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updatePayload)
+      });
+      if (updated?.data) {
+        const idx = leaveRequestsData.findIndex(r => r.id === id);
+        if (idx >= 0) leaveRequestsData[idx] = { ...leaveRequestsData[idx], ...updated.data };
+        return res.json(updated.data);
+      }
+    } catch (err: any) {}
+  }
+
+  const idx = leaveRequestsData.findIndex(r => r.id === id);
+  if (idx >= 0) {
+    leaveRequestsData[idx] = { ...leaveRequestsData[idx], ...updatePayload };
+    return res.json(leaveRequestsData[idx]);
+  }
+
+  res.status(404).json({ error: 'درخواست مرخصی یافت نشد' });
+});
+
+app.delete('/api/leave-requests/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { userId, personnelId, isAdmin } = getRequestUser(req);
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      await directusFetch(`/items/leave_requests/${id}`, { method: 'DELETE' });
+    } catch {}
+  }
+
+  const idx = leaveRequestsData.findIndex(r => r.id === id);
+  if (idx >= 0) {
+    const item = leaveRequestsData[idx];
+    if (!isAdmin && item.personnel_id !== personnelId && item.personnel_id !== userId) {
+      return res.status(403).json({ error: 'شما اجازه حذف این درخواست را ندارید.' });
+    }
+    leaveRequestsData.splice(idx, 1);
+    return res.json({ success: true });
+  }
+
+  res.json({ success: true });
+});
+
+// -------------------------------------------------------------
+// SALARY ADVANCE REQUESTS API (درخواست‌های مساعده)
+// -------------------------------------------------------------
+app.get('/api/advance-requests', async (req: Request, res: Response) => {
+  const { userId, personnelId, isAdmin, userName } = getRequestUser(req);
+  if (directusUrl && directusAdminToken) {
+    try {
+      const resp = await directusFetch('/items/advance_requests?sort=-date_created&limit=200');
+      if (resp && Array.isArray(resp.data)) {
+        let list: SalaryAdvanceRequest[] = resp.data.map((r: any) => ({
+          ...r,
+          personnel_id: typeof r.personnel_id === 'object' && r.personnel_id !== null ? r.personnel_id.id : String(r.personnel_id || ''),
+          personnel_name: r.personnel_name || (typeof r.personnel_id === 'object' && r.personnel_id !== null ? (r.personnel_id.name || r.personnel_id.first_name) : 'کارشناس شرکت')
+        }));
+        if (!isAdmin) {
+          list = list.filter(
+            (r) =>
+              r.personnel_id === personnelId ||
+              r.personnel_id === userId ||
+              (userName && r.personnel_name === userName)
+          );
+        }
+        return res.json(list);
+      }
+    } catch (err: any) {}
+  }
+
+  let list = [...advanceRequestsData];
+  if (!isAdmin) {
+    list = list.filter(
+      (r) =>
+        r.personnel_id === personnelId ||
+        r.personnel_id === userId ||
+        (userName && r.personnel_name === userName)
+    );
+  }
+  res.json(list);
+});
+
+app.post('/api/advance-requests', async (req: Request, res: Response) => {
+  const payload = req.body;
+  const { userId, personnelId, userName } = getRequestUser(req);
+  const newId = crypto.randomUUID();
+  const nowIso = new Date().toISOString();
+
+  const rawPId = payload.personnel_id || personnelId || userId;
+  const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
+
+  const newRequest: SalaryAdvanceRequest = {
+    id: newId,
+    personnel_id: resolved.personnelId || personnelId || userId || 'p-1',
+    personnel_name: resolved.personnelName || payload.personnel_name || userName || 'کارشناس شرکت',
+    amount: Number(payload.amount) || 0,
+    target_month: payload.target_month || '',
+    needed_date: payload.needed_date || null,
+    reason: payload.reason || '',
+    bank_card_number: payload.bank_card_number || null,
+    iban: payload.iban || null,
+    status: 'pending',
+    approved_amount: null,
+    manager_note: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    date_created: nowIso
+  };
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const created = await directusFetch('/items/advance_requests', {
+        method: 'POST',
+        body: JSON.stringify(newRequest)
+      });
+      if (created?.data) {
+        advanceRequestsData.unshift(created.data);
+        return res.status(201).json(created.data);
+      }
+    } catch (err: any) {}
+  }
+
+  advanceRequestsData.unshift(newRequest);
+  res.status(201).json(newRequest);
+});
+
+app.patch('/api/advance-requests/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status, approved_amount, manager_note } = req.body;
+  const { userName, isAdmin } = getRequestUser(req);
+
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'فقط مدیر سیستم اجازه تغییر وضعیت درخواست را دارد.' });
+  }
+
+  const nowIso = new Date().toISOString();
+  const updatePayload = {
+    status: status || 'pending',
+    approved_amount: approved_amount !== undefined ? Number(approved_amount) : null,
+    manager_note: manager_note || null,
+    reviewed_by: userName || 'مدیر سیستم',
+    reviewed_at: nowIso
+  };
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const updated = await directusFetch(`/items/advance_requests/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updatePayload)
+      });
+      if (updated?.data) {
+        const idx = advanceRequestsData.findIndex(r => r.id === id);
+        if (idx >= 0) advanceRequestsData[idx] = { ...advanceRequestsData[idx], ...updated.data };
+        return res.json(updated.data);
+      }
+    } catch (err: any) {}
+  }
+
+  const idx = advanceRequestsData.findIndex(r => r.id === id);
+  if (idx >= 0) {
+    advanceRequestsData[idx] = { ...advanceRequestsData[idx], ...updatePayload };
+    return res.json(advanceRequestsData[idx]);
+  }
+
+  res.status(404).json({ error: 'درخواست مساعده یافت نشد' });
+});
+
+app.delete('/api/advance-requests/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { userId, personnelId, isAdmin } = getRequestUser(req);
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      await directusFetch(`/items/advance_requests/${id}`, { method: 'DELETE' });
+    } catch {}
+  }
+
+  const idx = advanceRequestsData.findIndex(r => r.id === id);
+  if (idx >= 0) {
+    const item = advanceRequestsData[idx];
+    if (!isAdmin && item.personnel_id !== personnelId && item.personnel_id !== userId) {
+      return res.status(403).json({ error: 'شما اجازه حذف این درخواست را ندارید.' });
+    }
+    advanceRequestsData.splice(idx, 1);
+    return res.json({ success: true });
+  }
+
+  res.json({ success: true });
+});
+
+// -------------------------------------------------------------
+// PROFILE & PASSWORD UPDATE API (پروفایل و تغییر رمز)
+// -------------------------------------------------------------
+app.post('/api/auth/update-profile', async (req: Request, res: Response) => {
+  const { name, phone, avatar, bank_card_number, iban, national_id } = req.body;
+  const { userId, personnelId, userEmail, userName } = getRequestUser(req);
+
+  const personnelPatch: Record<string, any> = {};
+  if (name) personnelPatch.name = String(name).trim();
+  if (phone !== undefined) personnelPatch.phone = String(phone).trim();
+  if (avatar !== undefined) personnelPatch.avatar = avatar;
+  if (bank_card_number !== undefined) personnelPatch.bank_card_number = String(bank_card_number).trim();
+  if (iban !== undefined) personnelPatch.iban = String(iban).trim();
+  if (national_id !== undefined) personnelPatch.national_id = String(national_id).trim();
+
+  let targetPersonnel: any = null;
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      // 1. Locate existing personnel document in Directus
+      let foundPId: string | null = null;
+      if (personnelId) {
+        const byId = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
+        if (byId?.data?.id) foundPId = byId.data.id;
+      }
+      if (!foundPId && userId) {
+        const byUser = await directusFetch(`/items/personnel?filter[user_id][_eq]=${userId}`).catch(() => null);
+        if (byUser?.data && Array.isArray(byUser.data) && byUser.data.length > 0) {
+          foundPId = byUser.data[0].id;
+        }
+      }
+      if (!foundPId && userEmail) {
+        const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail)}`).catch(() => null);
+        if (byEmail?.data && Array.isArray(byEmail.data) && byEmail.data.length > 0) {
+          foundPId = byEmail.data[0].id;
+        }
+      }
+
+      // 2. Patch or Create in Directus personnel collection
+      if (foundPId) {
+        const updatedRes = await directusFetch(`/items/personnel/${foundPId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(personnelPatch)
+        });
+        targetPersonnel = updatedRes?.data || { id: foundPId, ...personnelPatch };
+      } else {
+        const newPId = personnelId || crypto.randomUUID();
+        const createdRes = await directusFetch('/items/personnel', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: newPId,
+            name: name || userName || 'کاربر سیستم',
+            email: userEmail || '',
+            phone: phone || '',
+            role: 'marketer',
+            status: 'active',
+            user_id: userId || null,
+            ...personnelPatch
+          })
+        });
+        targetPersonnel = createdRes?.data || { id: newPId, ...personnelPatch };
+      }
+
+      // 3. Also patch directus_users if userId exists
+      if (userId) {
+        await directusFetch(`/users/${userId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            ...(name ? { first_name: name } : {}),
+            ...(avatar ? { avatar } : {})
+          })
+        }).catch(() => {});
+      }
+    } catch (err: any) {
+      console.error('Directus personnel profile update error:', err.message);
+    }
+  }
+
+  // Update in-memory fallback
+  const targetId = personnelId || userId;
+  const idx = personnelData.findIndex(
+    p =>
+      (targetId && p.id === targetId) ||
+      (userId && p.user_id === userId) ||
+      (userEmail && p.email?.toLowerCase() === userEmail?.toLowerCase())
+  );
+  if (idx >= 0) {
+    personnelData[idx] = { ...personnelData[idx], ...personnelPatch };
+    if (!targetPersonnel) targetPersonnel = personnelData[idx];
+  } else {
+    const newLocal: Personnel = {
+      id: targetId || 'p-1',
+      name: name || userName || 'کاربر سیستم',
+      email: userEmail || '',
+      phone: phone || '',
+      role: 'marketer',
+      status: 'active',
+      active: true,
+      ...personnelPatch
+    };
+    personnelData.push(newLocal);
+    if (!targetPersonnel) targetPersonnel = newLocal;
+  }
+
+  res.json({ success: true, personnel: targetPersonnel, message: 'مشخصات پروفایل با موفقیت در پایگاه داده مرکزی ذخیره شد.' });
+});
+
+app.post('/api/upload-avatar', async (req: Request, res: Response) => {
+  const { dataUrl, fileName, mimeType } = req.body;
+  const { userId, personnelId } = getRequestUser(req);
+
+  if (!dataUrl) {
+    return res.status(400).json({ error: 'فایلی ارسال نشده است.' });
+  }
+
+  let finalAvatarUrl = dataUrl;
+  let fileId: string | null = null;
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const matches = dataUrl.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        const fileBuffer = Buffer.from(matches[2], 'base64');
+        const fileType = matches[1] || mimeType || 'image/jpeg';
+        const name = fileName || `avatar-${userId || Date.now()}.jpg`;
+
+        const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+        const header = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\nContent-Type: ${fileType}\r\n\r\n`;
+        const footer = `\r\n--${boundary}--\r\n`;
+        const bodyBuffer = Buffer.concat([Buffer.from(header, 'utf-8'), fileBuffer, Buffer.from(footer, 'utf-8')]);
+
+        const uploadRes = await fetch(`${directusUrl.replace(/\/$/, '')}/files`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${directusAdminToken}`,
+            'Content-Type': `multipart/form-data; boundary=${boundary}`
+          },
+          body: bodyBuffer
+        });
+
+        if (uploadRes.ok) {
+          const fileData: any = await uploadRes.json();
+          fileId = fileData?.data?.id;
+          if (fileId) {
+            finalAvatarUrl = `${directusUrl.replace(/\/$/, '')}/assets/${fileId}`;
+            if (userId) {
+              await directusFetch(`/users/${userId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ avatar: fileId })
+              }).catch(() => {});
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error uploading avatar to Directus:', e);
+    }
+  }
+
+  const targetId = personnelId || userId;
+  const idx = personnelData.findIndex(p => p.id === targetId || p.id === 'p-1');
+  if (idx >= 0) {
+    personnelData[idx].avatar = finalAvatarUrl;
+  }
+
+  res.json({ success: true, avatarUrl: finalAvatarUrl, fileId });
+});
+
+app.post('/api/auth/change-password', async (req: Request, res: Response) => {
+  const { current_password, new_password } = req.body;
+  const { userId } = getRequestUser(req);
+
+  if (!new_password || new_password.length < 6) {
+    return res.status(400).json({ error: 'رمز عبور جدید باید حداقل ۶ کاراکتر باشد.' });
+  }
+
+  if (directusUrl && directusAdminToken && userId) {
+    try {
+      await directusFetch(`/users/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ password: new_password })
+      });
+      return res.json({ success: true, message: 'رمز عبور با موفقیت تغییر یافت.' });
+    } catch (err: any) {
+      return res.status(500).json({ error: `خطا در تغییر رمز عبور: ${err.message}` });
+    }
+  }
+
+  res.json({ success: true, message: 'رمز عبور با موفقیت تغییر یافت.' });
 });
 
 // Periodic Expiration Check Trigger

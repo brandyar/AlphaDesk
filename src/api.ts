@@ -12,6 +12,10 @@ import {
   AuthUser,
   AuthResponse,
   RegisterPayload,
+  LeaveRequest,
+  SalaryAdvanceRequest,
+  UserProfileUpdatePayload,
+  PasswordChangePayload,
 } from './types';
 
 const BASE_URL = '/api';
@@ -266,6 +270,27 @@ export async function reassignCustomer(
   return handleResponse<Customer>(res, 'خطا در واگذاری مجدد مشتری در سیستم');
 }
 
+export async function mergeCustomers(
+  primaryCustomerId: string,
+  mergedCustomerIds: string[],
+  assignedMarketerId?: string,
+  assignedMarketerName?: string,
+  notes?: string
+): Promise<{ success: boolean; message: string; customer: Customer }> {
+  const res = await fetch(`${BASE_URL}/customers/merge`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      primary_customer_id: primaryCustomerId,
+      merged_customer_ids: mergedCustomerIds,
+      assigned_marketer_id: assignedMarketerId,
+      assigned_marketer_name: assignedMarketerName,
+      notes,
+    }),
+  });
+  return handleResponse<{ success: boolean; message: string; customer: Customer }>(res, 'خطا در ادغام پرونده‌های مشتریان');
+}
+
 export async function checkDuplicateContact(
   value: string,
   channelType?: ChannelType,
@@ -365,6 +390,28 @@ export async function updateColdLead(id: string, payload: Partial<ColdLead>): Pr
   return handleResponse<ColdLead>(res, 'خطا در بروزرسانی وضعیت شماره در پایگاه داده');
 }
 
+export async function bulkAssignColdLeads(
+  lead_ids: string[],
+  target_marketer_id: string
+): Promise<{ success: boolean; updatedCount: number; message: string }> {
+  const res = await fetch(`${BASE_URL}/cold-leads/bulk-assign`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ lead_ids, target_marketer_id }),
+  });
+  return handleResponse(res, 'خطا در تخصیص شماره‌ها به بازاریاب');
+}
+
+export async function deleteColdLead(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/cold-leads/${id}`, {
+    method: 'DELETE',
+    headers: getBffHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error('خطا در حذف شماره');
+  }
+}
+
 export async function convertColdLead(id: string, customerData?: Partial<Customer>): Promise<{ customer: Customer; lead?: ColdLead }> {
   const res = await fetch(`${BASE_URL}/cold-leads/${id}/convert`, {
     method: 'POST',
@@ -389,3 +436,182 @@ export async function createAdminReport(payload: Partial<AdministrativeReport>):
   });
   return handleResponse<AdministrativeReport>(res, 'خطا در ثبت گزارش عملکرد اداری در پایگاه داده');
 }
+
+// -------------------------------------------------------------
+// LEAVE REQUESTS API (درخواست‌های مرخصی)
+// -------------------------------------------------------------
+export async function fetchLeaveRequests(): Promise<LeaveRequest[]> {
+  const res = await fetch(`${BASE_URL}/leave-requests`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse<LeaveRequest[]>(res, 'خطا در دریافت لیست درخواست‌های مرخصی');
+}
+
+export async function createLeaveRequest(payload: Partial<LeaveRequest>): Promise<LeaveRequest> {
+  const res = await fetch(`${BASE_URL}/leave-requests`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<LeaveRequest>(res, 'خطا در ثبت درخواست مرخصی');
+}
+
+export async function updateLeaveRequestStatus(
+  id: string,
+  status: 'approved' | 'rejected' | 'pending',
+  manager_note?: string
+): Promise<LeaveRequest> {
+  const res = await fetch(`${BASE_URL}/leave-requests/${id}`, {
+    method: 'PATCH',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ status, manager_note }),
+  });
+  return handleResponse<LeaveRequest>(res, 'خطا در تغییر وضعیت درخواست مرخصی');
+}
+
+export async function deleteLeaveRequest(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/leave-requests/${id}`, {
+    method: 'DELETE',
+    headers: getBffHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error('خطا در حذف درخواست مرخصی');
+  }
+}
+
+// -------------------------------------------------------------
+// SALARY ADVANCE REQUESTS API (درخواست‌های مساعده)
+// -------------------------------------------------------------
+export async function fetchAdvanceRequests(): Promise<SalaryAdvanceRequest[]> {
+  const res = await fetch(`${BASE_URL}/advance-requests`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse<SalaryAdvanceRequest[]>(res, 'خطا در دریافت لیست درخواست‌های مساعده');
+}
+
+export async function createAdvanceRequest(payload: Partial<SalaryAdvanceRequest>): Promise<SalaryAdvanceRequest> {
+  const res = await fetch(`${BASE_URL}/advance-requests`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<SalaryAdvanceRequest>(res, 'خطا در ثبت درخواست مساعده');
+}
+
+export async function updateAdvanceRequestStatus(
+  id: string,
+  status: 'approved' | 'rejected' | 'pending',
+  approved_amount?: number,
+  manager_note?: string
+): Promise<SalaryAdvanceRequest> {
+  const res = await fetch(`${BASE_URL}/advance-requests/${id}`, {
+    method: 'PATCH',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ status, approved_amount, manager_note }),
+  });
+  return handleResponse<SalaryAdvanceRequest>(res, 'خطا در تغییر وضعیت درخواست مساعده');
+}
+
+export async function deleteAdvanceRequest(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/advance-requests/${id}`, {
+    method: 'DELETE',
+    headers: getBffHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error('خطا در حذف درخواست مساعده');
+  }
+}
+
+// -------------------------------------------------------------
+// USER PROFILE & PASSWORD API (پروفایل و تغییر رمز)
+// -------------------------------------------------------------
+export async function updateUserProfile(payload: UserProfileUpdatePayload): Promise<{ success: boolean; personnel: Personnel; message: string }> {
+  const res = await fetch(`${BASE_URL}/auth/update-profile`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, 'خطا در بروزرسانی پروفایل کاربری');
+}
+
+export async function uploadAvatar(dataUrl: string, fileName?: string): Promise<{ success: boolean; avatarUrl: string; fileId?: string }> {
+  const res = await fetch(`${BASE_URL}/upload-avatar`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ dataUrl, fileName }),
+  });
+  return handleResponse(res, 'خطا در بارگذاری تصویر پروفایل');
+}
+
+export async function changeUserPassword(payload: PasswordChangePayload): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${BASE_URL}/auth/change-password`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, 'خطا در تغییر رمز عبور');
+}
+
+// -------------------------------------------------------------
+// COLLEAGUES & OWNERSHIP MANAGEMENT (مدیریت همکاران و مالکیت)
+// -------------------------------------------------------------
+export async function createPersonnel(payload: {
+  name: string;
+  email: string;
+  phone?: string;
+  role: 'admin' | 'sales_manager' | 'marketer' | 'operator';
+  password?: string;
+}): Promise<Personnel> {
+  const res = await fetch(`${BASE_URL}/personnel`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<Personnel>(res, 'خطا در ثبت همکار جدید');
+}
+
+export async function updatePersonnel(id: string, payload: Partial<Personnel>): Promise<Personnel> {
+  const res = await fetch(`${BASE_URL}/personnel/${id}`, {
+    method: 'PATCH',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<Personnel>(res, 'خطا در بروزرسانی اطلاعات همکار');
+}
+
+export async function deletePersonnel(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/personnel/${id}`, {
+    method: 'DELETE',
+    headers: getBffHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error('خطا در حذف همکار');
+  }
+}
+
+export async function bulkExtendOwnership(
+  customer_ids: string[],
+  extend_days: number
+): Promise<{ success: boolean; updatedCount: number; message: string }> {
+  const res = await fetch(`${BASE_URL}/customers/bulk-extend`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ customer_ids, extend_days }),
+  });
+  return handleResponse(res, 'خطا در تمدید مالکیت مشتریان');
+}
+
+export async function bulkSwitchOwnership(
+  customer_ids: string[],
+  new_marketer_id: string,
+  new_marketer_name: string,
+  duration_days: number = 7
+): Promise<{ success: boolean; updatedCount: number; message: string }> {
+  const res = await fetch(`${BASE_URL}/customers/bulk-switch`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ customer_ids, new_marketer_id, new_marketer_name, duration_days }),
+  });
+  return handleResponse(res, 'خطا در انتقال و سوئیچ مالکیت مشتریان');
+}
+

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { X, MessageSquareText, Building, User, Calendar, Phone } from 'lucide-react';
+import { X, MessageSquareText, Building, User, Calendar, Phone, FileCheck2, Hash, DollarSign, PackageCheck } from 'lucide-react';
 import { Customer, CustomerReport, Personnel, NegotiationStatus, AuthUser } from '../types';
+import { PersianDatePicker } from './PersianDatePicker';
+import { formatToman } from '../utils';
 
 interface AddReportModalProps {
   isOpen: boolean;
@@ -47,9 +49,18 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
   const [nextFollowupDate, setNextFollowupDate] = useState(
     new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
+
+  // Contract / Invoice fields
+  const [contractNumber, setContractNumber] = useState('');
+  const [contractDate, setContractDate] = useState(new Date().toISOString().split('T')[0]);
+  const [contractItems, setContractItems] = useState('');
+  const [contractAmount, setContractAmount] = useState<string>('');
+
   const [saving, setSaving] = useState(false);
 
   const selectedCustomer = customers.find((c) => c.id === customerId);
+
+  const isContractStatus = negotiationStatus === 'قرارداد / فاکتور' || negotiationStatus === 'قرارداد';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +79,8 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
         ? (negotiatorName || currentPersonnel?.name || currentUser?.name || 'مدیر سیستم')
         : (currentPersonnel?.name || currentUser?.name || 'کارشناس پیگیری');
 
+      const numericAmount = contractAmount ? parseFloat(contractAmount.replace(/,/g, '')) : undefined;
+
       await onSaveReport({
         customer_id: customerId,
         negotiator_name: finalNegotiator,
@@ -76,6 +89,10 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
         negotiation_score: Number(negotiationScore),
         next_followup_date: nextFollowupDate ? new Date(nextFollowupDate).toISOString() : '',
         negotiation_status: negotiationStatus,
+        contract_number: isContractStatus && contractNumber ? contractNumber.trim() : undefined,
+        contract_date: isContractStatus && contractDate ? contractDate : undefined,
+        contract_items: isContractStatus && contractItems ? contractItems.trim() : undefined,
+        contract_amount: isContractStatus && !isNaN(numericAmount as number) ? numericAmount : undefined,
       });
       onClose();
     } catch (err: any) {
@@ -83,6 +100,16 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAmountChange = (val: string) => {
+    const rawDigits = val.replace(/[^\d]/g, '');
+    if (!rawDigits) {
+      setContractAmount('');
+      return;
+    }
+    const num = parseInt(rawDigits, 10);
+    setContractAmount(num.toLocaleString('en-US'));
   };
 
   return (
@@ -186,7 +213,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                 <option value="پیگیری بلند مدت">پیگیری بلند مدت</option>
                 <option value="پیگیری قرارداد">پیگیری قرارداد</option>
                 <option value="پیش نویس قرارداد">پیش نویس قرارداد</option>
-                <option value="قرارداد">قرارداد (موفق)</option>
+                <option value="قرارداد">قرارداد / فاکتور (موفق)</option>
                 <option value="لیست سیاه">لیست سیاه</option>
               </select>
             </div>
@@ -208,17 +235,88 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
 
             {/* Next Follow-up Date */}
             <div>
-              <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                تاریخ پیگیری بعدی
-              </label>
-              <input
-                type="date"
+              <PersianDatePicker
+                label="تاریخ پیگیری بعدی (شمسی)"
                 value={nextFollowupDate}
-                onChange={(e) => setNextFollowupDate(e.target.value)}
-                className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                onChange={(iso) => setNextFollowupDate(iso)}
               />
             </div>
           </div>
+
+          {/* Dedicated Contract / Invoice Section when status is 'قرارداد / فاکتور' */}
+          {isContractStatus && (
+            <div className="p-4 rounded-2xl bg-[#1DB954]/10 border border-[#1DB954]/30 space-y-3.5 animate-in fade-in duration-200">
+              <div className="flex items-center gap-2 text-xs font-bold text-[#1DB954] border-b border-[#1DB954]/20 pb-2">
+                <FileCheck2 className="w-4 h-4" />
+                <span>اطلاعات تکمیلی قرارداد / فاکتور صادر شده</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {/* Contract / Invoice Number */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1 flex items-center gap-1">
+                    <Hash className="w-3 h-3 text-[#1DB954]" />
+                    <span>شماره قرارداد / فاکتور</span>
+                  </label>
+                  <input
+                    type="text"
+                    dir="ltr"
+                    value={contractNumber}
+                    onChange={(e) => setContractNumber(e.target.value)}
+                    placeholder="مثلاً: CNT-1403/102 یا 89201"
+                    className="w-full h-9 px-3 bg-[#181818] rounded-lg text-xs text-white border border-[#2a2a2a] focus:border-[#1DB954] focus:outline-none font-mono"
+                  />
+                </div>
+
+                {/* Contract / Invoice Date */}
+                <div>
+                  <PersianDatePicker
+                    label="تاریخ قرارداد / فاکتور"
+                    value={contractDate}
+                    onChange={(iso) => setContractDate(iso || new Date().toISOString().split('T')[0])}
+                  />
+                </div>
+
+                {/* Final Amount (Toman) */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <DollarSign className="w-3 h-3 text-[#1DB954]" />
+                      <span>مبلغ نهایی (تومان)</span>
+                    </span>
+                    {contractAmount && (
+                      <span className="text-[10px] text-[#1DB954] font-mono font-bold">
+                        {formatToman(contractAmount)}
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    dir="ltr"
+                    value={contractAmount}
+                    onChange={(e) => handleAmountChange(e.target.value)}
+                    placeholder="مثلاً: 25,000,000"
+                    className="w-full h-9 px-3 bg-[#181818] rounded-lg text-xs text-white border border-[#2a2a2a] focus:border-[#1DB954] focus:outline-none font-mono font-bold text-left"
+                  />
+                </div>
+              </div>
+
+              {/* Contract / Invoice Items */}
+              <div>
+                <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1 flex items-center gap-1">
+                  <PackageCheck className="w-3 h-3 text-[#1DB954]" />
+                  <span>آیتم‌ها و اقلام قرارداد / فاکتور</span>
+                </label>
+                <input
+                  type="text"
+                  value={contractItems}
+                  onChange={(e) => setContractItems(e.target.value)}
+                  placeholder="شرح اقلام و خدمات (مثلاً: طراحی سایت فروشگاهی + درگاه پرداخت + هاست و پشتیبانی ۱ ساله)..."
+                  className="w-full h-9 px-3 bg-[#181818] rounded-lg text-xs text-white border border-[#2a2a2a] focus:border-[#1DB954] focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Report Text */}
           <div>
