@@ -8,11 +8,8 @@ import {
   Phone,
   Eye,
   EyeOff,
-  ShieldCheck,
-  Briefcase,
   AlertCircle,
   CheckCircle2,
-  Sparkles,
   X
 } from 'lucide-react';
 import { loginUser, registerUser } from '../api';
@@ -99,26 +96,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'خطا در برقراری ارتباط با سرور.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleQuickLogin = async (quickEmail: string, quickPass: string) => {
-    setEmail(quickEmail);
-    setPassword(quickPass);
-    setMode('login');
-    setErrorMessage(null);
-    setLoading(true);
-    try {
-      const res = await loginUser(quickEmail, quickPass);
-      setSuccessMessage('ورود سریع موفقیت‌آمیز بود.');
-      setTimeout(() => {
-        onAuthSuccess(res);
-        if (onClose) onClose();
-      }, 400);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'ورود سریع ناموفق بود.');
     } finally {
       setLoading(false);
     }
@@ -321,35 +298,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             )}
           </button>
         </form>
-
-        {/* Quick Demo Logins for Fast Testing */}
-        <div className="mt-5 pt-4 border-t border-[#282828]">
-          <div className="text-[11px] text-[#A7A7A7] mb-2 flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-[#1DB954]" />
-            <span>ورود سریع آزمایشی:</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('contact.brandyar@gmail.com', 'admin123')}
-              disabled={loading}
-              className="p-2 rounded-xl bg-[#222222] hover:bg-[#2a2a2a] text-white border border-[#333333] text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all hover:border-[#1DB954]/50"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-[#1DB954]" />
-              <span>ورود مدیر (Admin)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('test_marketer@company.ir', 'Password123!')}
-              disabled={loading}
-              className="p-2 rounded-xl bg-[#222222] hover:bg-[#2a2a2a] text-white border border-[#333333] text-[11px] font-medium flex items-center justify-center gap-1.5 transition-all hover:border-blue-400/50"
-            >
-              <Briefcase className="w-3.5 h-3.5 text-blue-400" />
-              <span>ورود کارشناس (Staff)</span>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
