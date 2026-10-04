@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard,
   Users,
+  Unlock,
   MessageSquareText,
   PhoneCall,
   ClipboardCheck,
@@ -16,6 +17,7 @@ import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { CustomersView } from './components/CustomersView';
+import { FreeCustomersView } from './components/FreeCustomersView';
 import { ReportsView } from './components/ReportsView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { ColdLeadsView } from './components/ColdLeadsView';
@@ -25,6 +27,7 @@ import { TeamManagementView } from './components/TeamManagementView';
 import { CustomerModal } from './components/CustomerModal';
 import { CustomerDetailModal } from './components/CustomerDetailModal';
 import { AddReportModal } from './components/AddReportModal';
+import { AddColdLeadModal } from './components/AddColdLeadModal';
 import { MergeCustomersModal } from './components/MergeCustomersModal';
 import { AuthModal } from './components/AuthModal';
 
@@ -55,6 +58,7 @@ import {
   updateCustomer,
   deleteCustomer,
   reassignCustomer,
+  claimFreeCustomer,
   mergeCustomers,
   createCustomerContact,
   fetchCustomerReports,
@@ -136,6 +140,7 @@ export default function App() {
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isAddReportModalOpen, setIsAddReportModalOpen] = useState(false);
+  const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);
   const [reportPreselectedCustomerId, setReportPreselectedCustomerId] = useState<string | undefined>(undefined);
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
   const [mergeInitialCustomerIds, setMergeInitialCustomerIds] = useState<string[]>([]);
@@ -292,6 +297,15 @@ export default function App() {
 
   const expiredCount = customers.filter((c) => c.is_expired).length;
 
+  const freeCustomersCount = customers.filter((c) => {
+    if (c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
+    const isUnassigned = !c.assigned_marketer_id || c.assigned_marketer_name === 'تخصیص نیافته';
+    const isDeadlinePassed = Boolean(
+      c.assignment_deadline && new Date().getTime() > new Date(c.assignment_deadline).getTime()
+    );
+    return Boolean(c.is_expired || isDeadlinePassed || isUnassigned);
+  }).length;
+
   // Handlers for Customer Operations
   const handleSaveCustomer = async (
     customerData: Partial<Customer> & { assignment_duration_days?: number }
@@ -395,6 +409,29 @@ export default function App() {
       showToast('مشتری با موفقیت به بازاریاب جدید واگذار شد.', 'success');
     } catch (err: any) {
       showToast('خطا در واگذاری مجدد مشتری: ' + (err.message || 'خطای نامشخص'), 'error');
+    }
+  };
+
+  const handleClaimCustomer = async (customerId: string, durationDays: number): Promise<boolean> => {
+    try {
+      const res = await claimFreeCustomer(customerId, {
+        personnel_id: currentPersonnel?.id || currentUser?.id,
+        personnel_name: currentPersonnel?.name || currentUser?.name,
+        duration_days: durationDays,
+      });
+
+      if (res && res.customer) {
+        setCustomers((prev) => prev.map((c) => (c.id === res.customer.id ? res.customer : c)));
+        const refreshedReports = await fetchCustomerReports().catch(() => null);
+        if (refreshedReports) setReports(refreshedReports);
+        fetchBffStatus().then(setBffStatus).catch(() => {});
+        showToast(res.message || 'پرونده با موفقیت به شما اختصاص یافت.', 'success');
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      showToast(err.message || 'خطا در اختصاص پرونده آزاد', 'error');
+      return false;
     }
   };
 
@@ -678,6 +715,7 @@ export default function App() {
         counts={{
           customers: customers.length,
           expiredCustomers: expiredCount,
+          freeCustomers: freeCustomersCount,
           coldLeads: coldLeads.length,
           reports: reports.length,
           adminReports: adminReports.length,
@@ -723,7 +761,7 @@ export default function App() {
             setIsCustomerModalOpen(true);
           }}
           onOpenNewLead={() => {
-            setActiveTab('cold_leads');
+            setIsAddLeadModalOpen(true);
           }}
           isMobileMenuOpen={isMobileMenuOpen}
           onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -766,7 +804,7 @@ export default function App() {
                     setEditingCustomer(null);
                     setIsCustomerModalOpen(true);
                   }}
-                  onOpenNewLead={() => setActiveTab('cold_leads')}
+                  onOpenNewLead={() => setIsAddLeadModalOpen(true)}
                   onOpenAddReport={() => {
                     setReportPreselectedCustomerId(undefined);
                     setIsAddReportModalOpen(true);
@@ -809,6 +847,26 @@ export default function App() {
                   onSelectStatusFilter={setStatusFilter}
                   showExpiredOnly={showExpiredOnly}
                   onToggleExpiredOnly={setShowExpiredOnly}
+                />
+              )}
+
+              {displayedTab === 'free_customers' && (
+                <FreeCustomersView
+                  customers={customers}
+                  reports={reports}
+                  personnelList={personnelList}
+                  currentPersonnel={currentPersonnel}
+                  currentUser={currentUser}
+                  isAdmin={Boolean(
+                    currentUser?.is_admin ||
+                    currentUser?.app_role === 'admin' ||
+                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                    currentPersonnel?.role === 'admin'
+                  )}
+                  onClaimCustomer={handleClaimCustomer}
+                  onSelectCustomer={openCustomerDetail}
+                  showToast={showToast}
                 />
               )}
 
@@ -976,6 +1034,23 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('free_customers')}
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors relative ${
+              activeTab === 'free_customers' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            }`}
+          >
+            <div className="relative">
+              <Unlock className="w-4 h-4 mb-0.5" />
+              {freeCustomersCount > 0 && (
+                <span className="absolute -top-1 -right-2 px-1 py-0.2 rounded-full bg-[#1DB954] text-black font-mono font-bold text-[8px]">
+                  {freeCustomersCount}
+                </span>
+              )}
+            </div>
+            <span>آزاد</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('reports')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
               activeTab === 'reports' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
@@ -1120,6 +1195,24 @@ export default function App() {
         personnelList={personnelList}
         initialSelectedCustomerIds={mergeInitialCustomerIds}
         onMerge={handleMergeCustomers}
+      />
+
+      {/* Quick Add Cold Lead Modal */}
+      <AddColdLeadModal
+        isOpen={isAddLeadModalOpen}
+        onClose={() => setIsAddLeadModalOpen(false)}
+        onAddLead={handleAddColdLead}
+        personnelList={personnelList}
+        currentPersonnel={currentPersonnel}
+        currentUser={currentUser}
+        isAdmin={Boolean(
+          currentUser?.is_admin ||
+          currentUser?.app_role === 'admin' ||
+          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+          currentPersonnel?.role === 'admin'
+        )}
+        showToast={showToast}
       />
 
       {/* User Login & Registration Modal */}

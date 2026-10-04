@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard,
   Users,
+  Unlock,
   MessageSquareText,
   PhoneCall,
   ClipboardCheck,
@@ -26,6 +27,7 @@ import { Personnel, TeamSubTab } from '../types';
 export type NavTab =
   | 'dashboard'
   | 'customers'
+  | 'free_customers'
   | 'reports'
   | 'analytics'
   | 'cold_leads'
@@ -41,6 +43,7 @@ interface SidebarProps {
   counts: {
     customers: number;
     expiredCustomers: number;
+    freeCustomers?: number;
     coldLeads: number;
     reports: number;
     adminReports: number;
@@ -67,9 +70,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   onLogout,
 }) => {
-  // Collapsible states (closed by default)
-  const [isTeamExpanded, setIsTeamExpanded] = useState(false);
-  const [isPortalExpanded, setIsPortalExpanded] = useState(false);
+  // Collapsible states (auto-expand when active)
+  const [isTeamExpanded, setIsTeamExpanded] = useState(activeTab === 'team');
+  const [isPortalExpanded, setIsPortalExpanded] = useState(activeTab === 'personal_portal');
+
+  useEffect(() => {
+    if (activeTab === 'team') {
+      setIsTeamExpanded(true);
+    }
+    if (activeTab === 'personal_portal') {
+      setIsPortalExpanded(true);
+    }
+  }, [activeTab]);
 
   const navItems: {
     id: NavTab;
@@ -90,6 +102,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Users,
       count: counts.customers,
       highlight: counts.expiredCustomers > 0,
+    },
+    {
+      id: 'free_customers',
+      label: 'مشتریان آزاد',
+      icon: Unlock,
+      count: counts.freeCustomers,
+      highlight: Boolean(counts.freeCustomers && counts.freeCustomers > 0),
+      badgeText: counts.freeCustomers && counts.freeCustomers > 0 ? 'آزاد' : undefined,
     },
     {
       id: 'reports',
@@ -119,6 +139,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const totalPortalPending = (counts.pendingLeaves || 0) + (counts.pendingAdvances || 0);
   const isTeamActive = activeTab === 'team';
   const isPortalActive = activeTab === 'personal_portal';
+
+  // Granular menu permission helper
+  const isMenuAllowed = (menuId: string): boolean => {
+    if (isAdmin || currentPersonnel?.role === 'admin') return true;
+    if (!currentPersonnel?.permissions?.allowed_menus) {
+      if (menuId === 'team') return false;
+      return true;
+    }
+    return currentPersonnel.permissions.allowed_menus.includes(menuId);
+  };
+
+  const visibleNavItems = navItems.filter((item) => isMenuAllowed(item.id));
+  const canAccessTeam = isAdmin || currentPersonnel?.role === 'admin' || isMenuAllowed('team');
+  const canAccessPortal = isMenuAllowed('personal_portal');
 
   return (
     <>
@@ -170,7 +204,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             بخش‌های اصلی سامانه
           </div>
 
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
 
@@ -221,12 +255,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* -------------------------------------------------------- */}
           {/* Admin Accordion: همکاران (Colleagues & Ownership)       */}
           {/* -------------------------------------------------------- */}
-          {isAdmin && (
+          {canAccessTeam && (
             <div>
               <button
-                onClick={() => {
-                  setIsTeamExpanded(!isTeamExpanded);
-                  onSelectTab('team', teamSubTab || 'colleagues_list');
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsTeamExpanded((prev) => !prev);
                 }}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group ${
                   isTeamActive
@@ -362,41 +398,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* -------------------------------------------------------- */}
           {/* Collapsible Accordion: پنل شخصی (Personal Portal)        */}
           {/* -------------------------------------------------------- */}
-          <div>
-            {/* Main Collapsible Trigger Button */}
-            <button
-              onClick={() => {
-                setIsPortalExpanded(!isPortalExpanded);
-                onSelectTab('personal_portal', portalSubTab || 'profile');
-              }}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group ${
-                isPortalActive
-                  ? 'bg-[#282828] text-white shadow-sm'
-                  : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <User
-                  className={`w-4 h-4 transition-colors ${
-                    isPortalActive ? 'text-[#1DB954]' : 'text-[#A7A7A7] group-hover:text-white'
-                  }`}
-                />
-                <span>پنل شخصی</span>
-              </div>
+          {canAccessPortal && (
+            <div>
+              {/* Main Collapsible Trigger Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsPortalExpanded((prev) => !prev);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group ${
+                  isPortalActive
+                    ? 'bg-[#282828] text-white shadow-sm'
+                    : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <User
+                    className={`w-4 h-4 transition-colors ${
+                      isPortalActive ? 'text-[#1DB954]' : 'text-[#A7A7A7] group-hover:text-white'
+                    }`}
+                  />
+                  <span>پنل شخصی</span>
+                </div>
 
-              <div className="flex items-center gap-1.5">
-                {totalPortalPending > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500 text-black font-mono font-bold">
-                    {totalPortalPending}
-                  </span>
-                )}
-                <ChevronDown
-                  className={`w-3.5 h-3.5 text-[#888] transition-transform duration-200 ${
-                    isPortalExpanded ? 'rotate-180 text-white' : ''
-                  }`}
-                />
-              </div>
-            </button>
+                <div className="flex items-center gap-1.5">
+                  {totalPortalPending > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500 text-black font-mono font-bold">
+                      {totalPortalPending}
+                    </span>
+                  )}
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-[#888] transition-transform duration-200 ${
+                      isPortalExpanded ? 'rotate-180 text-white' : ''
+                    }`}
+                  />
+                </div>
+              </button>
 
             {/* Sub-menu Items (Dropdown) */}
             {isPortalExpanded && (
@@ -480,6 +519,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
           </div>
+          )}
         </nav>
 
         {/* User Info Bar at bottom of sidebar */}

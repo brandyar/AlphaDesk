@@ -87,6 +87,8 @@ export interface Customer {
   assignment_duration_days?: number;
   status: NegotiationStatus;
   is_expired?: boolean;
+  claimed_from_pool?: boolean;
+  claimed_from_pool_at?: string;
   date_created: string;
   date_updated: string;
   reports?: CustomerReport[];
@@ -146,12 +148,47 @@ export interface AdministrativeReport {
   date_created: string;
 }
 
+export type PersonnelRole =
+  | 'admin'
+  | 'sales_manager'
+  | 'marketer'
+  | 'office_staff'
+  | 'remote_task'
+  | 'finance'
+  | 'operator'
+  | 'custom';
+
+export interface PersonnelContactNumber {
+  id?: string;
+  label: string;
+  number: string;
+}
+
+export interface PersonnelPermissions {
+  allowed_menus: string[]; // 'dashboard', 'customers', 'free_customers', 'reports', 'analytics', 'cold_leads', 'admin_reports', 'team', 'personal_portal'
+  can_view_all_customers?: boolean;
+  can_edit_customer?: boolean;
+  can_delete_customer?: boolean;
+  can_export_data?: boolean;
+  can_switch_ownership?: boolean;
+  can_extend_ownership?: boolean;
+  can_manage_leads?: boolean;
+  can_approve_leaves?: boolean;
+  can_approve_advances?: boolean;
+  can_manage_personnel?: boolean;
+  report_view_scope?: 'all' | 'own_only' | 'specific_personnel';
+  visible_report_personnel_ids?: string[];
+}
+
 export interface Personnel {
   id: string;
   name: string;
-  role: 'admin' | 'sales_manager' | 'marketer' | 'operator';
+  username?: string;
+  role: PersonnelRole;
   email: string;
   phone: string;
+  phones?: Array<string | PersonnelContactNumber>;
+  permissions?: PersonnelPermissions;
   avatar?: string;
   active: boolean;
   status?: string;
@@ -203,6 +240,7 @@ export interface SalaryAdvanceRequest {
 
 export interface UserProfileUpdatePayload {
   name?: string;
+  username?: string;
   phone?: string;
   avatar?: string;
   bank_card_number?: string;
@@ -221,6 +259,7 @@ export const ADMIN_ROLE_ID = '59e261e1-56f4-401e-9889-4971e2c3c4ce';
 export interface AuthUser {
   id: string;
   email: string;
+  username?: string;
   name: string;
   first_name?: string;
   last_name?: string;
@@ -239,6 +278,7 @@ export interface AuthResponse {
 
 export interface RegisterPayload {
   email: string;
+  username?: string;
   password: string;
   name: string;
   phone?: string;
@@ -255,9 +295,12 @@ export type TeamSubTab =
 
 export interface CreateColleaguePayload {
   name: string;
+  username?: string;
   email: string;
   phone?: string;
-  role: 'admin' | 'sales_manager' | 'marketer' | 'operator';
+  phones?: Array<string | PersonnelContactNumber>;
+  role: PersonnelRole;
+  permissions?: PersonnelPermissions;
   password?: string;
   status?: string;
 }
@@ -276,3 +319,10 @@ export interface BffStatus {
     personnel: number;
   };
 }
+
+export interface ProjectSettings {
+  id?: number;
+  ippanel_api?: string;
+  free_customers_claim_limit?: number;
+}
+

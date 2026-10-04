@@ -97,12 +97,20 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
 
   const visibleReports = adminReports.filter((r) => {
     if (userIsAdmin) return true;
-    return (
+    const isSelf =
       r.personnel_id === currentPersonnel?.id ||
       r.personnel_id === currentUser?.id ||
       r.personnel_name === currentPersonnel?.name ||
-      r.personnel_name === currentUser?.name
-    );
+      r.personnel_name === currentUser?.name;
+    if (isSelf) return true;
+
+    const scope = currentPersonnel?.permissions?.report_view_scope;
+    if (scope === 'all') return true;
+    if (scope === 'specific_personnel') {
+      const allowedIds = currentPersonnel?.permissions?.visible_report_personnel_ids || [];
+      return allowedIds.includes(r.personnel_id);
+    }
+    return false;
   });
 
   // Aggregated KPIs

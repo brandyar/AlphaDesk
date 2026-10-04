@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X,
   Plus,
@@ -24,6 +24,8 @@ import {
 import { Customer, CustomerContact, Personnel, NegotiationStatus, ChannelType, DuplicateCheckResult, AuthUser } from '../types';
 import { checkDuplicateContact } from '../api';
 import { PersianDatePicker } from './PersianDatePicker';
+import { IRAN_PROVINCES } from '../data/iranProvincesCities';
+import { toPersianDigits } from '../utils';
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -93,6 +95,23 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   const [province, setProvince] = useState(editingCustomer?.province || 'تهران');
   const [city, setCity] = useState(editingCustomer?.city || 'تهران');
   const [isEcommerce, setIsEcommerce] = useState(editingCustomer?.is_ecommerce || false);
+
+  const availableCities = useMemo(() => {
+    const found = IRAN_PROVINCES.find((p) => p.name === province);
+    return found ? found.cities : [];
+  }, [province]);
+
+  const handleProvinceChange = (newProvince: string) => {
+    setProvince(newProvince);
+    const found = IRAN_PROVINCES.find((p) => p.name === newProvince);
+    if (found && found.cities.length > 0) {
+      if (!found.cities.includes(city)) {
+        setCity(found.cities[0]);
+      }
+    } else {
+      setCity('');
+    }
+  };
 
   // Structured Contacts List
   const [contacts, setContacts] = useState<ContactRow[]>(() => {
@@ -613,24 +632,54 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
               {/* Row 2: Location & Ecommerce Toggle */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">استان</label>
-                  <input
-                    type="text"
+                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5 flex items-center justify-between">
+                    <span>استان</span>
+                    <span className="text-[10px] text-[#777]">۳۱ استان کشور</span>
+                  </label>
+                  <select
                     value={province}
-                    onChange={(e) => setProvince(e.target.value)}
-                    placeholder="تهران"
-                    className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white border border-transparent focus:border-[#1DB954] focus:outline-none transition-colors"
-                  />
+                    onChange={(e) => handleProvinceChange(e.target.value)}
+                    className="w-full h-10 px-3 bg-[#282828] rounded-xl text-xs text-white border border-[#3e3e3e] focus:border-[#1DB954] focus:outline-none transition-colors cursor-pointer"
+                  >
+                    <option value="">انتخاب استان...</option>
+                    {IRAN_PROVINCES.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">شهر</label>
-                  <input
-                    type="text"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="تهران"
-                    className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white border border-transparent focus:border-[#1DB954] focus:outline-none transition-colors"
-                  />
+                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5 flex items-center justify-between">
+                    <span>شهر</span>
+                    {availableCities.length > 0 && (
+                      <span className="text-[10px] text-[#1DB954] font-mono">
+                        {toPersianDigits(availableCities.length)} شهر
+                      </span>
+                    )}
+                  </label>
+                  {availableCities.length > 0 ? (
+                    <select
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      className="w-full h-10 px-3 bg-[#282828] rounded-xl text-xs text-white border border-[#3e3e3e] focus:border-[#1DB954] focus:outline-none transition-colors cursor-pointer"
+                    >
+                      <option value="">انتخاب شهر...</option>
+                      {availableCities.map((c: string) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="نام شهر را وارد کنید"
+                      className="w-full h-10 px-3 bg-[#282828] rounded-xl text-xs text-white border border-[#3e3e3e] focus:border-[#1DB954] focus:outline-none transition-colors"
+                    />
+                  )}
                 </div>
                 <div className="flex items-center pt-5">
                   <label className="flex items-center gap-2 cursor-pointer text-xs text-white">

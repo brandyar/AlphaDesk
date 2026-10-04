@@ -39,6 +39,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Form Fields
+  const [usernameOrEmail, setUsernameOrEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -52,12 +54,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    if (!email.trim() || !password.trim()) {
-      setErrorMessage('لطفاً ایمیل و کلمه عبور را وارد کنید.');
-      return;
-    }
-
-    if (mode === 'register') {
+    if (mode === 'login') {
+      if (!usernameOrEmail.trim() || !password.trim()) {
+        setErrorMessage('لطفاً نام کاربری یا شماره موبایل و کلمه عبور را وارد کنید.');
+        return;
+      }
+    } else {
+      if (!email.trim() || !password.trim()) {
+        setErrorMessage('لطفاً ایمیل و کلمه عبور را وارد کنید.');
+        return;
+      }
       if (!name.trim()) {
         setErrorMessage('لطفاً نام و نام خانوادگی را وارد کنید.');
         return;
@@ -75,7 +81,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setLoading(true);
     try {
       if (mode === 'login') {
-        const res = await loginUser(email.trim(), password);
+        const res = await loginUser(usernameOrEmail.trim(), password);
         setSuccessMessage('با موفقیت وارد شدید.');
         setTimeout(() => {
           onAuthSuccess(res);
@@ -84,6 +90,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       } else {
         const res = await registerUser({
           email: email.trim(),
+          username: username.trim() || undefined,
           password,
           name: name.trim(),
           phone: phone.trim(),
@@ -204,6 +211,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
 
               <div>
+                <label className="block text-xs text-[#A7A7A7] mb-1">نام کاربری (شناسه یکتا جهت ورود)</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="مثال: sara_ahmadi"
+                    dir="ltr"
+                    className="w-full h-10 bg-[#121212] border border-[#2e2e2e] focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] rounded-xl pr-9 pl-3 text-xs sm:text-sm text-white placeholder-[#555555] focus:outline-none transition-all text-left font-mono"
+                  />
+                  <User className="w-4 h-4 text-[#777777] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-[#A7A7A7] mb-1">پست الکترونیک (ایمیل)</label>
+                <div className="relative">
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@company.ir"
+                    required
+                    dir="ltr"
+                    className="w-full h-10 bg-[#121212] border border-[#2e2e2e] focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] rounded-xl pr-9 pl-3 text-xs sm:text-sm text-white placeholder-[#555555] focus:outline-none transition-all text-left"
+                  />
+                  <Mail className="w-4 h-4 text-[#777777] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-xs text-[#A7A7A7] mb-1">شماره تماس (اختیاری)</label>
                 <div className="relative">
                   <input
@@ -220,21 +258,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </>
           )}
 
-          <div>
-            <label className="block text-xs text-[#A7A7A7] mb-1">پست الکترونیک (ایمیل)</label>
-            <div className="relative">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@company.ir"
-                required
-                dir="ltr"
-                className="w-full h-10 bg-[#121212] border border-[#2e2e2e] focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] rounded-xl pr-9 pl-3 text-xs sm:text-sm text-white placeholder-[#555555] focus:outline-none transition-all text-left"
-              />
-              <Mail className="w-4 h-4 text-[#777777] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          {mode === 'login' && (
+            <div>
+              <label className="block text-xs text-[#A7A7A7] mb-1">نام کاربری</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={usernameOrEmail}
+                  onChange={(e) => setUsernameOrEmail(e.target.value)}
+                  placeholder="نام کاربری یا موبایل"
+                  required
+                  dir="ltr"
+                  className="w-full h-10 bg-[#121212] border border-[#2e2e2e] focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] rounded-xl pr-9 pl-3 text-xs sm:text-sm text-white placeholder-[#555555] focus:outline-none transition-all text-left font-mono"
+                />
+                <User className="w-4 h-4 text-[#777777] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
-          </div>
+          )}
 
           <div>
             <label className="block text-xs text-[#A7A7A7] mb-1">کلمه عبور</label>

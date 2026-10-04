@@ -62,6 +62,8 @@ export interface Customer {
   assignment_duration_days?: number;
   status: string;
   is_expired?: boolean;
+  claimed_from_pool?: boolean;
+  claimed_from_pool_at?: string;
   date_created: string;
   date_updated: string;
 }
@@ -147,12 +149,37 @@ export interface SalaryAdvanceRequest {
   date_created: string;
 }
 
+export interface PersonnelContactNumber {
+  id?: string;
+  label: string;
+  number: string;
+}
+
+export interface PersonnelPermissions {
+  allowed_menus: string[];
+  can_view_all_customers?: boolean;
+  can_edit_customer?: boolean;
+  can_delete_customer?: boolean;
+  can_export_data?: boolean;
+  can_switch_ownership?: boolean;
+  can_extend_ownership?: boolean;
+  can_manage_leads?: boolean;
+  can_approve_leaves?: boolean;
+  can_approve_advances?: boolean;
+  can_manage_personnel?: boolean;
+  report_view_scope?: 'all' | 'own_only' | 'specific_personnel';
+  visible_report_personnel_ids?: string[];
+}
+
 export interface Personnel {
   id: string;
   name: string;
-  role: 'admin' | 'sales_manager' | 'marketer' | 'operator';
+  username?: string;
+  role: 'admin' | 'sales_manager' | 'marketer' | 'office_staff' | 'remote_task' | 'operator' | 'finance' | 'custom' | string;
   email: string;
   phone: string;
+  phones?: Array<string | PersonnelContactNumber>;
+  permissions?: PersonnelPermissions;
   avatar?: string;
   status?: string;
   active?: boolean;
@@ -166,6 +193,7 @@ const initialPersonnel: Personnel[] = [
   {
     id: 'p-1',
     name: 'محمدرضا کیانی',
+    username: 'kiani',
     role: 'admin',
     email: 'kiani@company.ir',
     phone: '09121112233',
@@ -175,6 +203,7 @@ const initialPersonnel: Personnel[] = [
   {
     id: 'p-2',
     name: 'سارا احمدی',
+    username: 'sara_ahmadi',
     role: 'marketer',
     email: 'sara.ahmadi@company.ir',
     phone: '09123456789',
@@ -184,6 +213,7 @@ const initialPersonnel: Personnel[] = [
   {
     id: 'p-3',
     name: 'علیرضا حسینی',
+    username: 'hosseini',
     role: 'marketer',
     email: 'hosseini@company.ir',
     phone: '09351234567',
@@ -193,6 +223,7 @@ const initialPersonnel: Personnel[] = [
   {
     id: 'p-4',
     name: 'مهدی زمانی',
+    username: 'zamani',
     role: 'sales_manager',
     email: 'zamani@company.ir',
     phone: '09197654321',
@@ -540,6 +571,18 @@ const initialAdvanceRequests: SalaryAdvanceRequest[] = [
 let leaveRequestsData: LeaveRequest[] = [...initialLeaveRequests];
 let advanceRequestsData: SalaryAdvanceRequest[] = [...initialAdvanceRequests];
 
+export interface ProjectSettingsState {
+  id?: number;
+  ippanel_api?: string;
+  free_customers_claim_limit?: number;
+}
+
+let projectSettingsData: ProjectSettingsState = {
+  id: 1,
+  ippanel_api: '',
+  free_customers_claim_limit: 20,
+};
+
 // Concurrency mutex and recent creation cache to prevent double-registration
 const activeCustomerCreationLocks = new Set<string>();
 interface RecentCustomerCache {
@@ -603,6 +646,8 @@ function computeCustomerExpiration(c: any): any {
     negotiator_phones: Array.isArray(c.negotiator_phones) ? c.negotiator_phones : (typeof c.negotiator_phones === 'string' ? [c.negotiator_phones] : []),
     contacts: Array.isArray(c.contacts) ? c.contacts : [],
     is_expired: isExpired,
+    claimed_from_pool: Boolean(c.claimed_from_pool),
+    claimed_from_pool_at: c.claimed_from_pool_at || null,
   };
 }
 
@@ -831,6 +876,8 @@ function cleanCustomerPayloadForDirectus(payload: any, id: string, resolvedMarke
     assignment_duration_days: payload.assignment_duration_days ? parseInt(payload.assignment_duration_days, 10) : 7,
     status: payload.status || 'تماس برقرار نشده',
     is_expired: Boolean(payload.is_expired),
+    claimed_from_pool: payload.claimed_from_pool !== undefined ? Boolean(payload.claimed_from_pool) : false,
+    claimed_from_pool_at: payload.claimed_from_pool_at || null,
     date_created: payload.date_created || nowIso,
     date_updated: nowIso
   };
@@ -1129,11 +1176,13 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
       });
       const createdUser = createdUserRes.data;
 
-      // 3. Create or link Personnel entry with user_id
+      // 3. Create or link Personnel entry with user_id & username
+      const cleanUsername = String(req.body.username || '').trim() || cleanEmail.split('@')[0];
       const personnelId = crypto.randomUUID();
       const personnelPayload = {
         id: personnelId,
         name: fullName,
+        username: cleanUsername,
         email: cleanEmail,
         phone: cleanPhone,
         role: 'marketer',
@@ -1150,7 +1199,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
         if (existP && existP.data && existP.data.length > 0) {
           await directusFetch(`/items/personnel/${existP.data[0].id}`, {
             method: 'PATCH',
-            body: JSON.stringify({ user_id: createdUser.id, name: fullName, phone: cleanPhone })
+            body: JSON.stringify({ user_id: createdUser.id, name: fullName, username: cleanUsername, phone: cleanPhone })
           }).catch(() => {});
         }
       });
@@ -1172,6 +1221,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
         user: {
           id: createdUser.id,
           email: createdUser.email,
+          username: cleanUsername,
           first_name: createdUser.first_name,
           last_name: createdUser.last_name,
           name: fullName,
@@ -1182,6 +1232,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
         personnel: {
           id: personnelId,
           name: fullName,
+          username: cleanUsername,
           email: cleanEmail,
           phone: cleanPhone,
           role: 'marketer',
@@ -1196,10 +1247,12 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
   }
 
   // Local fallback
+  const cleanUsername = String(req.body.username || '').trim() || cleanEmail.split('@')[0];
   const mockUserId = crypto.randomUUID();
   const mockPersonnel: Personnel = {
     id: 'p-' + Date.now(),
     name: fullName,
+    username: cleanUsername,
     email: cleanEmail,
     phone: cleanPhone,
     role: 'marketer',
@@ -1213,6 +1266,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
     user: {
       id: mockUserId,
       email: cleanEmail,
+      username: cleanUsername,
       name: fullName,
       role_id: DIRECTUS_STAFF_ROLE_ID,
       is_admin: false,
@@ -1224,30 +1278,71 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
 });
 
 app.post('/api/auth/login', async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+  const { username, email, phone, identifier: rawId, password } = req.body;
+  const inputIdentifier = String(username || email || phone || rawId || '').trim();
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'ایمیل و کلمه عبور را وارد کنید.' });
+  if (!inputIdentifier || !password) {
+    return res.status(400).json({ error: 'نام کاربری، شماره موبایل یا ایمیل و کلمه عبور را وارد کنید.' });
   }
 
-  const cleanEmail = String(email).trim().toLowerCase();
+  const cleanIdent = inputIdentifier;
+  const cleanIdentLower = cleanIdent.toLowerCase();
+  const normalizedPhone = normalizeContactValue(cleanIdent, 'mobile');
 
   if (directusUrl && directusAdminToken) {
     try {
-      // 1. Authenticate with Directus
+      // 1. Resolve target email by checking personnel username/email/phone
+      let targetEmail = cleanIdentLower;
+      let targetPersonnelFromIdent: any = null;
+
+      try {
+        let orFilters = `filter[_or][0][username][_eq]=${encodeURIComponent(cleanIdent)}&filter[_or][1][email][_eq]=${encodeURIComponent(cleanIdentLower)}&filter[_or][2][phone][_eq]=${encodeURIComponent(cleanIdent)}`;
+        if (normalizedPhone) {
+          orFilters += `&filter[_or][3][phone][_eq]=${encodeURIComponent(normalizedPhone)}`;
+          if (normalizedPhone.startsWith('0')) {
+            orFilters += `&filter[_or][4][phone][_eq]=${encodeURIComponent(normalizedPhone.substring(1))}`;
+          }
+        }
+
+        const lookupRes = await directusFetch(`/items/personnel?${orFilters}&limit=1`);
+        if (lookupRes && Array.isArray(lookupRes.data) && lookupRes.data.length > 0) {
+          targetPersonnelFromIdent = lookupRes.data[0];
+          if (targetPersonnelFromIdent.email) {
+            targetEmail = targetPersonnelFromIdent.email.toLowerCase().trim();
+          }
+        }
+      } catch (lookupErr) {
+        console.warn('Personnel identifier lookup warning:', lookupErr);
+      }
+
+      // 2. Authenticate with Directus
       let loginToken = '';
       try {
         const loginRes = await directusFetch('/auth/login', {
           method: 'POST',
-          body: JSON.stringify({ email: cleanEmail, password: String(password) })
+          body: JSON.stringify({ email: targetEmail, password: String(password) })
         });
         loginToken = loginRes.data?.access_token || '';
       } catch (authErr: any) {
-        return res.status(401).json({ error: 'ایمیل یا کلمه عبور اشتباه است.' });
+        // If failed and targetEmail was modified, retry with raw input if contains @
+        if (targetEmail !== cleanIdentLower && cleanIdentLower.includes('@')) {
+          try {
+            const retryRes = await directusFetch('/auth/login', {
+              method: 'POST',
+              body: JSON.stringify({ email: cleanIdentLower, password: String(password) })
+            });
+            loginToken = retryRes.data?.access_token || '';
+            targetEmail = cleanIdentLower;
+          } catch {
+            return res.status(401).json({ error: 'اطلاعات کاربری یا کلمه عبور اشتباه است.' });
+          }
+        } else {
+          return res.status(401).json({ error: 'اطلاعات کاربری یا کلمه عبور اشتباه است.' });
+        }
       }
 
-      // 2. Fetch full user info including role
-      const userRes = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(cleanEmail)}&fields=*,role.*`);
+      // 3. Fetch full user info including role
+      const userRes = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(targetEmail)}&fields=*,role.*`);
       if (!userRes || !Array.isArray(userRes.data) || userRes.data.length === 0) {
         return res.status(404).json({ error: 'اطلاعات کاربری یافت نشد.' });
       }
@@ -1255,45 +1350,46 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
       const user = userRes.data[0];
       const roleId = typeof user.role === 'object' ? user.role?.id : user.role;
       const isAdmin = roleId === DIRECTUS_ADMIN_ROLE_ID || user.role?.name?.toLowerCase() === 'administrator';
-
       const fullName = (`${user.first_name || ''} ${user.last_name || ''}`).trim() || user.email;
 
-      // 3. Find or link personnel record
-      let personnelItem: any = null;
-      const pRes = await directusFetch(`/items/personnel?filter[_or][0][user_id][_eq]=${user.id}&filter[_or][1][email][_eq]=${encodeURIComponent(cleanEmail)}`).catch(() => null);
-      if (pRes && Array.isArray(pRes.data) && pRes.data.length > 0) {
-        personnelItem = pRes.data[0];
-        // Ensure user_id is saved
-        if (!personnelItem.user_id) {
-          await directusFetch(`/items/personnel/${personnelItem.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ user_id: user.id })
-          }).catch(() => {});
-        }
-      } else {
-        // Create personnel record if missing
-        const newPId = crypto.randomUUID();
-        const createdP = await directusFetch('/items/personnel', {
-          method: 'POST',
-          body: JSON.stringify({
+      // 4. Find or link personnel record
+      let personnelItem: any = targetPersonnelFromIdent;
+      if (!personnelItem) {
+        const pRes = await directusFetch(`/items/personnel?filter[_or][0][user_id][_eq]=${user.id}&filter[_or][1][email][_eq]=${encodeURIComponent(targetEmail)}`).catch(() => null);
+        if (pRes && Array.isArray(pRes.data) && pRes.data.length > 0) {
+          personnelItem = pRes.data[0];
+          if (!personnelItem.user_id) {
+            await directusFetch(`/items/personnel/${personnelItem.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ user_id: user.id })
+            }).catch(() => {});
+          }
+        } else {
+          const newPId = crypto.randomUUID();
+          const createdP = await directusFetch('/items/personnel', {
+            method: 'POST',
+            body: JSON.stringify({
+              id: newPId,
+              name: fullName,
+              username: cleanIdent.includes('@') ? cleanIdent.split('@')[0] : (normalizedPhone ? `user_${normalizedPhone.slice(-4)}` : cleanIdent),
+              email: targetEmail,
+              phone: normalizedPhone || '',
+              role: isAdmin ? 'admin' : 'marketer',
+              status: 'active',
+              user_id: user.id
+            })
+          }).catch(() => null);
+          personnelItem = createdP?.data || {
             id: newPId,
             name: fullName,
-            email: cleanEmail,
-            phone: '',
+            username: cleanIdent.includes('@') ? cleanIdent.split('@')[0] : (normalizedPhone ? `user_${normalizedPhone.slice(-4)}` : cleanIdent),
+            email: targetEmail,
+            phone: normalizedPhone || '',
             role: isAdmin ? 'admin' : 'marketer',
             status: 'active',
             user_id: user.id
-          })
-        }).catch(() => null);
-        personnelItem = createdP?.data || {
-          id: newPId,
-          name: fullName,
-          email: cleanEmail,
-          phone: '',
-          role: isAdmin ? 'admin' : 'marketer',
-          status: 'active',
-          user_id: user.id
-        };
+          };
+        }
       }
 
       return res.json({
@@ -1302,6 +1398,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
         user: {
           id: user.id,
           email: user.email,
+          username: personnelItem?.username,
           first_name: user.first_name,
           last_name: user.last_name,
           name: fullName,
@@ -1318,7 +1415,19 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   }
 
   // Fallback if Directus is offline
-  const found = initialPersonnel.find(p => p.email.toLowerCase() === cleanEmail);
+  const checkMatches = (p: Personnel) => {
+    if (p.username && p.username.toLowerCase() === cleanIdentLower) return true;
+    if (p.email && p.email.toLowerCase() === cleanIdentLower) return true;
+    if (p.phone) {
+      if (p.phone === cleanIdent) return true;
+      if (normalizedPhone && normalizeContactValue(p.phone, 'mobile') === normalizedPhone) return true;
+      if (cleanIdent.replace(/\D/g, '') && p.phone.replace(/\D/g, '') === cleanIdent.replace(/\D/g, '')) return true;
+    }
+    return false;
+  };
+
+  const found = personnelData.find(checkMatches) || initialPersonnel.find(checkMatches);
+
   if (found) {
     return res.json({
       success: true,
@@ -1326,6 +1435,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
       user: {
         id: found.id,
         email: found.email,
+        username: found.username,
         name: found.name,
         role_id: found.role === 'admin' ? DIRECTUS_ADMIN_ROLE_ID : DIRECTUS_STAFF_ROLE_ID,
         is_admin: found.role === 'admin',
@@ -1537,7 +1647,7 @@ app.get('/api/personnel', async (req: Request, res: Response) => {
 
 // Create new Colleague / Personnel
 app.post('/api/personnel', async (req: Request, res: Response) => {
-  const { name, email, phone, role, password, status } = req.body;
+  const { name, username, email, phone, phones, role, permissions, password, status } = req.body;
   const { isAdmin } = getRequestUser(req);
 
   if (!isAdmin) {
@@ -1550,6 +1660,7 @@ app.post('/api/personnel', async (req: Request, res: Response) => {
 
   const cleanEmail = String(email).trim().toLowerCase();
   const cleanName = String(name).trim();
+  const cleanUsername = String(username || '').trim() || cleanEmail.split('@')[0];
   const cleanPhone = String(phone || '').trim();
   const colleagueRole = role || 'marketer';
   const newPId = crypto.randomUUID();
@@ -1577,15 +1688,19 @@ app.post('/api/personnel', async (req: Request, res: Response) => {
         }
       }
 
-      const newPersonnelDoc = {
+      const newPersonnelDoc: any = {
         id: newPId,
         name: cleanName,
+        username: cleanUsername,
         email: cleanEmail,
         phone: cleanPhone,
         role: colleagueRole,
         status: status || 'active',
         user_id: directusUserId
       };
+
+      if (phones) newPersonnelDoc.phones = phones;
+      if (permissions) newPersonnelDoc.permissions = permissions;
 
       const created = await directusFetch('/items/personnel', {
         method: 'POST',
@@ -1603,8 +1718,11 @@ app.post('/api/personnel', async (req: Request, res: Response) => {
   const localItem: Personnel = {
     id: newPId,
     name: cleanName,
+    username: cleanUsername,
     email: cleanEmail,
     phone: cleanPhone,
+    phones: phones || undefined,
+    permissions: permissions || undefined,
     role: colleagueRole,
     status: status || 'active',
     active: true
@@ -1616,7 +1734,7 @@ app.post('/api/personnel', async (req: Request, res: Response) => {
 // Update Colleague / Personnel
 app.patch('/api/personnel/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, email, phone, role, status } = req.body;
+  const { name, username, email, phone, phones, role, permissions, status } = req.body;
   const { isAdmin } = getRequestUser(req);
 
   if (!isAdmin) {
@@ -1625,9 +1743,12 @@ app.patch('/api/personnel/:id', async (req: Request, res: Response) => {
 
   const patchPayload: Record<string, any> = {};
   if (name) patchPayload.name = String(name).trim();
+  if (username !== undefined) patchPayload.username = String(username).trim();
   if (email) patchPayload.email = String(email).trim().toLowerCase();
   if (phone !== undefined) patchPayload.phone = String(phone).trim();
+  if (phones !== undefined) patchPayload.phones = phones;
   if (role) patchPayload.role = role;
+  if (permissions !== undefined) patchPayload.permissions = permissions;
   if (status) patchPayload.status = status;
 
   if (directusUrl && directusAdminToken) {
@@ -2658,6 +2779,292 @@ app.post('/api/customers/:id/reassign', async (req: Request, res: Response) => {
   };
 
   res.json(customersData[index]);
+});
+
+// -------------------------------------------------------------
+// PROJECT SETTINGS & FREE POOL QUOTA (تنظیمات سامانه و حوضچه آزاد)
+// -------------------------------------------------------------
+
+// Helper to compute a marketer's active quota stats
+function computePersonnelFreeQuota(targetPersonnelId: string, customLimit?: number) {
+  const effectiveLimit = customLimit || projectSettingsData.free_customers_claim_limit || 20;
+
+  const userCustomers = customersData.filter((c) => {
+    return (
+      c.assigned_marketer_id === targetPersonnelId ||
+      (c.assigned_marketer_name && targetPersonnelId && c.assigned_marketer_name === targetPersonnelId)
+    );
+  });
+
+  const activeUnclosed = userCustomers.filter(
+    (c) => c.status !== 'قرارداد' && c.status !== 'لیست سیاه'
+  );
+
+  const successfulContracts = userCustomers.filter(
+    (c) => c.status === 'قرارداد'
+  );
+
+  const activeUnclosedCount = activeUnclosed.length;
+  const successfulCount = successfulContracts.length;
+  // If marketer has at least 1 successful contract, they unlock continued claiming!
+  // If they have 0 successful contracts, they can claim up to effectiveLimit (default 20).
+  const canClaim = successfulCount > 0 || activeUnclosedCount < effectiveLimit;
+  const remainingQuota = successfulCount > 0 ? 999 : Math.max(0, effectiveLimit - activeUnclosedCount);
+
+  return {
+    claimLimit: effectiveLimit,
+    activeUnclosedCount,
+    successfulCount,
+    canClaim,
+    remainingQuota,
+    requiresSuccessToUnlock: activeUnclosedCount >= effectiveLimit && successfulCount === 0,
+  };
+}
+
+// Get Project Settings (Directus singleton with fallback)
+app.get('/api/project-settings', async (req: Request, res: Response) => {
+  if (directusUrl && directusAdminToken) {
+    try {
+      const resp = await directusFetch('/items/project_settings').catch(() => null);
+      if (resp?.data) {
+        const item = Array.isArray(resp.data) ? resp.data[0] : resp.data;
+        if (item) {
+          projectSettingsData = { ...projectSettingsData, ...item };
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  res.json(projectSettingsData);
+});
+
+// Update Project Settings (Admin only)
+app.patch('/api/project-settings', async (req: Request, res: Response) => {
+  const { isAdmin, userRole } = getRequestUser(req);
+  if (!isAdmin && userRole !== 'admin') {
+    return res.status(403).json({
+      error: 'FORBIDDEN',
+      message: 'فقط مدیر سیستم مجاز به تغییر تنظیمات سامانه است.',
+    });
+  }
+
+  const patch = req.body;
+  projectSettingsData = { ...projectSettingsData, ...patch };
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      // First try standard singleton patch
+      const patched = await directusFetch('/items/project_settings', {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      }).catch(async () => {
+        return await directusFetch(`/items/project_settings/${projectSettingsData.id || 1}`, {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
+        });
+      });
+      if (patched?.data) {
+        projectSettingsData = { ...projectSettingsData, ...patched.data };
+      }
+    } catch (err: any) {
+      console.warn('Directus project_settings sync warning:', err.message);
+    }
+  }
+
+  res.json(projectSettingsData);
+});
+
+// Get Quota Status for Free Customers Pool
+app.get('/api/customers/free-quota', async (req: Request, res: Response) => {
+  const { personnelId, userId } = getRequestUser(req);
+  const targetId = (req.query.personnel_id as string) || personnelId || userId;
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+  if (!targetId) {
+    return res.json({
+      claimLimit: limit,
+      activeUnclosedCount: 0,
+      successfulCount: 0,
+      canClaim: true,
+      remainingQuota: limit,
+      requiresSuccessToUnlock: false,
+    });
+  }
+
+  const quota = computePersonnelFreeQuota(targetId, limit);
+  res.json(quota);
+});
+
+// Claim Customer from Free Customers Pool
+app.post('/api/customers/:id/claim-free', async (req: Request, res: Response) => {
+  const { userId, personnelId, userName, userRole } = getRequestUser(req);
+  const targetPersonnelId = req.body.personnel_id || personnelId || userId;
+  const targetPersonnelName = req.body.personnel_name || userName;
+  const days = req.body.duration_days ? parseInt(req.body.duration_days, 10) : 10;
+  const limit = req.body.claim_limit ? parseInt(req.body.claim_limit, 10) : 20;
+
+  if (!targetPersonnelId) {
+    return res.status(401).json({
+      error: 'UNAUTHORIZED',
+      message: 'شناسه کارشناس متقاضی یافت نشد. لطفاً مجدداً وارد سامانه شوید.',
+    });
+  }
+
+  // 1. Quota check
+  const quota = computePersonnelFreeQuota(targetPersonnelId, limit);
+  if (!quota.canClaim) {
+    return res.status(403).json({
+      error: 'QUOTA_LIMIT_REACHED',
+      message: `شما به سقف مجاز (${limit} پرونده فعال) رسیده‌اید. برای اختصاص پرونده جدید از بخش مشتریان آزاد، باید حداقل یک قرارداد موفق به ثبت برسانید.`,
+      quota,
+    });
+  }
+
+  // 2. Fetch customer and verify it is indeed free
+  let targetCustomer: any = null;
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const custRes = await directusFetch(`/items/customers/${req.params.id}`);
+      if (custRes?.data) {
+        targetCustomer = computeCustomerExpiration(custRes.data);
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  if (!targetCustomer) {
+    const local = customersData.find((c) => c.id === req.params.id);
+    if (local) {
+      targetCustomer = computeCustomerExpiration(local);
+    }
+  }
+
+  if (!targetCustomer) {
+    return res.status(404).json({
+      error: 'NOT_FOUND',
+      message: 'پرونده مشتری مورد نظر در سامانه یافت نشد.',
+    });
+  }
+
+  if (targetCustomer.status === 'قرارداد') {
+    return res.status(400).json({
+      error: 'ALREADY_CLOSED',
+      message: 'این پرونده قبلاً به قرارداد موفق منتهی شده و امکان برداشت مجدد ندارد.',
+    });
+  }
+
+  if (targetCustomer.status === 'لیست سیاه') {
+    return res.status(400).json({
+      error: 'BLACKLISTED',
+      message: 'این پرونده در لیست سیاه قرار دارد و قابل واگذاری نیست.',
+    });
+  }
+
+  const isFree =
+    targetCustomer.is_expired ||
+    !targetCustomer.assigned_marketer_id ||
+    targetCustomer.assigned_marketer_name === 'تخصیص نیافته' ||
+    (targetCustomer.assignment_deadline && new Date().getTime() > new Date(targetCustomer.assignment_deadline).getTime());
+
+  if (!isFree) {
+    return res.status(400).json({
+      error: 'NOT_FREE',
+      message: `این پرونده در حال حاضر تحت مهلت فعال پیگیری توسط «${targetCustomer.assigned_marketer_name}» قرار دارد و آزاد نیست.`,
+    });
+  }
+
+  // 3. Resolve target personnel name
+  const resolved = await resolvePersonnelId(targetPersonnelId, targetPersonnelName);
+  const nowTime = new Date();
+  const deadline = addDays(nowTime, days);
+
+  const patchData = {
+    assigned_marketer_id: resolved.personnelId,
+    assigned_marketer_name: (resolved.personnelName || targetPersonnelName || 'کارشناس فروش').trim(),
+    assignment_date: nowTime.toISOString(),
+    assignment_deadline: deadline,
+    assignment_duration_days: days,
+    is_expired: false,
+    claimed_from_pool: true,
+    claimed_from_pool_at: nowTime.toISOString(),
+    status: 'تماس برقرار نشده',
+    date_updated: nowTime.toISOString(),
+  };
+
+  // 4. Update in Directus or Local store
+  if (directusUrl && directusAdminToken) {
+    try {
+      const patched = await directusFetch(`/items/customers/${req.params.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patchData),
+      });
+
+      const reportHistory: CustomerReport = {
+        id: crypto.randomUUID(),
+        customer_id: req.params.id,
+        negotiator_name: patchData.assigned_marketer_name,
+        negotiation_phone: targetCustomer.manager_phones?.[0] || targetCustomer.mobile_numbers?.[0] || '-',
+        report_text: `پرونده توسط «${patchData.assigned_marketer_name}» از حوضچه مشتریان آزاد انتخاب و با مهلت پیگیری ${days} روزه به ایشان اختصاص یافت.`,
+        negotiation_score: 5,
+        next_followup_date: addDays(nowTime, 2),
+        negotiation_status: 'تماس برقرار نشده',
+        date_created: nowTime.toISOString(),
+      };
+
+      await directusFetch('/items/customer_reports', {
+        method: 'POST',
+        body: JSON.stringify(reportHistory),
+      }).catch(() => {});
+
+      // Sync local in-memory
+      const idx = customersData.findIndex((c) => c.id === req.params.id);
+      if (idx !== -1) {
+        customersData[idx] = { ...customersData[idx], ...patchData };
+      }
+      reportsData.unshift(reportHistory);
+
+      return res.json({
+        success: true,
+        message: `پرونده با موفقیت به شما اختصاص یافت و مهلت ${days} روزه برای شما ثبت شد.`,
+        customer: patched.data,
+      });
+    } catch (err: any) {
+      console.error('Directus claim error:', err.message);
+    }
+  }
+
+  // Local fallback
+  const idx = customersData.findIndex((c) => c.id === req.params.id);
+  if (idx !== -1) {
+    customersData[idx] = {
+      ...customersData[idx],
+      ...patchData,
+    };
+  }
+
+  const localReport: CustomerReport = {
+    id: crypto.randomUUID(),
+    customer_id: req.params.id,
+    negotiator_name: patchData.assigned_marketer_name,
+    negotiation_phone: targetCustomer.manager_phones?.[0] || targetCustomer.mobile_numbers?.[0] || '-',
+    report_text: `پرونده توسط «${patchData.assigned_marketer_name}» از حوضچه مشتریان آزاد انتخاب و با مهلت پیگیری ${days} روزه به ایشان اختصاص یافت.`,
+    negotiation_score: 5,
+    next_followup_date: addDays(nowTime, 2),
+    negotiation_status: 'تماس برقرار نشده',
+    date_created: nowTime.toISOString(),
+  };
+  reportsData.unshift(localReport);
+
+  const updatedCust = customersData[idx] || { ...targetCustomer, ...patchData };
+
+  res.json({
+    success: true,
+    message: `پرونده با موفقیت به شما اختصاص یافت و مهلت ${days} روزه برای شما ثبت شد.`,
+    customer: updatedCust,
+  });
 });
 
 // Merge Customers API (Admin only)
@@ -3735,11 +4142,12 @@ app.delete('/api/advance-requests/:id', async (req: Request, res: Response) => {
 // PROFILE & PASSWORD UPDATE API (پروفایل و تغییر رمز)
 // -------------------------------------------------------------
 app.post('/api/auth/update-profile', async (req: Request, res: Response) => {
-  const { name, phone, avatar, bank_card_number, iban, national_id } = req.body;
+  const { name, username, phone, avatar, bank_card_number, iban, national_id } = req.body;
   const { userId, personnelId, userEmail, userName } = getRequestUser(req);
 
   const personnelPatch: Record<string, any> = {};
   if (name) personnelPatch.name = String(name).trim();
+  if (username !== undefined) personnelPatch.username = String(username).trim();
   if (phone !== undefined) personnelPatch.phone = String(phone).trim();
   if (avatar !== undefined) personnelPatch.avatar = avatar;
   if (bank_card_number !== undefined) personnelPatch.bank_card_number = String(bank_card_number).trim();

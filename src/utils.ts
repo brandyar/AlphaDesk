@@ -326,6 +326,11 @@ export function getStatusTheme(status: NegotiationStatus | string): {
   }
 }
 
+export function getStatusBadgeClass(status?: string | null): string {
+  const theme = getStatusTheme(status || '');
+  return `${theme.color} ${theme.bg} border`;
+}
+
 export function formatToman(amount?: number | string | null): string {
   if (amount === undefined || amount === null || amount === '') return '';
   const num = typeof amount === 'string' ? parseFloat(amount.replace(/,/g, '')) : amount;

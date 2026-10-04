@@ -111,6 +111,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
 
   // Profile Form State
   const [profileName, setProfileName] = useState(currentPersonnel?.name || currentUser?.name || '');
+  const [profileUsername, setProfileUsername] = useState(currentPersonnel?.username || currentUser?.username || '');
   const [profilePhone, setProfilePhone] = useState(currentPersonnel?.phone || '');
   const [profileAvatar, setProfileAvatar] = useState(currentPersonnel?.avatar || '');
   const [profileBankCard, setProfileBankCard] = useState(currentPersonnel?.bank_card_number || '');
@@ -225,6 +226,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
     try {
       await onUpdateProfile({
         name: profileName,
+        username: profileUsername.trim() || undefined,
         phone: profilePhone,
         avatar: profileAvatar,
         bank_card_number: profileBankCard,
@@ -640,6 +642,20 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
                     onChange={(e) => setProfileName(e.target.value)}
                     required
                     className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                    نام کاربری ورود (شناسه یکتا)
+                  </label>
+                  <input
+                    type="text"
+                    dir="ltr"
+                    value={profileUsername}
+                    onChange={(e) => setProfileUsername(e.target.value)}
+                    placeholder="مثال: sara_ahmadi"
+                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
                   />
                 </div>
 

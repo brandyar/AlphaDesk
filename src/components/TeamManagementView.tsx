@@ -1,6 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
+  Users,
   Users2,
+  Unlock,
+  User,
   UserPlus,
   ArrowLeftRight,
   Clock,
@@ -11,6 +14,7 @@ import {
   Search,
   Filter,
   Shield,
+  ShieldCheck,
   Phone,
   Mail,
   UserCheck,
@@ -26,6 +30,21 @@ import {
   RefreshCw,
   FolderOpen,
   Award,
+  LayoutDashboard,
+  MessageSquareText,
+  BarChart3,
+  PhoneCall,
+  ClipboardCheck,
+  Eye,
+  Copy,
+  Briefcase,
+  Laptop,
+  Headphones,
+  DollarSign,
+  ChevronDown,
+  Layers,
+  KeyRound,
+  FileCheck,
 } from 'lucide-react';
 import {
   Personnel,
@@ -34,6 +53,9 @@ import {
   TeamSubTab,
   CreateColleaguePayload,
   RequestStatus,
+  PersonnelRole,
+  PersonnelPermissions,
+  PersonnelContactNumber,
 } from '../types';
 import {
   formatPersianDate,
@@ -42,6 +64,144 @@ import {
   getStatusTheme,
   toPersianDigits,
 } from '../utils';
+
+export const COMMON_PHONE_LABELS = [
+  'موبایل اصلی',
+  'شماره دوم',
+  'تلفن ثابت / داخلی',
+  'تلگرام',
+  'واتساپ',
+  'شماره اضطراری',
+];
+
+export const PERSONNEL_ROLE_CONFIG: Record<
+  PersonnelRole,
+  {
+    label: string;
+    description: string;
+    badgeClass: string;
+    icon: React.ComponentType<{ className?: string }>;
+    defaultMenus: string[];
+    defaultReportScope: 'all' | 'own_only' | 'specific_personnel';
+  }
+> = {
+  admin: {
+    label: 'مدیر ارشد / سیستم',
+    description: 'دسترسی کامل مدیریتی به تمامی منوها، پرونده‌ها و تنظیمات سامانه',
+    badgeClass: 'bg-[#1DB954]/15 text-[#1DB954] border-[#1DB954]/30',
+    icon: ShieldCheck,
+    defaultMenus: [
+      'dashboard',
+      'customers',
+      'free_customers',
+      'reports',
+      'analytics',
+      'cold_leads',
+      'admin_reports',
+      'team',
+      'personal_portal',
+    ],
+    defaultReportScope: 'all',
+  },
+  sales_manager: {
+    label: 'مدیر فروش و بازاریابی',
+    description: 'مدیریت تیم، تمدید و سوئیچ مالکیت‌ها، نظارت بر پایپ‌لاین و گزارش‌ها',
+    badgeClass: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+    icon: Briefcase,
+    defaultMenus: [
+      'dashboard',
+      'customers',
+      'free_customers',
+      'reports',
+      'analytics',
+      'cold_leads',
+      'admin_reports',
+      'team',
+      'personal_portal',
+    ],
+    defaultReportScope: 'all',
+  },
+  marketer: {
+    label: 'کارشناس فروش و مذاکره',
+    description: 'پیگیری پرونده‌ها، ثبت مذاکرات، فاکتورها، بانک شماره‌ها و گزارش کار روزانه',
+    badgeClass: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+    icon: PhoneCall,
+    defaultMenus: [
+      'dashboard',
+      'customers',
+      'free_customers',
+      'reports',
+      'cold_leads',
+      'admin_reports',
+      'personal_portal',
+    ],
+    defaultReportScope: 'own_only',
+  },
+  office_staff: {
+    label: 'همکار اداری و دفتری',
+    description: 'انجام وظایف اداری و سازمانی، ثبت گزارش عملکرد روزانه و امور پرسنلی',
+    badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+    icon: ClipboardCheck,
+    defaultMenus: ['dashboard', 'admin_reports', 'personal_portal'],
+    defaultReportScope: 'own_only',
+  },
+  remote_task: {
+    label: 'همکار دورکاری و تسک‌محور',
+    description: 'فعالیت پروژه‌ای و تسک‌محور دورکاری با دسترسی به ثبت کار روزانه و امور پرسنلی',
+    badgeClass: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
+    icon: Laptop,
+    defaultMenus: ['admin_reports', 'personal_portal'],
+    defaultReportScope: 'own_only',
+  },
+  operator: {
+    label: 'اپراتور پشتیبانی و ورود اطلاعات',
+    description: 'پاسخگویی اولیه و ثبت شماره‌های ورودی در بانک لید سرد',
+    badgeClass: 'bg-teal-500/15 text-teal-400 border-teal-500/30',
+    icon: Headphones,
+    defaultMenus: ['dashboard', 'cold_leads', 'admin_reports', 'personal_portal'],
+    defaultReportScope: 'own_only',
+  },
+  finance: {
+    label: 'امور مالی و حسابداری',
+    description: 'بررسی مبالغ قراردادها، فاکتورها و کارتابل درخواست‌های مساعده',
+    badgeClass: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+    icon: DollarSign,
+    defaultMenus: ['dashboard', 'reports', 'analytics', 'personal_portal'],
+    defaultReportScope: 'own_only',
+  },
+  custom: {
+    label: 'نقش سفارشی (تخصیص دستی دسترسی‌ها)',
+    description: 'تعیین دلخواه و تیک زدن موردی منوها، اختیارات کاری و گزارش‌ها',
+    badgeClass: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
+    icon: Layers,
+    defaultMenus: ['dashboard', 'admin_reports', 'personal_portal'],
+    defaultReportScope: 'own_only',
+  },
+};
+
+export const SYSTEM_MENUS = [
+  { id: 'dashboard', label: 'داشبورد و آمار', icon: LayoutDashboard, desc: 'آمار کلان و دسترسی‌های سریع' },
+  { id: 'customers', label: 'مدیریت مشتریان', icon: Users, desc: 'مشاهده پرونده‌ها و تایمرهای انقضا' },
+  { id: 'free_customers', label: 'مشتریان آزاد', icon: Unlock, desc: 'حوضچه مشتریان منقضی‌شده و بدون مالک با امکان اختصاص' },
+  { id: 'reports', label: 'گزارش‌های مذاکره', icon: MessageSquareText, desc: 'تاریخچه تماس‌ها و فاکتورها' },
+  { id: 'analytics', label: 'گزارشات نموداری', icon: BarChart3, desc: 'نمودارهای روزانه و قیف فروش' },
+  { id: 'cold_leads', label: 'بانک شماره‌های اولیه', icon: PhoneCall, desc: 'لیدهای سرد و تماس‌های اولیه' },
+  { id: 'admin_reports', label: 'گزارش عملکرد پرسنل', icon: ClipboardCheck, desc: 'فرم ثبت کار روزانه و ساعت کاری' },
+  { id: 'team', label: 'مدیریت همکاران و تیم', icon: Users2, desc: 'ثبت همکار، تمدید و سوئیچ مالکیت' },
+  { id: 'personal_portal', label: 'پنل شخصی و پرسنلی', icon: User, desc: 'پروفایل، مرخصی و مساعده' },
+];
+
+export const SYSTEM_ACTIONS = [
+  { key: 'can_view_all_customers', label: 'مشاهده مشتریان همه همکاران (نه فقط مال خودش)' },
+  { key: 'can_edit_customer', label: 'ویرایش مشخصات پرونده‌های مشتریان' },
+  { key: 'can_delete_customer', label: 'حذف پرونده‌های مشتریان' },
+  { key: 'can_export_data', label: 'کپی اطلاعات و خروجی داده‌ها' },
+  { key: 'can_extend_ownership', label: 'تمدید مهلت مالکیت پرونده‌ها (Deadline)' },
+  { key: 'can_switch_ownership', label: 'سوئیچ و واگذاری پرونده به بازاریاب دیگر' },
+  { key: 'can_manage_leads', label: 'تخصیص شماره‌های لید سرد به دیگران' },
+  { key: 'can_approve_leaves', label: 'تایید یا رد درخواست‌های مرخصی همکاران' },
+  { key: 'can_approve_advances', label: 'بررسی و تایید درخواست‌های مساعده مالی' },
+];
 
 interface TeamManagementViewProps {
   initialSubTab?: TeamSubTab;
@@ -89,11 +249,98 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   // TAB 1: New Colleague Form State
   // -------------------------------------------------------------
   const [colleagueName, setColleagueName] = useState('');
+  const [colleagueUsername, setColleagueUsername] = useState('');
   const [colleagueEmail, setColleagueEmail] = useState('');
-  const [colleaguePhone, setColleaguePhone] = useState('');
-  const [colleagueRole, setColleagueRole] = useState<'marketer' | 'sales_manager' | 'admin'>('marketer');
+  const [colleagueRole, setColleagueRole] = useState<PersonnelRole>('marketer');
   const [colleaguePassword, setColleaguePassword] = useState('');
   const [isSubmittingPersonnel, setIsSubmittingPersonnel] = useState(false);
+
+  // Multiple contact numbers state
+  const [colleaguePhones, setColleaguePhones] = useState<Array<{ id: string; label: string; number: string }>>([
+    { id: 'phone-1', label: 'موبایل اصلی', number: '' },
+  ]);
+
+  // Granular permissions state
+  const [allowedMenus, setAllowedMenus] = useState<string[]>(
+    PERSONNEL_ROLE_CONFIG['marketer'].defaultMenus
+  );
+  const [actionPermissions, setActionPermissions] = useState<Record<string, boolean>>({
+    can_view_all_customers: false,
+    can_edit_customer: true,
+    can_delete_customer: false,
+    can_export_data: false,
+    can_extend_ownership: false,
+    can_switch_ownership: false,
+    can_manage_leads: false,
+    can_approve_leaves: false,
+    can_approve_advances: false,
+  });
+  const [reportScope, setReportScope] = useState<'all' | 'own_only' | 'specific_personnel'>('own_only');
+  const [visibleReportPersonnelIds, setVisibleReportPersonnelIds] = useState<string[]>([]);
+
+  const handleRoleChange = (newRole: PersonnelRole) => {
+    setColleagueRole(newRole);
+    const config = PERSONNEL_ROLE_CONFIG[newRole];
+    if (config) {
+      setAllowedMenus([...config.defaultMenus]);
+      setReportScope(config.defaultReportScope);
+      if (newRole === 'admin') {
+        setActionPermissions({
+          can_view_all_customers: true,
+          can_edit_customer: true,
+          can_delete_customer: true,
+          can_export_data: true,
+          can_extend_ownership: true,
+          can_switch_ownership: true,
+          can_manage_leads: true,
+          can_approve_leaves: true,
+          can_approve_advances: true,
+        });
+      } else if (newRole === 'sales_manager') {
+        setActionPermissions({
+          can_view_all_customers: true,
+          can_edit_customer: true,
+          can_delete_customer: false,
+          can_export_data: true,
+          can_extend_ownership: true,
+          can_switch_ownership: true,
+          can_manage_leads: true,
+          can_approve_leaves: true,
+          can_approve_advances: false,
+        });
+      } else {
+        setActionPermissions({
+          can_view_all_customers: false,
+          can_edit_customer: true,
+          can_delete_customer: false,
+          can_export_data: false,
+          can_extend_ownership: false,
+          can_switch_ownership: false,
+          can_manage_leads: false,
+          can_approve_leaves: false,
+          can_approve_advances: false,
+        });
+      }
+    }
+  };
+
+  const handleAddColleaguePhone = () => {
+    setColleaguePhones((prev) => [
+      ...prev,
+      { id: 'phone-' + Date.now(), label: 'شماره دوم', number: '' },
+    ]);
+  };
+
+  const handleRemoveColleaguePhone = (id: string) => {
+    if (colleaguePhones.length <= 1) return;
+    setColleaguePhones((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const handleChangeColleaguePhone = (id: string, field: 'label' | 'number', val: string) => {
+    setColleaguePhones((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: val } : item))
+    );
+  };
 
   const handleRegisterColleague = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,18 +350,38 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
     }
     setIsSubmittingPersonnel(true);
     try {
+      const primaryPhone = colleaguePhones[0]?.number?.trim() || '';
+      const cleanPhones = colleaguePhones
+        .filter((p) => p.number.trim().length > 0)
+        .map((p) => ({
+          id: p.id,
+          label: p.label.trim() || 'شماره تماس',
+          number: p.number.trim(),
+        }));
+
+      const permissions: PersonnelPermissions = {
+        allowed_menus: allowedMenus,
+        ...actionPermissions,
+        report_view_scope: reportScope,
+        visible_report_personnel_ids: reportScope === 'specific_personnel' ? visibleReportPersonnelIds : [],
+      };
+
       await onCreatePersonnel({
         name: colleagueName.trim(),
+        username: colleagueUsername.trim() || undefined,
         email: colleagueEmail.trim(),
-        phone: colleaguePhone.trim(),
+        phone: primaryPhone,
+        phones: cleanPhones,
         role: colleagueRole,
+        permissions,
         password: colleaguePassword.trim() || undefined,
         status: 'active',
       });
       showToast(`همکار جدید «${colleagueName}» با موفقیت افزوده شد.`, 'success');
       setColleagueName('');
+      setColleagueUsername('');
       setColleagueEmail('');
-      setColleaguePhone('');
+      setColleaguePhones([{ id: 'phone-1', label: 'موبایل اصلی', number: '' }]);
       setColleaguePassword('');
       setActiveSubTab('colleagues_list');
     } catch (err: any) {
@@ -131,14 +398,71 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   const [editingColleague, setEditingColleague] = useState<Personnel | null>(null);
   const [isUpdatingColleague, setIsUpdatingColleague] = useState(false);
 
+  // Edit Colleague multi-phones and permissions state
+  const [editingPhones, setEditingPhones] = useState<Array<{ id: string; label: string; number: string }>>([]);
+  const [editingRole, setEditingRole] = useState<PersonnelRole>('marketer');
+  const [editingAllowedMenus, setEditingAllowedMenus] = useState<string[]>([]);
+  const [editingActionPermissions, setEditingActionPermissions] = useState<Record<string, boolean>>({});
+  const [editingReportScope, setEditingReportScope] = useState<'all' | 'own_only' | 'specific_personnel'>('own_only');
+  const [editingVisibleReportPersonnelIds, setEditingVisibleReportPersonnelIds] = useState<string[]>([]);
+
+  const openEditColleague = (p: Personnel) => {
+    setEditingColleague(p);
+    setEditingRole((p.role as PersonnelRole) || 'marketer');
+
+    // Parse phones
+    if (p.phones && Array.isArray(p.phones) && p.phones.length > 0) {
+      setEditingPhones(
+        p.phones.map((item, idx) => {
+          if (typeof item === 'string') {
+            return { id: `ep-${idx}`, label: idx === 0 ? 'موبایل اصلی' : 'شماره دیگر', number: item };
+          }
+          return { id: item.id || `ep-${idx}`, label: item.label || 'شماره تماس', number: item.number || '' };
+        })
+      );
+    } else if (p.phone) {
+      setEditingPhones([{ id: 'ep-1', label: 'موبایل اصلی', number: p.phone }]);
+    } else {
+      setEditingPhones([{ id: 'ep-1', label: 'موبایل اصلی', number: '' }]);
+    }
+
+    // Parse permissions
+    const perms = p.permissions;
+    const defaultMenus = PERSONNEL_ROLE_CONFIG[(p.role as PersonnelRole) || 'marketer']?.defaultMenus || [
+      'dashboard',
+      'customers',
+      'reports',
+      'admin_reports',
+      'personal_portal',
+    ];
+    setEditingAllowedMenus(perms?.allowed_menus || defaultMenus);
+
+    setEditingActionPermissions({
+      can_view_all_customers: Boolean(perms?.can_view_all_customers || p.role === 'admin' || p.role === 'sales_manager'),
+      can_edit_customer: perms?.can_edit_customer !== false,
+      can_delete_customer: Boolean(perms?.can_delete_customer || p.role === 'admin'),
+      can_export_data: Boolean(perms?.can_export_data || p.role === 'admin' || p.role === 'sales_manager'),
+      can_extend_ownership: Boolean(perms?.can_extend_ownership || p.role === 'admin' || p.role === 'sales_manager'),
+      can_switch_ownership: Boolean(perms?.can_switch_ownership || p.role === 'admin' || p.role === 'sales_manager'),
+      can_manage_leads: Boolean(perms?.can_manage_leads || p.role === 'admin' || p.role === 'sales_manager'),
+      can_approve_leaves: Boolean(perms?.can_approve_leaves || p.role === 'admin'),
+      can_approve_advances: Boolean(perms?.can_approve_advances || p.role === 'admin'),
+    });
+
+    setEditingReportScope(perms?.report_view_scope || (p.role === 'admin' || p.role === 'sales_manager' ? 'all' : 'own_only'));
+    setEditingVisibleReportPersonnelIds(perms?.visible_report_personnel_ids || []);
+  };
+
   const filteredPersonnel = useMemo(() => {
     return personnelList.filter((p) => {
       if (!personnelSearch.trim()) return true;
       const q = personnelSearch.toLowerCase();
+      const hasPhone = p.phone?.includes(q) || (Array.isArray(p.phones) && p.phones.some((ph) => (typeof ph === 'string' ? ph : ph.number)?.includes(q)));
       return (
         p.name?.toLowerCase().includes(q) ||
+        p.username?.toLowerCase().includes(q) ||
         p.email?.toLowerCase().includes(q) ||
-        p.phone?.includes(q)
+        hasPhone
       );
     });
   }, [personnelList, personnelSearch]);
@@ -147,14 +471,34 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
     if (!editingColleague) return;
     setIsUpdatingColleague(true);
     try {
+      const primaryPhone = editingPhones[0]?.number?.trim() || editingColleague.phone || '';
+      const cleanPhones = editingPhones
+        .filter((p) => p.number.trim().length > 0)
+        .map((p) => ({
+          id: p.id,
+          label: p.label.trim() || 'شماره تماس',
+          number: p.number.trim(),
+        }));
+
+      const permissions: PersonnelPermissions = {
+        allowed_menus: editingAllowedMenus,
+        ...editingActionPermissions,
+        report_view_scope: editingReportScope,
+        visible_report_personnel_ids:
+          editingReportScope === 'specific_personnel' ? editingVisibleReportPersonnelIds : [],
+      };
+
       await onUpdatePersonnel(editingColleague.id, {
         name: editingColleague.name,
+        username: editingColleague.username,
         email: editingColleague.email,
-        phone: editingColleague.phone,
-        role: editingColleague.role,
+        phone: primaryPhone,
+        phones: cleanPhones,
+        role: editingRole,
+        permissions,
         status: editingColleague.status,
       });
-      showToast('مشخصات همکار با موفقیت به‌روزرسانی شد.', 'success');
+      showToast('مشخصات و دسترسی‌های همکار با موفقیت به‌روزرسانی شد.', 'success');
       setEditingColleague(null);
     } catch (err: any) {
       showToast(err.message || 'خطا در ویرایش همکار', 'error');
@@ -340,87 +684,87 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {/* ------------------------------------------------------------- */}
       {/* 1. TOP HEADER & SUB-MENUS                                     */}
       {/* ------------------------------------------------------------- */}
-      <div className="bg-[#121212] border border-[#282828] rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#1DB954] to-[#14833b] text-black font-black text-xl flex items-center justify-center shadow-lg shadow-[#1DB954]/20 overflow-hidden border-2 border-[#1DB954]">
-              <Users2 className="w-6 h-6 text-black stroke-[2.5]" />
+      <div className="bg-[#121212] border border-[#282828] rounded-2xl p-3.5 sm:p-6 shadow-xl space-y-3.5 sm:space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-2xl bg-gradient-to-br from-[#1DB954] to-[#14833b] text-black font-black text-lg sm:text-xl flex items-center justify-center shadow-lg shadow-[#1DB954]/20 overflow-hidden border-2 border-[#1DB954] flex-shrink-0">
+              <Users2 className="w-5 sm:w-6 h-5 sm:h-6 text-black stroke-[2.5]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                  مدیریت همکاران و مالکیت پرونده‌ها
+                <h1 className="text-base sm:text-2xl font-black text-white tracking-tight">
+                  مدیریت همکاران و دسترسی‌ها
                 </h1>
-                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold border border-[#1DB954]/30">
+                <span className="text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold border border-[#1DB954]/30">
                   پنل مدیریت
                 </span>
               </div>
-              <p className="text-xs text-[#A7A7A7] mt-0.5">
-                تعریف پرسنل، کنترل مالکیت‌ها، تمدید مهلت و کارتابل تایید مرخصی‌ها
+              <p className="text-[11px] sm:text-xs text-[#A7A7A7] mt-0.5">
+                تعریف پرسنل، چند راه تماس، تمدید مهلت و تنظیم ریز دسترسی‌ها
               </p>
             </div>
           </div>
         </div>
 
         {/* Sub-menu Tabs */}
-        <div className="flex items-center gap-2 border-t border-[#222] pt-4 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1.5 sm:gap-2 border-t border-[#222] pt-3 overflow-x-auto scrollbar-none whitespace-nowrap pb-1">
           <button
             onClick={() => setActiveSubTab('new_colleague')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${
               activeSubTab === 'new_colleague'
                 ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
                 : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
             }`}
           >
-            <UserPlus className="w-4 h-4" />
+            <UserPlus className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
             <span>ثبت همکار جدید</span>
           </button>
 
           <button
             onClick={() => setActiveSubTab('colleagues_list')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${
               activeSubTab === 'colleagues_list'
                 ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
                 : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
             }`}
           >
-            <Users2 className="w-4 h-4" />
+            <Users2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
             <span>لیست همکاران ({toPersianDigits(personnelList.length)})</span>
           </button>
 
           <button
             onClick={() => setActiveSubTab('extend_ownership')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${
               activeSubTab === 'extend_ownership'
                 ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
                 : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
             }`}
           >
-            <Clock className="w-4 h-4" />
-            <span>تمدید مالکیت مشتری‌ها</span>
+            <Clock className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+            <span>تمدید مالکیت پرونده‌ها</span>
           </button>
 
           <button
             onClick={() => setActiveSubTab('switch_ownership')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${
               activeSubTab === 'switch_ownership'
                 ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
                 : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
             }`}
           >
-            <ArrowLeftRight className="w-4 h-4" />
-            <span>سوئیچ و انتقال مالکیت</span>
+            <ArrowLeftRight className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+            <span>انتقال مالکیت</span>
           </button>
 
           <button
             onClick={() => setActiveSubTab('leave_approvals')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap relative ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 relative ${
               activeSubTab === 'leave_approvals'
                 ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
                 : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
             }`}
           >
-            <CalendarCheck className="w-4 h-4" />
+            <CalendarCheck className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
             <span>درخواست‌های مرخصی</span>
             {pendingLeavesCount > 0 && (
               <span
@@ -441,104 +785,422 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {/* 2. TAB CONTENT 1: Register New Colleague                      */}
       {/* ------------------------------------------------------------- */}
       {activeSubTab === 'new_colleague' && (
-        <div className="max-w-2xl bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-6 space-y-6">
-          <div className="flex items-center gap-2 border-b border-[#282828] pb-4">
-            <UserPlus className="w-5 h-5 text-[#1DB954]" />
-            <div>
-              <h3 className="text-base font-bold text-white">ثبت و ایجاد همکار جدید</h3>
-              <p className="text-xs text-[#888]">
-                تعریف عضو جدید در تیم فروش و ایجاد حساب کاربری برای دسترسی به سامانه.
-              </p>
+        <div className="max-w-4xl bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-7 space-y-7 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-[#282828] pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954]">
+                <UserPlus className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">ثبت و ایجاد همکار جدید</h3>
+                <p className="text-xs text-[#888]">
+                  تعریف عضو جدید، چند راه تماس، نقش سازمانی و تنظیم تیک‌به‌تیک سطوح دسترسی و گزارش‌ها
+                </p>
+              </div>
             </div>
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#222] border border-[#333] text-[11px] text-[#A7A7A7]">
+              <Sparkles className="w-3.5 h-3.5 text-[#1DB954]" />
+              <span>پیکربندی هوشمند دسترسی‌ها</span>
+            </span>
           </div>
 
-          <form onSubmit={handleRegisterColleague} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                  نام و نام خانوادگی *
-                </label>
-                <input
-                  type="text"
-                  value={colleagueName}
-                  onChange={(e) => setColleagueName(e.target.value)}
-                  placeholder="مثلاً: سارا احمدی"
-                  required
-                  className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none"
-                />
+          <form onSubmit={handleRegisterColleague} className="space-y-6">
+            {/* Section A: Identity & Credentials */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-white flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-[#1DB954]" />
+                <span>۱. مشخصات هویتی و حساب کاربری</span>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                  ایمیل سازمانی (نام کاربری ورود) *
-                </label>
-                <input
-                  type="email"
-                  dir="ltr"
-                  value={colleagueEmail}
-                  onChange={(e) => setColleagueEmail(e.target.value)}
-                  placeholder="sara.ahmadi@company.ir"
-                  required
-                  className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 bg-[#141414] p-4 rounded-xl border border-[#262626]">
+                <div>
+                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                    نام و نام خانوادگی <span className="text-[#E22134]">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={colleagueName}
+                    onChange={(e) => setColleagueName(e.target.value)}
+                    placeholder="مثلاً: سارا احمدی"
+                    required
+                    className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                  شماره موبایل مستقیم
-                </label>
-                <input
-                  type="text"
-                  dir="ltr"
-                  value={colleaguePhone}
-                  onChange={(e) => setColleaguePhone(e.target.value)}
-                  placeholder="0912..."
-                  className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                />
-              </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5 flex items-center justify-between">
+                    <span>نام کاربری یکتا</span>
+                    <span className="text-[10px] text-[#777]">جهت ورود به سیستم</span>
+                  </label>
+                  <input
+                    type="text"
+                    dir="ltr"
+                    value={colleagueUsername}
+                    onChange={(e) => setColleagueUsername(e.target.value)}
+                    placeholder="sara_ahmadi"
+                    className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                  نقش و سطح دسترسی سازمانی *
-                </label>
-                <select
-                  value={colleagueRole}
-                  onChange={(e) => setColleagueRole(e.target.value as any)}
-                  className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none"
-                >
-                  <option value="marketer">کارشناس فروش و مذاکره</option>
-                  <option value="sales_manager">مدیر فروش</option>
-                  <option value="admin">مدیر سیستم (دسترسی کامل)</option>
-                </select>
-              </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                    ایمیل سازمانی <span className="text-[#E22134]">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    dir="ltr"
+                    value={colleagueEmail}
+                    onChange={(e) => setColleagueEmail(e.target.value)}
+                    placeholder="sara.ahmadi@company.ir"
+                    required
+                    className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono"
+                  />
+                </div>
 
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                  کلمه عبور ورود به سیستم (اختیاری)
-                </label>
-                <input
-                  type="password"
-                  dir="ltr"
-                  value={colleaguePassword}
-                  onChange={(e) => setColleaguePassword(e.target.value)}
-                  placeholder="حداقل ۶ کاراکتر (در صورت خالی بودن، کاربر بعداً تنظیم می‌کند)"
-                  className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                />
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                    کلمه عبور اولیه (اختیاری)
+                  </label>
+                  <input
+                    type="password"
+                    dir="ltr"
+                    value={colleaguePassword}
+                    onChange={(e) => setColleaguePassword(e.target.value)}
+                    placeholder="حداقل ۶ کاراکتر (در صورت خالی بودن، بعداً توسط همکار یا مدیر قابل تنظیم است)"
+                    className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono"
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="pt-2 flex justify-end">
+            {/* Section B: Multiple Contact Numbers */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-blue-400" />
+                  <span>۲. شماره‌ها و راه‌های ارتباطی همکار (ثبت چند شماره)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddColleaguePhone}
+                  className="px-3 py-1.5 rounded-lg bg-[#242424] hover:bg-[#303030] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors border border-[#3a3a3a]"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#1DB954]" />
+                  <span>افزودن شماره تماس دیگر</span>
+                </button>
+              </div>
+
+              <div className="space-y-2 bg-[#141414] p-4 rounded-xl border border-[#262626]">
+                {colleaguePhones.map((ph, idx) => (
+                  <div key={ph.id} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="w-full sm:w-48 flex-shrink-0">
+                      <select
+                        value={ph.label}
+                        onChange={(e) => handleChangeColleaguePhone(ph.id, 'label', e.target.value)}
+                        className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none cursor-pointer"
+                      >
+                        {COMMON_PHONE_LABELS.map((lbl) => (
+                          <option key={lbl} value={lbl}>
+                            {lbl}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        dir="ltr"
+                        value={ph.number}
+                        onChange={(e) => handleChangeColleaguePhone(ph.id, 'number', e.target.value)}
+                        placeholder={idx === 0 ? '0912xxxxxxx (شماره اصلی)' : 'شماره تماس یا آیدی'}
+                        className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono"
+                      />
+                    </div>
+
+                    {colleaguePhones.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveColleaguePhone(ph.id)}
+                        className="h-10 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center justify-center transition-colors flex-shrink-0"
+                        title="حذف این شماره"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <p className="text-[11px] text-[#777] pt-1">
+                  * شماره اول به عنوان شماره تماس اصلی در سامانه‌های تماس سریع و پیام‌رسان استفاده خواهد شد.
+                </p>
+              </div>
+            </div>
+
+            {/* Section C: Role Archetype Picker */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-white flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-purple-400" />
+                <span>۳. انتخاب نقش سازمانی و الگوی دسترسی</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                {(Object.keys(PERSONNEL_ROLE_CONFIG) as PersonnelRole[]).map((rKey) => {
+                  const cfg = PERSONNEL_ROLE_CONFIG[rKey];
+                  const Icon = cfg.icon;
+                  const isSelected = colleagueRole === rKey;
+
+                  return (
+                    <button
+                      type="button"
+                      key={rKey}
+                      onClick={() => handleRoleChange(rKey)}
+                      className={`text-right p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
+                        isSelected
+                          ? 'bg-[#1e1e1e] border-[#1DB954] shadow-md shadow-[#1DB954]/10 ring-1 ring-[#1DB954]'
+                          : 'bg-[#141414] border-[#282828] hover:border-[#383838] opacity-80 hover:opacity-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-bold text-xs text-white flex items-center gap-1.5">
+                          <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                          <span>{cfg.label}</span>
+                        </span>
+                        {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-[#1DB954]" />}
+                      </div>
+                      <p className="text-[10px] text-[#888] leading-relaxed line-clamp-2">
+                        {cfg.description}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Section D: Granular Permissions Matrix */}
+            <div className="space-y-4 bg-[#141414] p-5 rounded-2xl border border-[#262626]">
+              <div className="flex items-center justify-between border-b border-[#242424] pb-3">
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-amber-400" />
+                  <span>۴. تنظیمات دسترسی ریزدانه (تیک زدن منوها و اختیارات)</span>
+                </div>
+                <span className="text-[11px] text-[#A7A7A7]">
+                  نقش انتخاب‌شده: <span className="text-[#1DB954] font-bold">{PERSONNEL_ROLE_CONFIG[colleagueRole]?.label}</span>
+                </span>
+              </div>
+
+              {/* D1. Allowed Menus */}
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-[#CCC] flex items-center justify-between">
+                  <span>منوهای مجاز سامانه (کدام منوها را در سایدبار ببیند):</span>
+                  <span className="text-[11px] font-mono text-[#1DB954]">
+                    {toPersianDigits(allowedMenus.length)} از {toPersianDigits(SYSTEM_MENUS.length)} منو فعال
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {SYSTEM_MENUS.map((menu) => {
+                    const MenuIcon = menu.icon;
+                    const isChecked = allowedMenus.includes(menu.id);
+
+                    return (
+                      <label
+                        key={menu.id}
+                        className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-center gap-2.5 select-none ${
+                          isChecked
+                            ? 'bg-[#1a2e20]/60 border-[#1DB954]/50 text-white'
+                            : 'bg-[#181818] border-[#282828] text-[#888] hover:text-[#CCC]'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setAllowedMenus([...allowedMenus, menu.id]);
+                            } else {
+                              setAllowedMenus(allowedMenus.filter((m) => m !== menu.id));
+                            }
+                          }}
+                          className="w-4 h-4 rounded text-[#1DB954] accent-[#1DB954] cursor-pointer"
+                        />
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold truncate flex items-center gap-1.5">
+                            <MenuIcon className={`w-3.5 h-3.5 flex-shrink-0 ${isChecked ? 'text-[#1DB954]' : 'text-[#666]'}`} />
+                            <span className="truncate">{menu.label}</span>
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* D2. Action Capabilities */}
+              <div className="space-y-2 pt-2 border-t border-[#222]">
+                <div className="text-xs font-semibold text-[#CCC]">
+                  مجوزهای کاری و اختیارات عملیاتی (چه کارهایی بتواند انجام دهد):
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {SYSTEM_ACTIONS.map((action) => {
+                    const isAllowed = Boolean(actionPermissions[action.key]);
+
+                    return (
+                      <label
+                        key={action.key}
+                        className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 select-none ${
+                          isAllowed
+                            ? 'bg-[#18231c] border-[#1DB954]/40 text-white'
+                            : 'bg-[#181818] border-[#282828] text-[#777] hover:text-[#B3B3B3]'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isAllowed}
+                          onChange={(e) => {
+                            setActionPermissions({
+                              ...actionPermissions,
+                              [action.key]: e.target.checked,
+                            });
+                          }}
+                          className="w-4 h-4 mt-0.5 rounded text-[#1DB954] accent-[#1DB954] cursor-pointer flex-shrink-0"
+                        />
+                        <span className="text-xs leading-relaxed">{action.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* D3. Report View Scope (Whose reports can they see?) */}
+              <div className="space-y-3 pt-2 border-t border-[#222]">
+                <div className="text-xs font-semibold text-[#CCC] flex items-center justify-between">
+                  <span>دامنه مشاهده گزارش کار پرسنل (گزارش کار کیا رو ببینه و کیا رو نبینه):</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <label
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-2.5 select-none ${
+                      reportScope === 'all'
+                        ? 'bg-[#1a2e20]/70 border-[#1DB954] text-white'
+                        : 'bg-[#181818] border-[#282828] text-[#888]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="report_scope"
+                      value="all"
+                      checked={reportScope === 'all'}
+                      onChange={() => setReportScope('all')}
+                      className="accent-[#1DB954] cursor-pointer"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-white">همه همکاران</div>
+                      <div className="text-[10px] text-[#777]">مشاهده گزارش کار کل پرسنل</div>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-2.5 select-none ${
+                      reportScope === 'own_only'
+                        ? 'bg-[#1a2e20]/70 border-[#1DB954] text-white'
+                        : 'bg-[#181818] border-[#282828] text-[#888]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="report_scope"
+                      value="own_only"
+                      checked={reportScope === 'own_only'}
+                      onChange={() => setReportScope('own_only')}
+                      className="accent-[#1DB954] cursor-pointer"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-white">فقط گزارش کار خودش</div>
+                      <div className="text-[10px] text-[#777]">عدم دسترسی به گزارش دیگران</div>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-2.5 select-none ${
+                      reportScope === 'specific_personnel'
+                        ? 'bg-[#1a2e20]/70 border-[#1DB954] text-white'
+                        : 'bg-[#181818] border-[#282828] text-[#888]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="report_scope"
+                      value="specific_personnel"
+                      checked={reportScope === 'specific_personnel'}
+                      onChange={() => setReportScope('specific_personnel')}
+                      className="accent-[#1DB954] cursor-pointer"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-white">همکاران مشخص و منتخب</div>
+                      <div className="text-[10px] text-[#777]">فقط افراد انتخاب‌شده</div>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Sub-selector for specific personnel */}
+                {reportScope === 'specific_personnel' && (
+                  <div className="p-3 bg-[#181818] rounded-xl border border-[#333] space-y-2 animate-in fade-in">
+                    <div className="text-[11px] font-semibold text-[#BBB]">
+                      تیک بزنید گزارش کار کدام یک از همکاران برای این فرد قابل رویت باشد:
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                      {personnelList.map((pers) => {
+                        const isSelected = visibleReportPersonnelIds.includes(pers.id);
+                        return (
+                          <label
+                            key={pers.id}
+                            className={`p-2 rounded-lg border text-xs cursor-pointer flex items-center gap-2 ${
+                              isSelected
+                                ? 'bg-[#1DB954]/15 border-[#1DB954]/50 text-white'
+                                : 'bg-[#121212] border-[#282828] text-[#888]'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setVisibleReportPersonnelIds([...visibleReportPersonnelIds, pers.id]);
+                                } else {
+                                  setVisibleReportPersonnelIds(
+                                    visibleReportPersonnelIds.filter((id) => id !== pers.id)
+                                  );
+                                }
+                              }}
+                              className="accent-[#1DB954]"
+                            />
+                            <span className="truncate">{pers.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Submit Action */}
+            <div className="pt-2 flex items-center justify-between border-t border-[#282828]">
+              <div className="text-[11px] text-[#777]">
+                با ثبت همکار، دسترسی‌ها فوراً اعمال شده و در حساب وی فعال می‌شود.
+              </div>
               <button
                 type="submit"
                 disabled={isSubmittingPersonnel}
-                className="px-6 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold text-xs shadow-lg shadow-[#1DB954]/20 transition-all flex items-center gap-2"
+                className="px-6 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold text-xs shadow-lg shadow-[#1DB954]/25 transition-all flex items-center gap-2 hover:scale-[1.02]"
               >
                 {isSubmittingPersonnel ? (
                   <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <Check className="w-4 h-4 stroke-[3]" />
                 )}
-                <span>ثبت و ذخیره همکار</span>
+                <span>ثبت و ذخیره مشخصات همکار</span>
               </button>
             </div>
           </form>
@@ -575,15 +1237,43 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             {filteredPersonnel.map((p) => {
               const assignedCusts = customers.filter((c) => c.assigned_marketer_id === p.id);
               const wonCusts = assignedCusts.filter((c) => c.status === 'قرارداد');
+              const roleCfg = PERSONNEL_ROLE_CONFIG[p.role as PersonnelRole] || {
+                label: p.role,
+                badgeClass: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
+                icon: UserCheck,
+              };
+              const RoleIcon = roleCfg.icon;
+
+              // Build phone list for display
+              const cardPhones: Array<{ label: string; number: string }> = [];
+              if (p.phones && Array.isArray(p.phones) && p.phones.length > 0) {
+                p.phones.forEach((item, idx) => {
+                  if (typeof item === 'string') {
+                    if (item.trim()) cardPhones.push({ label: idx === 0 ? 'موبایل اصلی' : 'شماره دیگر', number: item });
+                  } else if (item && item.number) {
+                    cardPhones.push({ label: item.label || 'شماره تماس', number: item.number });
+                  }
+                });
+              } else if (p.phone) {
+                cardPhones.push({ label: 'موبایل اصلی', number: p.phone });
+              }
+
+              const allowedCount = p.permissions?.allowed_menus?.length ?? (p.role === 'admin' ? 8 : 6);
+              const scopeLabel =
+                p.permissions?.report_view_scope === 'all' || p.role === 'admin'
+                  ? 'همه همکاران'
+                  : p.permissions?.report_view_scope === 'specific_personnel'
+                  ? `${toPersianDigits(p.permissions?.visible_report_personnel_ids?.length || 0)} همکار منتخب`
+                  : 'فقط گزارش خود';
 
               return (
                 <div
                   key={p.id}
-                  className="bg-[#181818] border border-[#282828] hover:border-[#383838] rounded-2xl p-4 sm:p-5 space-y-4 transition-all"
+                  className="bg-[#181818] border border-[#282828] hover:border-[#383838] rounded-2xl p-4 sm:p-5 space-y-4 transition-all shadow-md hover:shadow-xl"
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-11 h-11 rounded-2xl bg-[#222] border-2 border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-sm flex-shrink-0">
+                      <div className="w-12 h-12 rounded-2xl bg-[#222] border-2 border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-base flex-shrink-0 shadow-md">
                         {p.avatar ? (
                           <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
                         ) : (
@@ -594,26 +1284,27 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         <div className="font-bold text-sm text-white truncate flex items-center gap-1.5">
                           <span>{p.name}</span>
                           {p.role === 'admin' && (
-                            <Shield className="w-3.5 h-3.5 text-amber-400" />
+                            <Shield className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
                           )}
                         </div>
-                        <div className="text-[11px] text-[#888] truncate mt-0.5">
-                          {p.role === 'admin'
-                            ? 'مدیر سیستم'
-                            : p.role === 'sales_manager'
-                            ? 'مدیر فروش'
-                            : 'کارشناس فروش'}
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${roleCfg.badgeClass}`}
+                          >
+                            <RoleIcon className="w-3 h-3" />
+                            <span>{roleCfg.label}</span>
+                          </span>
                         </div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => setEditingColleague(p)}
-                        className="p-1.5 rounded-lg bg-[#222] text-[#A7A7A7] hover:text-white transition-colors"
-                        title="ویرایش مشخصات"
+                        onClick={() => openEditColleague(p)}
+                        className="p-1.5 rounded-lg bg-[#222] text-[#A7A7A7] hover:text-white hover:bg-[#333] transition-colors"
+                        title="ویرایش مشخصات و دسترسی‌ها"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
+                        <Edit2 className="w-3.5 h-3.5 text-[#1DB954]" />
                       </button>
                       <button
                         onClick={async () => {
@@ -630,22 +1321,68 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Contact info */}
-                  <div className="space-y-1.5 text-xs text-[#999] border-t border-[#242424] pt-3">
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-3.5 h-3.5 text-[#666]" />
-                      <span className="font-mono text-[11px] truncate" dir="ltr">
-                        {p.email}
-                      </span>
-                    </div>
-                    {p.phone && (
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-3.5 h-3.5 text-[#666]" />
-                        <span className="font-mono text-[11px]" dir="ltr">
-                          {p.phone}
+                  {/* Contact info & multiple phone numbers */}
+                  <div className="space-y-2 text-xs border-t border-[#242424] pt-3">
+                    <div className="flex items-center justify-between text-xs text-[#999]">
+                      <div className="flex items-center gap-2 truncate">
+                        <Mail className="w-3.5 h-3.5 text-[#666] flex-shrink-0" />
+                        <span className="font-mono text-[11px] truncate" dir="ltr">
+                          {p.email}
                         </span>
                       </div>
+                      {p.username && (
+                        <span className="font-mono text-[10px] text-[#1DB954] bg-[#1DB954]/10 px-1.5 py-0.5 rounded" dir="ltr">
+                          @{p.username}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Phones list */}
+                    {cardPhones.length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        {cardPhones.map((ph, phIdx) => (
+                          <div
+                            key={phIdx}
+                            className="flex items-center justify-between text-xs bg-[#121212] px-2.5 py-1.5 rounded-lg border border-[#222]"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Phone className="w-3 h-3 text-[#1DB954] flex-shrink-0" />
+                              <span className="text-[10px] text-[#888] truncate">{ph.label}:</span>
+                              <a
+                                href={`tel:${ph.number}`}
+                                dir="ltr"
+                                className="font-mono text-[11px] text-white hover:text-[#1DB954] transition-colors"
+                              >
+                                {ph.number}
+                              </a>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(ph.number);
+                                showToast(`شماره ${ph.number} در حافظه کپی شد.`, 'info');
+                              }}
+                              className="text-[#666] hover:text-white p-1 rounded"
+                              title="کپی شماره"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     )}
+                  </div>
+
+                  {/* Granular permissions overview badges */}
+                  <div className="flex items-center flex-wrap gap-1.5 pt-2 border-t border-[#222] text-[10px]">
+                    <span className="px-2 py-0.5 rounded-md bg-[#121212] border border-[#262626] text-[#BBB] flex items-center gap-1">
+                      <Layers className="w-3 h-3 text-[#1DB954]" />
+                      <span>{toPersianDigits(allowedCount)} منوی مجاز</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-[#121212] border border-[#262626] text-[#BBB] flex items-center gap-1">
+                      <Eye className="w-3 h-3 text-blue-400" />
+                      <span>دید گزارش: {scopeLabel}</span>
+                    </span>
                   </div>
 
                   {/* Stats snippet */}
@@ -1150,89 +1887,387 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {/* 7. MODALS: Edit Colleague Modal                               */}
       {/* ------------------------------------------------------------- */}
       {editingColleague && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[#181818] border border-[#282828] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#282828] pb-3">
-              <h3 className="font-bold text-sm text-white">ویرایش مشخصات همکار</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm overflow-y-auto animate-in fade-in">
+          <div className="bg-[#181818] border border-[#282828] rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-4">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-[#121212] border-b border-[#282828] flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954]">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-white">
+                    ویرایش همکار: {editingColleague.name}
+                  </h3>
+                  <p className="text-[11px] text-[#888]">
+                    اصلاح اطلاعات هویتی، راه‌های تماس چندگانه و پیکربندی دقیق دسترسی‌ها
+                  </p>
+                </div>
+              </div>
               <button
                 onClick={() => setEditingColleague(null)}
-                className="text-[#888] hover:text-white"
+                className="w-8 h-8 rounded-full bg-[#242424] hover:bg-[#303030] flex items-center justify-center text-[#888] hover:text-white transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[#B3B3B3] mb-1">نام و نام خانوادگی</label>
-                <input
-                  type="text"
-                  value={editingColleague.name}
-                  onChange={(e) =>
-                    setEditingColleague({ ...editingColleague, name: e.target.value })
-                  }
-                  className="w-full h-9 px-3 bg-[#121212] rounded-xl text-white border border-[#333] focus:border-[#1DB954]"
-                />
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1 text-xs">
+              {/* 1. Identity & Role */}
+              <div className="space-y-3">
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-[#1DB954]" />
+                  <span>مشخصات فردی و نقش سازمانی</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#141414] p-3.5 rounded-xl border border-[#262626]">
+                  <div>
+                    <label className="block text-[#B3B3B3] mb-1 font-semibold">نام و نام خانوادگی</label>
+                    <input
+                      type="text"
+                      value={editingColleague.name}
+                      onChange={(e) =>
+                        setEditingColleague({ ...editingColleague, name: e.target.value })
+                      }
+                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[#B3B3B3] mb-1 font-semibold flex items-center justify-between">
+                      <span>نام کاربری ورود</span>
+                      <span className="text-[10px] text-[#777]">یکتا</span>
+                    </label>
+                    <input
+                      type="text"
+                      dir="ltr"
+                      value={editingColleague.username || ''}
+                      onChange={(e) =>
+                        setEditingColleague({ ...editingColleague, username: e.target.value })
+                      }
+                      placeholder="sara_ahmadi"
+                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[#B3B3B3] mb-1 font-semibold">ایمیل سازمانی</label>
+                    <input
+                      type="email"
+                      dir="ltr"
+                      value={editingColleague.email}
+                      onChange={(e) =>
+                        setEditingColleague({ ...editingColleague, email: e.target.value })
+                      }
+                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[#B3B3B3] mb-1 font-semibold">نقش سازمانی</label>
+                    <select
+                      value={editingRole}
+                      onChange={(e) => {
+                        const newR = e.target.value as PersonnelRole;
+                        setEditingRole(newR);
+                        const cfg = PERSONNEL_ROLE_CONFIG[newR];
+                        if (cfg) {
+                          setEditingAllowedMenus([...cfg.defaultMenus]);
+                          setEditingReportScope(cfg.defaultReportScope);
+                        }
+                      }}
+                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] cursor-pointer"
+                    >
+                      {(Object.keys(PERSONNEL_ROLE_CONFIG) as PersonnelRole[]).map((rKey) => (
+                        <option key={rKey} value={rKey}>
+                          {PERSONNEL_ROLE_CONFIG[rKey].label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[#B3B3B3] mb-1">ایمیل سازمانی</label>
-                <input
-                  type="email"
-                  dir="ltr"
-                  value={editingColleague.email}
-                  onChange={(e) =>
-                    setEditingColleague({ ...editingColleague, email: e.target.value })
-                  }
-                  className="w-full h-9 px-3 bg-[#121212] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono"
-                />
+              {/* 2. Multiple Phones & Contact Methods */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-white flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-blue-400" />
+                    <span>شماره‌ها و راه‌های ارتباطی همکار</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingPhones([
+                        ...editingPhones,
+                        { id: 'ep-' + Date.now(), label: 'شماره دوم', number: '' },
+                      ]);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-[#242424] hover:bg-[#303030] text-white text-xs flex items-center gap-1 border border-[#333]"
+                  >
+                    <Plus className="w-3 h-3 text-[#1DB954]" />
+                    <span>افزودن شماره</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2 bg-[#141414] p-3.5 rounded-xl border border-[#262626]">
+                  {editingPhones.map((ph, idx) => (
+                    <div key={ph.id} className="flex items-center gap-2">
+                      <select
+                        value={ph.label}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditingPhones((prev) =>
+                            prev.map((item) => (item.id === ph.id ? { ...item, label: val } : item))
+                          );
+                        }}
+                        className="w-36 h-9 px-2 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] cursor-pointer"
+                      >
+                        {COMMON_PHONE_LABELS.map((lbl) => (
+                          <option key={lbl} value={lbl}>
+                            {lbl}
+                          </option>
+                        ))}
+                      </select>
+
+                      <input
+                        type="text"
+                        dir="ltr"
+                        value={ph.number}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditingPhones((prev) =>
+                            prev.map((item) => (item.id === ph.id ? { ...item, number: val } : item))
+                          );
+                        }}
+                        placeholder={idx === 0 ? 'شماره اصلی' : 'شماره تماس'}
+                        className="flex-1 h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono text-xs"
+                      />
+
+                      {editingPhones.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingPhones(editingPhones.filter((item) => item.id !== ph.id));
+                          }}
+                          className="w-9 h-9 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center justify-center flex-shrink-0"
+                          title="حذف"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[#B3B3B3] mb-1">شماره تماس</label>
-                <input
-                  type="text"
-                  dir="ltr"
-                  value={editingColleague.phone || ''}
-                  onChange={(e) =>
-                    setEditingColleague({ ...editingColleague, phone: e.target.value })
-                  }
-                  className="w-full h-9 px-3 bg-[#121212] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono"
-                />
-              </div>
+              {/* 3. Granular Permissions (Menus, Capabilities, Reports Scope) */}
+              <div className="space-y-4 bg-[#141414] p-4 rounded-xl border border-[#262626]">
+                <div className="text-xs font-bold text-white flex items-center gap-2 border-b border-[#242424] pb-2.5">
+                  <Shield className="w-4 h-4 text-amber-400" />
+                  <span>سطوح دسترسی ریزدانه و اختیارات</span>
+                </div>
 
-              <div>
-                <label className="block text-[#B3B3B3] mb-1">نقش سازمانی</label>
-                <select
-                  value={editingColleague.role}
-                  onChange={(e) =>
-                    setEditingColleague({
-                      ...editingColleague,
-                      role: e.target.value as any,
-                    })
-                  }
-                  className="w-full h-9 px-3 bg-[#121212] rounded-xl text-white border border-[#333] focus:border-[#1DB954]"
-                >
-                  <option value="marketer">کارشناس فروش</option>
-                  <option value="sales_manager">مدیر فروش</option>
-                  <option value="admin">مدیر سیستم</option>
-                </select>
+                {/* 3a. Menus */}
+                <div className="space-y-2">
+                  <label className="block text-[#BBB] font-semibold">
+                    منوهای مجاز در سایدبار:
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {SYSTEM_MENUS.map((menu) => {
+                      const MenuIcon = menu.icon;
+                      const isChecked = editingAllowedMenus.includes(menu.id);
+                      return (
+                        <label
+                          key={menu.id}
+                          className={`p-2 rounded-lg border text-xs cursor-pointer flex items-center gap-2 select-none ${
+                            isChecked
+                              ? 'bg-[#1a2e20]/60 border-[#1DB954]/50 text-white'
+                              : 'bg-[#181818] border-[#282828] text-[#777]'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setEditingAllowedMenus([...editingAllowedMenus, menu.id]);
+                              } else {
+                                setEditingAllowedMenus(editingAllowedMenus.filter((m) => m !== menu.id));
+                              }
+                            }}
+                            className="accent-[#1DB954]"
+                          />
+                          <MenuIcon className={`w-3.5 h-3.5 ${isChecked ? 'text-[#1DB954]' : 'text-[#666]'}`} />
+                          <span className="truncate">{menu.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3b. Action capabilities */}
+                <div className="space-y-2 pt-2 border-t border-[#222]">
+                  <label className="block text-[#BBB] font-semibold">
+                    اختیارات عملیاتی:
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {SYSTEM_ACTIONS.map((action) => {
+                      const isAllowed = Boolean(editingActionPermissions[action.key]);
+                      return (
+                        <label
+                          key={action.key}
+                          className={`p-2 rounded-lg border text-xs cursor-pointer flex items-start gap-2 select-none ${
+                            isAllowed
+                              ? 'bg-[#18231c] border-[#1DB954]/40 text-white'
+                              : 'bg-[#181818] border-[#282828] text-[#777]'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isAllowed}
+                            onChange={(e) => {
+                              setEditingActionPermissions({
+                                ...editingActionPermissions,
+                                [action.key]: e.target.checked,
+                              });
+                            }}
+                            className="mt-0.5 accent-[#1DB954]"
+                          />
+                          <span className="leading-relaxed">{action.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3c. Report View Scope */}
+                <div className="space-y-2.5 pt-2 border-t border-[#222]">
+                  <label className="block text-[#BBB] font-semibold">
+                    دامنه مشاهده گزارش کار پرسنل (گزارش کار کیا رو ببینه):
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <label
+                      className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center gap-2 select-none ${
+                        editingReportScope === 'all'
+                          ? 'bg-[#1a2e20]/70 border-[#1DB954] text-white'
+                          : 'bg-[#181818] border-[#282828] text-[#777]'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="edit_report_scope"
+                        value="all"
+                        checked={editingReportScope === 'all'}
+                        onChange={() => setEditingReportScope('all')}
+                        className="accent-[#1DB954]"
+                      />
+                      <span>همه همکاران</span>
+                    </label>
+
+                    <label
+                      className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center gap-2 select-none ${
+                        editingReportScope === 'own_only'
+                          ? 'bg-[#1a2e20]/70 border-[#1DB954] text-white'
+                          : 'bg-[#181818] border-[#282828] text-[#777]'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="edit_report_scope"
+                        value="own_only"
+                        checked={editingReportScope === 'own_only'}
+                        onChange={() => setEditingReportScope('own_only')}
+                        className="accent-[#1DB954]"
+                      />
+                      <span>فقط گزارش خود</span>
+                    </label>
+
+                    <label
+                      className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center gap-2 select-none ${
+                        editingReportScope === 'specific_personnel'
+                          ? 'bg-[#1a2e20]/70 border-[#1DB954] text-white'
+                          : 'bg-[#181818] border-[#282828] text-[#777]'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="edit_report_scope"
+                        value="specific_personnel"
+                        checked={editingReportScope === 'specific_personnel'}
+                        onChange={() => setEditingReportScope('specific_personnel')}
+                        className="accent-[#1DB954]"
+                      />
+                      <span>همکاران مشخص</span>
+                    </label>
+                  </div>
+
+                  {/* Specific personnel picker */}
+                  {editingReportScope === 'specific_personnel' && (
+                    <div className="p-2.5 bg-[#181818] rounded-xl border border-[#333] space-y-1.5 animate-in fade-in">
+                      <div className="text-[11px] text-[#AAA]">انتخاب همکاران مجاز:</div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                        {personnelList.map((pers) => {
+                          const isSel = editingVisibleReportPersonnelIds.includes(pers.id);
+                          return (
+                            <label
+                              key={pers.id}
+                              className={`p-1.5 rounded border text-xs cursor-pointer flex items-center gap-1.5 ${
+                                isSel
+                                  ? 'bg-[#1DB954]/15 border-[#1DB954]/50 text-white'
+                                  : 'bg-[#121212] border-[#282828] text-[#888]'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSel}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setEditingVisibleReportPersonnelIds([
+                                      ...editingVisibleReportPersonnelIds,
+                                      pers.id,
+                                    ]);
+                                  } else {
+                                    setEditingVisibleReportPersonnelIds(
+                                      editingVisibleReportPersonnelIds.filter((id) => id !== pers.id)
+                                    );
+                                  }
+                                }}
+                                className="accent-[#1DB954]"
+                              />
+                              <span className="truncate">{pers.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-[#282828]">
+            {/* Modal Footer */}
+            <div className="p-4 bg-[#121212] border-t border-[#282828] flex items-center justify-end gap-2.5 flex-shrink-0">
               <button
+                type="button"
                 onClick={() => setEditingColleague(null)}
-                className="px-4 py-2 rounded-xl bg-[#282828] text-white text-xs font-bold"
+                className="px-4 py-2 rounded-xl bg-[#282828] hover:bg-[#333] text-white text-xs font-bold transition-colors"
               >
                 انصراف
               </button>
               <button
+                type="button"
                 onClick={handleSaveColleagueEdit}
                 disabled={isUpdatingColleague}
-                className="px-4 py-2 rounded-xl bg-[#1DB954] text-black text-xs font-bold hover:bg-[#1ed760]"
+                className="px-6 py-2 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black text-xs font-extrabold shadow-md shadow-[#1DB954]/20 transition-all flex items-center gap-1.5"
               >
-                {isUpdatingColleague ? 'در حال ذخیره...' : 'ذخیره تغییرات'}
+                {isUpdatingColleague ? (
+                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4 stroke-[3]" />
+                )}
+                <span>ذخیره تغییرات</span>
               </button>
             </div>
           </div>

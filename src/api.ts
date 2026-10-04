@@ -16,6 +16,8 @@ import {
   SalaryAdvanceRequest,
   UserProfileUpdatePayload,
   PasswordChangePayload,
+  CreateColleaguePayload,
+  ProjectSettings,
 } from './types';
 
 const BASE_URL = '/api';
@@ -113,11 +115,11 @@ async function handleResponse<T>(res: globalThis.Response, defaultErrorMsg: stri
 
 // ----------------- Auth API ----------------- //
 
-export async function loginUser(email: string, password: string): Promise<AuthResponse> {
+export async function loginUser(identifier: string, password: string): Promise<AuthResponse> {
   const res = await fetch(`${BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ identifier, email: identifier, username: identifier, phone: identifier, password }),
   });
   const data = await handleResponse<AuthResponse>(res, 'خطا در ورود به سامانه');
   if (data && data.success) {
@@ -268,6 +270,44 @@ export async function reassignCustomer(
     }),
   });
   return handleResponse<Customer>(res, 'خطا در واگذاری مجدد مشتری در سیستم');
+}
+
+export async function claimFreeCustomer(
+  id: string,
+  options?: {
+    personnel_id?: string;
+    personnel_name?: string;
+    duration_days?: number;
+    claim_limit?: number;
+  }
+): Promise<{ success: boolean; message: string; customer: Customer }> {
+  const res = await fetch(`${BASE_URL}/customers/${id}/claim-free`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(options || {}),
+  });
+  return handleResponse<{ success: boolean; message: string; customer: Customer }>(
+    res,
+    'خطا در اختصاص پرونده آزاد'
+  );
+}
+
+export async function fetchFreeCustomersQuota(personnelId?: string, limit = 20): Promise<{
+  claimLimit: number;
+  activeUnclosedCount: number;
+  successfulCount: number;
+  canClaim: boolean;
+  remainingQuota: number;
+  requiresSuccessToUnlock: boolean;
+}> {
+  const params = new URLSearchParams();
+  if (personnelId) params.append('personnel_id', personnelId);
+  if (limit) params.append('limit', String(limit));
+
+  const res = await fetch(`${BASE_URL}/customers/free-quota?${params.toString()}`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse(res, 'خطا در دریافت وضعیت سهمیه برداشت مشتریان آزاد');
 }
 
 export async function mergeCustomers(
@@ -555,13 +595,7 @@ export async function changeUserPassword(payload: PasswordChangePayload): Promis
 // -------------------------------------------------------------
 // COLLEAGUES & OWNERSHIP MANAGEMENT (مدیریت همکاران و مالکیت)
 // -------------------------------------------------------------
-export async function createPersonnel(payload: {
-  name: string;
-  email: string;
-  phone?: string;
-  role: 'admin' | 'sales_manager' | 'marketer' | 'operator';
-  password?: string;
-}): Promise<Personnel> {
+export async function createPersonnel(payload: CreateColleaguePayload): Promise<Personnel> {
   const res = await fetch(`${BASE_URL}/personnel`, {
     method: 'POST',
     headers: getBffHeaders({ 'Content-Type': 'application/json' }),
@@ -613,5 +647,23 @@ export async function bulkSwitchOwnership(
     body: JSON.stringify({ customer_ids, new_marketer_id, new_marketer_name, duration_days }),
   });
   return handleResponse(res, 'خطا در انتقال و سوئیچ مالکیت مشتریان');
+}
+
+// ----------------- Project Settings APIs ----------------- //
+
+export async function fetchProjectSettings(): Promise<ProjectSettings> {
+  const res = await fetch(`${BASE_URL}/project-settings`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse(res, 'خطا در دریافت تنظیمات سامانه');
+}
+
+export async function updateProjectSettings(payload: Partial<ProjectSettings>): Promise<ProjectSettings> {
+  const res = await fetch(`${BASE_URL}/project-settings`, {
+    method: 'PATCH',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, 'خطا در بروزرسانی تنظیمات سامانه');
 }
 
