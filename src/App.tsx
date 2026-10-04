@@ -11,7 +11,10 @@ import {
   CheckCircle,
   AlertCircle,
   Info,
-  X
+  X,
+  Building2,
+  Plus,
+  Edit2,
 } from 'lucide-react';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -30,6 +33,8 @@ import { AddReportModal } from './components/AddReportModal';
 import { AddColdLeadModal } from './components/AddColdLeadModal';
 import { MergeCustomersModal } from './components/MergeCustomersModal';
 import { AuthModal } from './components/AuthModal';
+import { TenantsManagementModal } from './components/TenantsManagementModal';
+import { TenantsManagementView } from './components/TenantsManagementView';
 
 import {
   Customer,
@@ -49,6 +54,7 @@ import {
   PasswordChangePayload,
   TeamSubTab,
   CreateColleaguePayload,
+  Tenant,
 } from './types';
 
 import {
@@ -93,6 +99,9 @@ import {
   updateUserProfile,
   uploadAvatar,
   changeUserPassword,
+  fetchTenants,
+  getActiveTenantId,
+  setActiveTenantId,
 } from './api';
 
 export default function App() {
@@ -129,6 +138,11 @@ export default function App() {
   const [currentPersonnel, setCurrentPersonnel] = useState<Personnel | null>(initialSession.personnel);
   const [bffStatus, setBffStatus] = useState<BffStatus | null>(null);
 
+  // Multi-Tenancy State
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [activeTenantId, setActiveTenantIdState] = useState<string>(() => getActiveTenantId() || 'all');
+  const [isTenantsModalOpen, setIsTenantsModalOpen] = useState(false);
+
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMarketerId, setSelectedMarketerId] = useState<string>('همه');
@@ -154,6 +168,42 @@ export default function App() {
   const [displayedTab, setDisplayedTab] = useState<NavTab>(activeTab);
   const [isTabTransitioning, setIsTabTransitioning] = useState(false);
 
+  // Load and refresh tenants
+  const loadTenants = async () => {
+    try {
+      const data = await fetchTenants();
+      setTenants(data);
+    } catch (err) {
+      console.warn('Failed to load tenants:', err);
+    }
+  };
+
+  const isCurrentUserAdmin = Boolean(
+    currentUser?.is_admin ||
+    currentUser?.app_role === 'admin' ||
+    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+    currentPersonnel?.role === 'admin'
+  );
+
+  const canAccessTenantsTab =
+    isCurrentUserAdmin ||
+    (currentPersonnel?.permissions?.can_manage_tenants ?? false) ||
+    (currentPersonnel?.permissions?.allowed_menus?.includes('tenants') ?? false);
+
+  const handleSelectTenant = (tenantId: string) => {
+    if (!isCurrentUserAdmin && tenantId === 'all') {
+      showToast('مشاهده تجمیعی همه سازمان‌ها فقط برای مدیر سیستم مجاز است.', 'error');
+      return;
+    }
+    setActiveTenantId(tenantId);
+    setActiveTenantIdState(tenantId);
+    const target = tenants.find((t) => String(t.id) === String(tenantId));
+    const name = tenantId === 'all' ? 'همه سازمان‌ها (تجمیعی)' : target?.name || 'سازمان منتخب';
+    showToast(`سازمان فعال: ${name}`, 'info');
+    loadAllData();
+  };
+
   // Smooth Tab Transition Handler
   useEffect(() => {
     if (activeTab !== displayedTab) {
@@ -169,7 +219,7 @@ export default function App() {
   // Initial Data Load
   const loadAllData = async (activeP?: Personnel | null) => {
     try {
-      const [pData, cData, rData, lData, aData, bStatus, lrData, arData] = await Promise.all([
+      const [pData, cData, rData, lData, aData, bStatus, lrData, arData, tData] = await Promise.all([
         fetchPersonnel().catch(() => []),
         fetchCustomers().catch(() => []),
         fetchCustomerReports().catch(() => []),
@@ -178,9 +228,11 @@ export default function App() {
         fetchBffStatus().catch(() => null),
         fetchLeaveRequests().catch(() => []),
         fetchAdvanceRequests().catch(() => []),
+        fetchTenants().catch(() => []),
       ]);
 
       setPersonnelList(pData);
+      setTenants(tData);
       
       // Accurately match logged-in user to their specific personnel record
       let targetPersonnel = activeP;
@@ -201,6 +253,36 @@ export default function App() {
       if (targetPersonnel) {
         setCurrentPersonnel(targetPersonnel);
         setApiPersonnelContext(targetPersonnel);
+
+        // For non-admin, auto-correct active tenant if they don't have access to 'all' or selected tenant
+        const isUserAdmin = Boolean(
+          currentUser?.is_admin ||
+          currentUser?.app_role === 'admin' ||
+          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+          targetPersonnel.role === 'admin'
+        );
+
+        if (!isUserAdmin) {
+          const userAllowed =
+            targetPersonnel.allowed_tenant_ids ||
+            targetPersonnel.permissions?.allowed_tenant_ids;
+          const currentActive = getActiveTenantId();
+          const fallback =
+            userAllowed && userAllowed.length > 0
+              ? String(userAllowed[0])
+              : targetPersonnel.tenant_id
+              ? String(targetPersonnel.tenant_id)
+              : 'default';
+
+          if (
+            currentActive === 'all' ||
+            (userAllowed && userAllowed.length > 0 && !userAllowed.some((id) => String(id) === currentActive))
+          ) {
+            setActiveTenantId(fallback);
+            setActiveTenantIdState(fallback);
+          }
+        }
       }
 
       setCustomers(cData);
@@ -707,6 +789,10 @@ export default function App() {
         portalSubTab={portalSubTab}
         teamSubTab={teamSubTab}
         onSelectTab={(tab, sub) => {
+          if (tab === 'tenants' && !canAccessTenantsTab) {
+            showToast('دسترسی به بخش سازمان‌ها برای حساب کاربری شما فعال نیست.', 'error');
+            return;
+          }
           setActiveTab(tab);
           if (tab === 'personal_portal' && sub) setPortalSubTab(sub as PortalTab);
           if (tab === 'team' && sub) setTeamSubTab(sub as TeamSubTab);
@@ -722,6 +808,7 @@ export default function App() {
           pendingLeaves: leaveRequests.filter((r) => r.status === 'pending').length,
           pendingAdvances: advanceRequests.filter((r) => r.status === 'pending').length,
           totalPersonnel: personnelList.length,
+          totalTenants: tenants.length,
         }}
         currentPersonnel={currentPersonnel}
         isAdmin={Boolean(
@@ -734,6 +821,10 @@ export default function App() {
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
         onLogout={handleLogout}
+        tenants={tenants}
+        activeTenantId={activeTenantId}
+        onSelectTenant={handleSelectTenant}
+        onOpenTenantsManagement={() => setIsTenantsModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -769,6 +860,10 @@ export default function App() {
             setActiveTab('personal_portal');
             setPortalSubTab(sub as PortalTab);
           }}
+          tenants={tenants}
+          activeTenantId={activeTenantId}
+          onSelectTenant={handleSelectTenant}
+          onOpenTenantsManagement={() => setIsTenantsModalOpen(true)}
         />
 
         {/* Dynamic Main View */}
@@ -1002,6 +1097,25 @@ export default function App() {
                   showToast={showToast}
                 />
               )}
+
+              {displayedTab === 'tenants' && (
+                <TenantsManagementView
+                  tenants={tenants}
+                  activeTenantId={activeTenantId}
+                  onSelectTenant={handleSelectTenant}
+                  onRefreshTenants={loadTenants}
+                  showToast={showToast}
+                  isAdmin={Boolean(
+                    currentUser?.is_admin ||
+                    currentUser?.app_role === 'admin' ||
+                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                    currentPersonnel?.role === 'admin'
+                  )}
+                  customers={customers}
+                  personnelList={personnelList}
+                />
+              )}
             </div>
           )}
         </main>
@@ -1220,6 +1334,24 @@ export default function App() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onAuthSuccess={handleAuthSuccess}
+      />
+
+      {/* Multi-Tenant Organization Management Modal */}
+      <TenantsManagementModal
+        isOpen={isTenantsModalOpen}
+        onClose={() => setIsTenantsModalOpen(false)}
+        tenants={tenants}
+        activeTenantId={activeTenantId}
+        onSelectTenant={handleSelectTenant}
+        onRefreshTenants={loadTenants}
+        showToast={showToast}
+        isAdmin={Boolean(
+          currentUser?.is_admin ||
+          currentUser?.app_role === 'admin' ||
+          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+          currentPersonnel?.role === 'admin'
+        )}
       />
 
       {/* Floating System Toast Notifications */}

@@ -45,6 +45,9 @@ import {
   Layers,
   KeyRound,
   FileCheck,
+  Building2,
+  HeartHandshake,
+  UserCog,
 } from 'lucide-react';
 import {
   Personnel,
@@ -56,6 +59,8 @@ import {
   PersonnelRole,
   PersonnelPermissions,
   PersonnelContactNumber,
+  FamilyContact,
+  Tenant,
 } from '../types';
 import {
   formatPersianDate,
@@ -64,6 +69,17 @@ import {
   getStatusTheme,
   toPersianDigits,
 } from '../utils';
+
+export const FAMILY_RELATION_OPTIONS = [
+  'پدر',
+  'مادر',
+  'همسر',
+  'برادر',
+  'خواهر',
+  'فرزند',
+  'سرپرست قانونی',
+  'سایر بستگان',
+];
 
 export const COMMON_PHONE_LABELS = [
   'موبایل اصلی',
@@ -99,6 +115,7 @@ export const PERSONNEL_ROLE_CONFIG: Record<
       'cold_leads',
       'admin_reports',
       'team',
+      'tenants',
       'personal_portal',
     ],
     defaultReportScope: 'all',
@@ -188,6 +205,7 @@ export const SYSTEM_MENUS = [
   { id: 'cold_leads', label: 'بانک شماره‌های اولیه', icon: PhoneCall, desc: 'لیدهای سرد و تماس‌های اولیه' },
   { id: 'admin_reports', label: 'گزارش عملکرد پرسنل', icon: ClipboardCheck, desc: 'فرم ثبت کار روزانه و ساعت کاری' },
   { id: 'team', label: 'مدیریت همکاران و تیم', icon: Users2, desc: 'ثبت همکار، تمدید و سوئیچ مالکیت' },
+  { id: 'tenants', label: 'سازمان‌ها و شعب (چندسازمانی)', icon: Building2, desc: 'مشاهده لیست سازمان‌ها و تعریف شرکت یا شعبه جدید' },
   { id: 'personal_portal', label: 'پنل شخصی و پرسنلی', icon: User, desc: 'پروفایل، مرخصی و مساعده' },
 ];
 
@@ -201,6 +219,7 @@ export const SYSTEM_ACTIONS = [
   { key: 'can_manage_leads', label: 'تخصیص شماره‌های لید سرد به دیگران' },
   { key: 'can_approve_leaves', label: 'تایید یا رد درخواست‌های مرخصی همکاران' },
   { key: 'can_approve_advances', label: 'بررسی و تایید درخواست‌های مساعده مالی' },
+  { key: 'can_manage_tenants', label: 'مدیریت سازمان‌ها، شعب و ایجاد سازمان جدید' },
 ];
 
 interface TeamManagementViewProps {
@@ -210,6 +229,9 @@ interface TeamManagementViewProps {
   leaveRequests: LeaveRequest[];
   currentPersonnel: Personnel | null;
   isAdmin: boolean;
+  tenants?: Tenant[];
+  activeTenantId?: string;
+  onOpenTenantsModal?: () => void;
   onCreatePersonnel: (payload: CreateColleaguePayload) => Promise<void>;
   onUpdatePersonnel: (id: string, payload: Partial<Personnel>) => Promise<void>;
   onDeletePersonnel: (id: string) => Promise<void>;
@@ -227,6 +249,9 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   leaveRequests,
   currentPersonnel,
   isAdmin,
+  tenants = [],
+  activeTenantId = 'default',
+  onOpenTenantsModal,
   onCreatePersonnel,
   onUpdatePersonnel,
   onDeletePersonnel,
@@ -253,12 +278,50 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   const [colleagueEmail, setColleagueEmail] = useState('');
   const [colleagueRole, setColleagueRole] = useState<PersonnelRole>('marketer');
   const [colleaguePassword, setColleaguePassword] = useState('');
+  const [colleagueTenantId, setColleagueTenantId] = useState(
+    activeTenantId && activeTenantId !== 'all' ? activeTenantId : 'default'
+  );
+  const [colleagueAllowedTenantIds, setColleagueAllowedTenantIds] = useState<string[]>([]);
   const [isSubmittingPersonnel, setIsSubmittingPersonnel] = useState(false);
 
   // Multiple contact numbers state
   const [colleaguePhones, setColleaguePhones] = useState<Array<{ id: string; label: string; number: string }>>([
     { id: 'phone-1', label: 'موبایل اصلی', number: '' },
   ]);
+
+  // Family Contacts State (اطلاعات تماس بستگان و خانواده همکار)
+  const [colleagueFamilyContacts, setColleagueFamilyContacts] = useState<Array<{
+    id: string;
+    name: string;
+    relation: string;
+    phone: string;
+    phone2?: string;
+    notes?: string;
+  }>>([
+    { id: 'fc-1', name: '', relation: 'پدر', phone: '', phone2: '', notes: '' },
+  ]);
+
+  const handleAddColleagueFamilyContact = () => {
+    setColleagueFamilyContacts((prev) => [
+      ...prev,
+      { id: 'fc-' + Date.now(), name: '', relation: 'پدر', phone: '', phone2: '', notes: '' },
+    ]);
+  };
+
+  const handleRemoveColleagueFamilyContact = (id: string) => {
+    if (colleagueFamilyContacts.length <= 1) return;
+    setColleagueFamilyContacts((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  const handleChangeColleagueFamilyContact = (
+    id: string,
+    field: 'name' | 'relation' | 'phone' | 'phone2' | 'notes',
+    val: string
+  ) => {
+    setColleagueFamilyContacts((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: val } : item))
+    );
+  };
 
   // Granular permissions state
   const [allowedMenus, setAllowedMenus] = useState<string[]>(
@@ -274,6 +337,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
     can_manage_leads: false,
     can_approve_leaves: false,
     can_approve_advances: false,
+    can_manage_tenants: false,
   });
   const [reportScope, setReportScope] = useState<'all' | 'own_only' | 'specific_personnel'>('own_only');
   const [visibleReportPersonnelIds, setVisibleReportPersonnelIds] = useState<string[]>([]);
@@ -295,6 +359,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           can_manage_leads: true,
           can_approve_leaves: true,
           can_approve_advances: true,
+          can_manage_tenants: true,
         });
       } else if (newRole === 'sales_manager') {
         setActionPermissions({
@@ -307,6 +372,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           can_manage_leads: true,
           can_approve_leaves: true,
           can_approve_advances: false,
+          can_manage_tenants: false,
         });
       } else {
         setActionPermissions({
@@ -319,6 +385,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           can_manage_leads: false,
           can_approve_leaves: false,
           can_approve_advances: false,
+          can_manage_tenants: false,
         });
       }
     }
@@ -359,9 +426,28 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           number: p.number.trim(),
         }));
 
+      const cleanFamilyContacts: FamilyContact[] = colleagueFamilyContacts
+        .filter((f) => f.name.trim() || f.phone.trim())
+        .map((f) => ({
+          id: f.id,
+          name: f.name.trim(),
+          relation: f.relation.trim() || 'بستگان',
+          phone: f.phone.trim(),
+          phone2: f.phone2?.trim() || undefined,
+          notes: f.notes?.trim() || undefined,
+        }));
+
+      const primaryFamily = cleanFamilyContacts[0];
+
+      const effectiveAllowed = colleagueAllowedTenantIds.length > 0
+        ? Array.from(new Set([colleagueTenantId, ...colleagueAllowedTenantIds]))
+        : [colleagueTenantId || 'default'];
+
       const permissions: PersonnelPermissions = {
         allowed_menus: allowedMenus,
         ...actionPermissions,
+        can_manage_tenants: Boolean(actionPermissions.can_manage_tenants),
+        allowed_tenant_ids: effectiveAllowed,
         report_view_scope: reportScope,
         visible_report_personnel_ids: reportScope === 'specific_personnel' ? visibleReportPersonnelIds : [],
       };
@@ -372,6 +458,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
         email: colleagueEmail.trim(),
         phone: primaryPhone,
         phones: cleanPhones,
+        tenant_id: colleagueTenantId || 'default',
+        allowed_tenant_ids: effectiveAllowed,
+        emergency_contact_name: primaryFamily?.name || undefined,
+        emergency_contact_phone: primaryFamily?.phone || undefined,
+        emergency_contact_relation: primaryFamily?.relation || undefined,
+        family_contacts: cleanFamilyContacts.length > 0 ? cleanFamilyContacts : undefined,
         role: colleagueRole,
         permissions,
         password: colleaguePassword.trim() || undefined,
@@ -382,6 +474,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       setColleagueUsername('');
       setColleagueEmail('');
       setColleaguePhones([{ id: 'phone-1', label: 'موبایل اصلی', number: '' }]);
+      setColleagueFamilyContacts([{ id: 'fc-1', name: '', relation: 'پدر', phone: '', phone2: '', notes: '' }]);
+      setColleagueAllowedTenantIds([]);
       setColleaguePassword('');
       setActiveSubTab('colleagues_list');
     } catch (err: any) {
@@ -395,20 +489,52 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   // TAB 2: Colleagues List Search & Edit Modal State
   // -------------------------------------------------------------
   const [personnelSearch, setPersonnelSearch] = useState('');
+  const [selectedTenantFilter, setSelectedTenantFilter] = useState<string>('all');
+  const [viewingFamilyModalPersonnel, setViewingFamilyModalPersonnel] = useState<Personnel | null>(null);
   const [editingColleague, setEditingColleague] = useState<Personnel | null>(null);
   const [isUpdatingColleague, setIsUpdatingColleague] = useState(false);
 
-  // Edit Colleague multi-phones and permissions state
+  // Edit Colleague multi-phones, family contacts, and permissions state
   const [editingPhones, setEditingPhones] = useState<Array<{ id: string; label: string; number: string }>>([]);
+  const [editingFamilyContacts, setEditingFamilyContacts] = useState<FamilyContact[]>([]);
+  const [editingTenantId, setEditingTenantId] = useState<string>('default');
+  const [editingAllowedTenantIds, setEditingAllowedTenantIds] = useState<string[]>([]);
   const [editingRole, setEditingRole] = useState<PersonnelRole>('marketer');
   const [editingAllowedMenus, setEditingAllowedMenus] = useState<string[]>([]);
   const [editingActionPermissions, setEditingActionPermissions] = useState<Record<string, boolean>>({});
   const [editingReportScope, setEditingReportScope] = useState<'all' | 'own_only' | 'specific_personnel'>('own_only');
   const [editingVisibleReportPersonnelIds, setEditingVisibleReportPersonnelIds] = useState<string[]>([]);
 
+  const handleAddEditingFamilyContact = () => {
+    setEditingFamilyContacts((prev) => [
+      ...prev,
+      { id: 'efc-' + Date.now(), name: '', relation: 'پدر', phone: '', phone2: '', notes: '' },
+    ]);
+  };
+
+  const handleRemoveEditingFamilyContact = (id: string) => {
+    if (editingFamilyContacts.length <= 1) return;
+    setEditingFamilyContacts((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  const handleChangeEditingFamilyContact = (
+    id: string,
+    field: 'name' | 'relation' | 'phone' | 'phone2' | 'notes',
+    val: string
+  ) => {
+    setEditingFamilyContacts((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: val } : item))
+    );
+  };
+
   const openEditColleague = (p: Personnel) => {
     setEditingColleague(p);
     setEditingRole((p.role as PersonnelRole) || 'marketer');
+    const primaryTenant = p.tenant_id || 'default';
+    setEditingTenantId(primaryTenant);
+    
+    const initialAllowed = p.allowed_tenant_ids || p.permissions?.allowed_tenant_ids || [primaryTenant];
+    setEditingAllowedTenantIds(initialAllowed);
 
     // Parse phones
     if (p.phones && Array.isArray(p.phones) && p.phones.length > 0) {
@@ -424,6 +550,35 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       setEditingPhones([{ id: 'ep-1', label: 'موبایل اصلی', number: p.phone }]);
     } else {
       setEditingPhones([{ id: 'ep-1', label: 'موبایل اصلی', number: '' }]);
+    }
+
+    // Parse family contacts
+    if (p.family_contacts && Array.isArray(p.family_contacts) && p.family_contacts.length > 0) {
+      setEditingFamilyContacts(
+        p.family_contacts.map((f, i) => ({
+          id: f.id || `efc-${i}`,
+          name: f.name || '',
+          relation: f.relation || 'پدر',
+          phone: f.phone || '',
+          phone2: f.phone2 || '',
+          notes: f.notes || '',
+        }))
+      );
+    } else if (p.emergency_contact_phone || p.emergency_contact_name) {
+      setEditingFamilyContacts([
+        {
+          id: 'efc-1',
+          name: p.emergency_contact_name || '',
+          relation: p.emergency_contact_relation || 'پدر',
+          phone: p.emergency_contact_phone || '',
+          phone2: '',
+          notes: '',
+        },
+      ]);
+    } else {
+      setEditingFamilyContacts([
+        { id: 'efc-1', name: '', relation: 'پدر', phone: '', phone2: '', notes: '' },
+      ]);
     }
 
     // Parse permissions
@@ -447,6 +602,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       can_manage_leads: Boolean(perms?.can_manage_leads || p.role === 'admin' || p.role === 'sales_manager'),
       can_approve_leaves: Boolean(perms?.can_approve_leaves || p.role === 'admin'),
       can_approve_advances: Boolean(perms?.can_approve_advances || p.role === 'admin'),
+      can_manage_tenants: Boolean(perms?.can_manage_tenants || p.role === 'admin'),
     });
 
     setEditingReportScope(perms?.report_view_scope || (p.role === 'admin' || p.role === 'sales_manager' ? 'all' : 'own_only'));
@@ -455,6 +611,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
 
   const filteredPersonnel = useMemo(() => {
     return personnelList.filter((p) => {
+      if (selectedTenantFilter !== 'all') {
+        const pTenant = p.tenant_id || 'default';
+        if (pTenant !== selectedTenantFilter) return false;
+      }
       if (!personnelSearch.trim()) return true;
       const q = personnelSearch.toLowerCase();
       const hasPhone = p.phone?.includes(q) || (Array.isArray(p.phones) && p.phones.some((ph) => (typeof ph === 'string' ? ph : ph.number)?.includes(q)));
@@ -465,7 +625,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
         hasPhone
       );
     });
-  }, [personnelList, personnelSearch]);
+  }, [personnelList, personnelSearch, selectedTenantFilter]);
 
   const handleSaveColleagueEdit = async () => {
     if (!editingColleague) return;
@@ -480,9 +640,28 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           number: p.number.trim(),
         }));
 
+      const cleanFamilyContacts: FamilyContact[] = editingFamilyContacts
+        .filter((f) => f.name.trim() || f.phone.trim())
+        .map((f) => ({
+          id: f.id,
+          name: f.name.trim(),
+          relation: f.relation.trim() || 'بستگان',
+          phone: f.phone.trim(),
+          phone2: f.phone2?.trim() || undefined,
+          notes: f.notes?.trim() || undefined,
+        }));
+
+      const primaryFamily = cleanFamilyContacts[0];
+
+      const effectiveAllowed = editingAllowedTenantIds.length > 0
+        ? Array.from(new Set([editingTenantId, ...editingAllowedTenantIds]))
+        : [editingTenantId || 'default'];
+
       const permissions: PersonnelPermissions = {
         allowed_menus: editingAllowedMenus,
         ...editingActionPermissions,
+        can_manage_tenants: Boolean(editingActionPermissions.can_manage_tenants),
+        allowed_tenant_ids: effectiveAllowed,
         report_view_scope: editingReportScope,
         visible_report_personnel_ids:
           editingReportScope === 'specific_personnel' ? editingVisibleReportPersonnelIds : [],
@@ -494,6 +673,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
         email: editingColleague.email,
         phone: primaryPhone,
         phones: cleanPhones,
+        tenant_id: editingTenantId || 'default',
+        allowed_tenant_ids: effectiveAllowed,
+        emergency_contact_name: primaryFamily?.name || undefined,
+        emergency_contact_phone: primaryFamily?.phone || undefined,
+        emergency_contact_relation: primaryFamily?.relation || undefined,
+        family_contacts: cleanFamilyContacts.length > 0 ? cleanFamilyContacts : undefined,
         role: editingRole,
         permissions,
         status: editingColleague.status,
@@ -857,7 +1042,102 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                   />
                 </div>
 
-                <div className="sm:col-span-2 lg:col-span-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-[#1DB954]" />
+                      <span>سازمان / شعبه اصلی همکار</span>
+                    </span>
+                    {onOpenTenantsModal && (
+                      <button
+                        type="button"
+                        onClick={onOpenTenantsModal}
+                        className="text-[10px] text-[#1DB954] hover:underline"
+                      >
+                        + مدیریت شعب
+                      </button>
+                    )}
+                  </label>
+                  <select
+                    value={colleagueTenantId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setColleagueTenantId(val);
+                      if (!colleagueAllowedTenantIds.includes(val)) {
+                        setColleagueAllowedTenantIds([...colleagueAllowedTenantIds, val]);
+                      }
+                    }}
+                    className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none cursor-pointer"
+                  >
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                    {tenants.length === 0 && (
+                      <option value="default">سازمان مرکزی آلفادسک</option>
+                    )}
+                  </select>
+                </div>
+
+                {tenants.length > 1 && (
+                  <div className="sm:col-span-2 p-3.5 bg-[#161616] rounded-xl border border-[#2a2a2a] space-y-2">
+                    <label className="block text-xs font-semibold text-[#CCC] flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-blue-400" />
+                        <span>سازمان‌ها و شعب مجاز جهت سوییچ (عضویت در چند شعبه):</span>
+                      </span>
+                      <span className="text-[10px] text-[#888]">
+                        کاربر غیرادمین فقط بین شعب تیک‌خورده مجاز به سوییچ خواهد بود
+                      </span>
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                      {tenants.map((t) => {
+                        const isChecked =
+                          colleagueAllowedTenantIds.includes(String(t.id)) ||
+                          colleagueTenantId === String(t.id);
+                        return (
+                          <label
+                            key={t.id}
+                            className={`p-2 rounded-lg border text-xs cursor-pointer flex items-center gap-2 select-none transition-colors ${
+                              isChecked
+                                ? 'bg-[#1a2e20]/60 border-[#1DB954]/50 text-white'
+                                : 'bg-[#1c1c1c] border-[#2c2c2c] text-[#777] hover:text-[#bbb]'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={colleagueTenantId === String(t.id)}
+                              onChange={(e) => {
+                                const tId = String(t.id);
+                                if (e.target.checked) {
+                                  setColleagueAllowedTenantIds([
+                                    ...colleagueAllowedTenantIds,
+                                    tId,
+                                  ]);
+                                } else {
+                                  setColleagueAllowedTenantIds(
+                                    colleagueAllowedTenantIds.filter((id) => id !== tId)
+                                  );
+                                }
+                              }}
+                              className="accent-[#1DB954]"
+                            />
+                            <span className="truncate">{t.name}</span>
+                            {colleagueTenantId === String(t.id) && (
+                              <span className="text-[9px] text-[#1DB954] bg-[#1DB954]/10 px-1 py-0.2 rounded font-mono mr-auto">
+                                شعبه اصلی
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
                     کلمه عبور اولیه (اختیاری)
                   </label>
@@ -936,11 +1216,129 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               </div>
             </div>
 
-            {/* Section C: Role Archetype Picker */}
+            {/* Section C: Family & Emergency Contacts */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <HeartHandshake className="w-4 h-4 text-rose-400" />
+                  <span>۳. اطلاعات تماس بستگان و خانواده همکار (تماس اضطراری)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddColleagueFamilyContact}
+                  className="px-3 py-1.5 rounded-lg bg-[#242424] hover:bg-[#303030] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors border border-[#3a3a3a]"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#1DB954]" />
+                  <span>افزودن عضو دیگر خانواده</span>
+                </button>
+              </div>
+
+              <div className="space-y-3 bg-[#141414] p-4 rounded-xl border border-[#262626]">
+                <p className="text-[11px] text-[#888] leading-relaxed">
+                  * ثبت شماره تماس خانواده و بستگان درجه یک جهت پیگیری‌های ضروری، حوادث غیرمترقبه و ارتباط سازمانی با خانواده همکار الزامی است.
+                </p>
+
+                {colleagueFamilyContacts.map((fc, idx) => (
+                  <div
+                    key={fc.id}
+                    className="p-3 bg-[#1a1a1a] rounded-xl border border-[#2c2c2c] space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between border-b border-[#262626] pb-2">
+                      <span className="text-[11px] font-bold text-[#1DB954] flex items-center gap-1.5">
+                        <HeartHandshake className="w-3.5 h-3.5" />
+                        <span>عضو شماره {toPersianDigits(idx + 1)} خانواده</span>
+                      </span>
+                      {colleagueFamilyContacts.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveColleagueFamilyContact(fc.id)}
+                          className="text-rose-400 hover:text-rose-300 text-[11px] flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>حذف این عضو</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] text-[#A7A7A7] mb-1">
+                          نام و نام خانوادگی عضو خانواده
+                        </label>
+                        <input
+                          type="text"
+                          value={fc.name}
+                          onChange={(e) => handleChangeColleagueFamilyContact(fc.id, 'name', e.target.value)}
+                          placeholder="مثلاً: احمد احمدی"
+                          className="w-full h-9 px-2.5 bg-[#121212] rounded-lg text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-[#A7A7A7] mb-1">
+                          نسبت خانوادگی
+                        </label>
+                        <select
+                          value={fc.relation}
+                          onChange={(e) => handleChangeColleagueFamilyContact(fc.id, 'relation', e.target.value)}
+                          className="w-full h-9 px-2.5 bg-[#121212] rounded-lg text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none cursor-pointer"
+                        >
+                          {FAMILY_RELATION_OPTIONS.map((rel) => (
+                            <option key={rel} value={rel}>
+                              {rel}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-[#A7A7A7] mb-1">
+                          شماره تماس همراه (موبایل)
+                        </label>
+                        <input
+                          type="text"
+                          dir="ltr"
+                          value={fc.phone}
+                          onChange={(e) => handleChangeColleagueFamilyContact(fc.id, 'phone', e.target.value)}
+                          placeholder="0912xxxxxxx"
+                          className="w-full h-9 px-2.5 bg-[#121212] rounded-lg text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-[#A7A7A7] mb-1">
+                          تلفن منزل / شماره دوم (اختیاری)
+                        </label>
+                        <input
+                          type="text"
+                          dir="ltr"
+                          value={fc.phone2 || ''}
+                          onChange={(e) => handleChangeColleagueFamilyContact(fc.id, 'phone2', e.target.value)}
+                          placeholder="021-xxxxxxxx"
+                          className="w-full h-9 px-2.5 bg-[#121212] rounded-lg text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <input
+                        type="text"
+                        value={fc.notes || ''}
+                        onChange={(e) => handleChangeColleagueFamilyContact(fc.id, 'notes', e.target.value)}
+                        placeholder="نشانی محل سکونت یا توضیحات بیشتر (اختیاری)"
+                        className="w-full h-8 px-2.5 bg-[#121212] rounded-lg text-[11px] text-white border border-[#282828] focus:border-[#1DB954] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Section D: Role Archetype Picker */}
             <div className="space-y-3">
               <div className="text-xs font-bold text-white flex items-center gap-2">
                 <Briefcase className="w-4 h-4 text-purple-400" />
-                <span>۳. انتخاب نقش سازمانی و الگوی دسترسی</span>
+                <span>۴. انتخاب نقش سازمانی و الگوی دسترسی</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
@@ -1213,7 +1611,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {activeSubTab === 'colleagues_list' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 bg-[#181818] p-3 sm:p-4 rounded-2xl border border-[#282828]">
-            <div className="relative flex-1 min-w-[240px]">
+            <div className="relative flex-1 min-w-[220px]">
               <Search className="w-4 h-4 text-[#888] absolute right-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -1222,6 +1620,38 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 placeholder="جستجو بر اساس نام، ایمیل، شماره تماس..."
                 className="w-full h-9 pr-9 pl-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none"
               />
+            </div>
+
+            {/* Organization / Tenant Filter */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#121212] border border-[#2c2c2c] text-xs text-[#B3B3B3]">
+                <Building2 className="w-3.5 h-3.5 text-[#1DB954]" />
+                <select
+                  value={selectedTenantFilter}
+                  onChange={(e) => setSelectedTenantFilter(e.target.value)}
+                  className="bg-transparent text-xs text-white focus:outline-none cursor-pointer"
+                >
+                  <option value="all" className="bg-[#181818]">
+                    همه سازمان‌ها ({toPersianDigits(personnelList.length)})
+                  </option>
+                  {tenants.map((t) => (
+                    <option key={t.id} value={t.id} className="bg-[#181818]">
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {onOpenTenantsModal && (
+                <button
+                  type="button"
+                  onClick={onOpenTenantsModal}
+                  className="p-2 rounded-xl bg-[#222] hover:bg-[#282828] text-[#888] hover:text-white transition-colors"
+                  title="مدیریت سازمان‌ها و شعب"
+                >
+                  <Building2 className="w-4 h-4 text-[#1DB954]" />
+                </button>
+              )}
             </div>
 
             <button
@@ -1287,12 +1717,16 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                             <Shield className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
                           )}
                         </div>
-                        <div className="mt-1 flex items-center gap-1.5">
+                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                           <span
                             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${roleCfg.badgeClass}`}
                           >
                             <RoleIcon className="w-3 h-3" />
                             <span>{roleCfg.label}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-[#121212] border border-[#2c2c2c] text-[#A7A7A7]">
+                            <Building2 className="w-3 h-3 text-[#1DB954]" />
+                            <span>{p.tenant_name || 'سازمان مرکزی'}</span>
                           </span>
                         </div>
                       </div>
@@ -1383,6 +1817,39 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       <Eye className="w-3 h-3 text-blue-400" />
                       <span>دید گزارش: {scopeLabel}</span>
                     </span>
+                  </div>
+
+                  {/* Family Contacts Quick Action */}
+                  <div className="pt-2 border-t border-[#222]">
+                    {(p.family_contacts && p.family_contacts.length > 0) || p.emergency_contact_phone ? (
+                      <button
+                        type="button"
+                        onClick={() => setViewingFamilyModalPersonnel(p)}
+                        className="w-full py-1.5 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 text-[11px] font-semibold flex items-center justify-between transition-colors shadow-sm"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <HeartHandshake className="w-3.5 h-3.5 text-rose-400" />
+                          <span>اطلاعات تماس خانواده</span>
+                        </span>
+                        <span className="px-2 py-0.5 bg-rose-500/20 rounded-md text-[10px] font-bold text-rose-200">
+                          {toPersianDigits(
+                            p.family_contacts && p.family_contacts.length > 0
+                              ? p.family_contacts.length
+                              : 1
+                          )}{' '}
+                          عضو
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openEditColleague(p)}
+                        className="w-full py-1.5 px-2.5 rounded-xl bg-[#141414] hover:bg-[#202020] text-[#777] hover:text-[#B3B3B3] border border-dashed border-[#2c2c2c] text-[11px] flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <HeartHandshake className="w-3.5 h-3.5 text-[#666]" />
+                        <span>ثبت شماره تماس خانواده همکار</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Stats snippet */}
@@ -1965,6 +2432,35 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                   </div>
 
                   <div>
+                    <label className="block text-[#B3B3B3] mb-1 font-semibold flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-[#1DB954]" />
+                        <span>سازمان / شعبه اصلی</span>
+                      </span>
+                    </label>
+                    <select
+                      value={editingTenantId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditingTenantId(val);
+                        if (!editingAllowedTenantIds.includes(val)) {
+                          setEditingAllowedTenantIds([...editingAllowedTenantIds, val]);
+                        }
+                      }}
+                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] cursor-pointer"
+                    >
+                      {tenants.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                      {tenants.length === 0 && (
+                        <option value="default">سازمان مرکزی آلفادسک</option>
+                      )}
+                    </select>
+                  </div>
+
+                  <div>
                     <label className="block text-[#B3B3B3] mb-1 font-semibold">نقش سازمانی</label>
                     <select
                       value={editingRole}
@@ -1986,6 +2482,63 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       ))}
                     </select>
                   </div>
+
+                  {tenants.length > 1 && (
+                    <div className="sm:col-span-2 p-3 bg-[#181818] rounded-xl border border-[#2e2e2e] space-y-2 mt-1">
+                      <label className="block text-xs font-semibold text-[#CCC] flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-blue-400" />
+                          <span>سازمان‌ها و شعب مجاز جهت سوییچ (عضویت در چند شعبه):</span>
+                        </span>
+                        <span className="text-[10px] text-[#888]">
+                          فقط در شعب تیک‌خورده مجاز به فعالیت و سوییچ خواهد بود
+                        </span>
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                        {tenants.map((t) => {
+                          const isChecked =
+                            editingAllowedTenantIds.includes(String(t.id)) ||
+                            editingTenantId === String(t.id);
+                          return (
+                            <label
+                              key={t.id}
+                              className={`p-2 rounded-lg border text-xs cursor-pointer flex items-center gap-2 select-none transition-colors ${
+                                isChecked
+                                  ? 'bg-[#1a2e20]/60 border-[#1DB954]/50 text-white'
+                                  : 'bg-[#121212] border-[#2c2c2c] text-[#777] hover:text-[#bbb]'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                disabled={editingTenantId === String(t.id)}
+                                onChange={(e) => {
+                                  const tId = String(t.id);
+                                  if (e.target.checked) {
+                                    setEditingAllowedTenantIds([
+                                      ...editingAllowedTenantIds,
+                                      tId,
+                                    ]);
+                                  } else {
+                                    setEditingAllowedTenantIds(
+                                      editingAllowedTenantIds.filter((id) => id !== tId)
+                                    );
+                                  }
+                                }}
+                                className="accent-[#1DB954]"
+                              />
+                              <span className="truncate">{t.name}</span>
+                              {editingTenantId === String(t.id) && (
+                                <span className="text-[9px] text-[#1DB954] bg-[#1DB954]/10 px-1 py-0.2 rounded font-mono mr-auto">
+                                  شعبه اصلی
+                                </span>
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

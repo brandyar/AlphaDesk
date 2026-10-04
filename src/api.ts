@@ -18,17 +18,27 @@ import {
   PasswordChangePayload,
   CreateColleaguePayload,
   ProjectSettings,
+  Tenant,
 } from './types';
 
 const BASE_URL = '/api';
 
 const AUTH_STORAGE_KEY = 'crm_auth_session';
+const TENANT_STORAGE_KEY = 'crm_active_tenant_id';
 
 let currentPersonnelContext: Personnel | null = null;
 let currentAuthUser: AuthUser | null = null;
 let currentAuthToken: string = '';
+let currentTenantId: string = 'default';
 
-// Load initial stored auth session if available
+// Load initial stored auth session & tenant if available
+try {
+  const savedTenant = localStorage.getItem(TENANT_STORAGE_KEY);
+  if (savedTenant) {
+    currentTenantId = savedTenant;
+  }
+} catch {}
+
 try {
   const saved = localStorage.getItem(AUTH_STORAGE_KEY);
   if (saved) {
@@ -36,8 +46,22 @@ try {
     currentAuthToken = parsed.access_token || '';
     currentAuthUser = parsed.user || null;
     currentPersonnelContext = parsed.personnel || null;
+    if (parsed.user?.tenant_id && !localStorage.getItem(TENANT_STORAGE_KEY)) {
+      currentTenantId = parsed.user.tenant_id;
+    }
   }
 } catch {}
+
+export function getActiveTenantId(): string {
+  return currentTenantId || 'default';
+}
+
+export function setActiveTenantId(id: string) {
+  currentTenantId = id || 'default';
+  try {
+    localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
+  } catch {}
+}
 
 export function setApiPersonnelContext(p: Personnel | null) {
   currentPersonnelContext = p;
@@ -94,6 +118,11 @@ function getBffHeaders(customHeaders: Record<string, string> = {}): Record<strin
     headers['x-personnel-id'] = currentPersonnelContext.id;
     if (!headers['x-user-role']) headers['x-user-role'] = currentPersonnelContext.role;
     if (!headers['x-user-name']) headers['x-user-name'] = encodeURIComponent(currentPersonnelContext.name);
+  }
+
+  const activeTenant = getActiveTenantId();
+  if (activeTenant) {
+    headers['x-tenant-id'] = activeTenant;
   }
 
   return headers;
@@ -666,4 +695,42 @@ export async function updateProjectSettings(payload: Partial<ProjectSettings>): 
   });
   return handleResponse(res, 'خطا در بروزرسانی تنظیمات سامانه');
 }
+
+// ----------------- Tenants / Multi-Tenancy APIs ----------------- //
+
+export async function fetchTenants(): Promise<Tenant[]> {
+  const res = await fetch(`${BASE_URL}/tenants`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse(res, 'خطا در دریافت لیست سازمان‌ها و شعب');
+}
+
+export async function createTenant(payload: Partial<Tenant>): Promise<Tenant> {
+  const res = await fetch(`${BASE_URL}/tenants`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, 'خطا در ایجاد سازمان / شعبه جدید');
+}
+
+export async function updateTenant(id: string, payload: Partial<Tenant>): Promise<Tenant> {
+  const res = await fetch(`${BASE_URL}/tenants/${id}`, {
+    method: 'PATCH',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, 'خطا در ویرایش اطلاعات سازمان');
+}
+
+export async function deleteTenant(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/tenants/${id}`, {
+    method: 'DELETE',
+    headers: getBffHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error('خطا در حذف سازمان');
+  }
+}
+
 

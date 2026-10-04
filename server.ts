@@ -35,6 +35,7 @@ export interface CustomerContact {
 
 export interface Customer {
   id: string;
+  tenant_id?: string;
   company_name: string;
   business_type: string;
   province: string;
@@ -99,6 +100,7 @@ export interface ColdLead {
 
 export interface AdministrativeReport {
   id: string;
+  tenant_id?: string;
   personnel_id: string;
   personnel_name: string;
   report_date: string;
@@ -114,6 +116,7 @@ export interface AdministrativeReport {
 
 export interface LeaveRequest {
   id: string;
+  tenant_id?: string;
   personnel_id: string;
   personnel_name: string;
   leave_type: 'daily' | 'hourly';
@@ -133,6 +136,7 @@ export interface LeaveRequest {
 
 export interface SalaryAdvanceRequest {
   id: string;
+  tenant_id?: string;
   personnel_id: string;
   personnel_name: string;
   amount: number;
@@ -173,12 +177,19 @@ export interface PersonnelPermissions {
 
 export interface Personnel {
   id: string;
+  tenant_id?: string;
+  tenant_name?: string;
+  allowed_tenant_ids?: string[];
   name: string;
   username?: string;
   role: 'admin' | 'sales_manager' | 'marketer' | 'office_staff' | 'remote_task' | 'operator' | 'finance' | 'custom' | string;
   email: string;
   phone: string;
   phones?: Array<string | PersonnelContactNumber>;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  emergency_contact_relation?: string;
+  family_contacts?: any;
   permissions?: PersonnelPermissions;
   avatar?: string;
   status?: string;
@@ -577,6 +588,110 @@ export interface ProjectSettingsState {
   free_customers_claim_limit?: number;
 }
 
+export interface Tenant {
+  id: string;
+  name: string;
+  slug?: string;
+  logo?: string;
+  phone?: string;
+  address?: string;
+  description?: string;
+  status: 'active' | 'inactive';
+  date_created: string;
+}
+
+let tenantsData: Tenant[] = [
+  {
+    id: 'default',
+    name: 'سازمان مرکزی آلفادسک',
+    slug: 'alphadesk-hq',
+    phone: '021-88888888',
+    address: 'تهران، میدان ونک، برج نگار، طبقه ۱۰',
+    description: 'سازمان مرکزی و پیش‌فرض سامانه',
+    status: 'active',
+    date_created: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'tenant-2',
+    name: 'شعبه بازرگانی و فروش آریا',
+    slug: 'arya-trading',
+    phone: '021-77777777',
+    address: 'اصفهان، خیابان چهارباغ بالا',
+    description: 'شعبه بازرگانی و فروش',
+    status: 'active',
+    date_created: '2026-02-01T00:00:00.000Z',
+  },
+];
+
+function resolveDirectusTenantId(rawTenant: any): number | null {
+  if (rawTenant === null || rawTenant === undefined || rawTenant === '' || rawTenant === 'all') {
+    if (tenantsData.length > 0) {
+      const num = Number(tenantsData[0].id);
+      if (!isNaN(num) && isFinite(num) && num > 0) return num;
+    }
+    return null;
+  }
+  const directNum = Number(rawTenant);
+  if (!isNaN(directNum) && isFinite(directNum) && directNum > 0) {
+    return directNum;
+  }
+  const str = String(rawTenant).trim().toLowerCase();
+  const match = tenantsData.find(
+    (t) =>
+      String(t.id).toLowerCase() === str ||
+      (t.slug && t.slug.toLowerCase() === str) ||
+      t.name.toLowerCase() === str
+  );
+  if (match) {
+    const matchNum = Number(match.id);
+    if (!isNaN(matchNum) && isFinite(matchNum) && matchNum > 0) return matchNum;
+  }
+  if (tenantsData.length > 0) {
+    const fallbackNum = Number(tenantsData[0].id);
+    if (!isNaN(fallbackNum) && isFinite(fallbackNum) && fallbackNum > 0) return fallbackNum;
+  }
+  return null;
+}
+
+function matchesTenant(itemTenantId: any, activeTenantId: string): boolean {
+  if (!activeTenantId || activeTenantId === 'all') return true;
+  const itemStr =
+    typeof itemTenantId === 'object' && itemTenantId !== null
+      ? String(itemTenantId.id)
+      : itemTenantId !== null && itemTenantId !== undefined
+      ? String(itemTenantId)
+      : 'default';
+
+  if (itemStr === activeTenantId) return true;
+  if (activeTenantId === 'default') {
+    if (itemStr === 'default') return true;
+    if (tenantsData.length > 0) {
+      if (itemStr === String(tenantsData[0].id) || (tenantsData[0].slug && itemStr === tenantsData[0].slug)) {
+        return true;
+      }
+    }
+  }
+  const activeTenant = tenantsData.find((t) => String(t.id) === activeTenantId || t.slug === activeTenantId);
+  if (activeTenant) {
+    if (itemStr === String(activeTenant.id) || (activeTenant.slug && itemStr === activeTenant.slug)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getRequestTenantId(req: Request): string {
+  const headerTenant = req.headers['x-tenant-id'];
+  if (headerTenant && typeof headerTenant === 'string' && headerTenant.trim()) {
+    return headerTenant.trim();
+  }
+  const queryTenant = req.query.tenant_id;
+  if (queryTenant && typeof queryTenant === 'string' && queryTenant.trim()) {
+    return queryTenant.trim();
+  }
+  return 'default';
+}
+
 let projectSettingsData: ProjectSettingsState = {
   id: 1,
   ippanel_api: '',
@@ -628,6 +743,14 @@ function computeCustomerExpiration(c: any): any {
     new Date().getTime() > new Date(c.assignment_deadline).getTime()
   );
 
+  const rawTenant = c.tenant_id;
+  const tId = typeof rawTenant === 'object' && rawTenant !== null
+    ? String(rawTenant.id)
+    : rawTenant !== null && rawTenant !== undefined
+    ? String(rawTenant)
+    : 'default';
+  const tObj = tenantsData.find(t => String(t.id) === tId || t.slug === tId);
+
   return {
     ...c,
     company_name: c.company_name || 'بدون نام',
@@ -648,6 +771,8 @@ function computeCustomerExpiration(c: any): any {
     is_expired: isExpired,
     claimed_from_pool: Boolean(c.claimed_from_pool),
     claimed_from_pool_at: c.claimed_from_pool_at || null,
+    tenant_id: tId,
+    tenant_name: (typeof rawTenant === 'object' && rawTenant?.name) || (tObj ? tObj.name : 'سازمان مرکزی'),
   };
 }
 
@@ -718,6 +843,53 @@ async function directusFetch(path: string, options: RequestInit = {}, retries = 
   }
 }
 
+// Ensure at least one default tenant exists in Directus so foreign keys are valid
+async function ensureDirectusTenants() {
+  if (!directusUrl || !directusAdminToken) return;
+  try {
+    const res = await directusFetch('/items/tenants?limit=100&sort=id');
+    if (res && Array.isArray(res.data) && res.data.length > 0) {
+      tenantsData = res.data.map((t: any) => ({
+        id: String(t.id),
+        name: t.name || 'سازمان ' + t.id,
+        slug: t.slug || 'org-' + t.id,
+        logo: t.logo || '',
+        description: t.description || '',
+        phone: t.phone || '',
+        address: t.address || '',
+        status: t.status === 'inactive' ? 'inactive' : 'active',
+        date_created: t.date_created || new Date().toISOString(),
+      }));
+      console.log(`Directus tenants synchronized (${tenantsData.length} tenants).`);
+    } else {
+      console.log('No tenants found in Directus, creating default tenant...');
+      const created = await directusFetch('/items/tenants', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'سازمان مرکزی آلفادسک',
+          slug: 'alphadesk-hq',
+          status: 'active',
+          description: 'سازمان اصلی و پیش‌فرض سامانه'
+        })
+      });
+      if (created?.data) {
+        tenantsData = [{
+          id: String(created.data.id),
+          name: created.data.name,
+          slug: created.data.slug,
+          logo: created.data.logo || '',
+          description: created.data.description || '',
+          status: 'active',
+          date_created: created.data.date_created || new Date().toISOString(),
+        }];
+        console.log('Directus default tenant created with ID:', created.data.id);
+      }
+    }
+  } catch (err: any) {
+    console.warn('Could not sync/seed tenants in Directus:', err.message);
+  }
+}
+
 // Auto-seed personnel into Directus so foreign key assigned_marketer_id is always satisfied
 async function ensureDirectusPersonnel() {
   if (!directusUrl || !directusAdminToken) return;
@@ -725,6 +897,7 @@ async function ensureDirectusPersonnel() {
     const res = await directusFetch('/items/personnel?limit=100');
     if (res && Array.isArray(res.data) && res.data.length === 0) {
       console.log('Seeding initial personnel into Directus...');
+      const defaultTenantId = resolveDirectusTenantId('default');
       await directusFetch('/items/personnel', {
         method: 'POST',
         body: JSON.stringify(initialPersonnel.map(p => ({
@@ -733,7 +906,8 @@ async function ensureDirectusPersonnel() {
           role: p.role,
           phone: p.phone,
           email: p.email,
-          status: 'active'
+          status: 'active',
+          ...(defaultTenantId ? { tenant_id: defaultTenantId } : {})
         })))
       });
       console.log('Directus personnel auto-seeded successfully.');
@@ -815,6 +989,28 @@ async function resolvePersonnelId(rawIdentifier: string | null | undefined, fall
   return { personnelId: null };
 }
 
+function enrichPersonnel(p: any): any {
+  if (!p) return p;
+  const tid = p.tenant_id && typeof p.tenant_id === 'object' ? String(p.tenant_id.id || p.tenant_id.name || 'default') : String(p.tenant_id || 'default');
+  const allowed = Array.isArray(p.allowed_tenant_ids)
+    ? p.allowed_tenant_ids.map(String)
+    : (p.permissions?.allowed_tenant_ids && Array.isArray(p.permissions.allowed_tenant_ids))
+    ? p.permissions.allowed_tenant_ids.map(String)
+    : [tid];
+
+  return {
+    ...p,
+    id: String(p.id),
+    tenant_id: tid,
+    allowed_tenant_ids: allowed,
+    permissions: {
+      ...(p.permissions || {}),
+      allowed_tenant_ids: allowed,
+    },
+    active: p.active !== false && p.status !== 'inactive',
+  };
+}
+
 // Clean Customer Payload for Directus schema fields
 function cleanCustomerPayloadForDirectus(payload: any, id: string, resolvedMarketerId?: string | null, resolvedMarketerName?: string) {
   const nowIso = new Date().toISOString();
@@ -878,6 +1074,7 @@ function cleanCustomerPayloadForDirectus(payload: any, id: string, resolvedMarke
     is_expired: Boolean(payload.is_expired),
     claimed_from_pool: payload.claimed_from_pool !== undefined ? Boolean(payload.claimed_from_pool) : false,
     claimed_from_pool_at: payload.claimed_from_pool_at || null,
+    tenant_id: resolveDirectusTenantId(payload.tenant_id),
     date_created: payload.date_created || nowIso,
     date_updated: nowIso
   };
@@ -1117,6 +1314,7 @@ function getRequestUser(req: Request) {
   const roleId = (req.headers['x-role-id'] as string) || (req.query.role_id as string) || '';
   const userName = req.headers['x-user-name'] ? decodeURIComponent(req.headers['x-user-name'] as string) : '';
   const userEmail = (req.headers['x-user-email'] as string) || '';
+  const tenantId = getRequestTenantId(req);
 
   const isAdmin =
     userRole === 'admin' ||
@@ -1130,7 +1328,8 @@ function getRequestUser(req: Request) {
     roleId,
     isAdmin,
     userName,
-    userEmail
+    userEmail,
+    tenantId,
   };
 }
 
@@ -1625,8 +1824,199 @@ const handleSeedInitialData = async (req: Request, res: Response) => {
 app.post('/api/seed-initial-data', handleSeedInitialData);
 app.post('/api/seed-directus', handleSeedInitialData);
 
+// ----------------- TENANT MANAGEMENT APIS (مدیریت سازمان‌ها / شرکت‌ها) ----------------- //
+
+app.get('/api/tenants', async (req: Request, res: Response) => {
+  if (directusUrl && directusAdminToken) {
+    try {
+      const resp = await directusFetch('/items/tenants?sort=id');
+      if (resp?.data && Array.isArray(resp.data)) {
+        if (resp.data.length === 0) {
+          await ensureDirectusTenants();
+        } else {
+          tenantsData = resp.data.map((t: any) => ({
+            id: String(t.id),
+            name: t.name || 'سازمان ' + t.id,
+            slug: t.slug || 'org-' + t.id,
+            logo: t.logo || '',
+            description: t.description || '',
+            phone: t.phone || '',
+            address: t.address || '',
+            status: t.status === 'inactive' ? 'inactive' : 'active',
+            date_created: t.date_created || new Date().toISOString(),
+          }));
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }
+  res.json(tenantsData);
+});
+
+app.post('/api/tenants', async (req: Request, res: Response) => {
+  const { isAdmin } = getRequestUser(req);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'فقط مدیر سیستم مجاز به ایجاد سازمان جدید است.' });
+  }
+
+  const { name, slug, phone, address, logo, description, status } = req.body;
+  if (!name || !String(name).trim()) {
+    return res.status(400).json({ error: 'نام سازمان الزامی است.' });
+  }
+
+  const cleanName = String(name).trim();
+  const cleanSlug = slug ? String(slug).trim() : 'org-' + Date.now();
+  const directusBody: Record<string, any> = {
+    name: cleanName,
+    slug: cleanSlug,
+    description: (description || address || '').trim(),
+    status: status || 'active',
+  };
+  if (logo && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(logo)) {
+    directusBody.logo = logo;
+  }
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const created = await directusFetch('/items/tenants', {
+        method: 'POST',
+        body: JSON.stringify(directusBody),
+      });
+      if (created?.data) {
+        const item: Tenant = {
+          id: String(created.data.id),
+          name: created.data.name,
+          slug: created.data.slug,
+          phone: phone ? String(phone).trim() : '',
+          address: address ? String(address).trim() : '',
+          description: created.data.description || '',
+          logo: created.data.logo || '',
+          status: created.data.status || 'active',
+          date_created: created.data.date_created || new Date().toISOString(),
+        };
+        tenantsData.push(item);
+        return res.status(201).json(item);
+      }
+    } catch (e: any) {
+      console.warn('Directus tenants save error:', e.message);
+    }
+  }
+
+  const newTenant: Tenant = {
+    id: String(Date.now()),
+    name: cleanName,
+    slug: cleanSlug,
+    phone: phone ? String(phone).trim() : '',
+    address: address ? String(address).trim() : '',
+    description: (description || '').trim(),
+    logo: logo || '',
+    status: status || 'active',
+    date_created: new Date().toISOString(),
+  };
+
+  tenantsData.push(newTenant);
+  res.status(201).json(newTenant);
+});
+
+app.patch('/api/tenants/:id', async (req: Request, res: Response) => {
+  const { isAdmin } = getRequestUser(req);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'فقط مدیر سیستم مجاز به ویرایش سازمان است.' });
+  }
+
+  const { id } = req.params;
+  const patch = req.body;
+
+  const idx = tenantsData.findIndex((t) => String(t.id) === String(id));
+  if (idx !== -1) {
+    tenantsData[idx] = { ...tenantsData[idx], ...patch };
+  }
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const directusPatch: Record<string, any> = {};
+      if (patch.name !== undefined) directusPatch.name = String(patch.name).trim();
+      if (patch.slug !== undefined) directusPatch.slug = String(patch.slug).trim();
+      if (patch.description !== undefined) directusPatch.description = String(patch.description).trim();
+      if (patch.status !== undefined) directusPatch.status = patch.status;
+      if (patch.logo && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(patch.logo)) {
+        directusPatch.logo = patch.logo;
+      }
+
+      const patched = await directusFetch(`/items/tenants/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(directusPatch),
+      });
+      if (patched?.data) {
+        const item: Tenant = {
+          ...tenantsData[idx],
+          ...patched.data,
+          id: String(patched.data.id)
+        };
+        if (idx !== -1) tenantsData[idx] = item;
+        return res.json(item);
+      }
+    } catch (e: any) {
+      console.warn('Directus tenant patch error:', e.message);
+    }
+  }
+
+  if (idx === -1) return res.status(404).json({ error: 'سازمان مورد نظر یافت نشد.' });
+  res.json(tenantsData[idx]);
+});
+
+app.delete('/api/tenants/:id', async (req: Request, res: Response) => {
+  const { isAdmin } = getRequestUser(req);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'فقط مدیر سیستم مجاز به حذف سازمان است.' });
+  }
+
+  const { id } = req.params;
+  if (id === 'default' || id === '1') {
+    return res.status(400).json({ error: 'سازمان پیش‌فرض سیستم قابل حذف نیست.' });
+  }
+
+  tenantsData = tenantsData.filter((t) => String(t.id) !== String(id));
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      await directusFetch(`/items/tenants/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch (e: any) {
+      console.warn('Directus tenant delete error:', e.message);
+    }
+  }
+
+  res.json({ success: true });
+});
+
 // Personnel API
 app.get('/api/personnel', async (req: Request, res: Response) => {
+  const tenantId = getRequestTenantId(req);
+  const enrichPersonnel = (p: any) => {
+    const rawT = p.tenant_id;
+    const tId = typeof rawT === 'object' && rawT !== null
+      ? String(rawT.id)
+      : rawT !== null && rawT !== undefined
+      ? String(rawT)
+      : 'default';
+    const tObj = tenantsData.find(t => String(t.id) === tId || t.slug === tId);
+    let allowedTenantIds: string[] = [];
+    if (Array.isArray(p.allowed_tenant_ids) && p.allowed_tenant_ids.length > 0) {
+      allowedTenantIds = p.allowed_tenant_ids.map(String);
+    } else if (Array.isArray(p.permissions?.allowed_tenant_ids) && p.permissions.allowed_tenant_ids.length > 0) {
+      allowedTenantIds = p.permissions.allowed_tenant_ids.map(String);
+    } else if (tId) {
+      allowedTenantIds = [tId];
+    }
+    return {
+      ...p,
+      tenant_id: tId,
+      tenant_name: (typeof rawT === 'object' && rawT?.name) || (tObj ? tObj.name : (tId === 'default' ? 'سازمان مرکزی آلفادسک' : tId)),
+      allowed_tenant_ids: allowedTenantIds,
+    };
+  };
+
   if (directusUrl && directusAdminToken) {
     try {
       const result = await directusFetch('/items/personnel?sort=id');
@@ -1634,21 +2024,50 @@ app.get('/api/personnel', async (req: Request, res: Response) => {
         if (result.data.length === 0) {
           await ensureDirectusPersonnel();
           const refreshed = await directusFetch('/items/personnel?sort=id');
-          return res.json(refreshed.data || initialPersonnel);
+          let list = (refreshed.data || initialPersonnel).map(enrichPersonnel);
+          if (tenantId && tenantId !== 'all') {
+            list = list.filter((p: any) => matchesTenant(p.tenant_id, tenantId));
+          }
+          return res.json(list);
         }
-        return res.json(result.data);
+        let list = result.data.map(enrichPersonnel);
+        if (tenantId && tenantId !== 'all') {
+          list = list.filter((p: any) => matchesTenant(p.tenant_id, tenantId));
+        }
+        return res.json(list);
       }
     } catch (e: any) {
       return res.status(502).json({ error: `خطا در فراخوانی پرسنل از پایگاه داده مرکزی: ${e.message}` });
     }
   }
-  res.json(initialPersonnel);
+  let list = (personnelData.length > 0 ? personnelData : initialPersonnel).map(enrichPersonnel);
+  if (tenantId && tenantId !== 'all') {
+    list = list.filter((p: any) => matchesTenant(p.tenant_id, tenantId));
+  }
+  res.json(list);
 });
 
 // Create new Colleague / Personnel
 app.post('/api/personnel', async (req: Request, res: Response) => {
-  const { name, username, email, phone, phones, role, permissions, password, status } = req.body;
+  const {
+    name,
+    username,
+    email,
+    phone,
+    phones,
+    role,
+    permissions,
+    password,
+    status,
+    tenant_id,
+    emergency_contact_name,
+    emergency_contact_phone,
+    emergency_contact_relation,
+    family_contacts,
+    allowed_tenant_ids,
+  } = req.body;
   const { isAdmin } = getRequestUser(req);
+  const targetTenantId = tenant_id || getRequestTenantId(req);
 
   if (!isAdmin) {
     return res.status(403).json({ error: 'فقط مدیر سیستم اجازه ثبت همکار جدید را دارد.' });
@@ -1664,6 +2083,9 @@ app.post('/api/personnel', async (req: Request, res: Response) => {
   const cleanPhone = String(phone || '').trim();
   const colleagueRole = role || 'marketer';
   const newPId = crypto.randomUUID();
+  const cleanAllowedTenants = Array.isArray(allowed_tenant_ids)
+    ? allowed_tenant_ids.map(String)
+    : [String(targetTenantId || 'default')];
 
   let directusUserId: string | null = null;
 
@@ -1688,26 +2110,36 @@ app.post('/api/personnel', async (req: Request, res: Response) => {
         }
       }
 
+      const mergedPermissions = {
+        ...(permissions || {}),
+        allowed_tenant_ids: cleanAllowedTenants,
+      };
+
       const newPersonnelDoc: any = {
         id: newPId,
+        tenant_id: resolveDirectusTenantId(targetTenantId),
         name: cleanName,
         username: cleanUsername,
         email: cleanEmail,
         phone: cleanPhone,
         role: colleagueRole,
         status: status || 'active',
-        user_id: directusUserId
+        user_id: directusUserId,
+        permissions: mergedPermissions,
       };
 
       if (phones) newPersonnelDoc.phones = phones;
-      if (permissions) newPersonnelDoc.permissions = permissions;
+      if (emergency_contact_name !== undefined) newPersonnelDoc.emergency_contact_name = String(emergency_contact_name).trim();
+      if (emergency_contact_phone !== undefined) newPersonnelDoc.emergency_contact_phone = String(emergency_contact_phone).trim();
+      if (emergency_contact_relation !== undefined) newPersonnelDoc.emergency_contact_relation = String(emergency_contact_relation).trim();
+      if (family_contacts !== undefined) newPersonnelDoc.family_contacts = family_contacts;
 
       const created = await directusFetch('/items/personnel', {
         method: 'POST',
         body: JSON.stringify(newPersonnelDoc)
       });
 
-      const finalItem = created?.data || newPersonnelDoc;
+      const finalItem = enrichPersonnel(created?.data || newPersonnelDoc);
       personnelData.push(finalItem);
       return res.status(201).json(finalItem);
     } catch (err: any) {
@@ -1717,12 +2149,21 @@ app.post('/api/personnel', async (req: Request, res: Response) => {
 
   const localItem: Personnel = {
     id: newPId,
+    tenant_id: targetTenantId,
+    allowed_tenant_ids: cleanAllowedTenants,
     name: cleanName,
     username: cleanUsername,
     email: cleanEmail,
     phone: cleanPhone,
     phones: phones || undefined,
-    permissions: permissions || undefined,
+    permissions: {
+      ...(permissions || {}),
+      allowed_tenant_ids: cleanAllowedTenants,
+    },
+    emergency_contact_name: emergency_contact_name ? String(emergency_contact_name).trim() : undefined,
+    emergency_contact_phone: emergency_contact_phone ? String(emergency_contact_phone).trim() : undefined,
+    emergency_contact_relation: emergency_contact_relation ? String(emergency_contact_relation).trim() : undefined,
+    family_contacts: family_contacts || undefined,
     role: colleagueRole,
     status: status || 'active',
     active: true
@@ -1734,7 +2175,22 @@ app.post('/api/personnel', async (req: Request, res: Response) => {
 // Update Colleague / Personnel
 app.patch('/api/personnel/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, username, email, phone, phones, role, permissions, status } = req.body;
+  const {
+    name,
+    username,
+    email,
+    phone,
+    phones,
+    role,
+    permissions,
+    status,
+    tenant_id,
+    emergency_contact_name,
+    emergency_contact_phone,
+    emergency_contact_relation,
+    family_contacts,
+    allowed_tenant_ids,
+  } = req.body;
   const { isAdmin } = getRequestUser(req);
 
   if (!isAdmin) {
@@ -1749,25 +2205,42 @@ app.patch('/api/personnel/:id', async (req: Request, res: Response) => {
   if (phones !== undefined) patchPayload.phones = phones;
   if (role) patchPayload.role = role;
   if (permissions !== undefined) patchPayload.permissions = permissions;
+  if (allowed_tenant_ids !== undefined) {
+    patchPayload.allowed_tenant_ids = Array.isArray(allowed_tenant_ids) ? allowed_tenant_ids.map(String) : [];
+    patchPayload.permissions = {
+      ...(patchPayload.permissions || {}),
+      allowed_tenant_ids: patchPayload.allowed_tenant_ids,
+    };
+  }
   if (status) patchPayload.status = status;
+  if (tenant_id !== undefined) patchPayload.tenant_id = tenant_id;
+  if (emergency_contact_name !== undefined) patchPayload.emergency_contact_name = String(emergency_contact_name).trim();
+  if (emergency_contact_phone !== undefined) patchPayload.emergency_contact_phone = String(emergency_contact_phone).trim();
+  if (emergency_contact_relation !== undefined) patchPayload.emergency_contact_relation = String(emergency_contact_relation).trim();
+  if (family_contacts !== undefined) patchPayload.family_contacts = family_contacts;
 
   if (directusUrl && directusAdminToken) {
     try {
+      const directusPersonnelPatch = { ...patchPayload };
+      if (directusPersonnelPatch.tenant_id !== undefined) {
+        directusPersonnelPatch.tenant_id = resolveDirectusTenantId(directusPersonnelPatch.tenant_id);
+      }
       const updated = await directusFetch(`/items/personnel/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify(patchPayload)
+        body: JSON.stringify(directusPersonnelPatch)
       });
       if (updated?.data) {
+        const enriched = enrichPersonnel(updated.data);
         const idx = personnelData.findIndex(p => p.id === id);
-        if (idx >= 0) personnelData[idx] = { ...personnelData[idx], ...updated.data };
-        return res.json(updated.data);
+        if (idx >= 0) personnelData[idx] = { ...personnelData[idx], ...enriched };
+        return res.json(enriched);
       }
     } catch (err: any) {}
   }
 
   const idx = personnelData.findIndex(p => p.id === id);
   if (idx >= 0) {
-    personnelData[idx] = { ...personnelData[idx], ...patchPayload };
+    personnelData[idx] = enrichPersonnel({ ...personnelData[idx], ...patchPayload });
     return res.json(personnelData[idx]);
   }
 
@@ -2112,13 +2585,18 @@ app.delete('/api/contacts/:id', async (req: Request, res: Response) => {
 // Customers API with BFF Role-Based Access Control
 app.get('/api/customers', async (req: Request, res: Response) => {
   const { search, status, marketer_id, expired_only } = req.query;
-  const { userId, personnelId, userRole, isAdmin, userName } = getRequestUser(req);
+  const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
 
   if (directusUrl && directusAdminToken) {
     try {
       const result = await directusFetch('/items/customers?sort=-date_created&limit=500&fields=*,contacts.*');
       if (result && Array.isArray(result.data)) {
         let list = result.data.map((c: any) => computeCustomerExpiration(c));
+
+        // Tenant-based filtering
+        if (tenantId && tenantId !== 'all') {
+          list = list.filter((c: any) => matchesTenant(c.tenant_id, tenantId));
+        }
 
         // Role-Based Filtering:
         // Admin sees ALL customers
@@ -2176,6 +2654,10 @@ app.get('/api/customers', async (req: Request, res: Response) => {
     ...c,
     contacts: contactsData.filter(ct => ct.customer_id === c.id)
   }));
+
+  if (tenantId && tenantId !== 'all') {
+    filtered = filtered.filter(c => matchesTenant(c.tenant_id, tenantId));
+  }
 
   if (!isAdmin && (userId || personnelId)) {
     filtered = filtered.filter(c =>
@@ -3316,7 +3798,7 @@ app.post('/api/customers/merge', async (req: Request, res: Response) => {
 });
 app.get('/api/customer-reports', async (req: Request, res: Response) => {
   const { customer_id } = req.query;
-  const { userId, personnelId, userRole, isAdmin, userName } = getRequestUser(req);
+  const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
 
   if (directusUrl && directusAdminToken) {
     try {
@@ -3324,6 +3806,12 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
       const result = await directusFetch(`/items/customer_reports${q}`);
       if (result && Array.isArray(result.data)) {
         let reportsList = result.data;
+
+        // Tenant-based filtering
+        if (tenantId && tenantId !== 'all') {
+          reportsList = reportsList.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
+        }
+
         // Non-admin Marketer/Staff only sees their own reports when browsing general reports list
         if (!isAdmin && (userId || personnelId || userName) && !customer_id) {
           reportsList = reportsList.filter((r: any) =>
@@ -3341,6 +3829,9 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
   }
 
   let repList = reportsData;
+  if (tenantId && tenantId !== 'all') {
+    repList = repList.filter(r => matchesTenant((r as any).tenant_id, tenantId));
+  }
   if (customer_id) {
     repList = repList.filter(r => r.customer_id === customer_id);
   } else if (!isAdmin && (userId || personnelId || userName)) {
@@ -3356,7 +3847,7 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
 
 app.post('/api/customer-reports', async (req: Request, res: Response) => {
   const payload = req.body;
-  const { userId, personnelId, userName, isAdmin } = getRequestUser(req);
+  const { userId, personnelId, userName, isAdmin, tenantId } = getRequestUser(req);
   const newReportId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
@@ -3375,9 +3866,12 @@ app.post('/api/customer-reports', async (req: Request, res: Response) => {
     ? (payload.negotiator_name || userName || 'کارشناس پیگیری').trim()
     : (userName || 'کارشناس پیگیری').trim();
 
-  const newReport: CustomerReport = {
+  const targetTenantId = payload.tenant_id || tenantId || 'default';
+
+  const newReport: CustomerReport & { tenant_id?: string } = {
     id: newReportId,
     customer_id: payload.customer_id,
+    tenant_id: targetTenantId,
     negotiator_name: finalNegotiatorName,
     negotiation_phone: (payload.negotiation_phone || '').trim(),
     report_text: (payload.report_text || '').trim(),
@@ -3396,9 +3890,13 @@ app.post('/api/customer-reports', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
+      const directusReportPayload = {
+        ...newReport,
+        tenant_id: resolveDirectusTenantId(targetTenantId),
+      };
       const created = await directusFetch('/items/customer_reports', {
         method: 'POST',
-        body: JSON.stringify(newReport)
+        body: JSON.stringify(directusReportPayload)
       });
 
       // Synchronize latest status & follow-up date on customer document
@@ -3433,7 +3931,7 @@ app.post('/api/customer-reports', async (req: Request, res: Response) => {
 
 // Cold Leads API
 app.get('/api/cold-leads', async (req: Request, res: Response) => {
-  const { userId, personnelId, userRole, isAdmin, userName } = getRequestUser(req);
+  const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
 
   if (directusUrl && directusAdminToken) {
     try {
@@ -3467,6 +3965,11 @@ app.get('/api/cold-leads', async (req: Request, res: Response) => {
           };
         });
 
+        // Tenant-based filtering
+        if (tenantId && tenantId !== 'all') {
+          leads = leads.filter((l: any) => matchesTenant(l.tenant_id, tenantId));
+        }
+
         // Non-admin Marketer only sees their own assigned leads
         if (!isAdmin && (userName || userId || personnelId)) {
           leads = leads.filter((l: any) =>
@@ -3484,6 +3987,9 @@ app.get('/api/cold-leads', async (req: Request, res: Response) => {
 
   // Fallback in-memory
   let leads = coldLeadsData;
+  if (tenantId && tenantId !== 'all') {
+    leads = leads.filter((l: any) => matchesTenant(l.tenant_id, tenantId));
+  }
   if (!isAdmin && (userName || userId || personnelId)) {
     leads = leads.filter((l) =>
       (personnelId && l.assigned_to === personnelId) ||
@@ -3495,7 +4001,7 @@ app.get('/api/cold-leads', async (req: Request, res: Response) => {
 
 app.post('/api/cold-leads', async (req: Request, res: Response) => {
   const payload = req.body;
-  const { userId, personnelId, userName, isAdmin } = getRequestUser(req);
+  const { userId, personnelId, userName, isAdmin, tenantId } = getRequestUser(req);
   const newLeadId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
@@ -3510,8 +4016,11 @@ app.post('/api/cold-leads', async (req: Request, res: Response) => {
   const finalAssignedId = resolved.personnelId || null;
   const finalAssignedName = resolved.personnelName || userName || 'تخصیص نیافته';
 
+  const targetTenantId = payload.tenant_id || tenantId || 'default';
+
   const newLead: any = {
     id: newLeadId,
+    tenant_id: targetTenantId,
     phone_number: (payload.phone_number || '').trim(),
     contact_name: (payload.contact_name || '').trim(),
     source: payload.source || 'ورود دستی',
@@ -3524,9 +4033,13 @@ app.post('/api/cold-leads', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
+      const directusLeadPayload = {
+        ...newLead,
+        tenant_id: resolveDirectusTenantId(targetTenantId),
+      };
       const created = await directusFetch('/items/cold_leads', {
         method: 'POST',
-        body: JSON.stringify(newLead)
+        body: JSON.stringify(directusLeadPayload)
       });
       const returned = created?.data || newLead;
       return res.status(201).json({
@@ -3733,7 +4246,7 @@ app.post('/api/cold-leads/:id/convert', async (req: Request, res: Response) => {
 
 // Administrative Reports API
 app.get('/api/administrative-reports', async (req: Request, res: Response) => {
-  const { userId, personnelId, userRole, isAdmin, userName } = getRequestUser(req);
+  const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
 
   const normalizeReport = (r: any) => {
     let hourly = r.hourly_logs;
@@ -3766,6 +4279,12 @@ app.get('/api/administrative-reports', async (req: Request, res: Response) => {
       const result = await directusFetch('/items/administrative_reports?sort=-report_date&limit=500');
       if (result && Array.isArray(result.data)) {
         let reports = result.data.map(normalizeReport);
+
+        // Tenant-based filtering
+        if (tenantId && tenantId !== 'all') {
+          reports = reports.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
+        }
+
         // Marketer only sees their own administrative reports
         if (!isAdmin && (userId || personnelId)) {
           reports = reports.filter((r: any) =>
@@ -3785,15 +4304,18 @@ app.get('/api/administrative-reports', async (req: Request, res: Response) => {
 
 app.post('/api/administrative-reports', async (req: Request, res: Response) => {
   const payload = req.body;
-  const { userId, personnelId, userName } = getRequestUser(req);
+  const { userId, personnelId, userName, tenantId } = getRequestUser(req);
   const newAdmId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
   const rawPId = payload.personnel_id || personnelId || userId;
   const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
 
+  const targetTenantId = payload.tenant_id || tenantId || 'default';
+
   const newReport: AdministrativeReport = {
     id: newAdmId,
+    tenant_id: targetTenantId,
     personnel_id: resolved.personnelId || 'p-1',
     personnel_name: resolved.personnelName || payload.personnel_name || userName || 'پرسنل شرکت',
     report_date: payload.report_date || nowIso.split('T')[0],
@@ -3809,7 +4331,10 @@ app.post('/api/administrative-reports', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      const directusReportPayload = { ...newReport };
+      const directusReportPayload = {
+        ...newReport,
+        tenant_id: resolveDirectusTenantId(targetTenantId)
+      };
       // If hourly_logs is an object/array, Directus JSON field or stringified JSON
       const created = await directusFetch('/items/administrative_reports', {
         method: 'POST',
@@ -3823,7 +4348,10 @@ app.post('/api/administrative-reports', async (req: Request, res: Response) => {
           const { hourly_logs, ...fallbackReport } = newReport;
           const created = await directusFetch('/items/administrative_reports', {
             method: 'POST',
-            body: JSON.stringify(fallbackReport)
+            body: JSON.stringify({
+              ...fallbackReport,
+              tenant_id: resolveDirectusTenantId(targetTenantId)
+            })
           });
           return res.status(201).json({ ...(created.data || fallbackReport), hourly_logs: newReport.hourly_logs });
         } catch {}
@@ -3843,7 +4371,7 @@ app.post('/api/administrative-reports', async (req: Request, res: Response) => {
 // LEAVE REQUESTS API (درخواست‌های مرخصی)
 // -------------------------------------------------------------
 app.get('/api/leave-requests', async (req: Request, res: Response) => {
-  const { userId, personnelId, isAdmin, userName } = getRequestUser(req);
+  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
   if (directusUrl && directusAdminToken) {
     try {
       const resp = await directusFetch('/items/leave_requests?sort=-date_created&limit=200');
@@ -3853,6 +4381,12 @@ app.get('/api/leave-requests', async (req: Request, res: Response) => {
           personnel_id: typeof r.personnel_id === 'object' && r.personnel_id !== null ? r.personnel_id.id : String(r.personnel_id || ''),
           personnel_name: r.personnel_name || (typeof r.personnel_id === 'object' && r.personnel_id !== null ? (r.personnel_id.name || r.personnel_id.first_name) : 'کارشناس شرکت')
         }));
+
+        // Tenant-based filtering
+        if (tenantId && tenantId !== 'all') {
+          list = list.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
+        }
+
         if (!isAdmin) {
           list = list.filter(
             (r) =>
@@ -3870,6 +4404,9 @@ app.get('/api/leave-requests', async (req: Request, res: Response) => {
 
   // In-memory fallback
   let list = [...leaveRequestsData];
+  if (tenantId && tenantId !== 'all') {
+    list = list.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
+  }
   if (!isAdmin) {
     list = list.filter(
       (r) =>
@@ -3883,15 +4420,18 @@ app.get('/api/leave-requests', async (req: Request, res: Response) => {
 
 app.post('/api/leave-requests', async (req: Request, res: Response) => {
   const payload = req.body;
-  const { userId, personnelId, userName } = getRequestUser(req);
+  const { userId, personnelId, userName, tenantId } = getRequestUser(req);
   const newId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
   const rawPId = payload.personnel_id || personnelId || userId;
   const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
 
+  const targetTenantId = payload.tenant_id || tenantId || 'default';
+
   const newRequest: LeaveRequest = {
     id: newId,
+    tenant_id: targetTenantId,
     personnel_id: resolved.personnelId || personnelId || userId || 'p-1',
     personnel_name: resolved.personnelName || payload.personnel_name || userName || 'کارشناس شرکت',
     leave_type: payload.leave_type === 'hourly' ? 'hourly' : 'daily',
@@ -3911,9 +4451,13 @@ app.post('/api/leave-requests', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
+      const directusLeavePayload = {
+        ...newRequest,
+        tenant_id: resolveDirectusTenantId(targetTenantId)
+      };
       const created = await directusFetch('/items/leave_requests', {
         method: 'POST',
-        body: JSON.stringify(newRequest)
+        body: JSON.stringify(directusLeavePayload)
       });
       if (created?.data) {
         leaveRequestsData.unshift(created.data);
@@ -3995,7 +4539,7 @@ app.delete('/api/leave-requests/:id', async (req: Request, res: Response) => {
 // SALARY ADVANCE REQUESTS API (درخواست‌های مساعده)
 // -------------------------------------------------------------
 app.get('/api/advance-requests', async (req: Request, res: Response) => {
-  const { userId, personnelId, isAdmin, userName } = getRequestUser(req);
+  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
   if (directusUrl && directusAdminToken) {
     try {
       const resp = await directusFetch('/items/advance_requests?sort=-date_created&limit=200');
@@ -4005,6 +4549,12 @@ app.get('/api/advance-requests', async (req: Request, res: Response) => {
           personnel_id: typeof r.personnel_id === 'object' && r.personnel_id !== null ? r.personnel_id.id : String(r.personnel_id || ''),
           personnel_name: r.personnel_name || (typeof r.personnel_id === 'object' && r.personnel_id !== null ? (r.personnel_id.name || r.personnel_id.first_name) : 'کارشناس شرکت')
         }));
+
+        // Tenant-based filtering
+        if (tenantId && tenantId !== 'all') {
+          list = list.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
+        }
+
         if (!isAdmin) {
           list = list.filter(
             (r) =>
@@ -4019,6 +4569,9 @@ app.get('/api/advance-requests', async (req: Request, res: Response) => {
   }
 
   let list = [...advanceRequestsData];
+  if (tenantId && tenantId !== 'all') {
+    list = list.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
+  }
   if (!isAdmin) {
     list = list.filter(
       (r) =>
@@ -4032,15 +4585,18 @@ app.get('/api/advance-requests', async (req: Request, res: Response) => {
 
 app.post('/api/advance-requests', async (req: Request, res: Response) => {
   const payload = req.body;
-  const { userId, personnelId, userName } = getRequestUser(req);
+  const { userId, personnelId, userName, tenantId } = getRequestUser(req);
   const newId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
   const rawPId = payload.personnel_id || personnelId || userId;
   const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
 
+  const targetTenantId = payload.tenant_id || tenantId || 'default';
+
   const newRequest: SalaryAdvanceRequest = {
     id: newId,
+    tenant_id: targetTenantId,
     personnel_id: resolved.personnelId || personnelId || userId || 'p-1',
     personnel_name: resolved.personnelName || payload.personnel_name || userName || 'کارشناس شرکت',
     amount: Number(payload.amount) || 0,
@@ -4059,9 +4615,13 @@ app.post('/api/advance-requests', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
+      const directusAdvancePayload = {
+        ...newRequest,
+        tenant_id: resolveDirectusTenantId(targetTenantId)
+      };
       const created = await directusFetch('/items/advance_requests', {
         method: 'POST',
-        body: JSON.stringify(newRequest)
+        body: JSON.stringify(directusAdvancePayload)
       });
       if (created?.data) {
         advanceRequestsData.unshift(created.data);
@@ -4142,7 +4702,19 @@ app.delete('/api/advance-requests/:id', async (req: Request, res: Response) => {
 // PROFILE & PASSWORD UPDATE API (پروفایل و تغییر رمز)
 // -------------------------------------------------------------
 app.post('/api/auth/update-profile', async (req: Request, res: Response) => {
-  const { name, username, phone, avatar, bank_card_number, iban, national_id } = req.body;
+  const {
+    name,
+    username,
+    phone,
+    avatar,
+    bank_card_number,
+    iban,
+    national_id,
+    emergency_contact_name,
+    emergency_contact_phone,
+    emergency_contact_relation,
+    family_contacts,
+  } = req.body;
   const { userId, personnelId, userEmail, userName } = getRequestUser(req);
 
   const personnelPatch: Record<string, any> = {};
@@ -4153,6 +4725,10 @@ app.post('/api/auth/update-profile', async (req: Request, res: Response) => {
   if (bank_card_number !== undefined) personnelPatch.bank_card_number = String(bank_card_number).trim();
   if (iban !== undefined) personnelPatch.iban = String(iban).trim();
   if (national_id !== undefined) personnelPatch.national_id = String(national_id).trim();
+  if (emergency_contact_name !== undefined) personnelPatch.emergency_contact_name = String(emergency_contact_name).trim();
+  if (emergency_contact_phone !== undefined) personnelPatch.emergency_contact_phone = String(emergency_contact_phone).trim();
+  if (emergency_contact_relation !== undefined) personnelPatch.emergency_contact_relation = String(emergency_contact_relation).trim();
+  if (family_contacts !== undefined) personnelPatch.family_contacts = family_contacts;
 
   let targetPersonnel: any = null;
 
@@ -4338,7 +4914,9 @@ app.post('/api/check-expirations', (req: Request, res: Response) => {
 // Setup Vite middleware in dev or static serving in production
 async function setupViteOrStatic() {
   if (directusUrl && directusAdminToken) {
-    ensureDirectusPersonnel().catch(() => {});
+    ensureDirectusTenants()
+      .then(() => ensureDirectusPersonnel())
+      .catch((err) => console.warn('Database initialization warning:', err.message));
   }
 
   if (process.env.NODE_ENV !== 'production') {

@@ -1,6 +1,23 @@
 import React, { useState } from 'react';
-import { Search, AlertTriangle, Plus, PhoneCall, Menu, X, LogIn, LogOut, ShieldCheck, UserCheck, ChevronDown, Sparkles, CalendarDays } from 'lucide-react';
-import { Personnel, AuthUser } from '../types';
+import {
+  Search,
+  AlertTriangle,
+  Plus,
+  PhoneCall,
+  Menu,
+  X,
+  LogIn,
+  LogOut,
+  ShieldCheck,
+  UserCheck,
+  ChevronDown,
+  Sparkles,
+  CalendarDays,
+  Building2,
+  Layers,
+  Check,
+} from 'lucide-react';
+import { Personnel, AuthUser, Tenant } from '../types';
 
 interface HeaderProps {
   searchQuery: string;
@@ -18,6 +35,10 @@ interface HeaderProps {
   onToggleMobileMenu?: () => void;
   isMobileMenuOpen?: boolean;
   onNavigateToPortal?: (subTab: 'profile' | 'leave' | 'advance') => void;
+  tenants?: Tenant[];
+  activeTenantId?: string;
+  onSelectTenant?: (tenantId: string) => void;
+  onOpenTenantsManagement?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -36,12 +57,74 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleMobileMenu,
   isMobileMenuOpen,
   onNavigateToPortal,
+  tenants = [],
+  activeTenantId = 'all',
+  onSelectTenant,
+  onOpenTenantsManagement,
 }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isOrgMenuOpen, setIsOrgMenuOpen] = useState(false);
 
-  const isAdmin = currentUser?.is_admin || currentPersonnel?.role === 'admin' || currentPersonnel?.role === 'sales_manager';
+  const isAdmin = Boolean(
+    currentUser?.is_admin ||
+    currentUser?.app_role === 'admin' ||
+    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+    currentPersonnel?.role === 'admin'
+  );
+
+  const canAccessTenants =
+    isAdmin ||
+    (currentPersonnel?.permissions?.can_manage_tenants ?? false) ||
+    (currentPersonnel?.permissions?.allowed_menus?.includes('tenants') ?? false);
+
   const displayName = currentUser?.name || currentPersonnel?.name || 'کاربر مهمان';
   const initial = displayName.charAt(0) || 'U';
+
+  const effectiveTenants =
+    tenants && tenants.length > 0
+      ? tenants
+      : [
+          {
+            id: 'default',
+            name: 'سازمان مرکزی آلفادسک',
+            slug: 'alphadesk-hq',
+            status: 'active',
+            date_created: '',
+          },
+        ];
+
+  // Determine allowed tenants for current user
+  const userAllowedTenants = isAdmin
+    ? effectiveTenants
+    : effectiveTenants.filter((t) => {
+        const allowed =
+          currentPersonnel?.allowed_tenant_ids ||
+          currentPersonnel?.permissions?.allowed_tenant_ids;
+        if (allowed && allowed.length > 0) {
+          return allowed.some(
+            (id) =>
+              String(id) === String(t.id) ||
+              (id === 'default' && (String(t.id) === '1' || String(t.id) === 'default'))
+          );
+        }
+        if (currentPersonnel?.tenant_id) {
+          return (
+            String(currentPersonnel.tenant_id) === String(t.id) ||
+            (currentPersonnel.tenant_id === 'default' &&
+              (String(t.id) === '1' || String(t.id) === 'default'))
+          );
+        }
+        return String(t.id) === '1' || String(t.id) === 'default';
+      });
+
+  const canSwitchTenants = isAdmin ? effectiveTenants.length > 1 : userAllowedTenants.length > 1;
+
+  const activeTenant = effectiveTenants.find((t) => String(t.id) === String(activeTenantId));
+  const activeTenantName =
+    activeTenantId === 'all'
+      ? 'همه سازمان‌ها'
+      : activeTenant?.name || (userAllowedTenants[0]?.name ?? 'سازمان مرکزی');
 
   return (
     <header className="h-16 sm:h-18 bg-[#121212] border-b border-[#282828] sticky top-0 z-30 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 select-none">
@@ -118,7 +201,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
               className="flex items-center gap-1.5 sm:gap-2 pl-2 pr-1.5 py-1 bg-[#181818] hover:bg-[#222222] border border-[#282828] rounded-full transition-colors cursor-pointer group"
-              title="حساب کاربری"
+              title="حساب کاربری و سازمان"
             >
               <div
                 className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-sm ${
@@ -135,7 +218,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {displayName}
                 </span>
                 <span className={`text-[10px] ${isAdmin ? 'text-[#1DB954]' : 'text-[#888888]'}`}>
-                  {isAdmin ? 'مدیر سیستم' : 'کارشناس فروش'}
+                  {isAdmin ? 'مدیر سیستم' : activeTenantName}
                 </span>
               </div>
 
@@ -149,7 +232,7 @@ export const Header: React.FC<HeaderProps> = ({
                   className="fixed inset-0 z-40"
                   onClick={() => setIsProfileMenuOpen(false)}
                 />
-                <div className="absolute left-0 mt-2 w-56 bg-[#181818] border border-[#2e2e2e] rounded-2xl shadow-2xl shadow-black/80 py-2 z-50 animate-fade-in text-right">
+                <div className="absolute left-0 mt-2 w-64 bg-[#181818] border border-[#2e2e2e] rounded-2xl shadow-2xl shadow-black/80 py-2 z-50 animate-fade-in text-right">
                   <div className="px-3.5 py-2 border-b border-[#282828]">
                     <div className="text-xs font-bold text-white truncate">{displayName}</div>
                     <div className="text-[11px] text-[#777777] truncate font-mono" dir="ltr">
@@ -164,10 +247,69 @@ export const Header: React.FC<HeaderProps> = ({
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#333333] border border-[#444444] text-white text-[10px]">
                           <UserCheck className="w-3 h-3 text-[#1DB954]" />
-                          <span>کارشناس فروش (اطلاعات خود)</span>
+                          <span>کارشناس فروش</span>
                         </span>
                       )}
                     </div>
+                  </div>
+
+                  {/* Active Organization & Switcher */}
+                  <div className="px-3.5 py-2 border-b border-[#282828] space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] text-[#777777] font-medium">
+                      <span className="flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-[#1DB954]" />
+                        <span>سازمان فعال:</span>
+                      </span>
+                      {canSwitchTenants && (
+                        <span className="text-[9px] font-mono text-[#1DB954]">
+                          {userAllowedTenants.length} سازمان
+                        </span>
+                      )}
+                    </div>
+
+                    {canSwitchTenants ? (
+                      <select
+                        aria-label="انتخاب سازمان فعال"
+                        value={activeTenantId}
+                        onChange={(e) => {
+                          onSelectTenant?.(e.target.value);
+                        }}
+                        className="w-full bg-[#121212] border border-[#282828] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#1DB954] cursor-pointer"
+                      >
+                        {isAdmin && (
+                          <option value="all" className="bg-[#181818] text-[#1DB954] font-bold">
+                            همه سازمان‌ها (تجمیعی)
+                          </option>
+                        )}
+                        {userAllowedTenants.map((t) => (
+                          <option key={t.id} value={t.id} className="bg-[#181818] text-white">
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="text-xs font-bold text-white bg-[#121212] px-2.5 py-1.5 rounded-lg border border-[#282828] flex items-center justify-between">
+                        <span className="truncate">{userAllowedTenants[0]?.name || activeTenantName}</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#1DB954]" />
+                      </div>
+                    )}
+
+                    {canAccessTenants && onOpenTenantsManagement && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsProfileMenuOpen(false);
+                          onOpenTenantsManagement();
+                        }}
+                        className="w-full mt-1 px-2.5 py-1.5 text-[11px] text-[#A7A7A7] hover:text-white hover:bg-[#282828] rounded-lg flex items-center justify-between transition-colors border border-[#282828] cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Layers className="w-3 h-3 text-[#888]" />
+                          <span>مدیریت سازمان‌ها و شعب</span>
+                        </span>
+                        <span className="text-[10px] text-[#777]">⚙</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Switch Active User / Switch personnel (if Admin) */}
