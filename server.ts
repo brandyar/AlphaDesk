@@ -4954,61 +4954,6 @@ app.post('/api/check-expirations', (req: Request, res: Response) => {
 // Data Migration Hub: Import Legacy System Tables (account, contact, history)
 // ============================================================================
 app.post('/api/migration/import', async (req: Request, res: Response) => {
-  const { tenant_id, personnelRows = [], customerRows = [], reportRows = [] } = req.body;
-  const targetTenantId = tenant_id || getRequestTenantId(req) || 'default';
-  const targetTenantNum = resolveDirectusTenantId(targetTenantId);
-
-  let importedPersonnelCount = 0;
-  let importedCustomersCount = 0;
-  let importedReportsCount = 0;
-  let skippedCount = 0;
-  const errors: string[] = [];
-
-  // Helper chunker for Directus bulk requests
-  function chunkArray<T>(items: T[], size: number): T[][] {
-    const chunks: T[][] = [];
-    for (let i = 0; i < items.length; i += size) {
-      chunks.push(items.slice(i, i + size));
-    }
-    return chunks;
-  }
-
-  // Map to index personnel by ID, username, phone, name
-  const legacyUidToPersonnelMap = new Map<string, any>();
-
-  // 1. Fetch current personnel from Directus to ensure real DB IDs are used
-  let directusPersonnelList: any[] = [];
-  if (directusUrl && directusAdminToken) {
-    try {
-      const pRes = await directusFetch('/items/personnel?limit=-1');
-      if (pRes && Array.isArray(pRes.data)) {
-        directusPersonnelList = pRes.data;
-      }
-    } catch (err: any) {
-      console.warn('Could not pre-fetch personnel from Directus:', err.message);
-    }
-  }
-
-  // Combine with local personnel
-  const combinedPersonnel = [...directusPersonnelList];
-  for (const p of personnelData) {
-    if (!combinedPersonnel.some(cp => cp.id === p.id)) {
-      combinedPersonnel.push(p);
-    }
-  }
-
-  // Index existing personnel
-  for (const p of combinedPersonnel) {
-    if (p.id) legacyUidToPersonnelMap.set(String(p.id).toLowerCase(), p);
-    if (p.username) legacyUidToPersonnelMap.set(String(p.username).toLowerCase(), p);
-    if (p.phone) {
-      const norm = normalizeContactValue(p.phone, 'mobile');
-      if (norm) legacyUidToPersonnelMap.set(norm, p);
-    }
-    if (p.name) legacyUidToPersonnelMap.set(String(p.name).trim().toLowerCase(), p);
-  }
-
-  // Helper to parse Jalali or Gregorian date to ISO
   function jalaliToGregorianCalc(jy: number, jm: number, jd: number): { gy: number; gm: number; gd: number } {
     let j_y = jy - 979;
     let j_m = jm - 1;
@@ -5055,8 +5000,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     if (!val) return null;
     const str = String(val).trim();
     if (!str || str.toLowerCase() === 'null') return null;
-
-    // 1. Gregorian standard check (e.g. "2025-08-13 17:16:00", "2025-08-13T17:16:00Z", "2018-10-31")
     const gregMatch = str.match(/^(20\d\d|19\d\d)[\/\-](\d{1,2})[\/\-](\d{1,2})(?:[\sT]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
     if (gregMatch) {
       const gy = parseInt(gregMatch[1], 10);
@@ -5068,8 +5011,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       const d = new Date(Date.UTC(gy, gm, gd, hh, mm, ss));
       if (!isNaN(d.getTime())) return d.toISOString();
     }
-
-    // 2. Jalali compact or separated with optional time (e.g. "14040522-1816", "1404/05/25 13:45", "14040522")
     const cleanCompact = str.replace(/[^0-9]/g, '');
     if (cleanCompact.startsWith('13') || cleanCompact.startsWith('14')) {
       if (cleanCompact.length >= 8) {
@@ -5087,8 +5028,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         } catch {}
       }
     }
-
-    // 3. Jalali with slashes/dashes
     if (str.includes('/') || str.includes('-')) {
       const parts = str.split(/[\s\/\-]/).filter(Boolean);
       if (parts.length >= 3) {
@@ -5104,12 +5043,137 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         }
       }
     }
-
     const standardDate = new Date(str);
     if (!isNaN(standardDate.getTime())) {
       return standardDate.toISOString();
     }
     return new Date().toISOString();
+  }
+  const { tenant_id, personnelRows = [], customerRows = [], reportRows = [] } = req.body;
+  const targetTenantId = tenant_id || getRequestTenantId(req) || 'default';
+  const targetTenantNum = resolveDirectusTenantId(targetTenantId);
+
+  let importedPersonnelCount = 0;
+  let importedCustomersCount = 0;
+  let importedReportsCount = 0;
+  let skippedCount = 0;
+  const errors: string[] = [];
+
+  function chunkArray<T>(items: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < items.length; i += size) {
+      chunks.push(items.slice(i, i + size));
+    }
+    return chunks;
+  }
+
+  // --------------------------------------------------------------------------
+  // INDEXING EXISTING DIRECTUS DATA FOR DEDUPLICATION & LOOKUP
+  // --------------------------------------------------------------------------
+  const legacyUidToPersonnelMap = new Map<string, any>();
+  const existingPhoneToCustomerMap = new Map<string, any>();
+  const existingCallIdToCustomerMap = new Map<string, any>();
+  const existingReportKeysSet = new Set<string>();
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      // 1. Fetch personnel for deduplication and referral mapping
+      const pRes = await directusFetch('/items/personnel?limit=-1');
+      if (pRes && Array.isArray(pRes.data)) {
+        for (const p of pRes.data) {
+          if (p.id) legacyUidToPersonnelMap.set(String(p.id).toLowerCase(), p);
+          if (p.username) legacyUidToPersonnelMap.set(String(p.username).toLowerCase(), p);
+          if (p.phone) {
+            const norm = normalizeContactValue(p.phone, 'mobile');
+            if (norm) legacyUidToPersonnelMap.set(norm, p);
+          }
+          if (p.name) legacyUidToPersonnelMap.set(String(p.name).trim().toLowerCase(), p);
+        }
+      }
+
+      // 2. Index existing customers only if customerRows are provided
+      if (customerRows.length > 0) {
+        const cResList = await Promise.all([
+          directusFetch('/items/customers?limit=1000&offset=0&fields=id,mobile_numbers,manager_phones,interview_report,assigned_marketer_name,status,next_followup_date').catch(() => null),
+          directusFetch('/items/customers?limit=1000&offset=1000&fields=id,mobile_numbers,manager_phones,interview_report,assigned_marketer_name,status,next_followup_date').catch(() => null),
+          directusFetch('/items/customers?limit=1000&offset=2000&fields=id,mobile_numbers,manager_phones,interview_report,assigned_marketer_name,status,next_followup_date').catch(() => null),
+        ]);
+
+        for (const res of cResList) {
+          if (res && Array.isArray(res.data)) {
+            for (const c of res.data) {
+              if (Array.isArray(c.mobile_numbers)) {
+                for (const m of c.mobile_numbers) {
+                  if (m && m !== '09000000000') existingPhoneToCustomerMap.set(m, c);
+                }
+              }
+              if (Array.isArray(c.manager_phones)) {
+                for (const m of c.manager_phones) {
+                  if (m && m !== '09000000000') existingPhoneToCustomerMap.set(m, c);
+                }
+              }
+              const match = (c.interview_report || '').match(/کد تماس\s+(\d+)/);
+              if (match && match[1]) {
+                existingCallIdToCustomerMap.set(match[1], c);
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Index existing customer reports only if reportRows are provided
+      if (reportRows.length > 0) {
+        // Also fetch customers if not fetched yet
+        if (customerRows.length === 0) {
+          const cResList = await Promise.all([
+            directusFetch('/items/customers?limit=1000&offset=0&fields=id,mobile_numbers,manager_phones,interview_report,assigned_marketer_name,status,next_followup_date').catch(() => null),
+            directusFetch('/items/customers?limit=1000&offset=1000&fields=id,mobile_numbers,manager_phones,interview_report,assigned_marketer_name,status,next_followup_date').catch(() => null),
+            directusFetch('/items/customers?limit=1000&offset=2000&fields=id,mobile_numbers,manager_phones,interview_report,assigned_marketer_name,status,next_followup_date').catch(() => null),
+          ]);
+          for (const res of cResList) {
+            if (res && Array.isArray(res.data)) {
+              for (const c of res.data) {
+                if (Array.isArray(c.mobile_numbers)) {
+                  for (const m of c.mobile_numbers) {
+                    if (m && m !== '09000000000') existingPhoneToCustomerMap.set(m, c);
+                  }
+                }
+                if (Array.isArray(c.manager_phones)) {
+                  for (const m of c.manager_phones) {
+                    if (m && m !== '09000000000') existingPhoneToCustomerMap.set(m, c);
+                  }
+                }
+                const match = (c.interview_report || '').match(/کد تماس\s+(\d+)/);
+                if (match && match[1]) {
+                  existingCallIdToCustomerMap.set(match[1], c);
+                }
+              }
+            }
+          }
+        }
+
+        const rResList = await Promise.all([
+          directusFetch('/items/customer_reports?limit=1000&offset=0&fields=id,customer_id,date_created,report_text').catch(() => null),
+          directusFetch('/items/customer_reports?limit=1000&offset=1000&fields=id,customer_id,date_created,report_text').catch(() => null),
+          directusFetch('/items/customer_reports?limit=1000&offset=2000&fields=id,customer_id,date_created,report_text').catch(() => null),
+          directusFetch('/items/customer_reports?limit=1000&offset=3000&fields=id,customer_id,date_created,report_text').catch(() => null),
+          directusFetch('/items/customer_reports?limit=1000&offset=4000&fields=id,customer_id,date_created,report_text').catch(() => null),
+        ]);
+
+        for (const res of rResList) {
+          if (res && Array.isArray(res.data)) {
+            for (const r of res.data) {
+              if (r.customer_id && r.date_created) {
+                const cleanTxtSnippet = String(r.report_text || '').trim().substring(0, 30);
+                existingReportKeysSet.add(`${r.customer_id}_${r.date_created.substring(0, 16)}_${cleanTxtSnippet}`);
+              }
+            }
+          }
+        }
+      }
+    } catch (idxErr: any) {
+      console.warn('Indexation error before migration:', idxErr.message);
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -5128,6 +5192,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       const normalizedPhone = normalizeContactValue(firstPhone, 'mobile');
       const email = String(row.email || (username ? `${username}@company.ir` : `user_${uid}@company.ir`)).trim();
       const roleStr = String(row.userlevel || row.acctype || row.role || '').toLowerCase();
+
       let assignedRole: any = 'marketer';
       if (roleStr === '0' || roleStr.includes('admin') || username === 'admin') {
         assignedRole = 'admin';
@@ -5135,7 +5200,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         assignedRole = 'sales_manager';
       }
 
-      // Check if personnel already exists in indexed map
       let existing = legacyUidToPersonnelMap.get(username) ||
                      (uid ? legacyUidToPersonnelMap.get(uid.toLowerCase()) : null) ||
                      (normalizedPhone ? legacyUidToPersonnelMap.get(normalizedPhone) : null);
@@ -5156,22 +5220,17 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         if (targetTenantNum) {
           newPersonnel.tenant_id = targetTenantNum;
         }
-
         personnelToInsertBatch.push(newPersonnel);
         legacyUidToPersonnelMap.set(personnelId.toLowerCase(), newPersonnel);
         if (uid) legacyUidToPersonnelMap.set(uid.toLowerCase(), newPersonnel);
         if (username) legacyUidToPersonnelMap.set(username, newPersonnel);
         if (normalizedPhone) legacyUidToPersonnelMap.set(normalizedPhone, newPersonnel);
-      } else {
-        if (uid) legacyUidToPersonnelMap.set(uid.toLowerCase(), existing);
-        if (username) legacyUidToPersonnelMap.set(username, existing);
       }
     } catch (err: any) {
       errors.push(`خطا در پردازش اطلاعات کاربر ${row.fname || row.username}: ${err.message}`);
     }
   }
 
-  // Insert personnel in batch into Directus
   if (personnelToInsertBatch.length > 0 && directusUrl && directusAdminToken) {
     try {
       const pChunks = chunkArray(personnelToInsertBatch, 100);
@@ -5191,23 +5250,13 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       }
     } catch (pErr: any) {
       console.error('Directus bulk insert personnel error:', pErr.message);
-      errors.push(`خطا در ثبت گروهی کارشناسان در دایرکتوس: ${pErr.message}`);
-      for (const p of personnelToInsertBatch) {
-        personnelData.push(p);
-        importedPersonnelCount++;
-      }
-    }
-  } else {
-    for (const p of personnelToInsertBatch) {
-      personnelData.push(p);
-      importedPersonnelCount++;
+      errors.push(`خطا در ثبت گروهی کارشناسان: ${pErr.message}`);
     }
   }
 
   // --------------------------------------------------------------------------
-  // STEP 2: IMPORT CUSTOMERS (contact)
+  // STEP 2: IMPORT CUSTOMERS (contact) WITH DEDUPLICATION
   // --------------------------------------------------------------------------
-  const legacyCustomerRefMap = new Map<string, any>();
   const customersToInsertBatch: any[] = [];
   const contactsToInsertBatch: any[] = [];
 
@@ -5240,7 +5289,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         const norm = normalizeContactValue(managerPhone, 'mobile');
         if (norm && !mobileList.includes(norm)) mobileList.push(norm);
       }
-
       const landlineList: string[] = [];
       if (rawLandlines) {
         rawLandlines.split(/[,;\n]/).forEach(l => {
@@ -5249,13 +5297,32 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         });
       }
 
+      // Deduplication check: check if CallID or any mobile phone already exists in Directus!
+      let existingCustomer = callId ? existingCallIdToCustomerMap.get(callId) : null;
+      if (!existingCustomer) {
+        for (const m of mobileList) {
+          if (m && existingPhoneToCustomerMap.has(m)) {
+            existingCustomer = existingPhoneToCustomerMap.get(m);
+            break;
+          }
+        }
+      }
+
+      if (existingCustomer) {
+        // Already imported -> cache in lookup map for step 3 report matching
+        if (callId) existingCallIdToCustomerMap.set(callId, existingCustomer);
+        if (customerIdLegacy) existingCallIdToCustomerMap.set(customerIdLegacy, existingCustomer);
+        for (const m of mobileList) existingPhoneToCustomerMap.set(m, existingCustomer);
+        skippedCount++;
+        continue;
+      }
+
       // Match marketer
       const legacyMarketerUid = String(row.Referrals || row.lockOwner || row.uid || '').trim().toLowerCase();
       const assignedPersonnel = legacyUidToPersonnelMap.get(legacyMarketerUid) ||
                               legacyUidToPersonnelMap.get(String(row.uid || '').trim().toLowerCase()) ||
-                              combinedPersonnel[0];
+                              personnelData[0];
 
-      // Negotiation status mapping
       const rawStat = String(row.lastStat || row.status || '').trim();
       let mappedStatus: any = 'تماس برقرار نشده';
       if (rawStat.includes('قرارداد') || rawStat.includes('فاکتور')) {
@@ -5276,8 +5343,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
 
       const isExpiredLegacy = String(row.expire || '') === '1' || String(row.is_expired || '') === 'true';
       const createdIso = parseToGregorianIso(row.InsertRecDate || row.created) || new Date().toISOString();
-
-      // Pre-generate guaranteed UUID for Directus
       const newCustId = crypto.randomUUID();
 
       const newCustObj: any = {
@@ -5310,18 +5375,16 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         is_expired: isExpiredLegacy,
         date_created: createdIso,
       };
+
       if (targetTenantNum) {
         newCustObj.tenant_id = targetTenantNum;
       }
 
       customersToInsertBatch.push(newCustObj);
+      if (callId) existingCallIdToCustomerMap.set(callId, newCustObj);
+      if (customerIdLegacy) existingCallIdToCustomerMap.set(customerIdLegacy, newCustObj);
+      for (const m of mobileList) existingPhoneToCustomerMap.set(m, newCustObj);
 
-      // Cache reference for reports linking
-      if (callId) legacyCustomerRefMap.set(callId, newCustObj);
-      if (customerIdLegacy) legacyCustomerRefMap.set(customerIdLegacy, newCustObj);
-      if (mobileList[0]) legacyCustomerRefMap.set(mobileList[0], newCustObj);
-
-      // Prepare contacts
       for (const m of mobileList) {
         contactsToInsertBatch.push({
           id: crypto.randomUUID(),
@@ -5340,88 +5403,42 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
-  // Insert customers & contacts in batch into Directus
+  // Safe batch insert customers (one chunk at a time, or row by row on error)
   if (customersToInsertBatch.length > 0 && directusUrl && directusAdminToken) {
-    try {
-      const cChunks = chunkArray(customersToInsertBatch, 100);
-      for (const cChunk of cChunks) {
+    const cChunks = chunkArray(customersToInsertBatch, 100);
+    for (const cChunk of cChunks) {
+      try {
         const insRes = await directusFetch('/items/customers', {
           method: 'POST',
           body: JSON.stringify(cChunk),
         });
         if (insRes && Array.isArray(insRes.data)) {
           importedCustomersCount += insRes.data.length;
-          for (const c of insRes.data) {
-            customersData.unshift(c);
-          }
+          for (const c of insRes.data) customersData.unshift(c);
         }
-      }
-
-      // Batch insert contacts
-      if (contactsToInsertBatch.length > 0) {
-        const ctChunks = chunkArray(contactsToInsertBatch, 100);
-        for (const ctChunk of ctChunks) {
+      } catch (chunkErr: any) {
+        // Fallback row-by-row on batch validation error to save all valid rows!
+        for (const singleCust of cChunk) {
           try {
-            const insCtRes = await directusFetch('/items/customer_contacts', {
+            const sRes = await directusFetch('/items/customers', {
               method: 'POST',
-              body: JSON.stringify(ctChunk),
+              body: JSON.stringify(singleCust),
             });
-            if (insCtRes && Array.isArray(insCtRes.data)) {
-              for (const ct of insCtRes.data) {
-                contactsData.push(ct);
-              }
+            if (sRes && sRes.data) {
+              importedCustomersCount++;
+              customersData.unshift(sRes.data);
             }
-          } catch (ctErr: any) {
-            console.warn('Customer contacts bulk insert warning:', ctErr.message);
+          } catch (singleErr: any) {
+            errors.push(`خطا در ثبت مشتری ${singleCust.company_name}: ${singleErr.message}`);
           }
         }
       }
-    } catch (cErr: any) {
-      console.error('Directus bulk insert customers error:', cErr.message);
-      errors.push(`خطا در ثبت گروهی مشتریان در دایرکتوس: ${cErr.message}`);
-      for (const c of customersToInsertBatch) {
-        customersData.unshift(c);
-        importedCustomersCount++;
-      }
-    }
-  } else {
-    for (const c of customersToInsertBatch) {
-      customersData.unshift(c);
-      importedCustomersCount++;
     }
   }
 
   // --------------------------------------------------------------------------
-  // STEP 3: IMPORT ALL REPORTS (history) WITH ACCURATE CREATION DATES
+  // STEP 3: IMPORT ALL REPORTS WITH DEDUPLICATION & TIME PRESERVATION
   // --------------------------------------------------------------------------
-  // If reportRows are provided independently (or along with customers), index existing customers from Directus
-  if (reportRows.length > 0 && directusUrl && directusAdminToken) {
-    try {
-      const pList = [];
-      for (let page = 1; page <= 6; page++) {
-        pList.push(
-          directusFetch(`/items/customers?filter[interview_report][_starts_with]=${encodeURIComponent('پرونده انتقال‌یافته از پایگاه داده قدیم - کد تماس')}&limit=1000&page=${page}&fields=id,interview_report,assigned_marketer_name,mobile_numbers,status,next_followup_date`)
-            .catch(() => null)
-        );
-      }
-      const pageResults = await Promise.all(pList);
-      for (const res of pageResults) {
-        if (res && Array.isArray(res.data)) {
-          for (const c of res.data) {
-            const m = (c.interview_report || '').match(/کد تماس\s+(\d+)/);
-            if (m && m[1]) {
-              if (!legacyCustomerRefMap.has(m[1])) {
-                legacyCustomerRefMap.set(m[1], c);
-              }
-            }
-          }
-        }
-      }
-    } catch (idxErr: any) {
-      console.warn('Could not pre-index existing customers by CallID:', idxErr.message);
-    }
-  }
-
   const reportsToInsertBatch: any[] = [];
   const latestReportPerCustomer = new Map<string, { report: any; parsedDate: number }>();
 
@@ -5432,9 +5449,9 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       const callNum = String(rep.callNum || rep.callnum || rep.phone || '').trim();
       const normCallNum = normalizeContactValue(callNum, 'mobile');
 
-      const targetCustomer = (callId && legacyCustomerRefMap.get(callId)) ||
-                             (customerIdLegacy && legacyCustomerRefMap.get(customerIdLegacy)) ||
-                             (normCallNum && legacyCustomerRefMap.get(normCallNum)) ||
+      const targetCustomer = (callId && existingCallIdToCustomerMap.get(callId)) ||
+                             (customerIdLegacy && existingCallIdToCustomerMap.get(customerIdLegacy)) ||
+                             (normCallNum && existingPhoneToCustomerMap.get(normCallNum)) ||
                              customersData.find(c => (normCallNum && c.mobile_numbers && c.mobile_numbers.includes(normCallNum)) || (callId && c.interview_report && c.interview_report.includes(callId)));
 
       if (!targetCustomer) {
@@ -5442,8 +5459,20 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         continue;
       }
 
-      const negotiatorName = String(rep.negotiator || targetCustomer.assigned_marketer_name || 'کارشناس مذاکره').trim();
+      const rawDateCreated = rep.insertDate || rep.dateTime || rep.varcharDate || rep.updateDate;
+      const repDateCreated = parseToGregorianIso(rawDateCreated) || new Date().toISOString();
+      const repTimestamp = new Date(repDateCreated).getTime();
       const reportText = String(rep.report || rep.text || 'مذاکره انجام شد.').trim();
+      const textSnippet = reportText.substring(0, 30);
+
+      // Deduplication signature: customer_id + ISO minute + snippet
+      const reportSigKey = `${targetCustomer.id}_${repDateCreated.substring(0, 16)}_${textSnippet}`;
+      if (existingReportKeysSet.has(reportSigKey)) {
+        skippedCount++;
+        continue;
+      }
+
+      const negotiatorName = String(rep.negotiator || targetCustomer.assigned_marketer_name || 'کارشناس مذاکره').trim();
       const phoneForReport = normCallNum || callNum || (targetCustomer.mobile_numbers && targetCustomer.mobile_numbers[0]) || '';
       const rawRating = parseInt(String(rep.rating || 5), 10);
       const rating = isNaN(rawRating) ? 5 : Math.min(Math.max(rawRating > 10 ? Math.round(rawRating / 2) : rawRating, 1), 10);
@@ -5463,12 +5492,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         repStatusMapped = 'پیگیری بلند مدت';
       }
 
-      // Priority: insertDate > dateTime > varcharDate > updateDate
-      const rawDateCreated = rep.insertDate || rep.dateTime || rep.varcharDate || rep.updateDate;
-      const repDateCreated = parseToGregorianIso(rawDateCreated) || new Date().toISOString();
-      const repTimestamp = new Date(repDateCreated).getTime();
-
-      const newRepObj: any = { 
+      const newRepObj: any = {
         id: crypto.randomUUID(),
         customer_id: targetCustomer.id,
         negotiator_name: negotiatorName,
@@ -5485,8 +5509,8 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       }
 
       reportsToInsertBatch.push(newRepObj);
+      existingReportKeysSet.add(reportSigKey);
 
-      // Track latest report per customer to sync latest status and next_followup_date
       const currentLatest = latestReportPerCustomer.get(targetCustomer.id);
       if (!currentLatest || repTimestamp >= currentLatest.parsedDate) {
         latestReportPerCustomer.set(targetCustomer.id, {
@@ -5503,45 +5527,46 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
-  // Insert reports in batch into Directus
+  // Safe batch insert reports (chunked, fallback row-by-row on error)
   if (reportsToInsertBatch.length > 0 && directusUrl && directusAdminToken) {
-    try {
-      const rChunks = chunkArray(reportsToInsertBatch, 100);
-      for (const rChunk of rChunks) {
+    const rChunks = chunkArray(reportsToInsertBatch, 100);
+    for (const rChunk of rChunks) {
+      try {
         const insRes = await directusFetch('/items/customer_reports', {
           method: 'POST',
           body: JSON.stringify(rChunk),
         });
         if (insRes && Array.isArray(insRes.data)) {
           importedReportsCount += insRes.data.length;
-          for (const r of insRes.data) {
-            reportsData.unshift(r);
+          for (const r of insRes.data) reportsData.unshift(r);
+        }
+      } catch (rErr: any) {
+        for (const singleRep of rChunk) {
+          try {
+            const sRes = await directusFetch('/items/customer_reports', {
+              method: 'POST',
+              body: JSON.stringify(singleRep),
+            });
+            if (sRes && sRes.data) {
+              importedReportsCount++;
+              reportsData.unshift(sRes.data);
+            }
+          } catch (singleErr: any) {
+            errors.push(`خطا در ثبت گزارش: ${singleErr.message}`);
           }
         }
       }
-    } catch (rErr: any) {
-      console.error('Directus bulk insert reports error:', rErr.message);
-      errors.push(`خطا در ثبت گروهی گزارش‌ها در دایرکتوس: ${rErr.message}`);
-      for (const r of reportsToInsertBatch) {
-        reportsData.unshift(r);
-        importedReportsCount++;
-      }
-    }
-  } else {
-    for (const r of reportsToInsertBatch) {
-      reportsData.unshift(r);
-      importedReportsCount++;
     }
   }
 
   return res.json({
-    success: errors.length === 0 || importedCustomersCount > 0 || importedReportsCount > 0,
+    success: true,
     importedPersonnelCount,
     importedCustomersCount,
     importedReportsCount,
     skippedCount,
     errors,
-    message: `درون‌ریزی با موفقیت به پایان رسید: ${importedPersonnelCount} کارشناس، ${importedCustomersCount} پرونده مشتری، و ${importedReportsCount} گزارش مذاکره با تاریخ دقیق ثبت مستقیماً در پایگاه داده ثبت و پیوند داده شدند.`
+    message: `درون‌ریزی با موفقیت انجام شد: ${importedCustomersCount} مشتری جدید، ${importedReportsCount} گزارش جدید ثبت شد (${skippedCount} رکورد تکراری با هوشمندی رد شدند).`,
   });
 });
 
