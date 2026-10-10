@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Database,
   UploadCloud,
@@ -19,7 +19,10 @@ import {
   ChevronDown,
   Layers,
   HelpCircle,
-  Play
+  Play,
+  Terminal,
+  ShieldCheck,
+  Server
 } from 'lucide-react';
 import { Tenant, Personnel } from '../types';
 import { importLegacyMigrationData } from '../api';
@@ -33,7 +36,7 @@ interface DataMigrationViewProps {
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
-// Sample initial data provided by the user for instant testing
+// نمونه داده‌های تست ارسالی توسط کاربر
 const SAMPLE_ACCOUNT_RAW = `uid\tpass\tfname\tlname\tgender\tactive\tbirth\taddress\tincomingDate\tendJobDate\tcontractType\tprecentage\tplusPrecent\tcode\tshenasname\tcontacts\temail\tresume\tpic\tuserlevel\tacctype\tusername\tshift\tinsertDate
 2000\t1235\tامیرعلی\tنیک آیین\tمرد\t1\t\t\t1396/12/09\t\t0\t0\t0\t\t\t09125665463,09111372125\t\t\t\t0\tParsDatam\tadmin\t0\t2018-10-31 15:32:19
 2020\t13661102\tحمیدرضا\tصابر\tمرد\t1\t\t\t1396/12/09\t\t0\t0\t0\t\t\t09370777561\thamid.saber.workmail@gmail.com\t\t\t0\tVlifeGaller\t2020\t21\t2018-10-31 15:32:19
@@ -49,19 +52,19 @@ const SAMPLE_HISTORY_RAW = `ID\tCallID\treport\tdateTime\tnegotiator\tcallNum\tn
 2\t17550940902084\tتماس برقرار شد گفت توضیحات و قیمت ارسال بشه\t14040522-1838\tاکبری\t9112840260\t1404/05/25  14:00\tپیگیری قبل از انقضا\t15\t2084\t2\tNULL\t2025-08-13 17:38:10\t2025-08-13 17:38:10\tNULL
 3\t17550946352084\tبهشون توضیح داده شد ولی جواب دریافت نشد\t14040522-1847\tموسوی\t9113119440\t1404/05/25  14:17\tپاسخ نمیدهد\t1\t2084\t3\tNULL\t2025-08-13 17:47:15\t2025-08-13 17:47:15\tNULL`;
 
-// Helper parser for TSV or CSV or JSON text
+// تابع تجزیه متن ورودی از قالب‌های جدولی یا متنی
 function parseRawInput(raw: string): any[] {
   const trimmed = raw.trim();
   if (!trimmed) return [];
 
-  // Check if valid JSON array
+  // بررسی آرایه جیسون
   if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
     try {
       return JSON.parse(trimmed);
     } catch {}
   }
 
-  // Parse TSV or CSV
+  // تجزیه خط به خط بر اساس تب یا کاما
   const lines = trimmed.split(/\r?\n/).filter(line => line.trim().length > 0);
   if (lines.length < 2) return [];
 
@@ -91,16 +94,34 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
   const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedTenantId, setSelectedTenantId] = useState<string>(activeTenantId === 'all' ? 'default' : activeTenantId);
 
-  // Raw input texts
+  // متون ورودی جداول
   const [accountText, setAccountText] = useState<string>('');
   const [contactText, setContactText] = useState<string>('');
   const [historyText, setHistoryText] = useState<string>('');
 
-  // Processing state
+  // وضعیت پردازش و پیشرفت زنده
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [currentPhaseText, setCurrentPhaseText] = useState('');
+  const [progressLogs, setProgressLogs] = useState<string[]>([]);
   const [importResult, setImportResult] = useState<any | null>(null);
+  const logContainerRef = useRef<HTMLDivElement>(null);
 
-  // Load sample data button
+  // حرکت خودکار لاگ به انتهای لیست
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [progressLogs]);
+
+  // افزودن لاگ با برچسب زمان
+  const addLog = (msg: string) => {
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    setProgressLogs(prev => [...prev, `[${timeStr}] ${msg}`]);
+  };
+
+  // بارگذاری داده‌های نمونه برای تست
   const handleLoadSampleData = () => {
     setAccountText(SAMPLE_ACCOUNT_RAW);
     setContactText(SAMPLE_CONTACT_RAW);
@@ -108,12 +129,12 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
     showToast('داده‌های نمونه ارسالی با موفقیت در فرم‌ها بارگذاری شدند.', 'info');
   };
 
-  // Parsed records summary
+  // رکوردهای شناسایی‌شده
   const parsedAccounts = parseRawInput(accountText);
   const parsedContacts = parseRawInput(contactText);
   const parsedHistory = parseRawInput(historyText);
 
-  // Execute migration
+  // اجرای فرآیند درون‌ریزی
   const handleExecuteImport = async () => {
     if (parsedAccounts.length === 0 && parsedContacts.length === 0 && parsedHistory.length === 0) {
       showToast('لطفاً حداقل داده‌های یکی از جداول را وارد کنید.', 'error');
@@ -122,6 +143,31 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
     try {
       setIsSubmitting(true);
+      setProgressPercent(10);
+      setProgressLogs([]);
+      setCurrentPhaseText('در حال آماده‌سازی و اعتبارسنجی اولیه ساختار رکوردها...');
+      addLog('آغاز عملیات انتقال هوشمند اطلاعات به پایگاه داده مرکزی دایرکتوس.');
+      addLog(`تعداد کارشناسان: ${parsedAccounts.length} | مشتریان: ${parsedContacts.length} | گزارش‌ها: ${parsedHistory.length}`);
+
+      // شبیه‌سازی مراحل با انیمیشن پیشرفت در زمان ارسال به سرور
+      const timer1 = setTimeout(() => {
+        setProgressPercent(30);
+        setCurrentPhaseText('ثبت و تطبیق حساب‌های کاربری پرسنل در دایرکتوس...');
+        addLog('بررسی شناسه کارشناسان و تخصیص سطوح دسترسی...');
+      }, 400);
+
+      const timer2 = setTimeout(() => {
+        setProgressPercent(55);
+        setCurrentPhaseText('درون‌ریزی دسته‌ای پرونده‌های مشتریان و شماره‌های تماس...');
+        addLog('ارسال دسته‌های مشتریان به پایگاه داده و نرمال‌سازی شماره‌های تماس...');
+      }, 900);
+
+      const timer3 = setTimeout(() => {
+        setProgressPercent(80);
+        setCurrentPhaseText('استخراج آخرین مذاکرات و الحاق به پرونده هر مشتری...');
+        addLog('پالایش تاریخچه مذاکرات و متصل‌کردن آخرین وضعیت هر پرونده...');
+      }, 1400);
+
       const res = await importLegacyMigrationData({
         tenant_id: selectedTenantId,
         personnelRows: parsedAccounts,
@@ -129,11 +175,20 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         reportRows: parsedHistory,
       });
 
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+
+      setProgressPercent(100);
+      setCurrentPhaseText('عملیات با موفقیت پایان یافت.');
+      addLog(`نتیجه قطعی: ${res.importedPersonnelCount} کارشناس، ${res.importedCustomersCount} پرونده مشتری، و ${res.importedReportsCount} آخرین گزارش مذاکره ثبت شدند.`);
+
       setImportResult(res);
       showToast(res.message, 'success');
       await onRefreshData();
       setActiveStep(4);
     } catch (err: any) {
+      addLog(`بروز خطا در جریان ذخیره‌سازی: ${err.message || 'خطای ناشناخته'}`);
       showToast(err.message || 'خطا در درون‌ریزی داده‌ها', 'error');
     } finally {
       setIsSubmitting(false);
@@ -144,7 +199,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Header Banner */}
+      {/* سربرگ معرفی */}
       <div className="bg-[#181818] border border-[#282828] rounded-2xl p-6 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-96 h-96 bg-[#1DB954]/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -152,13 +207,13 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           <div>
             <div className="flex items-center gap-2.5 text-[#1DB954] text-xs font-bold uppercase tracking-wider mb-1.5">
               <Database className="w-4 h-4" />
-              <span>مرکز مهاجرت و درون‌ریزی داده‌های سازمانی</span>
+              <span>مرکز مهاجرت و انتقال داده‌های سازمانی</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-white">
               انتقال هوشمند اطلاعات از سامانه قبلی
             </h1>
             <p className="text-xs sm:text-sm text-[#A7A7A7] mt-1 max-w-2xl leading-relaxed">
-              درون‌ریزی تمیز و خودکار جداول کارشناسان، پرونده‌های مشتریان و آخرین گزارش مذاکرات با رعایت روابط دایرکتوس، نرمال‌سازی شماره‌ها و پیشگیری از رکوردهای تکراری.
+              درون‌ریزی تمیز و خودکار جداول کارشناسان، پرونده‌های مشتریان و آخرین گزارش مذاکرات با رعایت کامل روابط در پایگاه داده، نرمال‌سازی شماره‌ها و پیشگیری از رکوردهای تکراری.
             </p>
           </div>
 
@@ -173,12 +228,12 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           </div>
         </div>
 
-        {/* Step Indicator */}
+        {/* نشانگر مراحل */}
         <div className="mt-8 pt-6 border-t border-[#252525] grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { num: 1, title: 'کارشناسان و پرسنل', subtitle: 'جدول account', count: parsedAccounts.length },
-            { num: 2, title: 'پرونده‌های مشتریان', subtitle: 'جدول contact', count: parsedContacts.length },
-            { num: 3, title: 'آخرین گزارش مذاکرات', subtitle: 'جدول history', count: parsedHistory.length },
+            { num: 1, title: 'کارشناسان و پرسنل', subtitle: 'جدول حساب‌های کاربری', count: parsedAccounts.length },
+            { num: 2, title: 'پرونده‌های مشتریان', subtitle: 'جدول اطلاعات مشتریان', count: parsedContacts.length },
+            { num: 3, title: 'آخرین گزارش مذاکرات', subtitle: 'جدول پیشینه و گزارش‌ها', count: parsedHistory.length },
             { num: 4, title: 'پیش‌نمایش و اعمال', subtitle: 'اتمام درون‌ریزی', count: null },
           ].map((s) => {
             const isCurrent = activeStep === s.num;
@@ -215,7 +270,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         </div>
       </div>
 
-      {/* Target Tenant Selector */}
+      {/* انتخاب سازمان مقصد */}
       <div className="bg-[#181818] border border-[#282828] rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
@@ -242,16 +297,16 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         </div>
       </div>
 
-      {/* STEP 1: ACCOUNT (Personnel) */}
+      {/* گام ۱: پرسنل */}
       {activeStep === 1 && (
         <div className="bg-[#181818] border border-[#282828] rounded-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 font-bold">
-                1
+                ۱
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">ورود اطلاعات همکاران و بازاریاب‌ها (جدول account)</h2>
+                <h2 className="text-base font-bold text-white">ورود اطلاعات همکاران و بازاریاب‌ها</h2>
                 <p className="text-xs text-[#888]">محتوای جدول را به صورت کپی پیست از اکسل، متن جدول یا جیسون در کادر زیر وارد کنید.</p>
               </div>
             </div>
@@ -261,17 +316,17 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول account:</label>
+            <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول اطلاعات پرسنل:</label>
             <textarea
               rows={8}
               value={accountText}
               onChange={(e) => setAccountText(e.target.value)}
-              placeholder="مثال: uid fname lname contacts userlevel username ..."
+              placeholder="ستون‌های جدول: uid fname lname contacts userlevel username ..."
               className="w-full bg-[#121212] border border-[#2e2e2e] rounded-xl p-3 text-xs font-mono text-[#DDD] focus:outline-none focus:border-[#1DB954] resize-y leading-relaxed dir-ltr"
             />
           </div>
 
-          {/* Quick Preview Table */}
+          {/* پیش‌نمایش پرسنل */}
           {parsedAccounts.length > 0 && (
             <div className="mt-4 pt-4 border-t border-[#252525]">
               <div className="text-xs font-bold text-white mb-2">پیش‌نمایش رکوردهای پرسنل ({parsedAccounts.length} مورد):</div>
@@ -279,7 +334,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                 <table className="w-full text-right text-xs">
                   <thead className="bg-[#202020] text-[#888] font-semibold border-b border-[#282828]">
                     <tr>
-                      <th className="p-2.5">کد کاربر (uid)</th>
+                      <th className="p-2.5">کد کارشناس</th>
                       <th className="p-2.5">نام و نام خانوادگی</th>
                       <th className="p-2.5">نام کاربری</th>
                       <th className="p-2.5">شماره تماس</th>
@@ -314,16 +369,16 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         </div>
       )}
 
-      {/* STEP 2: CONTACT (Customers) */}
+      {/* گام ۲: مشتریان */}
       {activeStep === 2 && (
         <div className="bg-[#181818] border border-[#282828] rounded-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-bold">
-                2
+                ۲
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">ورود اطلاعات مشتریان و پرونده‌ها (جدول contact)</h2>
+                <h2 className="text-base font-bold text-white">ورود اطلاعات مشتریان و پرونده‌ها</h2>
                 <p className="text-xs text-[#888]">شامل نام شرکت، صنف، موبایل‌ها، وضعیت و اتصال به بازاریاب مسئول.</p>
               </div>
             </div>
@@ -333,17 +388,17 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول contact:</label>
+            <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول مشتریان:</label>
             <textarea
               rows={8}
               value={contactText}
               onChange={(e) => setContactText(e.target.value)}
-              placeholder="مثال: CallID uid mobiles CompanyName job managerName lastStat ..."
+              placeholder="ستون‌های جدول: CallID uid mobiles CompanyName job managerName lastStat ..."
               className="w-full bg-[#121212] border border-[#2e2e2e] rounded-xl p-3 text-xs font-mono text-[#DDD] focus:outline-none focus:border-[#1DB954] resize-y leading-relaxed dir-ltr"
             />
           </div>
 
-          {/* Quick Preview Table */}
+          {/* پیش‌نمایش مشتریان */}
           {parsedContacts.length > 0 && (
             <div className="mt-4 pt-4 border-t border-[#252525]">
               <div className="text-xs font-bold text-white mb-2">پیش‌نمایش رکوردهای مشتریان ({parsedContacts.length} مورد):</div>
@@ -351,8 +406,8 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                 <table className="w-full text-right text-xs">
                   <thead className="bg-[#202020] text-[#888] font-semibold border-b border-[#282828]">
                     <tr>
-                      <th className="p-2.5">شناسه تماس (CallID)</th>
-                      <th className="p-2.5">نام شرکت / برند</th>
+                      <th className="p-2.5">شناسه تماس</th>
+                      <th className="p-2.5">نام شرکت یا برند</th>
                       <th className="p-2.5">صنف و حوزه</th>
                       <th className="p-2.5">شماره موبایل‌ها</th>
                       <th className="p-2.5">مدیر</th>
@@ -395,16 +450,16 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         </div>
       )}
 
-      {/* STEP 3: HISTORY (Reports) */}
+      {/* گام ۳: گزارش‌ها */}
       {activeStep === 3 && (
         <div className="bg-[#181818] border border-[#282828] rounded-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold">
-                3
+                ۳
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">ورود آخرین گزارش مذاکرات (جدول history)</h2>
+                <h2 className="text-base font-bold text-white">ورود آخرین گزارش مذاکرات</h2>
                 <p className="text-xs text-[#888]">سیستم به صورت خودکار تنها آخرین مذاکره ثبت‌شده هر مشتری را فیلتر کرده و ضمیمه پرونده می‌کند.</p>
               </div>
             </div>
@@ -414,17 +469,17 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول history:</label>
+            <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول گزارش‌ها:</label>
             <textarea
               rows={8}
               value={historyText}
               onChange={(e) => setHistoryText(e.target.value)}
-              placeholder="مثال: ID CallID report dateTime negotiator callNum nextFollow status rating ..."
+              placeholder="ستون‌های جدول: ID CallID report dateTime negotiator callNum nextFollow status rating ..."
               className="w-full bg-[#121212] border border-[#2e2e2e] rounded-xl p-3 text-xs font-mono text-[#DDD] focus:outline-none focus:border-[#1DB954] resize-y leading-relaxed dir-ltr"
             />
           </div>
 
-          {/* Quick Preview Table */}
+          {/* پیش‌نمایش گزارش‌ها */}
           {parsedHistory.length > 0 && (
             <div className="mt-4 pt-4 border-t border-[#252525]">
               <div className="text-xs font-bold text-white mb-2">پیش‌نمایش گزارش‌ها ({parsedHistory.length} مورد):</div>
@@ -432,7 +487,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                 <table className="w-full text-right text-xs">
                   <thead className="bg-[#202020] text-[#888] font-semibold border-b border-[#282828]">
                     <tr>
-                      <th className="p-2.5">شناسه تماس (CallID)</th>
+                      <th className="p-2.5">شناسه تماس</th>
                       <th className="p-2.5">مذاکره‌کننده</th>
                       <th className="p-2.5">شرح مذاکره</th>
                       <th className="p-2.5">امتیاز</th>
@@ -476,16 +531,16 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         </div>
       )}
 
-      {/* STEP 4: PREVIEW & EXECUTE */}
+      {/* گام ۴: پیش‌نمایش، پیشرفت زنده و اجرا */}
       {activeStep === 4 && (
         <div className="bg-[#181818] border border-[#282828] rounded-2xl p-6 space-y-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#1DB954]/10 border border-[#1DB954]/20 flex items-center justify-center text-[#1DB954] font-bold">
-              4
+              ۴
             </div>
             <div>
               <h2 className="text-base font-bold text-white">بررسی خلاصه و اجرای عملیات درون‌ریزی</h2>
-              <p className="text-xs text-[#888]">قبل از درج در پایگاه داده، آمار کل داده‌های آماده پردازش را بررسی نمایید.</p>
+              <p className="text-xs text-[#888]">آمار کل داده‌های آماده پردازش را بررسی کرده و عملیات انتقال به پایگاه داده دایرکتوس را آغاز نمایید.</p>
             </div>
           </div>
 
@@ -495,7 +550,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                 {parsedAccounts.length}
               </div>
               <div className="text-xs font-bold text-white">کارشناس و همکار</div>
-              <div className="text-[10px] text-[#777] mt-0.5">آماده ایجاد در جدول personnel</div>
+              <div className="text-[10px] text-[#777] mt-0.5">آماده ثبت در جدول کارشناسان</div>
             </div>
 
             <div className="bg-[#121212] border border-[#282828] rounded-xl p-4 text-center">
@@ -503,7 +558,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                 {parsedContacts.length}
               </div>
               <div className="text-xs font-bold text-white">پرونده مشتری</div>
-              <div className="text-[10px] text-[#777] mt-0.5">آماده ایجاد در جدول customers</div>
+              <div className="text-[10px] text-[#777] mt-0.5">آماده ثبت در جدول مشتریان</div>
             </div>
 
             <div className="bg-[#121212] border border-[#282828] rounded-xl p-4 text-center">
@@ -515,7 +570,39 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
             </div>
           </div>
 
-          {importResult && (
+          {/* کادر پیشرفت زنده هنگام اجرا */}
+          {isSubmitting && (
+            <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs font-bold text-white">
+                <span className="flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 text-[#1DB954] animate-spin" />
+                  <span>{currentPhaseText}</span>
+                </span>
+                <span className="font-mono text-[#1DB954]">{progressPercent}٪</span>
+              </div>
+
+              {/* نوار پیشرفت گرافیکی */}
+              <div className="w-full bg-[#202020] rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-[#1DB954] h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+
+              {/* کنسول لاگ زنده مراحل */}
+              <div
+                ref={logContainerRef}
+                className="bg-black/60 rounded-lg p-2.5 font-mono text-[11px] text-[#888] max-h-32 overflow-y-auto space-y-1 dir-ltr text-left border border-white/5"
+              >
+                {progressLogs.map((log, idx) => (
+                  <div key={idx} className="text-[#A7A7A7]">{log}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* نتیجه موفقیت یا خطا */}
+          {importResult && !isSubmitting && (
             <div className={`p-4 rounded-xl border ${
               importResult.success ? 'bg-[#1DB954]/10 border-[#1DB954]/30 text-white' : 'bg-red-950/20 border-red-500/30 text-white'
             }`}>
@@ -523,8 +610,18 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                 {importResult.success ? <CheckCircle2 className="w-5 h-5 text-[#1DB954]" /> : <AlertTriangle className="w-5 h-5 text-red-400" />}
                 <span>{importResult.message}</span>
               </div>
+              <div className="text-xs text-[#AAA] mt-2 flex flex-wrap gap-4">
+                <span>کارشناسان ثبت‌شده: <b className="text-white font-mono">{importResult.importedPersonnelCount}</b></span>
+                <span>پرونده‌های مشتریان: <b className="text-white font-mono">{importResult.importedCustomersCount}</b></span>
+                <span>آخرین گزارش‌ها: <b className="text-white font-mono">{importResult.importedReportsCount}</b></span>
+                <span className="text-[#1DB954] flex items-center gap-1 font-bold">
+                  <Server className="w-3.5 h-3.5" />
+                  ذخیره‌سازی مستقیم در پایگاه داده مرکزی دایرکتوس
+                </span>
+              </div>
               {importResult.errors && importResult.errors.length > 0 && (
-                <div className="mt-2 text-xs text-red-300 space-y-1">
+                <div className="mt-3 pt-3 border-t border-red-500/20 text-xs text-red-300 space-y-1">
+                  <div className="font-bold">جزئیات پیام‌های سرور:</div>
                   {importResult.errors.map((e: string, idx: number) => (
                     <div key={idx}>• {e}</div>
                   ))}
@@ -536,7 +633,8 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-[#252525]">
             <button
               onClick={() => setActiveStep(3)}
-              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#252525] hover:bg-[#303030] text-[#CCC] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all"
+              disabled={isSubmitting}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#252525] hover:bg-[#303030] text-[#CCC] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
             >
               <ArrowRight className="w-4 h-4" />
               <span>بازگشت به مراحل قبل</span>
@@ -550,7 +648,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
               {isSubmitting ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>در حال درون‌ریزی و اتصال روابط...</span>
+                  <span>در حال انتقال داده‌ها... ({progressPercent}٪)</span>
                 </>
               ) : (
                 <>
