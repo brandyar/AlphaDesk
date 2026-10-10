@@ -52,32 +52,111 @@ const SAMPLE_HISTORY_RAW = `ID\tCallID\treport\tdateTime\tnegotiator\tcallNum\tn
 2\t17550940902084\tتماس برقرار شد گفت توضیحات و قیمت ارسال بشه\t14040522-1838\tاکبری\t9112840260\t1404/05/25  14:00\tپیگیری قبل از انقضا\t15\t2084\t2\tNULL\t2025-08-13 17:38:10\t2025-08-13 17:38:10\tNULL
 3\t17550946352084\tبهشون توضیح داده شد ولی جواب دریافت نشد\t14040522-1847\tموسوی\t9113119440\t1404/05/25  14:17\tپاسخ نمیدهد\t1\t2084\t3\tNULL\t2025-08-13 17:47:15\t2025-08-13 17:47:15\tNULL`;
 
-// تابع تجزیه متن ورودی از قالب‌های جدولی یا متنی
+// تابع پیشرفته و هوشمند تجزیه متن ورودی (Multi-line Smart TSV/CSV Parser)
+// این تابع شکستگی‌های خط (Enter/Newline) ناخواسته در داخل فیلدهای گزارش یا توضیحات را به درستی تشخیص داده و ادغام می‌کند
 function parseRawInput(raw: string): any[] {
   const trimmed = raw.trim();
   if (!trimmed) return [];
 
-  // بررسی آرایه جیسون
+  // ۱. بررسی آرایه ساختاریافته جیسون
   if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
     try {
       return JSON.parse(trimmed);
     } catch {}
   }
 
-  // تجزیه خط به خط بر اساس تب یا کاما
-  const lines = trimmed.split(/\r?\n/).filter(line => line.trim().length > 0);
-  if (lines.length < 2) return [];
+  // ۲. تشخیص جداکننده اصلی بر اساس خط اول
+  const firstLineEnd = trimmed.indexOf('\n');
+  const firstLine = firstLineEnd !== -1 ? trimmed.substring(0, firstLineEnd) : trimmed;
+  const tabCount = (firstLine.match(/\t/g) || []).length;
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const delimiter = tabCount >= commaCount ? '\t' : ',';
 
-  const delimiter = lines[0].includes('\t') ? '\t' : ',';
-  const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+  // ۳. تجزیه‌گر مبتنی بر ماشین حالت (State Machine) با پشتیبانی از فیلدهای چندخطی داخل کوتیشن
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentField = '';
+  let insideQuotes = false;
+  const len = trimmed.length;
 
+  for (let i = 0; i < len; i++) {
+    const char = trimmed[i];
+    const nextChar = i + 1 < len ? trimmed[i + 1] : '';
+
+    if (char === '"') {
+      if (insideQuotes && nextChar === '"') {
+        currentField += '"';
+        i++; // رد کردن گیومه فرار
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+    } else if (char === delimiter && !insideQuotes) {
+      currentRow.push(currentField);
+      currentField = '';
+    } else if ((char === '\r' || char === '\n') && !insideQuotes) {
+      if (char === '\r' && nextChar === '\n') {
+        i++;
+      }
+      currentRow.push(currentField);
+      currentField = '';
+      if (currentRow.some(val => val.trim().length > 0)) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+    } else {
+      currentField += char;
+    }
+  }
+
+  if (currentField.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentField);
+    if (currentRow.some(val => val.trim().length > 0)) {
+      rows.push(currentRow);
+    }
+  }
+
+  if (rows.length < 2) return [];
+
+  const headers = rows[0].map(h => h.trim().replace(/^["']|["']$/g, ''));
+  const expectedCols = headers.length;
+
+  // ۴. ادغام هوشمند ردیف‌های تکه‌تکه‌شده فاقد کوتیشن (Unquoted Multi-line Stitching)
+  const unifiedRows: string[][] = [];
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (unifiedRows.length === 0) {
+      unifiedRows.push(row);
+      continue;
+    }
+
+    const prevRow = unifiedRows[unifiedRows.length - 1];
+
+    if (prevRow.length < expectedCols) {
+      // ردیف قبلی بر اثر اینتر نصفه رها شده است
+      prevRow[prevRow.length - 1] = (prevRow[prevRow.length - 1] + '\n' + (row[0] || '')).trim();
+      for (let c = 1; c < row.length; c++) {
+        prevRow.push(row[c]);
+      }
+    } else {
+      // ردیف قبلی کامل است. آیا ردیف فعلی شروع یک رکورد معتبر جدید است؟
+      const firstVal = String(row[0] || '').trim();
+      const looksLikeValidRecordStart = /^\d+$/.test(firstVal) || row.length === expectedCols;
+      if (!looksLikeValidRecordStart && row.length < expectedCols) {
+        const reportIdx = headers.findIndex(h => /report|text|address|notes|شرح/i.test(h));
+        const targetIdx = reportIdx !== -1 && reportIdx < prevRow.length ? reportIdx : prevRow.length - 1;
+        prevRow[targetIdx] = (prevRow[targetIdx] + '\n' + row.join('\t')).trim();
+      } else {
+        unifiedRows.push(row);
+      }
+    }
+  }
+
+  // ۵. نگاشت نهایی به اشیاء کلید-مقدار
   const results: any[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const currentLine = lines[i];
-    const values = currentLine.split(delimiter).map(v => v.trim().replace(/^["']|["']$/g, ''));
+  for (const row of unifiedRows) {
     const rowObj: Record<string, any> = {};
     headers.forEach((h, idx) => {
-      rowObj[h] = values[idx] !== undefined ? values[idx] : '';
+      rowObj[h] = row[idx] !== undefined ? row[idx].trim().replace(/^["']|["']$/g, '') : '';
     });
     results.push(rowObj);
   }
