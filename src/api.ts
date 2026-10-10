@@ -225,22 +225,68 @@ export async function fetchPersonnel(): Promise<Personnel[]> {
   return handleResponse<Personnel[]>(res, 'خطا در دریافت لیست پرسنل');
 }
 
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  filteredTotal: number;
+  page: number;
+  limit: number;
+}
+
 export async function fetchCustomers(filters?: {
   search?: string;
   status?: string;
   marketer_id?: string;
   expired_only?: boolean;
+  page?: number;
+  limit?: number;
 }): Promise<Customer[]> {
   const params = new URLSearchParams();
   if (filters?.search) params.append('search', filters.search);
   if (filters?.status) params.append('status', filters.status);
   if (filters?.marketer_id) params.append('marketer_id', filters.marketer_id);
   if (filters?.expired_only) params.append('expired_only', 'true');
+  if (filters?.page) params.append('page', String(filters.page));
+  if (filters?.limit !== undefined) params.append('limit', String(filters.limit));
 
   const res = await fetch(`${BASE_URL}/customers?${params.toString()}`, {
     headers: getBffHeaders(),
   });
   return handleResponse<Customer[]>(res, 'خطا در دریافت لیست مشتریان');
+}
+
+export async function fetchCustomersPaginated(filters?: {
+  search?: string;
+  status?: string;
+  marketer_id?: string;
+  expired_only?: boolean;
+  page?: number;
+  limit?: number;
+}): Promise<PaginatedResult<Customer>> {
+  const params = new URLSearchParams();
+  if (filters?.search) params.append('search', filters.search);
+  if (filters?.status) params.append('status', filters.status);
+  if (filters?.marketer_id) params.append('marketer_id', filters.marketer_id);
+  if (filters?.expired_only) params.append('expired_only', 'true');
+  if (filters?.page) params.append('page', String(filters.page));
+  if (filters?.limit) params.append('limit', String(filters.limit));
+
+  const res = await fetch(`${BASE_URL}/customers?${params.toString()}`, {
+    headers: getBffHeaders(),
+  });
+  const data = await handleResponse<Customer[]>(res, 'خطا در دریافت لیست مشتریان');
+  const total = parseInt(res.headers.get('X-Total-Count') || String(data.length), 10);
+  const filteredTotal = parseInt(res.headers.get('X-Filter-Count') || String(data.length), 10);
+  const page = parseInt(res.headers.get('X-Page') || String(filters?.page || 1), 10);
+  const limit = parseInt(res.headers.get('X-Limit') || String(filters?.limit || 50), 10);
+
+  return {
+    data,
+    total,
+    filteredTotal,
+    page,
+    limit,
+  };
 }
 
 export async function fetchCustomerById(id: string): Promise<Customer> {
@@ -417,12 +463,48 @@ export async function deleteCustomerContact(id: string): Promise<void> {
   }
 }
 
-export async function fetchCustomerReports(customerId?: string): Promise<CustomerReport[]> {
-  const q = customerId ? `?customer_id=${encodeURIComponent(customerId)}` : '';
+export async function fetchCustomerReports(
+  customerId?: string,
+  options?: { page?: number; limit?: number }
+): Promise<CustomerReport[]> {
+  const params = new URLSearchParams();
+  if (customerId) params.append('customer_id', customerId);
+  if (options?.page) params.append('page', String(options.page));
+  if (options?.limit !== undefined) params.append('limit', String(options.limit));
+
+  const q = params.toString() ? `?${params.toString()}` : '';
   const res = await fetch(`${BASE_URL}/customer-reports${q}`, {
     headers: getBffHeaders(),
   });
   return handleResponse<CustomerReport[]>(res, 'خطا در دریافت گزارش‌های مذاکره');
+}
+
+export async function fetchCustomerReportsPaginated(
+  customerId?: string,
+  options?: { page?: number; limit?: number }
+): Promise<PaginatedResult<CustomerReport>> {
+  const params = new URLSearchParams();
+  if (customerId) params.append('customer_id', customerId);
+  if (options?.page) params.append('page', String(options.page));
+  if (options?.limit) params.append('limit', String(options.limit));
+
+  const q = params.toString() ? `?${params.toString()}` : '';
+  const res = await fetch(`${BASE_URL}/customer-reports${q}`, {
+    headers: getBffHeaders(),
+  });
+  const data = await handleResponse<CustomerReport[]>(res, 'خطا در دریافت گزارش‌های مذاکره');
+  const total = parseInt(res.headers.get('X-Total-Count') || String(data.length), 10);
+  const filteredTotal = parseInt(res.headers.get('X-Filter-Count') || String(data.length), 10);
+  const page = parseInt(res.headers.get('X-Page') || String(options?.page || 1), 10);
+  const limit = parseInt(res.headers.get('X-Limit') || String(options?.limit || 50), 10);
+
+  return {
+    data,
+    total,
+    filteredTotal,
+    page,
+    limit,
+  };
 }
 
 export async function createCustomerReport(payload: Partial<CustomerReport>): Promise<CustomerReport> {

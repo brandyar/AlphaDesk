@@ -2584,12 +2584,22 @@ app.delete('/api/contacts/:id', async (req: Request, res: Response) => {
 
 // Customers API with BFF Role-Based Access Control
 app.get('/api/customers', async (req: Request, res: Response) => {
-  const { search, status, marketer_id, expired_only } = req.query;
+  const { search, status, marketer_id, expired_only, page, limit } = req.query;
   const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
+
+  const reqLimit = limit ? parseInt(String(limit), 10) : 500;
+  const reqPage = page ? parseInt(String(page), 10) : 1;
 
   if (directusUrl && directusAdminToken) {
     try {
-      const result = await directusFetch('/items/customers?sort=-date_created&limit=500&fields=*,contacts.*');
+      let directusQuery = `/items/customers?sort=-date_created&meta=*&fields=*,contacts.*`;
+      if (reqLimit > 0) {
+        directusQuery += `&limit=${reqLimit}&page=${reqPage}`;
+      } else {
+        directusQuery += `&limit=-1`;
+      }
+
+      const result = await directusFetch(directusQuery);
       if (result && Array.isArray(result.data)) {
         let list = result.data.map((c: any) => computeCustomerExpiration(c));
 
@@ -2636,6 +2646,15 @@ app.get('/api/customers', async (req: Request, res: Response) => {
         if (expired_only === 'true') {
           list = list.filter((c: any) => c.is_expired);
         }
+
+        const totalMetaCount = result.meta?.total_count ? parseInt(String(result.meta.total_count), 10) : list.length;
+        const filterMetaCount = result.meta?.filter_count ? parseInt(String(result.meta.filter_count), 10) : list.length;
+
+        // Add pagination response headers
+        res.setHeader('X-Total-Count', String(totalMetaCount));
+        res.setHeader('X-Filter-Count', String(filterMetaCount));
+        res.setHeader('X-Page', String(reqPage));
+        res.setHeader('X-Limit', String(reqLimit));
 
         return res.json(list);
       }
@@ -3797,12 +3816,23 @@ app.post('/api/customers/merge', async (req: Request, res: Response) => {
   });
 });
 app.get('/api/customer-reports', async (req: Request, res: Response) => {
-  const { customer_id } = req.query;
+  const { customer_id, page, limit } = req.query;
   const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
+
+  const reqLimit = limit ? parseInt(String(limit), 10) : (customer_id ? 200 : 500);
+  const reqPage = page ? parseInt(String(page), 10) : 1;
 
   if (directusUrl && directusAdminToken) {
     try {
-      const q = customer_id ? `?filter[customer_id][_eq]=${customer_id}&sort=-date_created&limit=500` : '?sort=-date_created&limit=500';
+      let q = `?sort=-date_created&meta=*`;
+      if (customer_id) {
+        q += `&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}`;
+      }
+      if (reqLimit > 0) {
+        q += `&limit=${reqLimit}&page=${reqPage}`;
+      } else {
+        q += `&limit=-1`;
+      }
       const result = await directusFetch(`/items/customer_reports${q}`);
       if (result && Array.isArray(result.data)) {
         let reportsList = result.data;
@@ -3821,6 +3851,15 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
             (personnelId && r.created_by === personnelId)
           );
         }
+
+        const totalMetaCount = result.meta?.total_count ? parseInt(String(result.meta.total_count), 10) : reportsList.length;
+        const filterMetaCount = result.meta?.filter_count ? parseInt(String(result.meta.filter_count), 10) : reportsList.length;
+
+        res.setHeader('X-Total-Count', String(totalMetaCount));
+        res.setHeader('X-Filter-Count', String(filterMetaCount));
+        res.setHeader('X-Page', String(reqPage));
+        res.setHeader('X-Limit', String(reqLimit));
+
         return res.json(reportsList);
       }
     } catch (e: any) {
@@ -4969,11 +5008,68 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     if (p.name) legacyUidToPersonnelMap.set(String(p.name).trim().toLowerCase(), p);
   }
 
-  // Helper to parse Jalali date or ISO to Gregorian ISO
+  // Helper to parse Jalali or Gregorian date to ISO
+  function jalaliToGregorianCalc(jy: number, jm: number, jd: number): { gy: number; gm: number; gd: number } {
+    let j_y = jy - 979;
+    let j_m = jm - 1;
+    let j_d = jd - 1;
+    let j_day_no = 365 * j_y + Math.floor(j_y / 33) * 8 + Math.floor(((j_y % 33) + 3) / 4);
+    for (let i = 0; i < j_m; ++i) j_day_no += i < 6 ? 31 : 30;
+    j_day_no += j_d;
+    let g_day_no = j_day_no + 79;
+    let gy = 1600 + 400 * Math.floor(g_day_no / 146097);
+    g_day_no = g_day_no % 146097;
+    let leap = true;
+    if (g_day_no >= 36525) {
+      g_day_no--;
+      gy += 100 * Math.floor(g_day_no / 36524);
+      g_day_no = g_day_no % 36524;
+      if (g_day_no >= 365) {
+        g_day_no++;
+      } else {
+        leap = false;
+      }
+    }
+    gy += 4 * Math.floor(g_day_no / 1461);
+    g_day_no %= 1461;
+    if (g_day_no >= 366) {
+      leap = false;
+      g_day_no--;
+      gy += Math.floor(g_day_no / 365);
+      g_day_no = g_day_no % 365;
+    }
+    const g_days_in_month = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let gm = 0;
+    for (let i = 0; i < 12; i++) {
+      if (g_day_no < g_days_in_month[i]) {
+        gm = i + 1;
+        break;
+      }
+      g_day_no -= g_days_in_month[i];
+    }
+    const gd = g_day_no + 1;
+    return { gy, gm, gd };
+  }
+
   function parseToGregorianIso(val: any): string | null {
     if (!val) return null;
     const str = String(val).trim();
     if (!str || str.toLowerCase() === 'null') return null;
+
+    // 1. Gregorian standard check (e.g. "2025-08-13 17:16:00", "2025-08-13T17:16:00Z", "2018-10-31")
+    const gregMatch = str.match(/^(20\d\d|19\d\d)[\/\-](\d{1,2})[\/\-](\d{1,2})(?:[\sT]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+    if (gregMatch) {
+      const gy = parseInt(gregMatch[1], 10);
+      const gm = parseInt(gregMatch[2], 10) - 1;
+      const gd = parseInt(gregMatch[3], 10);
+      const hh = gregMatch[4] ? parseInt(gregMatch[4], 10) : 12;
+      const mm = gregMatch[5] ? parseInt(gregMatch[5], 10) : 0;
+      const ss = gregMatch[6] ? parseInt(gregMatch[6], 10) : 0;
+      const d = new Date(Date.UTC(gy, gm, gd, hh, mm, ss));
+      if (!isNaN(d.getTime())) return d.toISOString();
+    }
+
+    // 2. Jalali compact or separated with optional time (e.g. "14040522-1816", "1404/05/25 13:45", "14040522")
     const cleanCompact = str.replace(/[^0-9]/g, '');
     if (cleanCompact.startsWith('13') || cleanCompact.startsWith('14')) {
       if (cleanCompact.length >= 8) {
@@ -4986,38 +5082,29 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
           mm = parseInt(cleanCompact.substring(10, 12), 10);
         }
         try {
-          const j_day_no = 365 * (jy - 979) + Math.floor((jy - 979) / 33) * 8 + Math.floor((((jy - 979) % 33) + 3) / 4);
-          let extra = 0;
-          for (let i = 0; i < jm - 1; ++i) extra += i < 6 ? 31 : 30;
-          const totalJ = j_day_no + extra + (jd - 1) + 79;
-          const g_day = totalJ;
-          const gy = 1600 + 400 * Math.floor(g_day / 146097);
-          let rem = g_day % 146097;
-          if (rem >= 36525) {
-            rem--;
-            const c = Math.floor(rem / 36524);
-            const gy2 = gy + 100 * c;
-            rem %= 36524;
-            if (rem >= 365) rem++;
-          }
-          const dObj = new Date(Date.UTC(jy > 1300 ? jy + 621 : jy, (jm - 1) % 12, Math.min(Math.max(jd, 1), 28), hh, mm, ss));
-          return dObj.toISOString();
+          const g = jalaliToGregorianCalc(jy, jm, jd);
+          return new Date(Date.UTC(g.gy, g.gm - 1, g.gd, hh, mm, ss)).toISOString();
         } catch {}
       }
     }
-    if (str.includes('/')) {
-      const parts = str.split(/[\s\/]/).filter(Boolean);
+
+    // 3. Jalali with slashes/dashes
+    if (str.includes('/') || str.includes('-')) {
+      const parts = str.split(/[\s\/\-]/).filter(Boolean);
       if (parts.length >= 3) {
         const p1 = parseInt(parts[0], 10);
         if (p1 > 1300 && p1 < 1500) {
           const jy = p1;
           const jm = parseInt(parts[1], 10);
           const jd = parseInt(parts[2], 10);
-          const dObj = new Date(Date.UTC(jy + 621, (jm - 1) % 12, Math.min(Math.max(jd, 1), 28), 12, 0, 0));
-          return dObj.toISOString();
+          try {
+            const g = jalaliToGregorianCalc(jy, jm, jd);
+            return new Date(Date.UTC(g.gy, g.gm - 1, g.gd, 12, 0, 0)).toISOString();
+          } catch {}
         }
       }
     }
+
     const standardDate = new Date(str);
     if (!isNaN(standardDate.getTime())) {
       return standardDate.toISOString();
@@ -5305,44 +5392,65 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   }
 
   // --------------------------------------------------------------------------
-  // STEP 3: IMPORT LATEST REPORTS (history)
+  // STEP 3: IMPORT ALL REPORTS (history) WITH ACCURATE CREATION DATES
   // --------------------------------------------------------------------------
-  const reportsByTarget = new Map<string, any[]>();
-  for (const rep of reportRows) {
-    const targetKey = String(rep.CallID || rep.customerID || rep.callid || rep.callNum || '').trim();
-    if (!targetKey) continue;
-    if (!reportsByTarget.has(targetKey)) {
-      reportsByTarget.set(targetKey, []);
+  // If reportRows are provided independently (or along with customers), index existing customers from Directus
+  if (reportRows.length > 0 && directusUrl && directusAdminToken) {
+    try {
+      const pList = [];
+      for (let page = 1; page <= 6; page++) {
+        pList.push(
+          directusFetch(`/items/customers?filter[interview_report][_starts_with]=${encodeURIComponent('پرونده انتقال‌یافته از پایگاه داده قدیم - کد تماس')}&limit=1000&page=${page}&fields=id,interview_report,assigned_marketer_name,mobile_numbers,status,next_followup_date`)
+            .catch(() => null)
+        );
+      }
+      const pageResults = await Promise.all(pList);
+      for (const res of pageResults) {
+        if (res && Array.isArray(res.data)) {
+          for (const c of res.data) {
+            const m = (c.interview_report || '').match(/کد تماس\s+(\d+)/);
+            if (m && m[1]) {
+              if (!legacyCustomerRefMap.has(m[1])) {
+                legacyCustomerRefMap.set(m[1], c);
+              }
+            }
+          }
+        }
+      }
+    } catch (idxErr: any) {
+      console.warn('Could not pre-index existing customers by CallID:', idxErr.message);
     }
-    reportsByTarget.get(targetKey)!.push(rep);
   }
 
   const reportsToInsertBatch: any[] = [];
-  for (const [key, reps] of reportsByTarget.entries()) {
+  const latestReportPerCustomer = new Map<string, { report: any; parsedDate: number }>();
+
+  for (const rep of reportRows) {
     try {
-      const targetCustomer = legacyCustomerRefMap.get(key) ||
-                             customersData.find(c => c.mobile_numbers && c.mobile_numbers.includes(normalizeContactValue(key, 'mobile')));
+      const callId = String(rep.CallID || rep.callid || '').trim();
+      const customerIdLegacy = String(rep.customerID || rep.customerid || '').trim();
+      const callNum = String(rep.callNum || rep.callnum || rep.phone || '').trim();
+      const normCallNum = normalizeContactValue(callNum, 'mobile');
+
+      const targetCustomer = (callId && legacyCustomerRefMap.get(callId)) ||
+                             (customerIdLegacy && legacyCustomerRefMap.get(customerIdLegacy)) ||
+                             (normCallNum && legacyCustomerRefMap.get(normCallNum)) ||
+                             customersData.find(c => (normCallNum && c.mobile_numbers && c.mobile_numbers.includes(normCallNum)) || (callId && c.interview_report && c.interview_report.includes(callId)));
+
       if (!targetCustomer) {
-        skippedCount += reps.length;
+        skippedCount++;
         continue;
       }
 
-      reps.sort((a, b) => {
-        const dateA = new Date(parseToGregorianIso(a.dateTime || a.insertDate || a.updateDate) || 0).getTime();
-        const dateB = new Date(parseToGregorianIso(b.dateTime || b.insertDate || b.updateDate) || 0).getTime();
-        return dateB - dateA;
-      });
-
-      const latest = reps[0];
-      const negotiatorName = String(latest.negotiator || targetCustomer.assigned_marketer_name || 'کارشناس مذاکره').trim();
-      const reportText = String(latest.report || latest.text || 'مذاکره انجام شد.').trim();
-      const callNum = String(latest.callNum || (targetCustomer.mobile_numbers && targetCustomer.mobile_numbers[0]) || '').trim();
-      const rawRating = parseInt(String(latest.rating || 5), 10);
+      const negotiatorName = String(rep.negotiator || targetCustomer.assigned_marketer_name || 'کارشناس مذاکره').trim();
+      const reportText = String(rep.report || rep.text || 'مذاکره انجام شد.').trim();
+      const phoneForReport = normCallNum || callNum || (targetCustomer.mobile_numbers && targetCustomer.mobile_numbers[0]) || '';
+      const rawRating = parseInt(String(rep.rating || 5), 10);
       const rating = isNaN(rawRating) ? 5 : Math.min(Math.max(rawRating > 10 ? Math.round(rawRating / 2) : rawRating, 1), 10);
-      const nextFollowIso = parseToGregorianIso(latest.nextFollow);
+      const nextFollowIso = parseToGregorianIso(rep.nextFollow);
+      const repStat = String(rep.status || '').trim();
 
-      const repStat = String(latest.status || '').trim();
-      let repStatusMapped: any = targetCustomer.status;
+      let repStatusMapped: any = targetCustomer.status || 'تماس برقرار نشده';
       if (repStat.includes('قرارداد') || repStat.includes('فاکتور')) {
         repStatusMapped = 'قرارداد';
       } else if (repStat.includes('نمیخواد')) {
@@ -5355,29 +5463,43 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         repStatusMapped = 'پیگیری بلند مدت';
       }
 
-      const repDateCreated = parseToGregorianIso(latest.insertDate || latest.dateTime) || new Date().toISOString();
+      // Priority: insertDate > dateTime > varcharDate > updateDate
+      const rawDateCreated = rep.insertDate || rep.dateTime || rep.varcharDate || rep.updateDate;
+      const repDateCreated = parseToGregorianIso(rawDateCreated) || new Date().toISOString();
+      const repTimestamp = new Date(repDateCreated).getTime();
 
-      const newRepObj: any = {
+      const newRepObj: any = { 
         id: crypto.randomUUID(),
         customer_id: targetCustomer.id,
         negotiator_name: negotiatorName,
-        negotiation_phone: normalizeContactValue(callNum, 'mobile') || callNum,
+        negotiation_phone: phoneForReport,
         report_text: reportText,
         negotiation_score: rating,
         next_followup_date: nextFollowIso,
         negotiation_status: repStatusMapped,
         date_created: repDateCreated,
       };
+
       if (targetTenantNum) {
         newRepObj.tenant_id = targetTenantNum;
       }
 
       reportsToInsertBatch.push(newRepObj);
 
-      targetCustomer.next_followup_date = nextFollowIso || targetCustomer.next_followup_date;
-      targetCustomer.status = repStatusMapped;
+      // Track latest report per customer to sync latest status and next_followup_date
+      const currentLatest = latestReportPerCustomer.get(targetCustomer.id);
+      if (!currentLatest || repTimestamp >= currentLatest.parsedDate) {
+        latestReportPerCustomer.set(targetCustomer.id, {
+          report: newRepObj,
+          parsedDate: repTimestamp,
+        });
+        targetCustomer.status = repStatusMapped;
+        if (nextFollowIso) {
+          targetCustomer.next_followup_date = nextFollowIso;
+        }
+      }
     } catch (err: any) {
-      errors.push(`خطا در پردازش آخرین گزارش برای کلید ${key}: ${err.message}`);
+      errors.push(`خطا در پردازش گزارش با شناسه ${rep.ID || rep.CallID || 'نامشخص'}: ${err.message}`);
     }
   }
 
@@ -5413,13 +5535,13 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   }
 
   return res.json({
-    success: errors.length === 0 || importedCustomersCount > 0,
+    success: errors.length === 0 || importedCustomersCount > 0 || importedReportsCount > 0,
     importedPersonnelCount,
     importedCustomersCount,
     importedReportsCount,
     skippedCount,
     errors,
-    message: `درون‌ریزی با موفقیت به پایان رسید: ${importedPersonnelCount} کارشناس، ${importedCustomersCount} پرونده مشتری، و ${importedReportsCount} گزارش آخرین مذاکره مستقیماً در پایگاه داده ثبت و پیوند داده شدند.`
+    message: `درون‌ریزی با موفقیت به پایان رسید: ${importedPersonnelCount} کارشناس، ${importedCustomersCount} پرونده مشتری، و ${importedReportsCount} گزارش مذاکره با تاریخ دقیق ثبت مستقیماً در پایگاه داده ثبت و پیوند داده شدند.`
   });
 });
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Users,
   Search,
@@ -15,6 +15,9 @@ import {
   ExternalLink,
   ChevronLeft,
   GitMerge,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import { Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
 import { formatTimeRemaining, formatPersianDate, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS } from '../utils';
@@ -53,6 +56,35 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   onToggleExpiredOnly,
 }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(30);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Reset page to 1 when filters or search change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, selectedMarketerId, showExpiredOnly, searchQuery]);
+
+  // Client-side search within the current dataset
+  const searchedCustomers = useMemo(() => {
+    if (!searchQuery.trim()) return customers;
+    const q = searchQuery.trim().toLowerCase();
+    return customers.filter(c => {
+      const matchCompany = c.company_name?.toLowerCase().includes(q);
+      const matchManager = c.manager_name?.toLowerCase().includes(q);
+      const matchCity = c.city?.toLowerCase().includes(q);
+      const matchJob = c.business_type?.toLowerCase().includes(q);
+      const matchPhone = Array.isArray(c.mobile_numbers) && c.mobile_numbers.some(m => m.includes(q));
+      return Boolean(matchCompany || matchManager || matchCity || matchJob || matchPhone);
+    });
+  }, [customers, searchQuery]);
+
+  // Compute pagination slices
+  const totalCount = searchedCustomers.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const paginatedCustomers = searchedCustomers.slice(startIndex, startIndex + pageSize);
 
   const userIsAdmin = Boolean(
     isAdmin ||
@@ -161,14 +193,44 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           </div>
         </div>
 
-        {/* Reset / Count preview */}
-        <div className="text-xs text-[#888888] font-mono">
-          نمایش <span className="text-[#1DB954] font-bold">{customers.length}</span> پرونده
+        {/* Search input & Pagination Size */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="جستجو در نام، مدیر، شماره یا شهر..."
+              className="h-9 w-52 sm:w-64 pl-8 pr-3 rounded-xl bg-[#282828] text-xs text-white placeholder-[#777] border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954]"
+            />
+            <Search className="w-3.5 h-3.5 text-[#777] absolute left-2.5 top-3 pointer-events-none" />
+          </div>
+
+          <div className="flex items-center gap-1.5 text-xs text-[#888]">
+            <span>تعداد در صفحه:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="h-9 px-2 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+            >
+              <option value="15">۱۵</option>
+              <option value="30">۳۰</option>
+              <option value="60">۶۰</option>
+              <option value="100">۱۰۰</option>
+            </select>
+          </div>
+
+          <div className="text-xs text-[#888888] font-mono">
+            کل: <span className="text-[#1DB954] font-bold">{totalCount}</span> پرونده
+          </div>
         </div>
       </div>
 
       {/* Customers Content: Grid View */}
-      {customers.length === 0 ? (
+      {searchedCustomers.length === 0 ? (
         <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-4">
           <div className="w-14 h-14 rounded-full bg-[#282828] flex items-center justify-center text-[#535353] mx-auto">
             <Users className="w-7 h-7" />
@@ -188,7 +250,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {customers.map((c) => {
+          {paginatedCustomers.map((c) => {
             const timer = formatTimeRemaining(c.assignment_deadline);
             const statusTheme = getStatusTheme(c.status);
 
@@ -320,6 +382,63 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {totalCount > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-[#181818] rounded-2xl border border-[#282828] text-xs">
+          <div className="text-[#888] font-medium">
+            نمایش <span className="text-white font-mono font-bold">{startIndex + 1}</span> تا{' '}
+            <span className="text-white font-mono font-bold">
+              {Math.min(startIndex + pageSize, totalCount)}
+            </span>{' '}
+            از کل <span className="text-[#1DB954] font-mono font-bold">{totalCount}</span> پرونده مشتری
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={safePage <= 1}
+              className="w-8 h-8 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed"
+              title="صفحه اول"
+            >
+              <ChevronsRight className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={safePage <= 1}
+              className="h-8 px-3 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center gap-1 transition-all cursor-pointer disabled:cursor-not-allowed"
+              title="صفحه قبلی"
+            >
+              <ChevronRight className="w-4 h-4" />
+              <span>قبلی</span>
+            </button>
+
+            <div className="px-3 py-1 bg-[#121212] rounded-lg border border-[#2a2a2a] text-white font-mono font-bold">
+              صفحه {safePage} از {totalPages}
+            </div>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={safePage >= totalPages}
+              className="h-8 px-3 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center gap-1 transition-all cursor-pointer disabled:cursor-not-allowed"
+              title="صفحه بعدی"
+            >
+              <span>بعدی</span>
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={safePage >= totalPages}
+              className="w-8 h-8 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed"
+              title="صفحه آخر"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>

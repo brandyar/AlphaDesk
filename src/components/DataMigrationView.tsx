@@ -164,8 +164,8 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
       const timer3 = setTimeout(() => {
         setProgressPercent(80);
-        setCurrentPhaseText('استخراج آخرین مذاکرات و الحاق به پرونده هر مشتری...');
-        addLog('پالایش تاریخچه مذاکرات و متصل‌کردن آخرین وضعیت هر پرونده...');
+        setCurrentPhaseText('درون‌ریزی کلیه گزارش‌های مذاکره و الحاق به پرونده هر مشتری...');
+        addLog('ثبت تاریخچه کامل مذاکرات همراه با تاریخ دقیق و اتصال به مشتریان...');
       }, 1400);
 
       const res = await importLegacyMigrationData({
@@ -181,7 +181,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
       setProgressPercent(100);
       setCurrentPhaseText('عملیات با موفقیت پایان یافت.');
-      addLog(`نتیجه قطعی: ${res.importedPersonnelCount} کارشناس، ${res.importedCustomersCount} پرونده مشتری، و ${res.importedReportsCount} آخرین گزارش مذاکره ثبت شدند.`);
+      addLog(`نتیجه قطعی: ${res.importedPersonnelCount} کارشناس، ${res.importedCustomersCount} پرونده مشتری، و ${res.importedReportsCount} گزارش مذاکره با تاریخ دقیق ثبت شدند.`);
 
       setImportResult(res);
       showToast(res.message, 'success');
@@ -566,7 +566,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                 {parsedHistory.length}
               </div>
               <div className="text-xs font-bold text-white">گزارش مذاکره</div>
-              <div className="text-[10px] text-[#777] mt-0.5">فیلتر خودکار و الصاق آخرین مذاکره</div>
+              <div className="text-[10px] text-[#777] mt-0.5">درون‌ریزی کامل با تاریخ واقعی ثبت</div>
             </div>
           </div>
 
@@ -613,7 +613,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
               <div className="text-xs text-[#AAA] mt-2 flex flex-wrap gap-4">
                 <span>کارشناسان ثبت‌شده: <b className="text-white font-mono">{importResult.importedPersonnelCount}</b></span>
                 <span>پرونده‌های مشتریان: <b className="text-white font-mono">{importResult.importedCustomersCount}</b></span>
-                <span>آخرین گزارش‌ها: <b className="text-white font-mono">{importResult.importedReportsCount}</b></span>
+                <span>گزارش‌های ثبت‌شده: <b className="text-white font-mono">{importResult.importedReportsCount}</b></span>
                 <span className="text-[#1DB954] flex items-center gap-1 font-bold">
                   <Server className="w-3.5 h-3.5" />
                   ذخیره‌سازی مستقیم در پایگاه داده مرکزی دایرکتوس

@@ -15,6 +15,9 @@ import {
   UserCheck,
   AlertCircle,
   ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   FileCheck2,
 } from 'lucide-react';
 import { CustomerReport, Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
@@ -75,6 +78,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [selectedStatus, setSelectedStatus] = useState<string>('همه');
   const [selectedNegotiator, setSelectedNegotiator] = useState<string>('همه');
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+
+  // Reset page when any filter changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery]);
 
   // Helper to check if a customer belongs to the current user
   const isMyCustomer = (c: Customer): boolean => {
@@ -354,6 +364,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     { id: 'expired' as StaffFilterType, label: 'منقضی شده' },
   ];
 
+  // Compute pagination
+  const totalCount = filteredReports.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const paginatedReports = filteredReports.slice(startIndex, startIndex + pageSize);
+
   return (
     <div className="space-y-6">
       {/* Title & Action */}
@@ -566,7 +583,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredReports.map((rep) => {
+          {paginatedReports.map((rep) => {
             const customer = customers.find((c) => c.id === rep.customer_id);
             const statusTheme = getStatusTheme(rep.negotiation_status);
             const daysToFollowup = getDaysUntil(rep.next_followup_date || customer?.next_followup_date);
@@ -722,6 +739,63 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {totalCount > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-[#181818] rounded-2xl border border-[#282828] text-xs">
+          <div className="text-[#888] font-medium">
+            نمایش <span className="text-white font-mono font-bold">{startIndex + 1}</span> تا{' '}
+            <span className="text-white font-mono font-bold">
+              {Math.min(startIndex + pageSize, totalCount)}
+            </span>{' '}
+            از کل <span className="text-[#1DB954] font-mono font-bold">{totalCount}</span> گزارش مذاکره
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={safePage <= 1}
+              className="w-8 h-8 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed"
+              title="صفحه اول"
+            >
+              <ChevronsRight className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={safePage <= 1}
+              className="h-8 px-3 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center gap-1 transition-all cursor-pointer disabled:cursor-not-allowed"
+              title="صفحه قبلی"
+            >
+              <ChevronRight className="w-4 h-4" />
+              <span>قبلی</span>
+            </button>
+
+            <div className="px-3 py-1 bg-[#121212] rounded-lg border border-[#2a2a2a] text-white font-mono font-bold">
+              صفحه {safePage} از {totalPages}
+            </div>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={safePage >= totalPages}
+              className="h-8 px-3 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center gap-1 transition-all cursor-pointer disabled:cursor-not-allowed"
+              title="صفحه بعدی"
+            >
+              <span>بعدی</span>
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={safePage >= totalPages}
+              className="w-8 h-8 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed"
+              title="صفحه آخر"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
     </div>

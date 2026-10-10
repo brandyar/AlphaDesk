@@ -221,8 +221,8 @@ export default function App() {
     try {
       const [pData, cData, rData, lData, aData, bStatus, lrData, arData, tData] = await Promise.all([
         fetchPersonnel().catch(() => []),
-        fetchCustomers().catch(() => []),
-        fetchCustomerReports().catch(() => []),
+        fetchCustomers({ limit: 10000 }).catch(() => []),
+        fetchCustomerReports(undefined, { limit: 10000 }).catch(() => []),
         fetchColdLeads().catch(() => []),
         fetchAdminReports().catch(() => []),
         fetchBffStatus().catch(() => null),
@@ -304,7 +304,7 @@ export default function App() {
 
     // Periodic interval to check expiration timers every 30 seconds
     const interval = setInterval(() => {
-      fetchCustomers().then(setCustomers).catch(() => {});
+      fetchCustomers({ limit: 10000 }).then(setCustomers).catch(() => {});
     }, 30000);
 
     return () => clearInterval(interval);
@@ -315,8 +315,8 @@ export default function App() {
     if (currentPersonnel) {
       setApiPersonnelContext(currentPersonnel);
       Promise.all([
-        fetchCustomers().catch(() => []),
-        fetchCustomerReports().catch(() => []),
+        fetchCustomers({ limit: 10000 }).catch(() => []),
+        fetchCustomerReports(undefined, { limit: 10000 }).catch(() => []),
         fetchColdLeads().catch(() => []),
         fetchAdminReports().catch(() => []),
       ]).then(([cData, rData, lData, aData]) => {
@@ -435,8 +435,8 @@ export default function App() {
       setPrefilledLeadNotes('');
 
       // Synchronize latest state
-      fetchCustomers().then(setCustomers).catch(() => {});
-      fetchCustomerReports().then(setReports).catch(() => {});
+      fetchCustomers({ limit: 10000 }).then(setCustomers).catch(() => {});
+      fetchCustomerReports(undefined, { limit: 10000 }).then(setReports).catch(() => {});
       fetchBffStatus().then(setBffStatus).catch(() => {});
     } catch (err: any) {
       showToast(err.message || 'خطا در ذخیره‌سازی اطلاعات مشتری', 'error');
@@ -486,7 +486,7 @@ export default function App() {
       const updated = await reassignCustomer(customerId, marketerId, marketerName, days);
       setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
       setSelectedCustomer(updated);
-      fetchCustomerReports().then(setReports).catch(() => {});
+      fetchCustomerReports(undefined, { limit: 10000 }).then(setReports).catch(() => {});
       fetchBffStatus().then(setBffStatus).catch(() => {});
       showToast('مشتری با موفقیت به بازاریاب جدید واگذار شد.', 'success');
     } catch (err: any) {
