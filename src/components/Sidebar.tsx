@@ -24,6 +24,7 @@ import {
   Check,
   Layers,
   Plus,
+  Database,
 } from 'lucide-react';
 import { Personnel, TeamSubTab, Tenant } from '../types';
 
@@ -584,6 +585,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       </span>
                     )}
                   </button>
+
+                  {/* 6. Data Migration Hub */}
+                  {(isAdmin || currentPersonnel?.role === 'admin') && (
+                    <button
+                      onClick={() => {
+                        onSelectTab('team', 'import_data');
+                        onCloseMobile?.();
+                      }}
+                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                        isTeamActive && teamSubTab === 'import_data'
+                          ? 'bg-[#1DB954]/15 text-[#1DB954]'
+                          : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Database className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'import_data' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                        <span>درون‌ریزی و مهاجرت داده‌ها</span>
+                      </div>
+                      <span className="text-[9px] px-1 py-0.2 rounded bg-[#1DB954]/10 text-[#1DB954] font-bold border border-[#1DB954]/20">
+                        جدید
+                      </span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>

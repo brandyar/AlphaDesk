@@ -1059,6 +1059,8 @@ export default function App() {
                     currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
                     currentPersonnel?.role === 'admin'
                   )}
+                  tenants={tenants}
+                  activeTenantId={activeTenantId}
                   onCreatePersonnel={handleCreatePersonnel}
                   onUpdatePersonnel={handleUpdatePersonnel}
                   onDeletePersonnel={handleDeletePersonnel}
@@ -1066,6 +1068,7 @@ export default function App() {
                   onBulkSwitchOwnership={handleBulkSwitchOwnership}
                   onUpdateLeaveStatus={handleUpdateLeaveStatus}
                   onSelectCustomer={openCustomerDetail}
+                  onRefreshData={loadAllData}
                   showToast={showToast}
                 />
               )}

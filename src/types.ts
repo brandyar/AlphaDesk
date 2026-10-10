@@ -336,7 +336,28 @@ export type TeamSubTab =
   | 'colleagues_list'
   | 'extend_ownership'
   | 'switch_ownership'
-  | 'leave_approvals';
+  | 'leave_approvals'
+  | 'import_data';
+
+export interface DataMigrationPreviewItem {
+  id?: string;
+  sourceType: 'personnel' | 'customer' | 'report';
+  nameOrTitle: string;
+  phone?: string;
+  details: string;
+  status: 'valid' | 'warning' | 'error';
+  statusMessage?: string;
+}
+
+export interface DataMigrationResult {
+  success: boolean;
+  importedPersonnelCount: number;
+  importedCustomersCount: number;
+  importedReportsCount: number;
+  skippedCount: number;
+  errors: string[];
+  message: string;
+}
 
 export interface CreateColleaguePayload {
   tenant_id?: string;

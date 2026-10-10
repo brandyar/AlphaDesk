@@ -48,7 +48,9 @@ import {
   Building2,
   HeartHandshake,
   UserCog,
+  Database,
 } from 'lucide-react';
+import { DataMigrationView } from './DataMigrationView';
 import {
   Personnel,
   Customer,
@@ -239,6 +241,7 @@ interface TeamManagementViewProps {
   onBulkSwitchOwnership: (customerIds: string[], targetPersonnelId: string, targetPersonnelName: string, days: number) => Promise<void>;
   onUpdateLeaveStatus: (id: string, status: RequestStatus, managerNote?: string) => Promise<void>;
   onSelectCustomer: (customer: Customer) => void;
+  onRefreshData?: () => Promise<void>;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -259,6 +262,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   onBulkSwitchOwnership,
   onUpdateLeaveStatus,
   onSelectCustomer,
+  onRefreshData,
   showToast,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<TeamSubTab>(initialSubTab);
@@ -963,6 +967,29 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               </span>
             )}
           </button>
+
+          {(isAdmin || currentPersonnel?.role === 'admin') && (
+            <button
+              onClick={() => setActiveSubTab('import_data')}
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 relative ${
+                activeSubTab === 'import_data'
+                  ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
+                  : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+              }`}
+            >
+              <Database className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+              <span>درون‌ریزی و انتقال داده‌ها</span>
+              <span
+                className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                  activeSubTab === 'import_data'
+                    ? 'bg-black text-[#1DB954]'
+                    : 'bg-[#1DB954]/20 text-[#1DB954]'
+                }`}
+              >
+                جدید
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -2348,6 +2375,20 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* 6. TAB CONTENT 6: Data Migration Hub (درون‌ریزی داده‌ها)       */}
+      {/* ------------------------------------------------------------- */}
+      {activeSubTab === 'import_data' && (
+        <DataMigrationView
+          tenants={tenants}
+          activeTenantId={activeTenantId}
+          currentPersonnel={currentPersonnel}
+          isAdmin={isAdmin}
+          onRefreshData={onRefreshData || (async () => {})}
+          showToast={showToast}
+        />
       )}
 
       {/* ------------------------------------------------------------- */}

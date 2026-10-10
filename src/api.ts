@@ -733,4 +733,27 @@ export async function deleteTenant(id: string): Promise<void> {
   }
 }
 
+export async function importLegacyMigrationData(payload: {
+  tenant_id?: string;
+  personnelRows: any[];
+  customerRows: any[];
+  reportRows: any[];
+}): Promise<{
+  success: boolean;
+  importedPersonnelCount: number;
+  importedCustomersCount: number;
+  importedReportsCount: number;
+  skippedCount: number;
+  errors: string[];
+  message: string;
+}> {
+  const res = await fetch(`${BASE_URL}/migration/import`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, 'خطا در درون‌ریزی داده‌های سامانه قبلی');
+}
+
+
 
