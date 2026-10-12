@@ -664,6 +664,15 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
             </div>
           </div>
 
+          {/* پیام راهنما برای درون‌ریزی اختصاصی گزارش‌ها */}
+          <div className="bg-[#132A1D] border border-[#1DB954]/30 rounded-xl p-3.5 flex items-start gap-3">
+            <Sparkles className="w-5 h-5 text-[#1DB954] shrink-0 mt-0.5" />
+            <div className="text-xs text-[#E0E0E0] leading-relaxed">
+              <span className="font-bold text-[#1DB954] block mb-0.5">درون‌ریزی مستقیم/مجدد گزارش‌های مذاکره:</span>
+              اگر مشتریان و پرسنل قبلاً در سامانه ثبت شده‌اند، <strong className="text-white">نیازی به انتخاب مجدد یا پر کردن گام‌های ۱ و ۲ نیست.</strong> می‌توانید فقط فایل گزارش‌ها را بارگذاری کرده و دکمه ادامه را بزنید. سیستم گزارش‌ها را به صورت هوشمند با کارشناسان و مشتریان موجود در دیتابیس تطبیق داده و پیوند می‌دهد.
+            </div>
+          </div>
+
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-medium text-[#AAA]">متن یا خروجی فایل گزارش‌ها:</label>
