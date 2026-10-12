@@ -751,6 +751,38 @@ function computeCustomerExpiration(c: any): any {
     : 'default';
   const tObj = tenantsData.find(t => String(t.id) === tId || t.slug === tId);
 
+  const contacts = Array.isArray(c.contacts) ? c.contacts : [];
+
+  const rawMobiles = Array.isArray(c.mobile_numbers) ? c.mobile_numbers : (typeof c.mobile_numbers === 'string' ? [c.mobile_numbers] : []);
+  const mobileNumbers = rawMobiles.length > 0
+    ? rawMobiles
+    : contacts.filter((ct: any) => ct.channel_type === 'mobile').map((ct: any) => ct.normalized_value || ct.value);
+
+  const rawLandlines = Array.isArray(c.landline_numbers) ? c.landline_numbers : (typeof c.landline_numbers === 'string' ? [c.landline_numbers] : []);
+  const landlineNumbers = rawLandlines.length > 0
+    ? rawLandlines
+    : contacts.filter((ct: any) => ct.channel_type === 'landline').map((ct: any) => ct.normalized_value || ct.value);
+
+  const rawTelegram = Array.isArray(c.telegram_ids) ? c.telegram_ids : (typeof c.telegram_ids === 'string' ? [c.telegram_ids] : []);
+  const telegramIds = rawTelegram.length > 0
+    ? rawTelegram
+    : contacts.filter((ct: any) => ct.channel_type === 'telegram').map((ct: any) => ct.value);
+
+  const rawInstagram = Array.isArray(c.instagram_ids) ? c.instagram_ids : (typeof c.instagram_ids === 'string' ? [c.instagram_ids] : []);
+  const instagramIds = rawInstagram.length > 0
+    ? rawInstagram
+    : contacts.filter((ct: any) => ct.channel_type === 'instagram').map((ct: any) => ct.value);
+
+  const rawEmails = Array.isArray(c.emails) ? c.emails : (typeof c.emails === 'string' ? [c.emails] : []);
+  const emails = rawEmails.length > 0
+    ? rawEmails
+    : contacts.filter((ct: any) => ct.channel_type === 'email').map((ct: any) => ct.value);
+
+  const rawWebsites = Array.isArray(c.websites) ? c.websites : (typeof c.websites === 'string' ? [c.websites] : []);
+  const websites = rawWebsites.length > 0
+    ? rawWebsites
+    : contacts.filter((ct: any) => ct.channel_type === 'website').map((ct: any) => ct.value);
+
   return {
     ...c,
     company_name: c.company_name || 'بدون نام',
@@ -759,15 +791,15 @@ function computeCustomerExpiration(c: any): any {
     province: c.province || '',
     status: c.status || 'تماس برقرار نشده',
     assigned_marketer_name: c.assigned_marketer_name || 'تخصیص نیافته',
-    mobile_numbers: Array.isArray(c.mobile_numbers) ? c.mobile_numbers : (typeof c.mobile_numbers === 'string' ? [c.mobile_numbers] : []),
-    landline_numbers: Array.isArray(c.landline_numbers) ? c.landline_numbers : (typeof c.landline_numbers === 'string' ? [c.landline_numbers] : []),
-    telegram_ids: Array.isArray(c.telegram_ids) ? c.telegram_ids : (typeof c.telegram_ids === 'string' ? [c.telegram_ids] : []),
-    instagram_ids: Array.isArray(c.instagram_ids) ? c.instagram_ids : (typeof c.instagram_ids === 'string' ? [c.instagram_ids] : []),
-    emails: Array.isArray(c.emails) ? c.emails : (typeof c.emails === 'string' ? [c.emails] : []),
-    websites: Array.isArray(c.websites) ? c.websites : (typeof c.websites === 'string' ? [c.websites] : []),
+    mobile_numbers: mobileNumbers,
+    landline_numbers: landlineNumbers,
+    telegram_ids: telegramIds,
+    instagram_ids: instagramIds,
+    emails: emails,
+    websites: websites,
     manager_phones: Array.isArray(c.manager_phones) ? c.manager_phones : (typeof c.manager_phones === 'string' ? [c.manager_phones] : []),
     negotiator_phones: Array.isArray(c.negotiator_phones) ? c.negotiator_phones : (typeof c.negotiator_phones === 'string' ? [c.negotiator_phones] : []),
-    contacts: Array.isArray(c.contacts) ? c.contacts : [],
+    contacts: contacts,
     is_expired: isExpired,
     claimed_from_pool: Boolean(c.claimed_from_pool),
     claimed_from_pool_at: c.claimed_from_pool_at || null,
@@ -4954,6 +4986,61 @@ app.post('/api/check-expirations', (req: Request, res: Response) => {
 // Data Migration Hub: Import Legacy System Tables (account, contact, history)
 // ============================================================================
 app.post('/api/migration/import', async (req: Request, res: Response) => {
+  const { tenant_id, personnelRows = [], customerRows = [], reportRows = [] } = req.body;
+  const targetTenantId = tenant_id || getRequestTenantId(req) || 'default';
+  const targetTenantNum = resolveDirectusTenantId(targetTenantId);
+
+  let importedPersonnelCount = 0;
+  let importedCustomersCount = 0;
+  let importedReportsCount = 0;
+  let skippedCount = 0;
+  const errors: string[] = [];
+
+  // Helper chunker for Directus bulk requests
+  function chunkArray<T>(items: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < items.length; i += size) {
+      chunks.push(items.slice(i, i + size));
+    }
+    return chunks;
+  }
+
+  // Map to index personnel by ID, username, phone, name
+  const legacyUidToPersonnelMap = new Map<string, any>();
+
+  // 1. Fetch current personnel from Directus to ensure real DB IDs are used
+  let directusPersonnelList: any[] = [];
+  if (directusUrl && directusAdminToken) {
+    try {
+      const pRes = await directusFetch('/items/personnel?limit=-1');
+      if (pRes && Array.isArray(pRes.data)) {
+        directusPersonnelList = pRes.data;
+      }
+    } catch (err: any) {
+      console.warn('Could not pre-fetch personnel from Directus:', err.message);
+    }
+  }
+
+  // Combine with local personnel
+  const combinedPersonnel = [...directusPersonnelList];
+  for (const p of personnelData) {
+    if (!combinedPersonnel.some(cp => cp.id === p.id)) {
+      combinedPersonnel.push(p);
+    }
+  }
+
+  // Index existing personnel
+  for (const p of combinedPersonnel) {
+    if (p.id) legacyUidToPersonnelMap.set(String(p.id).toLowerCase(), p);
+    if (p.username) legacyUidToPersonnelMap.set(String(p.username).toLowerCase(), p);
+    if (p.phone) {
+      const norm = normalizeContactValue(p.phone, 'mobile');
+      if (norm) legacyUidToPersonnelMap.set(norm, p);
+    }
+    if (p.name) legacyUidToPersonnelMap.set(String(p.name).trim().toLowerCase(), p);
+  }
+
+  // Helper to parse Jalali or Gregorian date to ISO
   function jalaliToGregorianCalc(jy: number, jm: number, jd: number): { gy: number; gm: number; gd: number } {
     let j_y = jy - 979;
     let j_m = jm - 1;
@@ -5000,6 +5087,8 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     if (!val) return null;
     const str = String(val).trim();
     if (!str || str.toLowerCase() === 'null') return null;
+
+    // 1. Gregorian standard check (e.g. "2025-08-13 17:16:00", "2025-08-13T17:16:00Z", "2018-10-31")
     const gregMatch = str.match(/^(20\d\d|19\d\d)[\/\-](\d{1,2})[\/\-](\d{1,2})(?:[\sT]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
     if (gregMatch) {
       const gy = parseInt(gregMatch[1], 10);
@@ -5011,6 +5100,8 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       const d = new Date(Date.UTC(gy, gm, gd, hh, mm, ss));
       if (!isNaN(d.getTime())) return d.toISOString();
     }
+
+    // 2. Jalali compact or separated with optional time (e.g. "14040522-1816", "1404/05/25 13:45", "14040522")
     const cleanCompact = str.replace(/[^0-9]/g, '');
     if (cleanCompact.startsWith('13') || cleanCompact.startsWith('14')) {
       if (cleanCompact.length >= 8) {
@@ -5028,6 +5119,8 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         } catch {}
       }
     }
+
+    // 3. Jalali with slashes/dashes
     if (str.includes('/') || str.includes('-')) {
       const parts = str.split(/[\s\/\-]/).filter(Boolean);
       if (parts.length >= 3) {
@@ -5043,141 +5136,16 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         }
       }
     }
+
     const standardDate = new Date(str);
     if (!isNaN(standardDate.getTime())) {
       return standardDate.toISOString();
     }
     return new Date().toISOString();
   }
-  const { tenant_id, personnelRows = [], customerRows = [], reportRows = [] } = req.body;
-  const targetTenantId = tenant_id || getRequestTenantId(req) || 'default';
-  const targetTenantNum = resolveDirectusTenantId(targetTenantId);
-
-  let importedPersonnelCount = 0;
-  let importedCustomersCount = 0;
-  let importedReportsCount = 0;
-  let skippedCount = 0;
-  const errors: string[] = [];
-
-  function chunkArray<T>(items: T[], size: number): T[][] {
-    const chunks: T[][] = [];
-    for (let i = 0; i < items.length; i += size) {
-      chunks.push(items.slice(i, i + size));
-    }
-    return chunks;
-  }
 
   // --------------------------------------------------------------------------
-  // INDEXING EXISTING DIRECTUS DATA FOR DEDUPLICATION & LOOKUP
-  // --------------------------------------------------------------------------
-  const legacyUidToPersonnelMap = new Map<string, any>();
-  const existingPhoneToCustomerMap = new Map<string, any>();
-  const existingCallIdToCustomerMap = new Map<string, any>();
-  const existingReportKeysSet = new Set<string>();
-
-  if (directusUrl && directusAdminToken) {
-    try {
-      // 1. Fetch personnel for deduplication and referral mapping
-      const pRes = await directusFetch('/items/personnel?limit=-1');
-      if (pRes && Array.isArray(pRes.data)) {
-        for (const p of pRes.data) {
-          if (p.id) legacyUidToPersonnelMap.set(String(p.id).toLowerCase(), p);
-          if (p.username) legacyUidToPersonnelMap.set(String(p.username).toLowerCase(), p);
-          if (p.phone) {
-            const norm = normalizeContactValue(p.phone, 'mobile');
-            if (norm) legacyUidToPersonnelMap.set(norm, p);
-          }
-          if (p.name) legacyUidToPersonnelMap.set(String(p.name).trim().toLowerCase(), p);
-        }
-      }
-
-      // 2. Index existing customers only if customerRows are provided
-      if (customerRows.length > 0) {
-        const cResList = await Promise.all([
-          directusFetch('/items/customers?limit=1000&offset=0&fields=id,mobile_numbers,manager_phones,interview_report,assigned_marketer_name,status,next_followup_date').catch(() => null),
-          directusFetch('/items/customers?limit=1000&offset=1000&fields=id,mobile_numbers,manager_phones,interview_report,assigned_marketer_name,status,next_followup_date').catch(() => null),
-          directusFetch('/items/customers?limit=1000&offset=2000&fields=id,mobile_numbers,manager_phones,interview_report,assigned_marketer_name,status,next_followup_date').catch(() => null),
-        ]);
-
-        for (const res of cResList) {
-          if (res && Array.isArray(res.data)) {
-            for (const c of res.data) {
-              if (Array.isArray(c.mobile_numbers)) {
-                for (const m of c.mobile_numbers) {
-                  if (m && m !== '09000000000') existingPhoneToCustomerMap.set(m, c);
-                }
-              }
-              if (Array.isArray(c.manager_phones)) {
-                for (const m of c.manager_phones) {
-                  if (m && m !== '09000000000') existingPhoneToCustomerMap.set(m, c);
-                }
-              }
-              const match = (c.interview_report || '').match(/کد تماس\s+(\d+)/);
-              if (match && match[1]) {
-                existingCallIdToCustomerMap.set(match[1], c);
-              }
-            }
-          }
-        }
-      }
-
-      // 3. Index existing customer reports only if reportRows are provided
-      if (reportRows.length > 0) {
-        // Also fetch customers if not fetched yet
-        if (customerRows.length === 0) {
-          const cResList = await Promise.all([
-            directusFetch('/items/customers?limit=1000&offset=0&fields=id,mobile_numbers,manager_phones,interview_report,assigned_marketer_name,status,next_followup_date').catch(() => null),
-            directusFetch('/items/customers?limit=1000&offset=1000&fields=id,mobile_numbers,manager_phones,interview_report,assigned_marketer_name,status,next_followup_date').catch(() => null),
-            directusFetch('/items/customers?limit=1000&offset=2000&fields=id,mobile_numbers,manager_phones,interview_report,assigned_marketer_name,status,next_followup_date').catch(() => null),
-          ]);
-          for (const res of cResList) {
-            if (res && Array.isArray(res.data)) {
-              for (const c of res.data) {
-                if (Array.isArray(c.mobile_numbers)) {
-                  for (const m of c.mobile_numbers) {
-                    if (m && m !== '09000000000') existingPhoneToCustomerMap.set(m, c);
-                  }
-                }
-                if (Array.isArray(c.manager_phones)) {
-                  for (const m of c.manager_phones) {
-                    if (m && m !== '09000000000') existingPhoneToCustomerMap.set(m, c);
-                  }
-                }
-                const match = (c.interview_report || '').match(/کد تماس\s+(\d+)/);
-                if (match && match[1]) {
-                  existingCallIdToCustomerMap.set(match[1], c);
-                }
-              }
-            }
-          }
-        }
-
-        const rResList = await Promise.all([
-          directusFetch('/items/customer_reports?limit=1000&offset=0&fields=id,customer_id,date_created,report_text').catch(() => null),
-          directusFetch('/items/customer_reports?limit=1000&offset=1000&fields=id,customer_id,date_created,report_text').catch(() => null),
-          directusFetch('/items/customer_reports?limit=1000&offset=2000&fields=id,customer_id,date_created,report_text').catch(() => null),
-          directusFetch('/items/customer_reports?limit=1000&offset=3000&fields=id,customer_id,date_created,report_text').catch(() => null),
-          directusFetch('/items/customer_reports?limit=1000&offset=4000&fields=id,customer_id,date_created,report_text').catch(() => null),
-        ]);
-
-        for (const res of rResList) {
-          if (res && Array.isArray(res.data)) {
-            for (const r of res.data) {
-              if (r.customer_id && r.date_created) {
-                const cleanTxtSnippet = String(r.report_text || '').trim().substring(0, 30);
-                existingReportKeysSet.add(`${r.customer_id}_${r.date_created.substring(0, 16)}_${cleanTxtSnippet}`);
-              }
-            }
-          }
-        }
-      }
-    } catch (idxErr: any) {
-      console.warn('Indexation error before migration:', idxErr.message);
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // STEP 1: IMPORT PERSONNEL (account)
+  // STEP 1: IMPORT PERSONNEL (account) - Prevent Duplicates by Phone / Username / ID
   // --------------------------------------------------------------------------
   const personnelToInsertBatch: any[] = [];
   for (const row of personnelRows) {
@@ -5192,7 +5160,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       const normalizedPhone = normalizeContactValue(firstPhone, 'mobile');
       const email = String(row.email || (username ? `${username}@company.ir` : `user_${uid}@company.ir`)).trim();
       const roleStr = String(row.userlevel || row.acctype || row.role || '').toLowerCase();
-
       let assignedRole: any = 'marketer';
       if (roleStr === '0' || roleStr.includes('admin') || username === 'admin') {
         assignedRole = 'admin';
@@ -5200,11 +5167,18 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         assignedRole = 'sales_manager';
       }
 
-      let existing = legacyUidToPersonnelMap.get(username) ||
-                     (uid ? legacyUidToPersonnelMap.get(uid.toLowerCase()) : null) ||
-                     (normalizedPhone ? legacyUidToPersonnelMap.get(normalizedPhone) : null);
+      // Check if personnel already exists in indexed map
+      let existing = (normalizedPhone ? legacyUidToPersonnelMap.get(normalizedPhone) : null) ||
+                     legacyUidToPersonnelMap.get(username) ||
+                     (uid ? legacyUidToPersonnelMap.get(uid.toLowerCase()) : null);
 
-      if (!existing) {
+      if (existing) {
+        // DUPLICATE PERSONNEL - SKIP CREATING DUPLICATE RECORD
+        skippedCount++;
+        if (uid) legacyUidToPersonnelMap.set(uid.toLowerCase(), existing);
+        if (username) legacyUidToPersonnelMap.set(username, existing);
+        if (normalizedPhone) legacyUidToPersonnelMap.set(normalizedPhone, existing);
+      } else {
         const personnelId = uid ? `p-${uid}` : crypto.randomUUID();
         const newPersonnel: any = {
           id: personnelId,
@@ -5220,6 +5194,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         if (targetTenantNum) {
           newPersonnel.tenant_id = targetTenantNum;
         }
+
         personnelToInsertBatch.push(newPersonnel);
         legacyUidToPersonnelMap.set(personnelId.toLowerCase(), newPersonnel);
         if (uid) legacyUidToPersonnelMap.set(uid.toLowerCase(), newPersonnel);
@@ -5231,6 +5206,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
+  // Insert personnel in batch into Directus
   if (personnelToInsertBatch.length > 0 && directusUrl && directusAdminToken) {
     try {
       const pChunks = chunkArray(personnelToInsertBatch, 100);
@@ -5250,12 +5226,79 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       }
     } catch (pErr: any) {
       console.error('Directus bulk insert personnel error:', pErr.message);
-      errors.push(`خطا در ثبت گروهی کارشناسان: ${pErr.message}`);
+      errors.push(`خطا در ثبت گروهی کارشناسان در دایرکتوس: ${pErr.message}`);
+      for (const p of personnelToInsertBatch) {
+        personnelData.push(p);
+        importedPersonnelCount++;
+      }
+    }
+  } else {
+    for (const p of personnelToInsertBatch) {
+      personnelData.push(p);
+      importedPersonnelCount++;
     }
   }
 
   // --------------------------------------------------------------------------
-  // STEP 2: IMPORT CUSTOMERS (contact) WITH DEDUPLICATION
+  // STEP 2: PRE-FETCH & INDEX EXISTING CUSTOMERS AND CONTACTS FOR DUPLICATE CHECK
+  // --------------------------------------------------------------------------
+  const legacyCustomerRefMap = new Map<string, any>();
+  const existingPhoneToCustomerMap = new Map<string, any>();
+
+  // Fetch existing customer contacts from Directus & local memory
+  let directusContactsList: any[] = [];
+  if (directusUrl && directusAdminToken) {
+    try {
+      const ctRes = await directusFetch('/items/customer_contacts?limit=-1&fields=id,customer_id,channel_type,value,normalized_value');
+      if (ctRes && Array.isArray(ctRes.data)) {
+        directusContactsList = ctRes.data;
+      }
+    } catch (err: any) {
+      console.warn('Could not pre-fetch customer contacts from Directus:', err.message);
+    }
+  }
+
+  const combinedContacts = [...directusContactsList, ...contactsData];
+  for (const ct of combinedContacts) {
+    const norm = ct.normalized_value || normalizeContactValue(ct.value, ct.channel_type);
+    if (norm && ct.customer_id) {
+      const custObj = typeof ct.customer_id === 'object' ? ct.customer_id : { id: String(ct.customer_id) };
+      existingPhoneToCustomerMap.set(norm, custObj);
+    }
+  }
+
+  // Pre-fetch existing customers from Directus & local memory
+  let directusCustomersList: any[] = [];
+  if (directusUrl && directusAdminToken) {
+    try {
+      const cRes = await directusFetch('/items/customers?limit=-1&fields=id,company_name,status,assigned_marketer_id,assigned_marketer_name,interview_report,mobile_numbers');
+      if (cRes && Array.isArray(cRes.data)) {
+        directusCustomersList = cRes.data;
+      }
+    } catch (err: any) {
+      console.warn('Could not pre-fetch customers from Directus:', err.message);
+    }
+  }
+
+  const combinedCustomers = [...directusCustomersList, ...customersData];
+  for (const c of combinedCustomers) {
+    if (c.id) legacyCustomerRefMap.set(String(c.id).toLowerCase(), c);
+    if (c.interview_report) {
+      const m = String(c.interview_report).match(/کد تماس\s+(\d+)/);
+      if (m && m[1]) {
+        legacyCustomerRefMap.set(m[1], c);
+      }
+    }
+    if (Array.isArray(c.mobile_numbers)) {
+      for (const mob of c.mobile_numbers) {
+        const norm = normalizeContactValue(mob, 'mobile');
+        if (norm) existingPhoneToCustomerMap.set(norm, c);
+      }
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // PROCESS CUSTOMERS ROWS (Prevent duplicates by mobile & store contacts in customer_contacts)
   // --------------------------------------------------------------------------
   const customersToInsertBatch: any[] = [];
   const contactsToInsertBatch: any[] = [];
@@ -5289,6 +5332,11 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         const norm = normalizeContactValue(managerPhone, 'mobile');
         if (norm && !mobileList.includes(norm)) mobileList.push(norm);
       }
+      if (tlgMobile) {
+        const norm = normalizeContactValue(tlgMobile, 'mobile');
+        if (norm && !mobileList.includes(norm)) mobileList.push(norm);
+      }
+
       const landlineList: string[] = [];
       if (rawLandlines) {
         rawLandlines.split(/[,;\n]/).forEach(l => {
@@ -5297,23 +5345,27 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         });
       }
 
-      // Deduplication check: check if CallID or any mobile phone already exists in Directus!
-      let existingCustomer = callId ? existingCallIdToCustomerMap.get(callId) : null;
-      if (!existingCustomer) {
-        for (const m of mobileList) {
-          if (m && existingPhoneToCustomerMap.has(m)) {
-            existingCustomer = existingPhoneToCustomerMap.get(m);
-            break;
-          }
+      // CHECK FOR DUPLICATE CUSTOMER BY MOBILE PHONE
+      let matchedCustomer: any = null;
+      for (const m of mobileList) {
+        if (existingPhoneToCustomerMap.has(m)) {
+          matchedCustomer = existingPhoneToCustomerMap.get(m);
+          break;
+        }
+        if (legacyCustomerRefMap.has(m)) {
+          matchedCustomer = legacyCustomerRefMap.get(m);
+          break;
         }
       }
 
-      if (existingCustomer) {
-        // Already imported -> cache in lookup map for step 3 report matching
-        if (callId) existingCallIdToCustomerMap.set(callId, existingCustomer);
-        if (customerIdLegacy) existingCallIdToCustomerMap.set(customerIdLegacy, existingCustomer);
-        for (const m of mobileList) existingPhoneToCustomerMap.set(m, existingCustomer);
+      if (matchedCustomer) {
+        // DUPLICATE CUSTOMER DETECTED! SKIP CREATING NEW CUSTOMER RECORD
         skippedCount++;
+        if (callId) legacyCustomerRefMap.set(callId, matchedCustomer);
+        if (customerIdLegacy) legacyCustomerRefMap.set(customerIdLegacy, matchedCustomer);
+        for (const m of mobileList) {
+          legacyCustomerRefMap.set(m, matchedCustomer);
+        }
         continue;
       }
 
@@ -5321,8 +5373,9 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       const legacyMarketerUid = String(row.Referrals || row.lockOwner || row.uid || '').trim().toLowerCase();
       const assignedPersonnel = legacyUidToPersonnelMap.get(legacyMarketerUid) ||
                               legacyUidToPersonnelMap.get(String(row.uid || '').trim().toLowerCase()) ||
-                              personnelData[0];
+                              combinedPersonnel[0];
 
+      // Negotiation status mapping
       const rawStat = String(row.lastStat || row.status || '').trim();
       let mappedStatus: any = 'تماس برقرار نشده';
       if (rawStat.includes('قرارداد') || rawStat.includes('فاکتور')) {
@@ -5343,8 +5396,13 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
 
       const isExpiredLegacy = String(row.expire || '') === '1' || String(row.is_expired || '') === 'true';
       const createdIso = parseToGregorianIso(row.InsertRecDate || row.created) || new Date().toISOString();
+
+      // Pre-generate guaranteed UUID for Customer
       const newCustId = crypto.randomUUID();
 
+      // EXPLICIT REQUIREMENT 2:
+      // Phone numbers & communication channels MUST NOT be populated in customers collection fields!
+      // Keep mobile_numbers, landline_numbers, manager_phones, negotiator_phones, telegram_ids, instagram_ids, emails, websites empty or null in customers table!
       const newCustObj: any = {
         id: newCustId,
         company_name: companyName,
@@ -5352,16 +5410,16 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         province: province || 'نامشخص',
         city: city || 'نامشخص',
         manager_name: managerName || 'مدیریت',
-        manager_phones: managerPhone ? [normalizeContactValue(managerPhone, 'mobile')] : [],
+        manager_phones: [],
         negotiator_name: managerName || 'مدیریت',
         negotiator_phones: [],
-        mobile_numbers: mobileList.length > 0 ? mobileList : ['09000000000'],
-        landline_numbers: landlineList,
-        telegram_phone: tlgMobile || null,
-        telegram_ids: telegId ? [telegId.replace('@', '')] : null,
-        instagram_ids: instaId ? [instaId.replace('@', '')] : null,
-        emails: email ? [email] : null,
-        websites: website ? [website] : null,
+        mobile_numbers: [],
+        landline_numbers: [],
+        telegram_phone: null,
+        telegram_ids: [],
+        instagram_ids: [],
+        emails: [],
+        websites: [],
         is_ecommerce: Boolean(website || row.system),
         interview_status: 'انتقال از سامانه قدیم',
         interview_report: `پرونده انتقال‌یافته از پایگاه داده قدیم - کد تماس ${callId}`,
@@ -5375,70 +5433,212 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         is_expired: isExpiredLegacy,
         date_created: createdIso,
       };
-
       if (targetTenantNum) {
         newCustObj.tenant_id = targetTenantNum;
       }
 
       customersToInsertBatch.push(newCustObj);
-      if (callId) existingCallIdToCustomerMap.set(callId, newCustObj);
-      if (customerIdLegacy) existingCallIdToCustomerMap.set(customerIdLegacy, newCustObj);
-      for (const m of mobileList) existingPhoneToCustomerMap.set(m, newCustObj);
 
+      // Cache references for duplicate checking and report linking
+      if (callId) legacyCustomerRefMap.set(callId, newCustObj);
+      if (customerIdLegacy) legacyCustomerRefMap.set(customerIdLegacy, newCustObj);
       for (const m of mobileList) {
+        legacyCustomerRefMap.set(m, newCustObj);
+        existingPhoneToCustomerMap.set(m, newCustObj);
+      }
+
+      // EXPLICIT REQUIREMENT 2:
+      // Populate ALL communication channels into the customer_contacts collection!
+
+      // 1. Mobile contacts
+      mobileList.forEach((m, idx) => {
         contactsToInsertBatch.push({
           id: crypto.randomUUID(),
           customer_id: newCustId,
           channel_type: 'mobile',
           value: m,
           normalized_value: m,
-          contact_name: newCustObj.manager_name,
-          contact_role: 'موبایل انتقال‌یافته',
-          is_primary: true,
-          date_created: newCustObj.date_created,
+          contact_name: managerName || 'مدیریت',
+          contact_role: idx === 0 ? 'موبایل اصلی' : 'موبایل دوم',
+          is_primary: idx === 0,
+          date_created: createdIso,
+          ...(targetTenantNum ? { tenant_id: targetTenantNum } : {})
+        });
+      });
+
+      // 2. Landline contacts
+      landlineList.forEach((l) => {
+        contactsToInsertBatch.push({
+          id: crypto.randomUUID(),
+          customer_id: newCustId,
+          channel_type: 'landline',
+          value: l,
+          normalized_value: l,
+          contact_name: 'دفتر مرکزی',
+          contact_role: 'تلفن ثابت',
+          is_primary: false,
+          date_created: createdIso,
+          ...(targetTenantNum ? { tenant_id: targetTenantNum } : {})
+        });
+      });
+
+      // 3. Telegram contacts
+      if (telegId) {
+        const normTeleg = normalizeContactValue(telegId, 'telegram');
+        contactsToInsertBatch.push({
+          id: crypto.randomUUID(),
+          customer_id: newCustId,
+          channel_type: 'telegram',
+          value: telegId,
+          normalized_value: normTeleg || telegId.replace('@', '').toLowerCase(),
+          contact_name: managerName || 'مدیریت',
+          contact_role: 'آیدی تلگرام',
+          is_primary: false,
+          date_created: createdIso,
+          ...(targetTenantNum ? { tenant_id: targetTenantNum } : {})
         });
       }
+
+      // 4. Instagram contacts
+      if (instaId) {
+        const normInsta = normalizeContactValue(instaId, 'instagram');
+        contactsToInsertBatch.push({
+          id: crypto.randomUUID(),
+          customer_id: newCustId,
+          channel_type: 'instagram',
+          value: instaId,
+          normalized_value: normInsta || instaId.replace('@', '').toLowerCase(),
+          contact_name: 'پیج اینستاگرام',
+          contact_role: 'شبکه اجتماعی',
+          is_primary: false,
+          date_created: createdIso,
+          ...(targetTenantNum ? { tenant_id: targetTenantNum } : {})
+        });
+      }
+
+      // 5. Email contacts
+      if (email) {
+        const normEmail = normalizeContactValue(email, 'email');
+        contactsToInsertBatch.push({
+          id: crypto.randomUUID(),
+          customer_id: newCustId,
+          channel_type: 'email',
+          value: email,
+          normalized_value: normEmail || email.toLowerCase(),
+          contact_name: 'ایمیل شرکت',
+          contact_role: 'پست الکترونیک',
+          is_primary: false,
+          date_created: createdIso,
+          ...(targetTenantNum ? { tenant_id: targetTenantNum } : {})
+        });
+      }
+
+      // 6. Website contacts
+      if (website) {
+        const normWeb = normalizeContactValue(website, 'website');
+        contactsToInsertBatch.push({
+          id: crypto.randomUUID(),
+          customer_id: newCustId,
+          channel_type: 'website',
+          value: website,
+          normalized_value: normWeb || website.toLowerCase(),
+          contact_name: 'وب‌سایت',
+          contact_role: 'تارنما',
+          is_primary: false,
+          date_created: createdIso,
+          ...(targetTenantNum ? { tenant_id: targetTenantNum } : {})
+        });
+      }
+
     } catch (err: any) {
       errors.push(`خطا در پردازش پرونده مشتری ${row.CompanyName || 'نامشخص'}: ${err.message}`);
     }
   }
 
-  // Safe batch insert customers (one chunk at a time, or row by row on error)
+  // Insert customers & contacts batch into Directus
   if (customersToInsertBatch.length > 0 && directusUrl && directusAdminToken) {
-    const cChunks = chunkArray(customersToInsertBatch, 100);
-    for (const cChunk of cChunks) {
-      try {
+    try {
+      const cChunks = chunkArray(customersToInsertBatch, 100);
+      for (const cChunk of cChunks) {
         const insRes = await directusFetch('/items/customers', {
           method: 'POST',
           body: JSON.stringify(cChunk),
         });
         if (insRes && Array.isArray(insRes.data)) {
           importedCustomersCount += insRes.data.length;
-          for (const c of insRes.data) customersData.unshift(c);
-        }
-      } catch (chunkErr: any) {
-        // Fallback row-by-row on batch validation error to save all valid rows!
-        for (const singleCust of cChunk) {
-          try {
-            const sRes = await directusFetch('/items/customers', {
-              method: 'POST',
-              body: JSON.stringify(singleCust),
-            });
-            if (sRes && sRes.data) {
-              importedCustomersCount++;
-              customersData.unshift(sRes.data);
-            }
-          } catch (singleErr: any) {
-            errors.push(`خطا در ثبت مشتری ${singleCust.company_name}: ${singleErr.message}`);
+          for (const c of insRes.data) {
+            customersData.unshift(c);
           }
         }
       }
+
+      // Batch insert customer_contacts
+      if (contactsToInsertBatch.length > 0) {
+        const ctChunks = chunkArray(contactsToInsertBatch, 100);
+        for (const ctChunk of ctChunks) {
+          try {
+            const insCtRes = await directusFetch('/items/customer_contacts', {
+              method: 'POST',
+              body: JSON.stringify(ctChunk),
+            });
+            if (insCtRes && Array.isArray(insCtRes.data)) {
+              for (const ct of insCtRes.data) {
+                contactsData.push(ct);
+              }
+            }
+          } catch (ctErr: any) {
+            console.warn('Customer contacts bulk insert warning:', ctErr.message);
+          }
+        }
+      }
+    } catch (cErr: any) {
+      console.error('Directus bulk insert customers error:', cErr.message);
+      errors.push(`خطا در ثبت گروهی مشتریان در دایرکتوس: ${cErr.message}`);
+      for (const c of customersToInsertBatch) {
+        customersData.unshift(c);
+        importedCustomersCount++;
+      }
+    }
+  } else {
+    for (const c of customersToInsertBatch) {
+      customersData.unshift(c);
+      importedCustomersCount++;
+    }
+    for (const ct of contactsToInsertBatch) {
+      contactsData.push(ct);
     }
   }
 
   // --------------------------------------------------------------------------
-  // STEP 3: IMPORT ALL REPORTS WITH DEDUPLICATION & TIME PRESERVATION
+  // STEP 3: IMPORT ALL REPORTS (history) WITH ACCURATE CREATION DATES
   // --------------------------------------------------------------------------
+  if (reportRows.length > 0 && directusUrl && directusAdminToken) {
+    try {
+      const pList = [];
+      for (let page = 1; page <= 6; page++) {
+        pList.push(
+          directusFetch(`/items/customers?filter[interview_report][_starts_with]=${encodeURIComponent('پرونده انتقال‌یافته از پایگاه داده قدیم - کد تماس')}&limit=1000&page=${page}&fields=id,interview_report,assigned_marketer_name,mobile_numbers,status,next_followup_date`)
+            .catch(() => null)
+        );
+      }
+      const pageResults = await Promise.all(pList);
+      for (const res of pageResults) {
+        if (res && Array.isArray(res.data)) {
+          for (const c of res.data) {
+            const m = (c.interview_report || '').match(/کد تماس\s+(\d+)/);
+            if (m && m[1]) {
+              if (!legacyCustomerRefMap.has(m[1])) {
+                legacyCustomerRefMap.set(m[1], c);
+              }
+            }
+          }
+        }
+      }
+    } catch (idxErr: any) {
+      console.warn('Could not pre-index existing customers by CallID:', idxErr.message);
+    }
+  }
+
   const reportsToInsertBatch: any[] = [];
   const latestReportPerCustomer = new Map<string, { report: any; parsedDate: number }>();
 
@@ -5449,31 +5649,20 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       const callNum = String(rep.callNum || rep.callnum || rep.phone || '').trim();
       const normCallNum = normalizeContactValue(callNum, 'mobile');
 
-      const targetCustomer = (callId && existingCallIdToCustomerMap.get(callId)) ||
-                             (customerIdLegacy && existingCallIdToCustomerMap.get(customerIdLegacy)) ||
+      const targetCustomer = (callId && legacyCustomerRefMap.get(callId)) ||
+                             (customerIdLegacy && legacyCustomerRefMap.get(customerIdLegacy)) ||
+                             (normCallNum && legacyCustomerRefMap.get(normCallNum)) ||
                              (normCallNum && existingPhoneToCustomerMap.get(normCallNum)) ||
-                             customersData.find(c => (normCallNum && c.mobile_numbers && c.mobile_numbers.includes(normCallNum)) || (callId && c.interview_report && c.interview_report.includes(callId)));
+                             customersData.find(c => (callId && c.interview_report && c.interview_report.includes(callId)));
 
       if (!targetCustomer) {
         skippedCount++;
         continue;
       }
 
-      const rawDateCreated = rep.insertDate || rep.dateTime || rep.varcharDate || rep.updateDate;
-      const repDateCreated = parseToGregorianIso(rawDateCreated) || new Date().toISOString();
-      const repTimestamp = new Date(repDateCreated).getTime();
-      const reportText = String(rep.report || rep.text || 'مذاکره انجام شد.').trim();
-      const textSnippet = reportText.substring(0, 30);
-
-      // Deduplication signature: customer_id + ISO minute + snippet
-      const reportSigKey = `${targetCustomer.id}_${repDateCreated.substring(0, 16)}_${textSnippet}`;
-      if (existingReportKeysSet.has(reportSigKey)) {
-        skippedCount++;
-        continue;
-      }
-
       const negotiatorName = String(rep.negotiator || targetCustomer.assigned_marketer_name || 'کارشناس مذاکره').trim();
-      const phoneForReport = normCallNum || callNum || (targetCustomer.mobile_numbers && targetCustomer.mobile_numbers[0]) || '';
+      const reportText = String(rep.report || rep.text || 'مذاکره انجام شد.').trim();
+      const phoneForReport = normCallNum || callNum || '';
       const rawRating = parseInt(String(rep.rating || 5), 10);
       const rating = isNaN(rawRating) ? 5 : Math.min(Math.max(rawRating > 10 ? Math.round(rawRating / 2) : rawRating, 1), 10);
       const nextFollowIso = parseToGregorianIso(rep.nextFollow);
@@ -5492,7 +5681,11 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         repStatusMapped = 'پیگیری بلند مدت';
       }
 
-      const newRepObj: any = {
+      const rawDateCreated = rep.insertDate || rep.dateTime || rep.varcharDate || rep.updateDate;
+      const repDateCreated = parseToGregorianIso(rawDateCreated) || new Date().toISOString();
+      const repTimestamp = new Date(repDateCreated).getTime();
+
+      const newRepObj: any = { 
         id: crypto.randomUUID(),
         customer_id: targetCustomer.id,
         negotiator_name: negotiatorName,
@@ -5509,7 +5702,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       }
 
       reportsToInsertBatch.push(newRepObj);
-      existingReportKeysSet.add(reportSigKey);
 
       const currentLatest = latestReportPerCustomer.get(targetCustomer.id);
       if (!currentLatest || repTimestamp >= currentLatest.parsedDate) {
@@ -5527,46 +5719,45 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
-  // Safe batch insert reports (chunked, fallback row-by-row on error)
+  // Insert reports in batch into Directus
   if (reportsToInsertBatch.length > 0 && directusUrl && directusAdminToken) {
-    const rChunks = chunkArray(reportsToInsertBatch, 100);
-    for (const rChunk of rChunks) {
-      try {
+    try {
+      const rChunks = chunkArray(reportsToInsertBatch, 100);
+      for (const rChunk of rChunks) {
         const insRes = await directusFetch('/items/customer_reports', {
           method: 'POST',
           body: JSON.stringify(rChunk),
         });
         if (insRes && Array.isArray(insRes.data)) {
           importedReportsCount += insRes.data.length;
-          for (const r of insRes.data) reportsData.unshift(r);
-        }
-      } catch (rErr: any) {
-        for (const singleRep of rChunk) {
-          try {
-            const sRes = await directusFetch('/items/customer_reports', {
-              method: 'POST',
-              body: JSON.stringify(singleRep),
-            });
-            if (sRes && sRes.data) {
-              importedReportsCount++;
-              reportsData.unshift(sRes.data);
-            }
-          } catch (singleErr: any) {
-            errors.push(`خطا در ثبت گزارش: ${singleErr.message}`);
+          for (const r of insRes.data) {
+            reportsData.unshift(r);
           }
         }
       }
+    } catch (rErr: any) {
+      console.error('Directus bulk insert reports error:', rErr.message);
+      errors.push(`خطا در ثبت گروهی گزارش‌ها در دایرکتوس: ${rErr.message}`);
+      for (const r of reportsToInsertBatch) {
+        reportsData.unshift(r);
+        importedReportsCount++;
+      }
+    }
+  } else {
+    for (const r of reportsToInsertBatch) {
+      reportsData.unshift(r);
+      importedReportsCount++;
     }
   }
 
   return res.json({
-    success: true,
+    success: errors.length === 0 || importedCustomersCount > 0 || importedReportsCount > 0,
     importedPersonnelCount,
     importedCustomersCount,
     importedReportsCount,
     skippedCount,
     errors,
-    message: `درون‌ریزی با موفقیت انجام شد: ${importedCustomersCount} مشتری جدید، ${importedReportsCount} گزارش جدید ثبت شد (${skippedCount} رکورد تکراری با هوشمندی رد شدند).`,
+    message: `درون‌ریزی با موفقیت به پایان رسید: ${importedPersonnelCount} کارشناس، ${importedCustomersCount} پرونده مشتری، و ${importedReportsCount} گزارش مذاکره ثبت شدند. (تعداد رکوردهای تکراری/پیش‌تر موجود نادیده گرفته‌شده: ${skippedCount})`
   });
 });
 
