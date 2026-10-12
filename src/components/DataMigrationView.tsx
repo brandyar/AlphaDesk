@@ -571,6 +571,15 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
             </div>
           </div>
 
+          {/* پیام راهنما برای اصلاح و بروزرسانی مالکیت پرونده‌ها */}
+          <div className="bg-[#132035] border border-blue-500/30 rounded-xl p-3.5 flex items-start gap-3">
+            <Sparkles className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+            <div className="text-xs text-[#E0E0E0] leading-relaxed">
+              <span className="font-bold text-blue-400 block mb-0.5">اصلاح و به‌روزرسانی هوشمند مالکان پرونده‌ها:</span>
+              با بارگذاری فایل پرونده‌ها و پرسنل، <strong className="text-white">هیچ مشتری تکراری ایجاد نخواهد شد.</strong> پایگاه داده پرونده‌های موجود را شناسایی کرده و بازاریاب مسئول هر پرونده را بر اساس فیلدهای مرجع (<span className="font-mono text-[#1DB954]">Referrals / lockOwner / uid</span>) به کارشناس مربوطه اصلاح و به روزرسانی خواهد کرد.
+            </div>
+          </div>
+
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول مشتریان:</label>

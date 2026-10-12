@@ -5412,21 +5412,72 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       }
 
       if (matchedCustomer) {
-        // DUPLICATE CUSTOMER DETECTED! SKIP CREATING NEW CUSTOMER RECORD
+        // DUPLICATE CUSTOMER DETECTED!
+        // Instead of just skipping, RE-ASSIGN existing customer to the correct personnel in Directus!
         skippedCount++;
+
+        const legacyMarketerUid = String(row.Referrals || row.lockOwner || row.uid || row.UID || row.userId || row.user_id || row.ReferralsFrom || row.manager_id || '').trim();
+        let assignedPersonnel: any = null;
+        if (legacyMarketerUid) {
+          const cleanKey = legacyMarketerUid.toLowerCase();
+          assignedPersonnel = legacyUidToPersonnelMap.get(cleanKey) ||
+                              legacyUidToPersonnelMap.get(`p-${cleanKey}`) ||
+                              legacyUidToPersonnelMap.get(cleanKey.replace(/^p-/, ''));
+
+          if (!assignedPersonnel && cleanKey.length >= 2) {
+            assignedPersonnel = combinedPersonnel.find(
+              (p) =>
+                p.name?.toLowerCase() === cleanKey ||
+                p.name?.toLowerCase().includes(cleanKey) ||
+                cleanKey.includes(p.name?.toLowerCase()) ||
+                p.username?.toLowerCase() === cleanKey
+            );
+          }
+        }
+
+        if (assignedPersonnel && (matchedCustomer.assigned_marketer_id !== assignedPersonnel.id || matchedCustomer.assigned_marketer_name !== assignedPersonnel.name)) {
+          matchedCustomer.assigned_marketer_id = assignedPersonnel.id;
+          matchedCustomer.assigned_marketer_name = assignedPersonnel.name;
+          if (directusUrl && directusAdminToken && matchedCustomer.id) {
+            directusFetch(`/items/customers/${matchedCustomer.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({
+                assigned_marketer_id: assignedPersonnel.id,
+                assigned_marketer_name: assignedPersonnel.name,
+                date_updated: new Date().toISOString(),
+              })
+            }).catch((patchErr) => console.warn('Re-assigning customer marketer warning:', patchErr.message));
+          }
+        }
+
         if (callId) legacyCustomerRefMap.set(callId, matchedCustomer);
         if (customerIdLegacy) legacyCustomerRefMap.set(customerIdLegacy, matchedCustomer);
         for (const m of mobileList) {
           legacyCustomerRefMap.set(m, matchedCustomer);
+          existingPhoneToCustomerMap.set(m, matchedCustomer);
         }
         continue;
       }
 
       // Match marketer
-      const legacyMarketerUid = String(row.Referrals || row.lockOwner || row.uid || '').trim().toLowerCase();
-      const assignedPersonnel = legacyUidToPersonnelMap.get(legacyMarketerUid) ||
-                              legacyUidToPersonnelMap.get(String(row.uid || '').trim().toLowerCase()) ||
-                              combinedPersonnel[0];
+      const legacyMarketerUid = String(row.Referrals || row.lockOwner || row.uid || row.UID || row.userId || row.user_id || row.ReferralsFrom || row.manager_id || '').trim();
+      let assignedPersonnel: any = null;
+      if (legacyMarketerUid) {
+        const cleanKey = legacyMarketerUid.toLowerCase();
+        assignedPersonnel = legacyUidToPersonnelMap.get(cleanKey) ||
+                            legacyUidToPersonnelMap.get(`p-${cleanKey}`) ||
+                            legacyUidToPersonnelMap.get(cleanKey.replace(/^p-/, ''));
+
+        if (!assignedPersonnel && cleanKey.length >= 2) {
+          assignedPersonnel = combinedPersonnel.find(
+            (p) =>
+              p.name?.toLowerCase() === cleanKey ||
+              p.name?.toLowerCase().includes(cleanKey) ||
+              cleanKey.includes(p.name?.toLowerCase()) ||
+              p.username?.toLowerCase() === cleanKey
+          );
+        }
+      }
 
       // Negotiation status mapping
       const rawStat = String(row.lastStat || row.status || '').trim();
