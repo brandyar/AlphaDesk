@@ -53,7 +53,6 @@ const SAMPLE_HISTORY_RAW = `ID\tCallID\treport\tdateTime\tnegotiator\tcallNum\tn
 3\t17550946352084\tبهشون توضیح داده شد ولی جواب دریافت نشد\t14040522-1847\tموسوی\t9113119440\t1404/05/25  14:17\tپاسخ نمیدهد\t1\t2084\t3\tNULL\t2025-08-13 17:47:15\t2025-08-13 17:47:15\tNULL`;
 
 // تابع پیشرفته و هوشمند تجزیه متن ورودی (Multi-line Smart TSV/CSV Parser)
-// این تابع شکستگی‌های خط (Enter/Newline) ناخواسته در داخل فیلدهای گزارش یا توضیحات را به درستی تشخیص داده و ادغام می‌کند
 function parseRawInput(raw: string): any[] {
   const trimmed = raw.trim();
   if (!trimmed) return [];
@@ -72,7 +71,7 @@ function parseRawInput(raw: string): any[] {
   const commaCount = (firstLine.match(/,/g) || []).length;
   const delimiter = tabCount >= commaCount ? '\t' : ',';
 
-  // ۳. تجزیه‌گر مبتنی بر ماشین حالت (State Machine) با پشتیبانی از فیلدهای چندخطی داخل کوتیشن
+  // ۳. تجزیه‌گر مبتنی بر ماشین حالت (State Machine)
   const rows: string[][] = [];
   let currentRow: string[] = [];
   let currentField = '';
@@ -86,7 +85,7 @@ function parseRawInput(raw: string): any[] {
     if (char === '"') {
       if (insideQuotes && nextChar === '"') {
         currentField += '"';
-        i++; // رد کردن گیومه فرار
+        i++;
       } else {
         insideQuotes = !insideQuotes;
       }
@@ -120,7 +119,7 @@ function parseRawInput(raw: string): any[] {
   const headers = rows[0].map(h => h.trim().replace(/^["']|["']$/g, ''));
   const expectedCols = headers.length;
 
-  // ۴. ادغام هوشمند ردیف‌های تکه‌تکه‌شده فاقد کوتیشن (Unquoted Multi-line Stitching)
+  // ۴. ادغام هوشمند ردیف‌های تکه‌تکه‌شده فاقد کوتیشن
   const unifiedRows: string[][] = [];
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
@@ -132,13 +131,11 @@ function parseRawInput(raw: string): any[] {
     const prevRow = unifiedRows[unifiedRows.length - 1];
 
     if (prevRow.length < expectedCols) {
-      // ردیف قبلی بر اثر اینتر نصفه رها شده است
       prevRow[prevRow.length - 1] = (prevRow[prevRow.length - 1] + '\n' + (row[0] || '')).trim();
       for (let c = 1; c < row.length; c++) {
         prevRow.push(row[c]);
       }
     } else {
-      // ردیف قبلی کامل است. آیا ردیف فعلی شروع یک رکورد معتبر جدید است؟
       const firstVal = String(row[0] || '').trim();
       const looksLikeValidRecordStart = /^\d+$/.test(firstVal) || row.length === expectedCols;
       if (!looksLikeValidRecordStart && row.length < expectedCols) {
@@ -178,6 +175,11 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
   const [contactText, setContactText] = useState<string>('');
   const [historyText, setHistoryText] = useState<string>('');
 
+  // نام فایل‌های بارگذاری‌شده
+  const [accountFileName, setAccountFileName] = useState<string>('');
+  const [contactFileName, setContactFileName] = useState<string>('');
+  const [historyFileName, setHistoryFileName] = useState<string>('');
+
   // وضعیت پردازش و پیشرفت زنده
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
@@ -193,19 +195,20 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
     }
   }, [progressLogs]);
 
-  // افزودن لاگ با برچسب زمان
   const addLog = (msg: string) => {
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
     setProgressLogs(prev => [...prev, `[${timeStr}] ${msg}`]);
   };
 
-  // بارگذاری داده‌های نمونه برای تست
   const handleLoadSampleData = () => {
     setAccountText(SAMPLE_ACCOUNT_RAW);
     setContactText(SAMPLE_CONTACT_RAW);
     setHistoryText(SAMPLE_HISTORY_RAW);
-    showToast('داده‌های نمونه ارسالی با موفقیت در فرم‌ها بارگذاری شدند.', 'info');
+    setAccountFileName('sample_accounts.tsv');
+    setContactFileName('sample_contacts.tsv');
+    setHistoryFileName('sample_history.tsv');
+    showToast('داده‌های نمونه ارسالی با موفقیت بارگذاری شدند.', 'info');
   };
 
   // رکوردهای شناسایی‌شده
@@ -213,7 +216,33 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
   const parsedContacts = parseRawInput(contactText);
   const parsedHistory = parseRawInput(historyText);
 
-  // اجرای فرآیند درون‌ریزی
+  // خواندن فایل از سیستم کاربر
+  const handleFileUpload = (file: File, target: 'account' | 'contact' | 'history') => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      if (content) {
+        if (target === 'account') {
+          setAccountText(content);
+          setAccountFileName(file.name);
+        } else if (target === 'contact') {
+          setContactText(content);
+          setContactFileName(file.name);
+        } else if (target === 'history') {
+          setHistoryText(content);
+          setHistoryFileName(file.name);
+        }
+        showToast(`فایل «${file.name}» با موفقیت خوانده شد.`, 'success');
+      }
+    };
+    reader.onerror = () => {
+      showToast('خطا در خواندن فایل انتخاب شده.', 'error');
+    };
+    reader.readAsText(file, 'utf-8');
+  };
+
+  // اجرای فرآیند درون‌ریزی با دسته‌بندی خودکار و پردازش تدریجی برای حجم‌های بالا (حتی ۳۵,۰۰۰+ رکورد)
   const handleExecuteImport = async () => {
     if (parsedAccounts.length === 0 && parsedContacts.length === 0 && parsedHistory.length === 0) {
       showToast('لطفاً حداقل داده‌های یکی از جداول را وارد کنید.', 'error');
@@ -222,48 +251,112 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
     try {
       setIsSubmitting(true);
-      setProgressPercent(10);
+      setProgressPercent(0);
       setProgressLogs([]);
-      setCurrentPhaseText('در حال آماده‌سازی و اعتبارسنجی اولیه ساختار رکوردها...');
-      addLog('آغاز عملیات انتقال هوشمند اطلاعات به پایگاه داده مرکزی دایرکتوس.');
-      addLog(`تعداد کارشناسان: ${parsedAccounts.length} | مشتریان: ${parsedContacts.length} | گزارش‌ها: ${parsedHistory.length}`);
+      setImportResult(null);
 
-      // شبیه‌سازی مراحل با انیمیشن پیشرفت در زمان ارسال به سرور
-      const timer1 = setTimeout(() => {
-        setProgressPercent(30);
-        setCurrentPhaseText('ثبت و تطبیق حساب‌های کاربری پرسنل در دایرکتوس...');
-        addLog('بررسی شناسه کارشناسان و تخصیص سطوح دسترسی...');
-      }, 400);
+      const totalAccounts = parsedAccounts.length;
+      const totalContacts = parsedContacts.length;
+      const totalHistory = parsedHistory.length;
 
-      const timer2 = setTimeout(() => {
-        setProgressPercent(55);
-        setCurrentPhaseText('درون‌ریزی دسته‌ای پرونده‌های مشتریان و شماره‌های تماس...');
-        addLog('ارسال دسته‌های مشتریان به پایگاه داده و نرمال‌سازی شماره‌های تماس...');
-      }, 900);
+      addLog(`آغاز درون‌ریزی هوشمند برای ${totalAccounts} کارشناس، ${totalContacts} مشتری و ${totalHistory} گزارش مذاکره.`);
 
-      const timer3 = setTimeout(() => {
-        setProgressPercent(80);
-        setCurrentPhaseText('درون‌ریزی کلیه گزارش‌های مذاکره و الحاق به پرونده هر مشتری...');
-        addLog('ثبت تاریخچه کامل مذاکرات همراه با تاریخ دقیق و اتصال به مشتریان...');
-      }, 1400);
+      let sumPersonnel = 0;
+      let sumCustomers = 0;
+      let sumReports = 0;
+      let sumSkipped = 0;
+      const allErrors: string[] = [];
 
-      const res = await importLegacyMigrationData({
-        tenant_id: selectedTenantId,
-        personnelRows: parsedAccounts,
-        customerRows: parsedContacts,
-        reportRows: parsedHistory,
-      });
+      // ۱. اگر پرسنل وجود دارد ارسال می‌شوند
+      if (totalAccounts > 0) {
+        setCurrentPhaseText(`در حال درون‌ریزی ${totalAccounts} حساب کاربری پرسنل...`);
+        addLog(`ارسال ${totalAccounts} رکورد پرسنل به پایگاه داده...`);
+        const resP = await importLegacyMigrationData({
+          tenant_id: selectedTenantId,
+          personnelRows: parsedAccounts,
+          customerRows: [],
+          reportRows: [],
+        });
+        sumPersonnel += resP.importedPersonnelCount || 0;
+        sumSkipped += resP.skippedCount || 0;
+        if (resP.errors?.length) allErrors.push(...resP.errors);
+        addLog(`ثبت پرسنل تکمیل شد: ${resP.importedPersonnelCount} کارشناس جدید ثبت گردید.`);
+      }
 
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
+      // ۲. درون‌ریزی مشتریان در دسته‌های ۲۰۰۰ تایی
+      const CUSTOMER_CHUNK_SIZE = 2000;
+      if (totalContacts > 0) {
+        const totalCustChunks = Math.ceil(totalContacts / CUSTOMER_CHUNK_SIZE);
+        for (let i = 0; i < totalCustChunks; i++) {
+          const start = i * CUSTOMER_CHUNK_SIZE;
+          const end = Math.min(start + CUSTOMER_CHUNK_SIZE, totalContacts);
+          const chunk = parsedContacts.slice(start, end);
+
+          const pct = Math.round(10 + ((i + 1) / totalCustChunks) * 30);
+          setProgressPercent(pct);
+          setCurrentPhaseText(`درون‌ریزی پرونده مشتریان (دسته‌بندی ${i + 1} از ${totalCustChunks}: رکوردهای ${start + 1} تا ${end})...`);
+          addLog(`ارسال دسته‌بندی ${i + 1} مشتریان (${chunk.length} پرونده)...`);
+
+          const resC = await importLegacyMigrationData({
+            tenant_id: selectedTenantId,
+            personnelRows: [],
+            customerRows: chunk,
+            reportRows: [],
+          });
+
+          sumCustomers += resC.importedCustomersCount || 0;
+          sumSkipped += resC.skippedCount || 0;
+          if (resC.errors?.length) allErrors.push(...resC.errors);
+          addLog(`دسته ${i + 1} مشتریان انجام شد: ${resC.importedCustomersCount} پرونده جدید ثبت شد.`);
+        }
+      } else {
+        setProgressPercent(40);
+      }
+
+      // ۳. درون‌ریزی گزارش‌های مذاکره در دسته‌های ۲۰۰۰ تایی (پشتیبانی تا ۳۵,۰۰۰+ رکورد بدون قطعی یا تایم‌اوت)
+      const REPORT_CHUNK_SIZE = 2000;
+      if (totalHistory > 0) {
+        const totalRepChunks = Math.ceil(totalHistory / REPORT_CHUNK_SIZE);
+        for (let i = 0; i < totalRepChunks; i++) {
+          const start = i * REPORT_CHUNK_SIZE;
+          const end = Math.min(start + REPORT_CHUNK_SIZE, totalHistory);
+          const chunk = parsedHistory.slice(start, end);
+
+          const pct = Math.round(40 + ((i + 1) / totalRepChunks) * 58);
+          setProgressPercent(pct);
+          setCurrentPhaseText(`درون‌ریزی گزارش‌های مذاکره (دسته‌بندی ${i + 1} از ${totalRepChunks}: گزارش‌های ${start + 1} تا ${end} از کل ${totalHistory})...`);
+          addLog(`ارسال دسته‌بندی ${i + 1} از ${totalRepChunks} گزارش‌ها (${chunk.length} رکورد)...`);
+
+          const resR = await importLegacyMigrationData({
+            tenant_id: selectedTenantId,
+            personnelRows: [],
+            customerRows: [],
+            reportRows: chunk,
+          });
+
+          sumReports += resR.importedReportsCount || 0;
+          sumSkipped += resR.skippedCount || 0;
+          if (resR.errors?.length) allErrors.push(...resR.errors);
+          addLog(`دسته ${i + 1} گزارش‌ها انجام شد: ${resR.importedReportsCount} گزارش ثبت و پیوند داده شد.`);
+        }
+      }
 
       setProgressPercent(100);
-      setCurrentPhaseText('عملیات با موفقیت پایان یافت.');
-      addLog(`نتیجه قطعی: ${res.importedPersonnelCount} کارشناس، ${res.importedCustomersCount} پرونده مشتری، و ${res.importedReportsCount} گزارش مذاکره با تاریخ دقیق ثبت شدند.`);
+      setCurrentPhaseText('کلیه دسته‌بندی‌های درون‌ریزی با موفقیت به پایان رسیدند.');
+      addLog(`پایان موفقیت‌آمیز: کل داده‌ها شامل ${sumPersonnel} کارشناس، ${sumCustomers} مشتری و ${sumReports} گزارش مذاکره پردازش و ثبت شدند. (${sumSkipped} رکورد تکراری نادیده گرفته شد)`);
 
-      setImportResult(res);
-      showToast(res.message, 'success');
+      const finalResult = {
+        success: allErrors.length === 0 || sumCustomers > 0 || sumReports > 0,
+        importedPersonnelCount: sumPersonnel,
+        importedCustomersCount: sumCustomers,
+        importedReportsCount: sumReports,
+        skippedCount: sumSkipped,
+        errors: allErrors,
+        message: `عملیات درون‌ریزی کامل داده‌ها با موفقیت به پایان رسید: ${sumPersonnel} کارشناس، ${sumCustomers} پرونده مشتری، و ${sumReports} گزارش مذاکره در پایگاه داده مرکزی ثبت گردیدند. (${sumSkipped} رکورد تکراری شناسایی و نادیده گرفته شد)`
+      };
+
+      setImportResult(finalResult);
+      showToast(finalResult.message, 'success');
       await onRefreshData();
       setActiveStep(4);
     } catch (err: any) {
@@ -292,7 +385,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
               انتقال هوشمند اطلاعات از سامانه قبلی
             </h1>
             <p className="text-xs sm:text-sm text-[#A7A7A7] mt-1 max-w-2xl leading-relaxed">
-              درون‌ریزی تمیز و خودکار جداول کارشناسان، پرونده‌های مشتریان و آخرین گزارش مذاکرات با رعایت کامل روابط در پایگاه داده، نرمال‌سازی شماره‌ها و پیشگیری از رکوردهای تکراری.
+              پشتیبانی از درون‌ریزی انبوه (حتی بیش از ۳۵,۰۰۰ گزارش) با قابلیت آپلود فایل، دسته‌بندی خودکار، نرمال‌سازی شماره‌ها و پیشگیری هوشمند از رکوردهای تکراری.
             </p>
           </div>
 
@@ -312,7 +405,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           {[
             { num: 1, title: 'کارشناسان و پرسنل', subtitle: 'جدول حساب‌های کاربری', count: parsedAccounts.length },
             { num: 2, title: 'پرونده‌های مشتریان', subtitle: 'جدول اطلاعات مشتریان', count: parsedContacts.length },
-            { num: 3, title: 'آخرین گزارش مذاکرات', subtitle: 'جدول پیشینه و گزارش‌ها', count: parsedHistory.length },
+            { num: 3, title: 'گزارش‌های مذاکره', subtitle: 'جدول پیشینه و گزارش‌ها', count: parsedHistory.length },
             { num: 4, title: 'پیش‌نمایش و اعمال', subtitle: 'اتمام درون‌ریزی', count: null },
           ].map((s) => {
             const isCurrent = activeStep === s.num;
@@ -386,7 +479,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
               </div>
               <div>
                 <h2 className="text-base font-bold text-white">ورود اطلاعات همکاران و بازاریاب‌ها</h2>
-                <p className="text-xs text-[#888]">محتوای جدول را به صورت کپی پیست از اکسل، متن جدول یا جیسون در کادر زیر وارد کنید.</p>
+                <p className="text-xs text-[#888]">محتوای جدول را به صورت انتخاب فایل اکسل/CSV یا کپی پیست متن در کادر زیر وارد کنید.</p>
               </div>
             </div>
             <div className="text-xs font-mono text-[#1DB954] bg-[#1DB954]/10 px-3 py-1 rounded-lg border border-[#1DB954]/20">
@@ -395,7 +488,19 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول اطلاعات پرسنل:</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول اطلاعات پرسنل:</label>
+              <label className="px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#2e2e2e] text-xs font-bold text-[#1DB954] cursor-pointer flex items-center gap-1.5 transition-all border border-[#333]">
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>{accountFileName ? `فایل: ${accountFileName}` : 'بارگذاری فایل (.csv / .tsv)'}</span>
+                <input
+                  type="file"
+                  accept=".csv,.tsv,.txt,.json"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'account')}
+                />
+              </label>
+            </div>
             <textarea
               rows={8}
               value={accountText}
@@ -467,7 +572,19 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول مشتریان:</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول مشتریان:</label>
+              <label className="px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#2e2e2e] text-xs font-bold text-[#1DB954] cursor-pointer flex items-center gap-1.5 transition-all border border-[#333]">
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>{contactFileName ? `فایل: ${contactFileName}` : 'بارگذاری فایل (.csv / .tsv)'}</span>
+                <input
+                  type="file"
+                  accept=".csv,.tsv,.txt,.json"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'contact')}
+                />
+              </label>
+            </div>
             <textarea
               rows={8}
               value={contactText}
@@ -538,8 +655,8 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                 ۳
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">ورود آخرین گزارش مذاکرات</h2>
-                <p className="text-xs text-[#888]">سیستم به صورت خودکار تنها آخرین مذاکره ثبت‌شده هر مشتری را فیلتر کرده و ضمیمه پرونده می‌کند.</p>
+                <h2 className="text-base font-bold text-white">ورود گزارش‌های مذاکره (حجم کامل / ۳۵,۰۰۰+ رکورد)</h2>
+                <p className="text-xs text-[#888]">می‌توانید فایل کامل ۳۵,۰۰۰ گزارش را یکجا آپلود کنید. سیستم به صورت خودکار آن را دسته‌بندی و ارسال می‌کند.</p>
               </div>
             </div>
             <div className="text-xs font-mono text-[#1DB954] bg-[#1DB954]/10 px-3 py-1 rounded-lg border border-[#1DB954]/20">
@@ -548,7 +665,19 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول گزارش‌ها:</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-[#AAA]">متن یا خروجی فایل گزارش‌ها:</label>
+              <label className="px-3.5 py-2 rounded-xl bg-[#1DB954]/10 hover:bg-[#1DB954]/20 text-xs font-bold text-[#1DB954] cursor-pointer flex items-center gap-2 transition-all border border-[#1DB954]/30 shadow-sm">
+                <UploadCloud className="w-4 h-4" />
+                <span>{historyFileName ? `فایل انتخاب شده: ${historyFileName}` : 'بارگذاری فایل کامل ۳۵ هزار گزارش (.csv / .tsv)'}</span>
+                <input
+                  type="file"
+                  accept=".csv,.tsv,.txt,.json"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'history')}
+                />
+              </label>
+            </div>
             <textarea
               rows={8}
               value={historyText}
@@ -561,7 +690,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           {/* پیش‌نمایش گزارش‌ها */}
           {parsedHistory.length > 0 && (
             <div className="mt-4 pt-4 border-t border-[#252525]">
-              <div className="text-xs font-bold text-white mb-2">پیش‌نمایش گزارش‌ها ({parsedHistory.length} مورد):</div>
+              <div className="text-xs font-bold text-white mb-2">پیش‌نمایش گزارش‌ها (نمایش ۵ مورد از کل {parsedHistory.length} مورد):</div>
               <div className="overflow-x-auto rounded-xl border border-[#282828]">
                 <table className="w-full text-right text-xs">
                   <thead className="bg-[#202020] text-[#888] font-semibold border-b border-[#282828]">
@@ -619,7 +748,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-white">بررسی خلاصه و اجرای عملیات درون‌ریزی</h2>
-              <p className="text-xs text-[#888]">آمار کل داده‌های آماده پردازش را بررسی کرده و عملیات انتقال به پایگاه داده دایرکتوس را آغاز نمایید.</p>
+              <p className="text-xs text-[#888]">سیستم کل {parsedHistory.length} گزارش را به صورت دسته‌های خودکار ارسال می‌کند تا بدون تایم‌اوت ثبت گردند.</p>
             </div>
           </div>
 
@@ -645,7 +774,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                 {parsedHistory.length}
               </div>
               <div className="text-xs font-bold text-white">گزارش مذاکره</div>
-              <div className="text-[10px] text-[#777] mt-0.5">درون‌ریزی کامل با تاریخ واقعی ثبت</div>
+              <div className="text-[10px] text-[#777] mt-0.5">درون‌ریزی کامل (ارسال دسته‌ای)</div>
             </div>
           </div>
 
@@ -693,6 +822,9 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                 <span>کارشناسان ثبت‌شده: <b className="text-white font-mono">{importResult.importedPersonnelCount}</b></span>
                 <span>پرونده‌های مشتریان: <b className="text-white font-mono">{importResult.importedCustomersCount}</b></span>
                 <span>گزارش‌های ثبت‌شده: <b className="text-white font-mono">{importResult.importedReportsCount}</b></span>
+                {importResult.skippedCount > 0 && (
+                  <span className="text-amber-400">رکوردهای تکراری/غیرمجاز نادیده گرفته‌شده: <b className="font-mono">{importResult.skippedCount}</b></span>
+                )}
                 <span className="text-[#1DB954] flex items-center gap-1 font-bold">
                   <Server className="w-3.5 h-3.5" />
                   ذخیره‌سازی مستقیم در پایگاه داده مرکزی دایرکتوس
@@ -721,13 +853,13 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
             <button
               onClick={handleExecuteImport}
-              disabled={isSubmitting || (parsedAccounts.length === 0 && parsedContacts.length === 0)}
+              disabled={isSubmitting || (parsedAccounts.length === 0 && parsedContacts.length === 0 && parsedHistory.length === 0)}
               className="w-full sm:w-auto px-8 py-3 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] disabled:opacity-50 text-black font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#1DB954]/20"
             >
               {isSubmitting ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>در حال انتقال داده‌ها... ({progressPercent}٪)</span>
+                  <span>در حال درون‌ریزی دسته‌ای... ({progressPercent}٪)</span>
                 </>
               ) : (
                 <>

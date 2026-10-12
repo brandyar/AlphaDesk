@@ -221,8 +221,8 @@ export default function App() {
     try {
       const [pData, cData, rData, lData, aData, bStatus, lrData, arData, tData] = await Promise.all([
         fetchPersonnel().catch(() => []),
-        fetchCustomers({ limit: 10000 }).catch(() => []),
-        fetchCustomerReports(undefined, { limit: 10000 }).catch(() => []),
+        fetchCustomers({ limit: -1 }).catch(() => []),
+        fetchCustomerReports(undefined, { limit: -1 }).catch(() => []),
         fetchColdLeads().catch(() => []),
         fetchAdminReports().catch(() => []),
         fetchBffStatus().catch(() => null),

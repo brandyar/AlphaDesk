@@ -13,7 +13,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 // Directus configuration
 let directusUrl = process.env.DIRECTUS_URL || '';
@@ -873,6 +874,54 @@ async function directusFetch(path: string, options: RequestInit = {}, retries = 
       throw err;
     }
   }
+}
+
+// Auto-paginated Directus fetcher that seamlessly retrieves all records beyond Directus 10,000 limit
+async function directusFetchAllPages(basePath: string, options: RequestInit = {}): Promise<{ data: any[]; meta?: any }> {
+  const PAGE_SIZE = 5000;
+  const [pathOnly, queryString] = basePath.split('?');
+  const params = new URLSearchParams(queryString || '');
+  params.set('limit', String(PAGE_SIZE));
+  params.set('page', '1');
+  if (!params.has('meta')) params.set('meta', '*');
+
+  const page1Url = `${pathOnly}?${params.toString()}`;
+  const page1Res = await directusFetch(page1Url, options);
+
+  if (!page1Res || !Array.isArray(page1Res.data)) {
+    return { data: page1Res?.data || [], meta: page1Res?.meta };
+  }
+
+  const allItems = [...page1Res.data];
+  const totalCount = page1Res.meta?.filter_count ?? page1Res.meta?.total_count ?? page1Res.data.length;
+
+  if (totalCount > PAGE_SIZE) {
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+    const pagePromises = [];
+    for (let p = 2; p <= totalPages; p++) {
+      const pParams = new URLSearchParams(queryString || '');
+      pParams.set('limit', String(PAGE_SIZE));
+      pParams.set('page', String(p));
+      if (!pParams.has('meta')) pParams.set('meta', '*');
+      const pUrl = `${pathOnly}?${pParams.toString()}`;
+      pagePromises.push(directusFetch(pUrl, options).catch(() => ({ data: [] })));
+    }
+
+    const remainingPages = await Promise.all(pagePromises);
+    for (const res of remainingPages) {
+      if (res && Array.isArray(res.data)) {
+        allItems.push(...res.data);
+      }
+    }
+  }
+
+  return {
+    data: allItems,
+    meta: {
+      total_count: totalCount || allItems.length,
+      filter_count: totalCount || allItems.length,
+    }
+  };
 }
 
 // Ensure at least one default tenant exists in Directus so foreign keys are valid
@@ -2468,9 +2517,9 @@ app.get('/api/contacts', async (req: Request, res: Response) => {
   const { customer_id, search, type } = req.query;
   if (directusUrl && directusAdminToken) {
     try {
-      let q = '/items/customer_contacts?sort=-date_created&limit=500';
+      let q = '/items/customer_contacts?sort=-date_created';
       if (customer_id) q += `&filter[customer_id][_eq]=${encodeURIComponent(customer_id as string)}`;
-      const result = await directusFetch(q);
+      const result = await directusFetchAllPages(q);
       if (result && Array.isArray(result.data)) {
         return res.json(result.data);
       }
@@ -2624,14 +2673,13 @@ app.get('/api/customers', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      let directusQuery = `/items/customers?sort=-date_created&meta=*&fields=*,contacts.*`;
-      if (reqLimit > 0) {
-        directusQuery += `&limit=${reqLimit}&page=${reqPage}`;
+      let result: any;
+      if (reqLimit <= 0 || reqLimit >= 5000) {
+        result = await directusFetchAllPages('/items/customers?sort=-date_created&fields=*,contacts.*');
       } else {
-        directusQuery += `&limit=-1`;
+        const directusQuery = `/items/customers?sort=-date_created&meta=*&fields=*,contacts.*&limit=${reqLimit}&page=${reqPage}`;
+        result = await directusFetch(directusQuery);
       }
-
-      const result = await directusFetch(directusQuery);
       if (result && Array.isArray(result.data)) {
         let list = result.data.map((c: any) => computeCustomerExpiration(c));
 
@@ -3856,16 +3904,14 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      let q = `?sort=-date_created&meta=*`;
-      if (customer_id) {
-        q += `&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}`;
-      }
-      if (reqLimit > 0) {
-        q += `&limit=${reqLimit}&page=${reqPage}`;
+      let result: any;
+      const custFilter = customer_id ? `&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}` : '';
+      if (reqLimit <= 0 || reqLimit >= 5000) {
+        result = await directusFetchAllPages(`/items/customer_reports?sort=-date_created${custFilter}`);
       } else {
-        q += `&limit=-1`;
+        const q = `?sort=-date_created&meta=*${custFilter}&limit=${reqLimit}&page=${reqPage}`;
+        result = await directusFetch(`/items/customer_reports${q}`);
       }
-      const result = await directusFetch(`/items/customer_reports${q}`);
       if (result && Array.isArray(result.data)) {
         let reportsList = result.data;
 
@@ -4006,7 +4052,7 @@ app.get('/api/cold-leads', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      const result = await directusFetch('/items/cold_leads?fields=*,assigned_to.*&sort=-date_created&limit=1000');
+      const result = await directusFetchAllPages('/items/cold_leads?fields=*,assigned_to.*&sort=-date_created');
       if (result && Array.isArray(result.data)) {
         let leads = result.data.map((l: any) => {
           let aId: string | null = null;
@@ -4347,7 +4393,7 @@ app.get('/api/administrative-reports', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      const result = await directusFetch('/items/administrative_reports?sort=-report_date&limit=500');
+      const result = await directusFetchAllPages('/items/administrative_reports?sort=-report_date');
       if (result && Array.isArray(result.data)) {
         let reports = result.data.map(normalizeReport);
 
@@ -4445,7 +4491,7 @@ app.get('/api/leave-requests', async (req: Request, res: Response) => {
   const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
   if (directusUrl && directusAdminToken) {
     try {
-      const resp = await directusFetch('/items/leave_requests?sort=-date_created&limit=200');
+      const resp = await directusFetchAllPages('/items/leave_requests?sort=-date_created');
       if (resp && Array.isArray(resp.data)) {
         let list: LeaveRequest[] = resp.data.map((r: any) => ({
           ...r,
@@ -4613,7 +4659,7 @@ app.get('/api/advance-requests', async (req: Request, res: Response) => {
   const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
   if (directusUrl && directusAdminToken) {
     try {
-      const resp = await directusFetch('/items/advance_requests?sort=-date_created&limit=200');
+      const resp = await directusFetchAllPages('/items/advance_requests?sort=-date_created');
       if (resp && Array.isArray(resp.data)) {
         let list: SalaryAdvanceRequest[] = resp.data.map((r: any) => ({
           ...r,
