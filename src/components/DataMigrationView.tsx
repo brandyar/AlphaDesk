@@ -307,7 +307,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           sumCustomers += resC.importedCustomersCount || 0;
           sumSkipped += resC.skippedCount || 0;
           if (resC.errors?.length) allErrors.push(...resC.errors);
-          addLog(`دسته ${i + 1} مشتریان انجام شد: ${resC.importedCustomersCount} پرونده جدید ثبت شد.`);
+          addLog(`دسته ${i + 1} مشتریان پردازش شد: ${resC.importedCustomersCount} پرونده جدید ثبت و ${resC.skippedCount || 0} پرونده موجود با بازاریاب و کارشناس مربوطه به روزرسانی گردید.`);
         }
       } else {
         setProgressPercent(40);

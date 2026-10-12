@@ -5302,7 +5302,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   let directusContactsList: any[] = [];
   if (directusUrl && directusAdminToken) {
     try {
-      const ctRes = await directusFetch('/items/customer_contacts?limit=-1&fields=id,customer_id,channel_type,value,normalized_value');
+      const ctRes = await directusFetchAllPages('/items/customer_contacts?fields=id,customer_id,channel_type,value,normalized_value');
       if (ctRes && Array.isArray(ctRes.data)) {
         directusContactsList = ctRes.data;
       }
@@ -5313,6 +5313,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
 
   const combinedContacts = [...directusContactsList, ...contactsData];
   for (const ct of combinedContacts) {
+    if (!ct) continue;
     const norm = ct.normalized_value || normalizeContactValue(ct.value, ct.channel_type);
     if (norm && ct.customer_id) {
       const custObj = typeof ct.customer_id === 'object' ? ct.customer_id : { id: String(ct.customer_id) };
@@ -5324,7 +5325,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   let directusCustomersList: any[] = [];
   if (directusUrl && directusAdminToken) {
     try {
-      const cRes = await directusFetch('/items/customers?limit=-1&fields=id,company_name,status,assigned_marketer_id,assigned_marketer_name,interview_report,mobile_numbers');
+      const cRes = await directusFetchAllPages('/items/customers?fields=id,company_name,status,assigned_marketer_id,assigned_marketer_name,interview_report,mobile_numbers');
       if (cRes && Array.isArray(cRes.data)) {
         directusCustomersList = cRes.data;
       }
@@ -5335,6 +5336,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
 
   const combinedCustomers = [...directusCustomersList, ...customersData];
   for (const c of combinedCustomers) {
+    if (!c) continue;
     if (c.id) legacyCustomerRefMap.set(String(c.id).toLowerCase(), c);
     if (c.interview_report) {
       const m = String(c.interview_report).match(/کد تماس\s+(\d+)/);
@@ -5359,7 +5361,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   for (const row of customerRows) {
     try {
       const callId = String(row.CallID || row.callid || row.id || '').trim();
-      const customerIdLegacy = String(row.CustomerID || row.customerid || '').trim();
+      const customerIdLegacy = String(row.CustomerID || row.customerid || row.customerID || '').trim();
       const companyName = String(row.CompanyName || row.companyName || row.marketName || 'بدون نام').trim();
       const businessType = String(row.job || row.business_type || '').trim();
       const province = String(row.province || '').trim();
@@ -5398,42 +5400,64 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         });
       }
 
-      // CHECK FOR DUPLICATE CUSTOMER BY MOBILE PHONE
+      // CHECK FOR DUPLICATE CUSTOMER BY CALLID, CUSTOMERID, OR MOBILE PHONE
       let matchedCustomer: any = null;
-      for (const m of mobileList) {
-        if (existingPhoneToCustomerMap.has(m)) {
-          matchedCustomer = existingPhoneToCustomerMap.get(m);
-          break;
+      if (callId && legacyCustomerRefMap.has(callId)) {
+        matchedCustomer = legacyCustomerRefMap.get(callId);
+      } else if (customerIdLegacy && legacyCustomerRefMap.has(customerIdLegacy)) {
+        matchedCustomer = legacyCustomerRefMap.get(customerIdLegacy);
+      } else {
+        for (const m of mobileList) {
+          if (existingPhoneToCustomerMap.has(m)) {
+            matchedCustomer = existingPhoneToCustomerMap.get(m);
+            break;
+          }
+          if (legacyCustomerRefMap.has(m)) {
+            matchedCustomer = legacyCustomerRefMap.get(m);
+            break;
+          }
         }
-        if (legacyCustomerRefMap.has(m)) {
-          matchedCustomer = legacyCustomerRefMap.get(m);
-          break;
+      }
+
+      // Extract accurate legacy marketer personnel key
+      let legacyMarketerKey = '';
+      const refFrom = String(row.ReferralsFrom || row.referralsFrom || '').trim();
+      const rowUid = String(row.uid || row.UID || row.userId || row.user_id || '').trim();
+      const lockOwner = String(row.lockOwner || row.lockowner || '').trim();
+      const referrals = String(row.Referrals || row.referrals || '').trim();
+
+      if (refFrom && refFrom !== '0' && refFrom !== '1' && refFrom !== 'null') {
+        legacyMarketerKey = refFrom;
+      } else if (rowUid && rowUid !== '0' && rowUid !== 'null') {
+        legacyMarketerKey = rowUid;
+      } else if (lockOwner && lockOwner !== '0' && lockOwner !== '1' && lockOwner !== '2' && lockOwner !== 'null' && lockOwner.length > 2) {
+        legacyMarketerKey = lockOwner;
+      } else if (referrals && referrals !== '0' && referrals !== '1' && referrals !== 'null' && referrals.length > 2) {
+        legacyMarketerKey = referrals;
+      }
+
+      let assignedPersonnel: any = null;
+      if (legacyMarketerKey) {
+        const cleanKey = legacyMarketerKey.toLowerCase();
+        assignedPersonnel = legacyUidToPersonnelMap.get(cleanKey) ||
+                            legacyUidToPersonnelMap.get(`p-${cleanKey}`) ||
+                            legacyUidToPersonnelMap.get(cleanKey.replace(/^p-/, ''));
+
+        if (!assignedPersonnel && cleanKey.length >= 2) {
+          assignedPersonnel = combinedPersonnel.find(
+            (p) =>
+              p.name?.toLowerCase() === cleanKey ||
+              p.name?.toLowerCase().includes(cleanKey) ||
+              cleanKey.includes(p.name?.toLowerCase()) ||
+              p.username?.toLowerCase() === cleanKey
+          );
         }
       }
 
       if (matchedCustomer) {
         // DUPLICATE CUSTOMER DETECTED!
-        // Instead of just skipping, RE-ASSIGN existing customer to the correct personnel in Directus!
+        // Re-assign existing customer in Directus to the correct personnel!
         skippedCount++;
-
-        const legacyMarketerUid = String(row.Referrals || row.lockOwner || row.uid || row.UID || row.userId || row.user_id || row.ReferralsFrom || row.manager_id || '').trim();
-        let assignedPersonnel: any = null;
-        if (legacyMarketerUid) {
-          const cleanKey = legacyMarketerUid.toLowerCase();
-          assignedPersonnel = legacyUidToPersonnelMap.get(cleanKey) ||
-                              legacyUidToPersonnelMap.get(`p-${cleanKey}`) ||
-                              legacyUidToPersonnelMap.get(cleanKey.replace(/^p-/, ''));
-
-          if (!assignedPersonnel && cleanKey.length >= 2) {
-            assignedPersonnel = combinedPersonnel.find(
-              (p) =>
-                p.name?.toLowerCase() === cleanKey ||
-                p.name?.toLowerCase().includes(cleanKey) ||
-                cleanKey.includes(p.name?.toLowerCase()) ||
-                p.username?.toLowerCase() === cleanKey
-            );
-          }
-        }
 
         if (assignedPersonnel && (matchedCustomer.assigned_marketer_id !== assignedPersonnel.id || matchedCustomer.assigned_marketer_name !== assignedPersonnel.name)) {
           matchedCustomer.assigned_marketer_id = assignedPersonnel.id;
@@ -5457,26 +5481,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
           existingPhoneToCustomerMap.set(m, matchedCustomer);
         }
         continue;
-      }
-
-      // Match marketer
-      const legacyMarketerUid = String(row.Referrals || row.lockOwner || row.uid || row.UID || row.userId || row.user_id || row.ReferralsFrom || row.manager_id || '').trim();
-      let assignedPersonnel: any = null;
-      if (legacyMarketerUid) {
-        const cleanKey = legacyMarketerUid.toLowerCase();
-        assignedPersonnel = legacyUidToPersonnelMap.get(cleanKey) ||
-                            legacyUidToPersonnelMap.get(`p-${cleanKey}`) ||
-                            legacyUidToPersonnelMap.get(cleanKey.replace(/^p-/, ''));
-
-        if (!assignedPersonnel && cleanKey.length >= 2) {
-          assignedPersonnel = combinedPersonnel.find(
-            (p) =>
-              p.name?.toLowerCase() === cleanKey ||
-              p.name?.toLowerCase().includes(cleanKey) ||
-              cleanKey.includes(p.name?.toLowerCase()) ||
-              p.username?.toLowerCase() === cleanKey
-          );
-        }
       }
 
       // Negotiation status mapping
