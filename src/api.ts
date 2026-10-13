@@ -839,5 +839,13 @@ export async function importLegacyMigrationData(payload: {
   return handleResponse(res, 'خطا در درون‌ریزی داده‌های سامانه قبلی');
 }
 
+export async function resetMigrationCache(): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${BASE_URL}/migration/reset-cache`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+  });
+  return handleResponse(res, 'خطا در پاکسازی حافظه کش درون‌ریزی');
+}
+
 
 

@@ -25,7 +25,7 @@ import {
   Server
 } from 'lucide-react';
 import { Tenant, Personnel } from '../types';
-import { importLegacyMigrationData } from '../api';
+import { importLegacyMigrationData, resetMigrationCache } from '../api';
 
 interface DataMigrationViewProps {
   tenants: Tenant[];
@@ -242,6 +242,16 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
     reader.readAsText(file, 'utf-8');
   };
 
+  const handleResetCache = async () => {
+    try {
+      await resetMigrationCache();
+      showToast('حافظه کش موقت درون‌ریزی با موفقیت پاکسازی شد.', 'success');
+      addLog('پاکسازی حافظه کش موقت سرور انجام گردید.');
+    } catch (err: any) {
+      showToast(err.message || 'خطا در پاکسازی کش', 'error');
+    }
+  };
+
   // اجرای فرآیند درون‌ریزی با دسته‌بندی خودکار و پردازش تدریجی برای حجم‌های بالا (حتی ۳۵,۰۰۰+ رکورد)
   const handleExecuteImport = async () => {
     if (parsedAccounts.length === 0 && parsedContacts.length === 0 && parsedHistory.length === 0) {
@@ -254,6 +264,13 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
       setProgressPercent(0);
       setProgressLogs([]);
       setImportResult(null);
+
+      // Reset any stale server-side memory cache before starting
+      try {
+        await resetMigrationCache();
+      } catch (rErr) {
+        console.warn('Could not reset migration cache:', rErr);
+      }
 
       const totalAccounts = parsedAccounts.length;
       const totalContacts = parsedContacts.length;
@@ -390,6 +407,14 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleResetCache}
+              className="px-3.5 py-2 rounded-xl bg-[#252525] hover:bg-[#303030] border border-[#3e3e3e] text-xs font-bold text-[#CCC] hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              title="پاکسازی حافظه موقت سرور جهت شروع مجدد و درون‌ریزی تمیز"
+            >
+              <RefreshCw className="w-4 h-4 text-amber-400" />
+              <span>پاکسازی حافظه موقت درون‌ریزی</span>
+            </button>
             <button
               onClick={handleLoadSampleData}
               className="px-3.5 py-2 rounded-xl bg-[#252525] hover:bg-[#303030] border border-[#3e3e3e] text-xs font-bold text-[#CCC] hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-sm"

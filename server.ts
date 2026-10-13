@@ -5028,6 +5028,15 @@ app.post('/api/check-expirations', (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
+// Endpoint to reset in-memory migration cache when user clears DB or wants a clean start
+app.post('/api/migration/reset-cache', (req: Request, res: Response) => {
+  customersData = [];
+  reportsData = [];
+  contactsData = [];
+  personnelData = [...initialPersonnel];
+  return res.json({ success: true, message: 'حافظه موقت کش درون‌ریزی با موفقیت پاکسازی شد.' });
+});
+
 // ============================================================================
 // Data Migration Hub: Import Legacy System Tables (account, contact, history)
 // ============================================================================
@@ -5035,6 +5044,13 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   const { tenant_id, personnelRows = [], customerRows = [], reportRows = [] } = req.body;
   const targetTenantId = tenant_id || getRequestTenantId(req) || 'default';
   const targetTenantNum = resolveDirectusTenantId(targetTenantId);
+
+  // If a new personnel import step is started, clear old local migration arrays
+  if (personnelRows.length > 0) {
+    customersData = [];
+    contactsData = [];
+    reportsData = [];
+  }
 
   let importedPersonnelCount = 0;
   let importedCustomersCount = 0;
@@ -5067,13 +5083,16 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
-  // Combine with local personnel
-  const combinedPersonnel = [...directusPersonnelList];
-  for (const p of personnelData) {
-    if (!combinedPersonnel.some(cp => cp.id === p.id)) {
-      combinedPersonnel.push(p);
-    }
-  }
+  // Combine with local personnel (In Directus mode, ONLY use Directus personnel to avoid deleted memory ghosts)
+  const combinedPersonnel: any[] = (directusUrl && directusAdminToken)
+    ? [...directusPersonnelList]
+    : (() => {
+        const list = [...directusPersonnelList];
+        for (const p of personnelData) {
+          if (!list.some(cp => cp.id === p.id)) list.push(p);
+        }
+        return list;
+      })();
 
   // Index existing personnel
   for (const p of combinedPersonnel) {
@@ -5380,7 +5399,10 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
-  const combinedContacts = [...directusContactsList, ...contactsData];
+  const combinedContacts = (directusUrl && directusAdminToken)
+    ? directusContactsList
+    : [...directusContactsList, ...contactsData];
+
   for (const ct of combinedContacts) {
     if (!ct) continue;
     const norm = ct.normalized_value || normalizeContactValue(ct.value, ct.channel_type);
@@ -5403,7 +5425,9 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
-  const combinedCustomers = [...directusCustomersList, ...customersData];
+  const combinedCustomers = (directusUrl && directusAdminToken)
+    ? directusCustomersList
+    : [...directusCustomersList, ...customersData];
   for (const c of combinedCustomers) {
     if (!c) continue;
     if (c.id) legacyCustomerRefMap.set(String(c.id).toLowerCase(), c);
