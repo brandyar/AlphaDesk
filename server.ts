@@ -5093,6 +5093,74 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     if (p.name) legacyUidToPersonnelMap.set(String(p.name).trim().toLowerCase(), p);
   }
 
+  // Helper to check if a string key is valid (not '0', '1', 'null', 'NULL', 'undefined')
+  function isValidPersonnelKey(k: any): boolean {
+    if (!k) return false;
+    const s = String(k).trim().toLowerCase();
+    return (
+      s !== '' &&
+      s !== '0' &&
+      s !== '1' &&
+      s !== 'null' &&
+      s !== 'undefined' &&
+      s !== 'none' &&
+      s !== 'false' &&
+      s !== 'true'
+    );
+  }
+
+  // Helper to resolve personnel from legacy row across accounts/contacts/history fields
+  function resolvePersonnelFromRow(row: any): any | null {
+    if (!row) return null;
+    const candidateKeys = [
+      row.uid,
+      row.UID,
+      row.user_id,
+      row.userId,
+      row.ReferralsFrom,
+      row.referralsFrom,
+      row.lockOwner,
+      row.lockowner,
+      row.Referrals,
+      row.referrals,
+      row.negotiator,
+      row.negotiator_name,
+      row.operator,
+      row.writer,
+      row.userName,
+      row.username,
+    ];
+
+    for (const rawKey of candidateKeys) {
+      if (!rawKey) continue;
+      const cleanKey = String(rawKey).trim().toLowerCase();
+      if (!isValidPersonnelKey(cleanKey)) continue;
+
+      let match =
+        legacyUidToPersonnelMap.get(cleanKey) ||
+        legacyUidToPersonnelMap.get(`p-${cleanKey}`) ||
+        legacyUidToPersonnelMap.get(cleanKey.replace(/^p-/, ''));
+
+      if (match) return match;
+
+      if (cleanKey.length >= 2 && isNaN(Number(cleanKey))) {
+        match = combinedPersonnel.find((p) => {
+          const pName = String(p.name || '').trim().toLowerCase();
+          const pUser = String(p.username || '').trim().toLowerCase();
+          return (
+            pName === cleanKey ||
+            pUser === cleanKey ||
+            (pName && cleanKey.includes(pName)) ||
+            (pName && pName.includes(cleanKey))
+          );
+        });
+        if (match) return match;
+      }
+    }
+
+    return null;
+  }
+
   // Helper to parse Jalali or Gregorian date to ISO
   function jalaliToGregorianCalc(jy: number, jm: number, jd: number): { gy: number; gm: number; gd: number } {
     let j_y = jy - 979;
@@ -5297,6 +5365,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   // --------------------------------------------------------------------------
   const legacyCustomerRefMap = new Map<string, any>();
   const existingPhoneToCustomerMap = new Map<string, any>();
+  const customersToPatchMap = new Map<string, any>();
 
   // Fetch existing customer contacts from Directus & local memory
   let directusContactsList: any[] = [];
@@ -5419,40 +5488,8 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         }
       }
 
-      // Extract accurate legacy marketer personnel key
-      let legacyMarketerKey = '';
-      const refFrom = String(row.ReferralsFrom || row.referralsFrom || '').trim();
-      const rowUid = String(row.uid || row.UID || row.userId || row.user_id || '').trim();
-      const lockOwner = String(row.lockOwner || row.lockowner || '').trim();
-      const referrals = String(row.Referrals || row.referrals || '').trim();
-
-      if (refFrom && refFrom !== '0' && refFrom !== '1' && refFrom !== 'null') {
-        legacyMarketerKey = refFrom;
-      } else if (rowUid && rowUid !== '0' && rowUid !== 'null') {
-        legacyMarketerKey = rowUid;
-      } else if (lockOwner && lockOwner !== '0' && lockOwner !== '1' && lockOwner !== '2' && lockOwner !== 'null' && lockOwner.length > 2) {
-        legacyMarketerKey = lockOwner;
-      } else if (referrals && referrals !== '0' && referrals !== '1' && referrals !== 'null' && referrals.length > 2) {
-        legacyMarketerKey = referrals;
-      }
-
-      let assignedPersonnel: any = null;
-      if (legacyMarketerKey) {
-        const cleanKey = legacyMarketerKey.toLowerCase();
-        assignedPersonnel = legacyUidToPersonnelMap.get(cleanKey) ||
-                            legacyUidToPersonnelMap.get(`p-${cleanKey}`) ||
-                            legacyUidToPersonnelMap.get(cleanKey.replace(/^p-/, ''));
-
-        if (!assignedPersonnel && cleanKey.length >= 2) {
-          assignedPersonnel = combinedPersonnel.find(
-            (p) =>
-              p.name?.toLowerCase() === cleanKey ||
-              p.name?.toLowerCase().includes(cleanKey) ||
-              cleanKey.includes(p.name?.toLowerCase()) ||
-              p.username?.toLowerCase() === cleanKey
-          );
-        }
-      }
+      // Extract accurate legacy marketer personnel
+      const assignedPersonnel = resolvePersonnelFromRow(row);
 
       if (matchedCustomer) {
         // DUPLICATE CUSTOMER DETECTED!
@@ -5462,16 +5499,11 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         if (assignedPersonnel && (matchedCustomer.assigned_marketer_id !== assignedPersonnel.id || matchedCustomer.assigned_marketer_name !== assignedPersonnel.name)) {
           matchedCustomer.assigned_marketer_id = assignedPersonnel.id;
           matchedCustomer.assigned_marketer_name = assignedPersonnel.name;
-          if (directusUrl && directusAdminToken && matchedCustomer.id) {
-            directusFetch(`/items/customers/${matchedCustomer.id}`, {
-              method: 'PATCH',
-              body: JSON.stringify({
-                assigned_marketer_id: assignedPersonnel.id,
-                assigned_marketer_name: assignedPersonnel.name,
-                date_updated: new Date().toISOString(),
-              })
-            }).catch((patchErr) => console.warn('Re-assigning customer marketer warning:', patchErr.message));
-          }
+          customersToPatchMap.set(matchedCustomer.id, {
+            id: matchedCustomer.id,
+            assigned_marketer_id: assignedPersonnel.id,
+            assigned_marketer_name: assignedPersonnel.name,
+          });
         }
 
         if (callId) legacyCustomerRefMap.set(callId, matchedCustomer);
@@ -5717,6 +5749,26 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
+  // Execute batch PATCH updates for existing customer marketer assignments
+  if (customersToPatchMap.size > 0 && directusUrl && directusAdminToken) {
+    const patchArray = Array.from(customersToPatchMap.values());
+    const cPatchChunks = chunkArray(patchArray, 50);
+    for (const chunk of cPatchChunks) {
+      await Promise.all(
+        chunk.map((c) =>
+          directusFetch(`/items/customers/${c.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              assigned_marketer_id: c.assigned_marketer_id,
+              assigned_marketer_name: c.assigned_marketer_name,
+              date_updated: new Date().toISOString(),
+            }),
+          }).catch((err) => console.warn('Re-assigning customer marketer error:', err.message))
+        )
+      );
+    }
+  }
+
   // --------------------------------------------------------------------------
   // STEP 3: IMPORT ALL REPORTS (history) WITH ACCURATE CREATION DATES & PERSONNEL MATCHING
   // --------------------------------------------------------------------------
@@ -5782,57 +5834,20 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       }
 
       // Resolve author/negotiator personnel accurately
-      const rawNegotiatorKey = String(
-        rep.negotiator ||
-        rep.negotiator_name ||
-        rep.uid ||
-        rep.UID ||
-        rep.userId ||
-        rep.user_id ||
-        rep.operator ||
-        rep.writer ||
-        rep.userName ||
-        rep.username ||
-        rep.Referrals ||
-        rep.lockOwner ||
-        rep.insertUser ||
-        ''
-      ).trim();
-
-      let matchedPersonnel: any = null;
-      if (rawNegotiatorKey) {
-        const cleanKey = rawNegotiatorKey.toLowerCase();
-        matchedPersonnel = legacyUidToPersonnelMap.get(cleanKey) ||
-                           legacyUidToPersonnelMap.get(`p-${cleanKey}`) ||
-                           legacyUidToPersonnelMap.get(cleanKey.replace(/^p-/, ''));
-
-        if (!matchedPersonnel && cleanKey.length >= 2) {
-          matchedPersonnel = combinedPersonnel.find(
-            (p) =>
-              p.name?.toLowerCase() === cleanKey ||
-              p.name?.toLowerCase().includes(cleanKey) ||
-              cleanKey.includes(p.name?.toLowerCase()) ||
-              p.username?.toLowerCase() === cleanKey
-          );
-        }
-      }
+      const matchedPersonnel = resolvePersonnelFromRow(rep);
 
       const negotiatorName = matchedPersonnel ? matchedPersonnel.name : (rep.negotiator && isNaN(Number(rep.negotiator)) ? String(rep.negotiator).trim() : (targetCustomer.assigned_marketer_name || 'کارشناس مذاکره'));
       const createdByVal = matchedPersonnel ? matchedPersonnel.id : (targetCustomer.assigned_marketer_id || null);
 
-      // Auto-assign marketer to customer if customer currently has no assigned marketer
+      // Auto-assign marketer to customer if customer currently has no assigned marketer or 'بدون مسئول'
       if (matchedPersonnel && (!targetCustomer.assigned_marketer_id || targetCustomer.assigned_marketer_name === 'تخصیص نیافته' || targetCustomer.assigned_marketer_name === 'بدون مسئول')) {
         targetCustomer.assigned_marketer_id = matchedPersonnel.id;
         targetCustomer.assigned_marketer_name = matchedPersonnel.name;
-        if (directusUrl && directusAdminToken) {
-          directusFetch(`/items/customers/${targetCustomer.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              assigned_marketer_id: matchedPersonnel.id,
-              assigned_marketer_name: matchedPersonnel.name,
-            })
-          }).catch(() => {});
-        }
+        customersToPatchMap.set(targetCustomer.id, {
+          id: targetCustomer.id,
+          assigned_marketer_id: matchedPersonnel.id,
+          assigned_marketer_name: matchedPersonnel.name,
+        });
       }
 
       const reportText = String(rep.report || rep.text || 'مذاکره انجام شد.').trim();
@@ -5925,14 +5940,41 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
+  // Batch update modified customer statuses, next followup dates & assigned marketers
+  for (const [custId, entry] of latestReportPerCustomer.entries()) {
+    const custObj = legacyCustomerRefMap.get(custId.toLowerCase()) || customersData.find(c => c.id === custId);
+    if (custObj) {
+      const patchObj: any = customersToPatchMap.get(custId) || { id: custId };
+      patchObj.status = custObj.status;
+      if (custObj.next_followup_date) patchObj.next_followup_date = custObj.next_followup_date;
+      customersToPatchMap.set(custId, patchObj);
+    }
+  }
+
+  if (customersToPatchMap.size > 0 && directusUrl && directusAdminToken) {
+    const patchArray = Array.from(customersToPatchMap.values());
+    const cPatchChunks = chunkArray(patchArray, 50);
+    for (const chunk of cPatchChunks) {
+      await Promise.all(
+        chunk.map((c) =>
+          directusFetch(`/items/customers/${c.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(c),
+          }).catch((err) => console.warn('Customer update error:', err.message))
+        )
+      );
+    }
+  }
+
   return res.json({
-    success: errors.length === 0 || importedCustomersCount > 0 || importedReportsCount > 0,
+    success: errors.length === 0 || importedCustomersCount > 0 || importedReportsCount > 0 || customersToPatchMap.size > 0,
     importedPersonnelCount,
     importedCustomersCount,
     importedReportsCount,
+    updatedCustomersCount: customersToPatchMap.size,
     skippedCount,
     errors,
-    message: `درون‌ریزی با موفقیت به پایان رسید: ${importedPersonnelCount} کارشناس، ${importedCustomersCount} پرونده مشتری، و ${importedReportsCount} گزارش مذاکره ثبت شدند. (تعداد رکوردهای تکراری/پیش‌تر موجود نادیده گرفته‌شده: ${skippedCount})`
+    message: `پردازش با موفقیت انجام شد: ${importedPersonnelCount} کارشناس، ${importedCustomersCount} پرونده جدید ثبت، ${customersToPatchMap.size} پرونده به بازاریاب‌های مربوطه متصل/بروزرسانی شد و ${importedReportsCount} گزارش ثبت شد. (تعداد رکوردهای موجود نادیده گرفته‌شده: ${skippedCount})`
   });
 });
 
