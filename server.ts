@@ -813,8 +813,8 @@ function updateExpirationFlags() {
   customersData = customersData.map(c => computeCustomerExpiration(c));
 }
 
-// Directus API Request Forwarder with retry and timeout resilience
-async function directusFetch(path: string, options: RequestInit = {}, retries = 2): Promise<any> {
+// Directus API Request Forwarder with retry, backoff and rate-limit/pressure resilience
+async function directusFetch(path: string, options: RequestInit = {}, retries = 3): Promise<any> {
   if (!directusUrl) {
     throw new Error('DIRECTUS_URL_NOT_CONFIGURED');
   }
@@ -834,7 +834,7 @@ async function directusFetch(path: string, options: RequestInit = {}, retries = 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const timeoutId = setTimeout(() => controller.abort(), 25000);
 
       const res = await fetch(url, {
         ...options,
@@ -852,6 +852,23 @@ async function directusFetch(path: string, options: RequestInit = {}, retries = 
             parsedMessage = errJson.errors[0].message;
           }
         } catch {}
+
+        const isPressureOrRateLimit =
+          res.status === 503 ||
+          res.status === 429 ||
+          res.status === 502 ||
+          res.status === 504 ||
+          parsedMessage.includes('Under pressure') ||
+          parsedMessage.includes('unavailable') ||
+          parsedMessage.includes('rate limit');
+
+        if (isPressureOrRateLimit && attempt < retries) {
+          const backoffMs = 1200 * Math.pow(2, attempt) + Math.random() * 500;
+          console.warn(`Directus under pressure (${res.status}: ${parsedMessage}). Retrying in ${Math.round(backoffMs)}ms (Attempt ${attempt + 1}/${retries})...`);
+          await new Promise(r => setTimeout(r, backoffMs));
+          continue;
+        }
+
         throw new Error(parsedMessage);
       }
 
@@ -867,8 +884,9 @@ async function directusFetch(path: string, options: RequestInit = {}, retries = 
       const text = await res.text();
       return { data: text, text };
     } catch (err: any) {
-      if (attempt < retries && (err.name === 'AbortError' || err.message?.includes('fetch failed') || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT')) {
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      if (attempt < retries && (err.name === 'AbortError' || err.message?.includes('fetch failed') || err.message?.includes('Under pressure') || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT')) {
+        const backoffMs = 1000 * Math.pow(2, attempt) + Math.random() * 400;
+        await new Promise(r => setTimeout(r, backoffMs));
         continue;
       }
       throw err;
@@ -922,6 +940,100 @@ async function directusFetchAllPages(basePath: string, options: RequestInit = {}
       filter_count: totalCount || allItems.length,
     }
   };
+}
+
+// Helper chunker for Directus bulk requests
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+// Resilient Batch Inserter with Micro-Chunk Fallback and Automatic Rate-Limit Pacing
+async function directusSafeBatchInsert(collection: string, items: any[], chunkSize = 25): Promise<any[]> {
+  if (!items || items.length === 0) return [];
+  const inserted: any[] = [];
+  const chunks = chunkArray(items, chunkSize);
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    if (i > 0) await new Promise((r) => setTimeout(r, 120));
+
+    try {
+      const res = await directusFetch(`/items/${collection}`, {
+        method: 'POST',
+        body: JSON.stringify(chunk),
+      }, 4);
+
+      if (res && Array.isArray(res.data)) {
+        inserted.push(...res.data);
+      } else if (res && res.data) {
+        inserted.push(res.data);
+      }
+    } catch (err: any) {
+      console.warn(`Chunk insert failed for ${collection} (size ${chunk.length}): ${err.message}. Retrying in smaller micro-chunks...`);
+      const subChunks = chunkArray(chunk, 5);
+      for (const sub of subChunks) {
+        try {
+          await new Promise((r) => setTimeout(r, 150));
+          const subRes = await directusFetch(`/items/${collection}`, {
+            method: 'POST',
+            body: JSON.stringify(sub),
+          }, 4);
+          if (subRes && Array.isArray(subRes.data)) {
+            inserted.push(...subRes.data);
+          } else if (subRes && subRes.data) {
+            inserted.push(subRes.data);
+          }
+        } catch (subErr: any) {
+          console.warn(`Sub-chunk failed for ${collection}, falling back to single item inserts: ${subErr.message}`);
+          for (const item of sub) {
+            try {
+              await new Promise((r) => setTimeout(r, 200));
+              const singleRes = await directusFetch(`/items/${collection}`, {
+                method: 'POST',
+                body: JSON.stringify(item),
+              }, 4);
+              if (singleRes && singleRes.data) {
+                inserted.push(singleRes.data);
+              }
+            } catch (singleErr: any) {
+              console.error(`Failed to insert single item into ${collection}:`, singleErr.message);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return inserted;
+}
+
+// Resilient Batch Patcher with Concurrency Control & Delay
+async function directusSafeBatchPatch(collection: string, patchMap: Map<string, any>, chunkSize = 20) {
+  if (patchMap.size === 0) return;
+  const items = Array.from(patchMap.values());
+  const chunks = chunkArray(items, chunkSize);
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    if (i > 0) await new Promise((r) => setTimeout(r, 100));
+
+    await Promise.all(
+      chunk.map(async (c: any) => {
+        try {
+          await directusFetch(`/items/${collection}/${c.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(c),
+          }, 4);
+        } catch (err: any) {
+          console.warn(`Failed to patch item ${c.id} in ${collection}:`, err.message);
+        }
+      })
+    );
+  }
 }
 
 // Ensure at least one default tenant exists in Directus so foreign keys are valid
@@ -5349,28 +5461,16 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   // Insert personnel in batch into Directus
   if (personnelToInsertBatch.length > 0 && directusUrl && directusAdminToken) {
     try {
-      const pChunks = chunkArray(personnelToInsertBatch, 100);
-      for (const pChunk of pChunks) {
-        const insRes = await directusFetch('/items/personnel', {
-          method: 'POST',
-          body: JSON.stringify(pChunk),
-        });
-        if (insRes && Array.isArray(insRes.data)) {
-          importedPersonnelCount += insRes.data.length;
-          for (const p of insRes.data) {
-            personnelData.push(p);
-            legacyUidToPersonnelMap.set(String(p.id).toLowerCase(), p);
-            if (p.username) legacyUidToPersonnelMap.set(String(p.username).toLowerCase(), p);
-          }
-        }
+      const insertedPersonnel = await directusSafeBatchInsert('personnel', personnelToInsertBatch, 25);
+      importedPersonnelCount += insertedPersonnel.length;
+      for (const p of insertedPersonnel) {
+        personnelData.push(p);
+        legacyUidToPersonnelMap.set(String(p.id).toLowerCase(), p);
+        if (p.username) legacyUidToPersonnelMap.set(String(p.username).toLowerCase(), p);
       }
     } catch (pErr: any) {
       console.error('Directus bulk insert personnel error:', pErr.message);
       errors.push(`خطا در ثبت گروهی کارشناسان در دایرکتوس: ${pErr.message}`);
-      for (const p of personnelToInsertBatch) {
-        personnelData.push(p);
-        importedPersonnelCount++;
-      }
     }
   } else {
     for (const p of personnelToInsertBatch) {
@@ -5385,6 +5485,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   const legacyCustomerRefMap = new Map<string, any>();
   const existingPhoneToCustomerMap = new Map<string, any>();
   const customersToPatchMap = new Map<string, any>();
+  const directusValidCustomerIds = new Set<string>();
 
   // Fetch existing customer contacts from Directus & local memory
   let directusContactsList: any[] = [];
@@ -5429,8 +5530,10 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     ? directusCustomersList
     : [...directusCustomersList, ...customersData];
   for (const c of combinedCustomers) {
-    if (!c) continue;
-    if (c.id) legacyCustomerRefMap.set(String(c.id).toLowerCase(), c);
+    if (!c || !c.id) continue;
+    const cIdStr = String(c.id).toLowerCase();
+    directusValidCustomerIds.add(cIdStr);
+    legacyCustomerRefMap.set(cIdStr, c);
     if (c.interview_report) {
       const m = String(c.interview_report).match(/کد تماس\s+(\d+)/);
       if (m && m[1]) {
@@ -5564,9 +5667,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       // Pre-generate guaranteed UUID for Customer
       const newCustId = crypto.randomUUID();
 
-      // EXPLICIT REQUIREMENT 2:
-      // Phone numbers & communication channels MUST NOT be populated in customers collection fields!
-      // Keep mobile_numbers, landline_numbers, manager_phones, negotiator_phones, telegram_ids, instagram_ids, emails, websites empty or null in customers table!
       const newCustObj: any = {
         id: newCustId,
         company_name: companyName,
@@ -5611,10 +5711,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         existingPhoneToCustomerMap.set(m, newCustObj);
       }
 
-      // EXPLICIT REQUIREMENT 2:
-      // Populate ALL communication channels into the customer_contacts collection!
-
-      // 1. Mobile contacts
+      // Populate ALL communication channels into customer_contacts
       mobileList.forEach((m, idx) => {
         contactsToInsertBatch.push({
           id: crypto.randomUUID(),
@@ -5630,7 +5727,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         });
       });
 
-      // 2. Landline contacts
       landlineList.forEach((l) => {
         contactsToInsertBatch.push({
           id: crypto.randomUUID(),
@@ -5646,7 +5742,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         });
       });
 
-      // 3. Telegram contacts
       if (telegId) {
         const normTeleg = normalizeContactValue(telegId, 'telegram');
         contactsToInsertBatch.push({
@@ -5663,7 +5758,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         });
       }
 
-      // 4. Instagram contacts
       if (instaId) {
         const normInsta = normalizeContactValue(instaId, 'instagram');
         contactsToInsertBatch.push({
@@ -5680,7 +5774,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         });
       }
 
-      // 5. Email contacts
       if (email) {
         const normEmail = normalizeContactValue(email, 'email');
         contactsToInsertBatch.push({
@@ -5697,7 +5790,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         });
       }
 
-      // 6. Website contacts
       if (website) {
         const normWeb = normalizeContactValue(website, 'website');
         contactsToInsertBatch.push({
@@ -5719,49 +5811,34 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
-  // Insert customers & contacts batch into Directus
+  // Insert customers & contacts batch into Directus safely
   if (customersToInsertBatch.length > 0 && directusUrl && directusAdminToken) {
     try {
-      const cChunks = chunkArray(customersToInsertBatch, 100);
-      for (const cChunk of cChunks) {
-        const insRes = await directusFetch('/items/customers', {
-          method: 'POST',
-          body: JSON.stringify(cChunk),
-        });
-        if (insRes && Array.isArray(insRes.data)) {
-          importedCustomersCount += insRes.data.length;
-          for (const c of insRes.data) {
-            customersData.unshift(c);
-          }
+      const insertedCusts = await directusSafeBatchInsert('customers', customersToInsertBatch, 25);
+      importedCustomersCount += insertedCusts.length;
+
+      const createdCustIds = new Set<string>();
+      for (const c of insertedCusts) {
+        customersData.unshift(c);
+        if (c.id) {
+          const cIdStr = String(c.id).toLowerCase();
+          createdCustIds.add(cIdStr);
+          directusValidCustomerIds.add(cIdStr);
+          legacyCustomerRefMap.set(cIdStr, c);
         }
       }
 
-      // Batch insert customer_contacts
-      if (contactsToInsertBatch.length > 0) {
-        const ctChunks = chunkArray(contactsToInsertBatch, 100);
-        for (const ctChunk of ctChunks) {
-          try {
-            const insCtRes = await directusFetch('/items/customer_contacts', {
-              method: 'POST',
-              body: JSON.stringify(ctChunk),
-            });
-            if (insCtRes && Array.isArray(insCtRes.data)) {
-              for (const ct of insCtRes.data) {
-                contactsData.push(ct);
-              }
-            }
-          } catch (ctErr: any) {
-            console.warn('Customer contacts bulk insert warning:', ctErr.message);
-          }
+      // Filter contacts to ONLY those whose customer was successfully created in Directus
+      const validContacts = contactsToInsertBatch.filter((ct) => createdCustIds.has(String(ct.customer_id).toLowerCase()));
+      if (validContacts.length > 0) {
+        const insertedCt = await directusSafeBatchInsert('customer_contacts', validContacts, 25);
+        for (const ct of insertedCt) {
+          contactsData.push(ct);
         }
       }
     } catch (cErr: any) {
       console.error('Directus bulk insert customers error:', cErr.message);
       errors.push(`خطا در ثبت گروهی مشتریان در دایرکتوس: ${cErr.message}`);
-      for (const c of customersToInsertBatch) {
-        customersData.unshift(c);
-        importedCustomersCount++;
-      }
     }
   } else {
     for (const c of customersToInsertBatch) {
@@ -5775,22 +5852,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
 
   // Execute batch PATCH updates for existing customer marketer assignments
   if (customersToPatchMap.size > 0 && directusUrl && directusAdminToken) {
-    const patchArray = Array.from(customersToPatchMap.values());
-    const cPatchChunks = chunkArray(patchArray, 50);
-    for (const chunk of cPatchChunks) {
-      await Promise.all(
-        chunk.map((c) =>
-          directusFetch(`/items/customers/${c.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              assigned_marketer_id: c.assigned_marketer_id,
-              assigned_marketer_name: c.assigned_marketer_name,
-              date_updated: new Date().toISOString(),
-            }),
-          }).catch((err) => console.warn('Re-assigning customer marketer error:', err.message))
-        )
-      );
-    }
+    await directusSafeBatchPatch('customers', customersToPatchMap, 20);
   }
 
   // --------------------------------------------------------------------------
@@ -5802,7 +5864,10 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       const cRes = await directusFetchAllPages('/items/customers?fields=id,interview_report,assigned_marketer_name,assigned_marketer_id,mobile_numbers,status,next_followup_date');
       if (cRes && Array.isArray(cRes.data)) {
         for (const c of cRes.data) {
-          legacyCustomerRefMap.set(String(c.id).toLowerCase(), c);
+          if (!c || !c.id) continue;
+          const cIdStr = String(c.id).toLowerCase();
+          directusValidCustomerIds.add(cIdStr);
+          legacyCustomerRefMap.set(cIdStr, c);
           if (c.interview_report) {
             const m = String(c.interview_report).match(/کد تماس\s+(\d+)/);
             if (m && m[1]) {
@@ -5852,9 +5917,23 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
                              (normCallNum && existingPhoneToCustomerMap.get(normCallNum)) ||
                              customersData.find(c => (callId && c.interview_report && c.interview_report.includes(callId)));
 
-      if (!targetCustomer) {
+      if (!targetCustomer || !targetCustomer.id) {
         skippedCount++;
         continue;
+      }
+
+      // Foreign key protection: ensure targetCustomer.id actually exists in Directus
+      if (directusUrl && directusAdminToken) {
+        const targetCustIdStr = String(targetCustomer.id).toLowerCase();
+        if (!directusValidCustomerIds.has(targetCustIdStr)) {
+          const checkCust = await directusFetch(`/items/customers/${targetCustomer.id}`).catch(() => null);
+          if (checkCust && checkCust.data && checkCust.data.id) {
+            directusValidCustomerIds.add(targetCustIdStr);
+          } else {
+            skippedCount++;
+            continue;
+          }
+        }
       }
 
       // Resolve author/negotiator personnel accurately
@@ -5933,29 +6012,17 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
-  // Insert reports in batch into Directus
+  // Insert reports safely into Directus
   if (reportsToInsertBatch.length > 0 && directusUrl && directusAdminToken) {
     try {
-      const rChunks = chunkArray(reportsToInsertBatch, 100);
-      for (const rChunk of rChunks) {
-        const insRes = await directusFetch('/items/customer_reports', {
-          method: 'POST',
-          body: JSON.stringify(rChunk),
-        });
-        if (insRes && Array.isArray(insRes.data)) {
-          importedReportsCount += insRes.data.length;
-          for (const r of insRes.data) {
-            reportsData.unshift(r);
-          }
-        }
+      const insertedReps = await directusSafeBatchInsert('customer_reports', reportsToInsertBatch, 25);
+      importedReportsCount += insertedReps.length;
+      for (const r of insertedReps) {
+        reportsData.unshift(r);
       }
     } catch (rErr: any) {
       console.error('Directus bulk insert reports error:', rErr.message);
       errors.push(`خطا در ثبت گروهی گزارش‌ها در دایرکتوس: ${rErr.message}`);
-      for (const r of reportsToInsertBatch) {
-        reportsData.unshift(r);
-        importedReportsCount++;
-      }
     }
   } else {
     for (const r of reportsToInsertBatch) {
@@ -5976,18 +6043,13 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   }
 
   if (customersToPatchMap.size > 0 && directusUrl && directusAdminToken) {
-    const patchArray = Array.from(customersToPatchMap.values());
-    const cPatchChunks = chunkArray(patchArray, 50);
-    for (const chunk of cPatchChunks) {
-      await Promise.all(
-        chunk.map((c) =>
-          directusFetch(`/items/customers/${c.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify(c),
-          }).catch((err) => console.warn('Customer update error:', err.message))
-        )
-      );
+    const validPatchMap = new Map<string, any>();
+    for (const [id, patchObj] of customersToPatchMap.entries()) {
+      if (directusValidCustomerIds.has(String(id).toLowerCase())) {
+        validPatchMap.set(id, patchObj);
+      }
     }
+    await directusSafeBatchPatch('customers', validPatchMap, 20);
   }
 
   return res.json({
