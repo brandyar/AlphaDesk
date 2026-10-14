@@ -1498,31 +1498,54 @@ const DIRECTUS_ADMIN_ROLE_IDS = [
 const DIRECTUS_ADMIN_ROLE_ID = '59e261e1-56f4-401e-9889-4971e2c3c4ce';
 const DIRECTUS_STAFF_ROLE_ID = 'b9c11357-4926-47ad-b020-6080cb2a62df';
 
+// High-performance In-Memory Cache for Directus Data
+interface DataCache<T> {
+  timestamp: number;
+  data: T;
+  meta?: any;
+}
+let customersCache: DataCache<any[]> | null = null;
+let reportsCache: DataCache<any[]> | null = null;
+const CACHE_TTL_MS = 25000; // 25 seconds cache
+
+function invalidateCustomersCache() {
+  customersCache = null;
+}
+
+function invalidateReportsCache() {
+  reportsCache = null;
+}
+
 // ----------------- BFF API & RBAC LAYER ----------------- //
 
 function getRequestUser(req: Request) {
   const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string) || '';
   const personnelId = (req.headers['x-personnel-id'] as string) || (req.query.personnel_id as string) || userId;
-  const userRole = (req.headers['x-user-role'] as string) || (req.query.user_role as string) || 'admin';
+  const userRole = (req.headers['x-user-role'] as string) || (req.query.user_role as string) || '';
   const roleId = (req.headers['x-role-id'] as string) || (req.query.role_id as string) || '';
   const userName = req.headers['x-user-name'] ? decodeURIComponent(req.headers['x-user-name'] as string) : '';
   const userEmail = (req.headers['x-user-email'] as string) || '';
   const tenantId = getRequestTenantId(req);
 
-  const isAdmin =
-    userRole === 'admin' ||
-    userRole === 'sales_manager' ||
-    DIRECTUS_ADMIN_ROLE_IDS.includes(roleId);
+  // Authenticated context exists only if a user or personnel ID or auth header is provided
+  const hasUserContext = Boolean(userId || personnelId || userEmail || req.headers['authorization']);
+
+  // Admin is strictly someone with admin role in authenticated context
+  const isAdmin = Boolean(
+    hasUserContext &&
+    (userRole === 'admin' || userRole === 'sales_manager' || DIRECTUS_ADMIN_ROLE_IDS.includes(roleId))
+  );
 
   return {
     userId,
     personnelId,
-    userRole: isAdmin ? 'admin' : 'marketer',
+    userRole: isAdmin ? 'admin' : (userRole || 'marketer'),
     roleId,
     isAdmin,
     userName,
     userEmail,
     tenantId,
+    isAuthenticated: hasUserContext,
   };
 }
 
@@ -2524,6 +2547,7 @@ app.post('/api/customers/bulk-extend', async (req: Request, res: Response) => {
     }
   }
 
+  invalidateCustomersCache();
   res.json({
     success: true,
     updatedCount,
@@ -2604,6 +2628,8 @@ app.post('/api/customers/bulk-switch', async (req: Request, res: Response) => {
     }
   }
 
+  invalidateCustomersCache();
+  invalidateReportsCache();
   res.json({
     success: true,
     updatedCount,
@@ -2775,81 +2801,129 @@ app.delete('/api/contacts/:id', async (req: Request, res: Response) => {
   res.status(204).send();
 });
 
-// Customers API with BFF Role-Based Access Control
+// Customers API with BFF Role-Based Access Control and Performance Caching
 app.get('/api/customers', async (req: Request, res: Response) => {
-  const { search, status, marketer_id, expired_only, page, limit } = req.query;
+  const { search, status, marketer_id, expired_only, page, limit, free_only } = req.query;
   const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
 
   const reqLimit = limit ? parseInt(String(limit), 10) : 500;
   const reqPage = page ? parseInt(String(page), 10) : 1;
+  const isFreeOnly = free_only === 'true';
+
+  // Security guard: If request is from an unauthenticated user (guest / initial load before auth),
+  // NEVER expose company customers. Only return empty list or free pool if requested.
+  if (!isAdmin && !userId && !personnelId && !isFreeOnly) {
+    return res.json([]);
+  }
 
   if (directusUrl && directusAdminToken) {
     try {
-      let result: any;
-      if (reqLimit <= 0 || reqLimit >= 5000) {
-        result = await directusFetchAllPages('/items/customers?sort=-date_created&fields=*,contacts.*');
+      const now = Date.now();
+      let allCustomersList: any[] = [];
+
+      // 1. NON-ADMIN MARKETER:
+      // Optimized path: query Directus directly for ONLY this marketer's customers,
+      // avoiding fetching 5,000+ items across the network!
+      if (!isAdmin && (userId || personnelId || userName) && !isFreeOnly) {
+        if (customersCache && now - customersCache.timestamp < CACHE_TTL_MS) {
+          allCustomersList = customersCache.data;
+        } else {
+          const orClauses: string[] = [];
+          if (personnelId) orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_id][_eq]=${encodeURIComponent(personnelId)}`);
+          if (userId && userId !== personnelId) orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_id][_eq]=${encodeURIComponent(userId)}`);
+          if (userName) orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_name][_eq]=${encodeURIComponent(userName)}`);
+
+          const qStr = orClauses.length > 0 ? `&${orClauses.join('&')}` : '';
+          const directusQuery = `/items/customers?sort=-date_created&limit=1000&fields=*,contacts.*${qStr}`;
+          const fastRes = await directusFetch(directusQuery).catch(() => null);
+          if (fastRes && Array.isArray(fastRes.data)) {
+            allCustomersList = fastRes.data;
+          }
+        }
       } else {
-        const directusQuery = `/items/customers?sort=-date_created&meta=*&fields=*,contacts.*&limit=${reqLimit}&page=${reqPage}`;
-        result = await directusFetch(directusQuery);
+        // 2. ADMIN or FREE POOL:
+        // Use in-memory cache if warm, otherwise query Directus and populate cache
+        if (customersCache && now - customersCache.timestamp < CACHE_TTL_MS) {
+          allCustomersList = customersCache.data;
+        } else {
+          let fetchRes: any;
+          if (reqLimit <= 0 || reqLimit >= 5000) {
+            fetchRes = await directusFetchAllPages('/items/customers?sort=-date_created&fields=*,contacts.*');
+          } else {
+            fetchRes = await directusFetch(`/items/customers?sort=-date_created&meta=*&fields=*,contacts.*&limit=${reqLimit}&page=${reqPage}`);
+          }
+          if (fetchRes && Array.isArray(fetchRes.data)) {
+            allCustomersList = fetchRes.data;
+            customersCache = {
+              timestamp: now,
+              data: allCustomersList,
+              meta: fetchRes.meta,
+            };
+          }
+        }
       }
-      if (result && Array.isArray(result.data)) {
-        let list = result.data.map((c: any) => computeCustomerExpiration(c));
 
-        // Tenant-based filtering
-        if (tenantId && tenantId !== 'all') {
-          list = list.filter((c: any) => matchesTenant(c.tenant_id, tenantId));
-        }
+      let list = allCustomersList.map((c: any) => computeCustomerExpiration(c));
 
-        // Role-Based Filtering:
-        // Admin sees ALL customers
-        // Staff/Marketer sees ONLY their own assigned customers
-        if (!isAdmin && (userId || personnelId)) {
-          list = list.filter((c: any) =>
-            c.assigned_marketer_id === personnelId ||
-            c.assigned_marketer_id === userId ||
-            (userName && c.assigned_marketer_name === userName)
-          );
-        }
-
-        if (search && typeof search === 'string') {
-          const s = search.toLowerCase();
-          list = list.filter((c: any) =>
-            c.company_name?.toLowerCase().includes(s) ||
-            c.manager_name?.toLowerCase().includes(s) ||
-            c.city?.toLowerCase().includes(s) ||
-            c.business_type?.toLowerCase().includes(s) ||
-            (Array.isArray(c.mobile_numbers) && c.mobile_numbers.some((m: string) => m.includes(s))) ||
-            (Array.isArray(c.contacts) && c.contacts.some((ct: any) =>
-              ct.value?.toLowerCase().includes(s) ||
-              ct.contact_name?.toLowerCase().includes(s) ||
-              ct.contact_role?.toLowerCase().includes(s)
-            ))
-          );
-        }
-
-        if (status && typeof status === 'string' && status !== 'همه') {
-          list = list.filter((c: any) => c.status === status);
-        }
-
-        if (marketer_id && typeof marketer_id === 'string' && marketer_id !== 'همه') {
-          list = list.filter((c: any) => c.assigned_marketer_id === marketer_id);
-        }
-
-        if (expired_only === 'true') {
-          list = list.filter((c: any) => c.is_expired);
-        }
-
-        const totalMetaCount = result.meta?.total_count ? parseInt(String(result.meta.total_count), 10) : list.length;
-        const filterMetaCount = result.meta?.filter_count ? parseInt(String(result.meta.filter_count), 10) : list.length;
-
-        // Add pagination response headers
-        res.setHeader('X-Total-Count', String(totalMetaCount));
-        res.setHeader('X-Filter-Count', String(filterMetaCount));
-        res.setHeader('X-Page', String(reqPage));
-        res.setHeader('X-Limit', String(reqLimit));
-
-        return res.json(list);
+      // Tenant-based filtering
+      if (tenantId && tenantId !== 'all') {
+        list = list.filter((c: any) => matchesTenant(c.tenant_id, tenantId));
       }
+
+      // Role-Based Filtering:
+      // Marketer sees ONLY their own assigned customers (unless viewing free pool)
+      if (!isAdmin && (userId || personnelId || userName) && !isFreeOnly) {
+        list = list.filter((c: any) =>
+          c.assigned_marketer_id === personnelId ||
+          c.assigned_marketer_id === userId ||
+          (userName && c.assigned_marketer_name === userName)
+        );
+      } else if (isFreeOnly) {
+        list = list.filter((c: any) => {
+          if (c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
+          const isUnassigned = !c.assigned_marketer_id || c.assigned_marketer_name === 'تخصیص نیافته';
+          const isDeadlinePassed = Boolean(
+            c.assignment_deadline && new Date().getTime() > new Date(c.assignment_deadline).getTime()
+          );
+          return Boolean(c.is_expired || isDeadlinePassed || isUnassigned);
+        });
+      }
+
+      if (search && typeof search === 'string') {
+        const s = search.toLowerCase();
+        list = list.filter((c: any) =>
+          c.company_name?.toLowerCase().includes(s) ||
+          c.manager_name?.toLowerCase().includes(s) ||
+          c.city?.toLowerCase().includes(s) ||
+          c.business_type?.toLowerCase().includes(s) ||
+          (Array.isArray(c.mobile_numbers) && c.mobile_numbers.some((m: string) => m.includes(s))) ||
+          (Array.isArray(c.contacts) && c.contacts.some((ct: any) =>
+            ct.value?.toLowerCase().includes(s) ||
+            ct.contact_name?.toLowerCase().includes(s) ||
+            ct.contact_role?.toLowerCase().includes(s)
+          ))
+        );
+      }
+
+      if (status && typeof status === 'string' && status !== 'همه') {
+        list = list.filter((c: any) => c.status === status);
+      }
+
+      if (marketer_id && typeof marketer_id === 'string' && marketer_id !== 'همه') {
+        list = list.filter((c: any) => c.assigned_marketer_id === marketer_id);
+      }
+
+      if (expired_only === 'true') {
+        list = list.filter((c: any) => c.is_expired);
+      }
+
+      const totalCount = list.length;
+      res.setHeader('X-Total-Count', String(totalCount));
+      res.setHeader('X-Filter-Count', String(totalCount));
+      res.setHeader('X-Page', String(reqPage));
+      res.setHeader('X-Limit', String(reqLimit));
+
+      return res.json(list);
     } catch (e: any) {
       console.error('Fetch customers error:', e.message);
       return res.status(502).json({
@@ -3117,6 +3191,7 @@ app.post('/api/customers', async (req: Request, res: Response) => {
           recentCustomerCreations.splice(0, recentCustomerCreations.length - 50);
         }
 
+        invalidateCustomersCache();
         return res.status(201).json(fullCustomer);
       } catch (err: any) {
         console.error('Customer creation failed:', err.message);
@@ -3143,6 +3218,7 @@ app.post('/api/customers', async (req: Request, res: Response) => {
       recentCustomerCreations.splice(0, recentCustomerCreations.length - 50);
     }
 
+    invalidateCustomersCache();
     return res.status(201).json(fullCreated);
   } finally {
     activeCustomerCreationLocks.delete(lockKey);
@@ -3305,6 +3381,7 @@ app.patch('/api/customers/:id', async (req: Request, res: Response) => {
         contacts: updatedContacts
       };
 
+      invalidateCustomersCache();
       return res.json(fullCustomer);
     } catch (err: any) {
       console.error('Customer update error:', err.message);
@@ -3335,6 +3412,7 @@ app.patch('/api/customers/:id', async (req: Request, res: Response) => {
     date_updated: nowIso
   };
 
+  invalidateCustomersCache();
   res.json(customersData[index]);
 });
 
@@ -3376,6 +3454,8 @@ app.delete('/api/customers/:id', async (req: Request, res: Response) => {
 
       await directusFetch(`/items/customers/${req.params.id}`, { method: 'DELETE' });
 
+      invalidateCustomersCache();
+      invalidateReportsCache();
       return res.json({ success: true });
     } catch (err: any) {
       console.error('Customer delete error:', err.message);
@@ -3389,6 +3469,8 @@ app.delete('/api/customers/:id', async (req: Request, res: Response) => {
   customersData = customersData.filter(c => c.id !== req.params.id);
   reportsData = reportsData.filter(r => r.customer_id !== req.params.id);
   contactsData = contactsData.filter(ct => ct.customer_id !== req.params.id);
+  invalidateCustomersCache();
+  invalidateReportsCache();
   res.json({ success: true });
 });
 
@@ -3451,6 +3533,8 @@ app.post('/api/customers/:id/reassign', async (req: Request, res: Response) => {
         body: JSON.stringify(reportHistory)
       }).catch(() => {});
 
+      invalidateCustomersCache();
+      invalidateReportsCache();
       return res.json(patchedCust.data);
     } catch (err: any) {
       console.error('Customer reassign error:', err.message);
@@ -3471,6 +3555,8 @@ app.post('/api/customers/:id/reassign', async (req: Request, res: Response) => {
     ...patchData
   };
 
+  invalidateCustomersCache();
+  invalidateReportsCache();
   res.json(customersData[index]);
 });
 
@@ -3719,6 +3805,8 @@ app.post('/api/customers/:id/claim-free', async (req: Request, res: Response) =>
       }
       reportsData.unshift(reportHistory);
 
+      invalidateCustomersCache();
+      invalidateReportsCache();
       return res.json({
         success: true,
         message: `پرونده با موفقیت به شما اختصاص یافت و مهلت ${days} روزه برای شما ثبت شد.`,
@@ -3753,6 +3841,8 @@ app.post('/api/customers/:id/claim-free', async (req: Request, res: Response) =>
 
   const updatedCust = customersData[idx] || { ...targetCustomer, ...patchData };
 
+  invalidateCustomersCache();
+  invalidateReportsCache();
   res.json({
     success: true,
     message: `پرونده با موفقیت به شما اختصاص یافت و مهلت ${days} روزه برای شما ثبت شد.`,
@@ -3922,6 +4012,8 @@ app.post('/api/customers/merge', async (req: Request, res: Response) => {
         contacts: updatedContactsRes?.data || []
       };
 
+      invalidateCustomersCache();
+      invalidateReportsCache();
       return res.json({
         success: true,
         message: `تعداد ${sourceCustomers.length} پرونده با موفقیت در پرونده «${primaryCust.company_name}» ادغام گردیدند.`,
@@ -4001,6 +4093,8 @@ app.post('/api/customers/merge', async (req: Request, res: Response) => {
   // Remove source customers
   customersData = customersData.filter(c => !merged_customer_ids.includes(c.id));
 
+  invalidateCustomersCache();
+  invalidateReportsCache();
   return res.json({
     success: true,
     message: 'ادغام مشتریان با موفقیت انجام شد.',
@@ -4014,44 +4108,89 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
   const reqLimit = limit ? parseInt(String(limit), 10) : (customer_id ? 200 : 500);
   const reqPage = page ? parseInt(String(page), 10) : 1;
 
+  // Security guard: unauthenticated request without customer_id gets nothing
+  if (!isAdmin && !userId && !personnelId && !userName && !customer_id) {
+    return res.json([]);
+  }
+
   if (directusUrl && directusAdminToken) {
     try {
-      let result: any;
-      const custFilter = customer_id ? `&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}` : '';
-      if (reqLimit <= 0 || reqLimit >= 5000) {
-        result = await directusFetchAllPages(`/items/customer_reports?sort=-date_created${custFilter}`);
-      } else {
-        const q = `?sort=-date_created&meta=*${custFilter}&limit=${reqLimit}&page=${reqPage}`;
-        result = await directusFetch(`/items/customer_reports${q}`);
-      }
-      if (result && Array.isArray(result.data)) {
-        let reportsList = result.data;
+      const now = Date.now();
+      let reportsList: any[] = [];
 
-        // Tenant-based filtering
-        if (tenantId && tenantId !== 'all') {
-          reportsList = reportsList.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
-        }
-
-        // Non-admin Marketer/Staff only sees their own reports when browsing general reports list
-        if (!isAdmin && (userId || personnelId || userName) && !customer_id) {
-          reportsList = reportsList.filter((r: any) =>
+      // 1. If viewing specific customer's reports:
+      if (customer_id) {
+        const custFilter = `&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}&limit=200`;
+        const cRes = await directusFetch(`/items/customer_reports?sort=-date_created${custFilter}`);
+        reportsList = Array.isArray(cRes?.data) ? cRes.data : [];
+      } else if (!isAdmin && (userId || personnelId || userName)) {
+        // 2. Non-admin marketer viewing their own reports:
+        // Check if reportsCache is warm
+        if (reportsCache && now - reportsCache.timestamp < CACHE_TTL_MS) {
+          reportsList = reportsCache.data.filter((r: any) =>
             (userName && r.negotiator_name === userName) ||
             r.created_by === userName ||
             (userId && r.created_by === userId) ||
             (personnelId && r.created_by === personnelId)
           );
+        } else {
+          // Query Directus with marketer filter directly - 100x faster than fetching all 32,000!
+          const orClauses: string[] = [];
+          if (userName) {
+            orClauses.push(`filter[_or][${orClauses.length}][negotiator_name][_eq]=${encodeURIComponent(userName)}`);
+            orClauses.push(`filter[_or][${orClauses.length}][created_by][_eq]=${encodeURIComponent(userName)}`);
+          }
+          if (userId) orClauses.push(`filter[_or][${orClauses.length}][created_by][_eq]=${encodeURIComponent(userId)}`);
+          if (personnelId && personnelId !== userId) orClauses.push(`filter[_or][${orClauses.length}][created_by][_eq]=${encodeURIComponent(personnelId)}`);
+          const qStr = orClauses.length > 0 ? `&${orClauses.join('&')}` : '';
+          const fastRes = await directusFetch(`/items/customer_reports?sort=-date_created&limit=1000${qStr}`).catch(() => null);
+          reportsList = Array.isArray(fastRes?.data) ? fastRes.data : [];
         }
-
-        const totalMetaCount = result.meta?.total_count ? parseInt(String(result.meta.total_count), 10) : reportsList.length;
-        const filterMetaCount = result.meta?.filter_count ? parseInt(String(result.meta.filter_count), 10) : reportsList.length;
-
-        res.setHeader('X-Total-Count', String(totalMetaCount));
-        res.setHeader('X-Filter-Count', String(filterMetaCount));
-        res.setHeader('X-Page', String(reqPage));
-        res.setHeader('X-Limit', String(reqLimit));
-
-        return res.json(reportsList);
+      } else {
+        // 3. Admin viewing general reports:
+        if (reportsCache && now - reportsCache.timestamp < CACHE_TTL_MS) {
+          reportsList = reportsCache.data;
+        } else {
+          let fetchRes: any;
+          if (reqLimit <= 0 || reqLimit >= 5000) {
+            // Fetch up to 2500 recent reports to avoid freezing Directus with 35,000 items
+            fetchRes = await directusFetch('/items/customer_reports?sort=-date_created&limit=2500');
+          } else {
+            fetchRes = await directusFetch(`/items/customer_reports?sort=-date_created&meta=*&limit=${reqLimit}&page=${reqPage}`);
+          }
+          if (fetchRes && Array.isArray(fetchRes.data)) {
+            reportsList = fetchRes.data;
+            reportsCache = {
+              timestamp: now,
+              data: reportsList,
+              meta: fetchRes.meta,
+            };
+          }
+        }
       }
+
+      // Tenant-based filtering
+      if (tenantId && tenantId !== 'all') {
+        reportsList = reportsList.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
+      }
+
+      // Non-admin safety filter
+      if (!isAdmin && (userId || personnelId || userName) && !customer_id) {
+        reportsList = reportsList.filter((r: any) =>
+          (userName && r.negotiator_name === userName) ||
+          r.created_by === userName ||
+          (userId && r.created_by === userId) ||
+          (personnelId && r.created_by === personnelId)
+        );
+      }
+
+      const totalCount = reportsList.length;
+      res.setHeader('X-Total-Count', String(totalCount));
+      res.setHeader('X-Filter-Count', String(totalCount));
+      res.setHeader('X-Page', String(reqPage));
+      res.setHeader('X-Limit', String(reqLimit));
+
+      return res.json(reportsList);
     } catch (e: any) {
       return res.status(502).json({ error: `خطا در دریافت گزارش‌ها از پایگاه داده مرکزی: ${e.message}` });
     }
@@ -4145,6 +4284,8 @@ app.post('/api/customer-reports', async (req: Request, res: Response) => {
         body: JSON.stringify(customerUpdatePayload)
       }).catch((e) => console.warn('Customer status sync warning:', e.message));
 
+      invalidateCustomersCache();
+      invalidateReportsCache();
       return res.status(201).json(created.data || newReport);
     } catch (err: any) {
       console.error('Report create error:', err.message);
@@ -4155,6 +4296,8 @@ app.post('/api/customer-reports', async (req: Request, res: Response) => {
     }
   }
 
+  invalidateCustomersCache();
+  invalidateReportsCache();
   res.status(201).json(newReport);
 });
 
@@ -6051,6 +6194,9 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
     await directusSafeBatchPatch('customers', validPatchMap, 20);
   }
+
+  invalidateCustomersCache();
+  invalidateReportsCache();
 
   return res.json({
     success: errors.length === 0 || importedCustomersCount > 0 || importedReportsCount > 0 || customersToPatchMap.size > 0,

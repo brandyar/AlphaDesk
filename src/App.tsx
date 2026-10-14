@@ -217,12 +217,34 @@ export default function App() {
   }, [activeTab, displayedTab]);
 
   // Initial Data Load
-  const loadAllData = async (activeP?: Personnel | null) => {
+  const isFetchingRef = useRef(false);
+
+  // Initial Data Load with intelligent user-scoped querying and caching
+  const loadAllData = async (activeP?: Personnel | null, activeUser?: AuthUser | null) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
+      const targetUser = activeUser !== undefined ? activeUser : currentUser;
+      const targetPContext = activeP !== undefined ? activeP : currentPersonnel;
+
+      const isAdmin = Boolean(
+        targetUser?.is_admin ||
+        targetUser?.app_role === 'admin' ||
+        targetUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+        targetUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+        targetPContext?.role === 'admin'
+      );
+
+      // Fast, lightweight query limits:
+      // If admin, load up to 5000 customers & 2000 reports (served in ~1ms from server cache).
+      // If non-admin marketer, load up to 500 customers & 500 reports (only their own records).
+      const customerLimit = isAdmin ? 5000 : 500;
+      const reportLimit = isAdmin ? 2000 : 500;
+
       const [pData, cData, rData, lData, aData, bStatus, lrData, arData, tData] = await Promise.all([
         fetchPersonnel().catch(() => []),
-        fetchCustomers({ limit: -1 }).catch(() => []),
-        fetchCustomerReports(undefined, { limit: -1 }).catch(() => []),
+        fetchCustomers({ limit: customerLimit }).catch(() => []),
+        fetchCustomerReports(undefined, { limit: reportLimit }).catch(() => []),
         fetchColdLeads().catch(() => []),
         fetchAdminReports().catch(() => []),
         fetchBffStatus().catch(() => null),
@@ -235,20 +257,18 @@ export default function App() {
       setTenants(tData);
       
       // Accurately match logged-in user to their specific personnel record
-      let targetPersonnel = activeP;
-      if (!targetPersonnel && currentUser) {
+      let targetPersonnel = activeP !== undefined ? activeP : null;
+      if (!targetPersonnel && targetUser) {
         targetPersonnel = pData.find(
           (p) =>
-            (currentUser.email && p.email?.toLowerCase() === currentUser.email?.toLowerCase()) ||
-            (currentUser.id && (p.id === currentUser.id || p.user_id === currentUser.id))
+            (targetUser.email && p.email?.toLowerCase() === targetUser.email?.toLowerCase()) ||
+            (targetUser.id && (p.id === targetUser.id || p.user_id === targetUser.id))
         ) || null;
       }
       if (!targetPersonnel && currentPersonnel) {
         targetPersonnel = pData.find((p) => p.id === currentPersonnel.id) || currentPersonnel;
       }
-      if (!targetPersonnel && !currentUser && pData.length > 0) {
-        targetPersonnel = pData[0];
-      }
+      // CRITICAL SECURITY: Never assign pData[0] if user is not logged in!
 
       if (targetPersonnel) {
         setCurrentPersonnel(targetPersonnel);
@@ -256,10 +276,10 @@ export default function App() {
 
         // For non-admin, auto-correct active tenant if they don't have access to 'all' or selected tenant
         const isUserAdmin = Boolean(
-          currentUser?.is_admin ||
-          currentUser?.app_role === 'admin' ||
-          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+          targetUser?.is_admin ||
+          targetUser?.app_role === 'admin' ||
+          targetUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+          targetUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
           targetPersonnel.role === 'admin'
         );
 
@@ -296,88 +316,120 @@ export default function App() {
       console.error('Error loading data:', e);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
   };
 
   useEffect(() => {
     loadAllData();
 
-    // Periodic interval to check expiration timers every 30 seconds
+    // Lightweight status refresh every 45 seconds (does NOT spam large datasets)
     const interval = setInterval(() => {
-      fetchCustomers({ limit: 10000 }).then(setCustomers).catch(() => {});
-    }, 30000);
+      fetchBffStatus().then(setBffStatus).catch(() => {});
+    }, 45000);
 
     return () => clearInterval(interval);
   }, []);
 
-  // When active personnel (role/user) switches, update BFF context and reload role-scoped data
-  useEffect(() => {
-    if (currentPersonnel) {
-      setApiPersonnelContext(currentPersonnel);
-      Promise.all([
-        fetchCustomers({ limit: 10000 }).catch(() => []),
-        fetchCustomerReports(undefined, { limit: 10000 }).catch(() => []),
-        fetchColdLeads().catch(() => []),
-        fetchAdminReports().catch(() => []),
-      ]).then(([cData, rData, lData, aData]) => {
-        setCustomers(cData);
-        setReports(rData);
-        setColdLeads(lData);
-        setAdminReports(aData);
-      });
-    }
-  }, [currentPersonnel]);
+  const handleSelectPersonnel = (p: Personnel | null) => {
+    setCurrentPersonnel(p);
+    setApiPersonnelContext(p);
+    setCustomers([]);
+    setReports([]);
+    setLoading(true);
+    loadAllData(p, currentUser);
+  };
 
   const handleAuthSuccess = (authData: AuthResponse) => {
+    // 1. Immediately reset data state so previous session or full data is cleared instantly
+    setCustomers([]);
+    setReports([]);
+    setColdLeads([]);
+    setAdminReports([]);
+    setLoading(true);
+
+    // 2. Set user and personnel context
     setCurrentUser(authData.user);
     if (authData.personnel) {
       setCurrentPersonnel(authData.personnel);
       setApiPersonnelContext(authData.personnel);
     }
     showToast(`خوش آمدید ${authData.user.name} (${authData.user.is_admin ? 'مدیر سیستم' : 'کارشناس فروش'})`, 'success');
-    loadAllData(authData.personnel);
+    loadAllData(authData.personnel, authData.user);
   };
 
   const handleLogout = () => {
     logoutUser();
     setCurrentUser(null);
+    setCurrentPersonnel(null);
+    setApiPersonnelContext(null);
+    setCustomers([]);
+    setReports([]);
+    setColdLeads([]);
+    setAdminReports([]);
     showToast('از حساب کاربری خود خارج شدید.', 'info');
-    loadAllData();
+    loadAllData(null, null);
   };
 
-  // Filter customers for current view
-  const filteredCustomers = customers.filter((c) => {
-    if (!c) return false;
-    if (showExpiredOnly && !c.is_expired) return false;
-    if (selectedMarketerId !== 'همه' && c.assigned_marketer_id !== selectedMarketerId) return false;
-    if (statusFilter !== 'همه') {
-      if (statusFilter === 'قرارداد' || statusFilter === 'قرارداد / فاکتور') {
-        const stStr = String(c.status);
-        const isContract = stStr === 'قرارداد' || stStr === 'قرارداد / فاکتور' || stStr === 'قرارداد/فاکتور';
-        if (!isContract) return false;
-      } else if (c.status !== statusFilter) {
-        return false;
-      }
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchCompany = c.company_name?.toLowerCase().includes(q);
-      const matchManager = c.manager_name?.toLowerCase().includes(q);
-      const matchCity = c.city?.toLowerCase().includes(q);
-      const matchJob = c.business_type?.toLowerCase().includes(q);
-      const matchPhone = Array.isArray(c.mobile_numbers) && c.mobile_numbers.some((m) => m && m.includes(q));
-      const matchContact = Array.isArray(c.contacts) && c.contacts.some(
-        (ct) =>
-          (ct?.value && ct.value.toLowerCase().includes(q)) ||
-          (ct?.contact_name && ct.contact_name.toLowerCase().includes(q)) ||
-          (ct?.contact_role && ct.contact_role.toLowerCase().includes(q))
-      );
-      if (!matchCompany && !matchManager && !matchCity && !matchJob && !matchPhone && !matchContact) return false;
-    }
-    return true;
-  });
+  // Strictly user-scoped customers: if non-admin, strictly restrict to this marketer's portfolio
+  const userScopedCustomers = React.useMemo(() => {
+    if (isCurrentUserAdmin) return customers;
+    if (!currentPersonnel && !currentUser) return [];
+    return customers.filter((c) =>
+      (currentPersonnel && c.assigned_marketer_id === currentPersonnel.id) ||
+      (currentPersonnel?.user_id && c.assigned_marketer_id === currentPersonnel.user_id) ||
+      (currentPersonnel?.name && c.assigned_marketer_name === currentPersonnel.name) ||
+      (currentUser?.id && c.assigned_marketer_id === currentUser.id)
+    );
+  }, [customers, isCurrentUserAdmin, currentPersonnel, currentUser]);
 
-  const expiredCount = customers.filter((c) => c.is_expired).length;
+  // Strictly user-scoped reports: if non-admin, strictly restrict to this marketer's reports
+  const userScopedReports = React.useMemo(() => {
+    if (isCurrentUserAdmin) return reports;
+    if (!currentPersonnel && !currentUser) return [];
+    return reports.filter((r) =>
+      (currentPersonnel?.name && r.negotiator_name === currentPersonnel.name) ||
+      r.created_by === currentPersonnel?.name ||
+      (currentPersonnel?.id && r.created_by === currentPersonnel.id) ||
+      (currentUser?.id && r.created_by === currentUser.id)
+    );
+  }, [reports, isCurrentUserAdmin, currentPersonnel, currentUser]);
+
+  // Filter customers for current view
+  const filteredCustomers = React.useMemo(() => {
+    return userScopedCustomers.filter((c) => {
+      if (!c) return false;
+      if (showExpiredOnly && !c.is_expired) return false;
+      if (isCurrentUserAdmin && selectedMarketerId !== 'همه' && c.assigned_marketer_id !== selectedMarketerId) return false;
+      if (statusFilter !== 'همه') {
+        if (statusFilter === 'قرارداد' || statusFilter === 'قرارداد / فاکتور') {
+          const stStr = String(c.status);
+          const isContract = stStr === 'قرارداد' || stStr === 'قرارداد / فاکتور' || stStr === 'قرارداد/فاکتور';
+          if (!isContract) return false;
+        } else if (c.status !== statusFilter) {
+          return false;
+        }
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchCompany = c.company_name?.toLowerCase().includes(q);
+        const matchManager = c.manager_name?.toLowerCase().includes(q);
+        const matchCity = c.city?.toLowerCase().includes(q);
+        const matchJob = c.business_type?.toLowerCase().includes(q);
+        const matchPhone = Array.isArray(c.mobile_numbers) && c.mobile_numbers.some((m) => m && m.includes(q));
+        const matchContact = Array.isArray(c.contacts) && c.contacts.some(
+          (ct) =>
+            (ct?.value && ct.value.toLowerCase().includes(q)) ||
+            (ct?.contact_name && ct.contact_name.toLowerCase().includes(q)) ||
+            (ct?.contact_role && ct.contact_role.toLowerCase().includes(q))
+        );
+        if (!matchCompany && !matchManager && !matchCity && !matchJob && !matchPhone && !matchContact) return false;
+      }
+      return true;
+    });
+  }, [userScopedCustomers, showExpiredOnly, isCurrentUserAdmin, selectedMarketerId, statusFilter, searchQuery]);
+
+  const expiredCount = userScopedCustomers.filter((c) => c.is_expired).length;
 
   const freeCustomersCount = customers.filter((c) => {
     if (c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
@@ -799,11 +851,11 @@ export default function App() {
           setIsMobileMenuOpen(false);
         }}
         counts={{
-          customers: customers.length,
+          customers: userScopedCustomers.length,
           expiredCustomers: expiredCount,
           freeCustomers: freeCustomersCount,
-          coldLeads: coldLeads.length,
-          reports: reports.length,
+          coldLeads: isCurrentUserAdmin ? coldLeads.length : coldLeads.filter(l => l.assigned_to === currentPersonnel?.id).length,
+          reports: userScopedReports.length,
           adminReports: adminReports.length,
           pendingLeaves: leaveRequests.filter((r) => r.status === 'pending').length,
           pendingAdvances: advanceRequests.filter((r) => r.status === 'pending').length,
@@ -836,7 +888,7 @@ export default function App() {
           personnelList={personnelList}
           currentPersonnel={currentPersonnel}
           currentUser={currentUser}
-          onSelectPersonnel={setCurrentPersonnel}
+          onSelectPersonnel={handleSelectPersonnel}
           onOpenAuthModal={() => setIsAuthModalOpen(true)}
           onLogout={handleLogout}
           expiredCount={expiredCount}
@@ -888,8 +940,8 @@ export default function App() {
             >
               {displayedTab === 'dashboard' && (
                 <DashboardView
-                  customers={customers}
-                  reports={reports}
+                  customers={userScopedCustomers}
+                  reports={userScopedReports}
                   coldLeads={coldLeads}
                   adminReports={adminReports}
                   personnelList={personnelList}
@@ -967,8 +1019,8 @@ export default function App() {
 
               {displayedTab === 'reports' && (
                 <ReportsView
-                  reports={reports}
-                  customers={customers}
+                  reports={userScopedReports}
+                  customers={userScopedCustomers}
                   personnelList={personnelList}
                   currentPersonnel={currentPersonnel}
                   currentUser={currentUser}
@@ -989,8 +1041,8 @@ export default function App() {
 
               {displayedTab === 'analytics' && (
                 <AnalyticsView
-                  reports={reports}
-                  customers={customers}
+                  reports={userScopedReports}
+                  customers={userScopedCustomers}
                   personnelList={personnelList}
                   currentPersonnel={currentPersonnel}
                   currentUser={currentUser}
