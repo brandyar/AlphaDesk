@@ -31,8 +31,8 @@ import {
   X,
 } from 'lucide-react';
 import { Customer, CustomerReport, Personnel, AuthUser } from '../types';
-import { fetchProjectSettings, updateProjectSettings } from '../api';
-import { toPersianDigits, formatPersianDate, formatPersianDateTime, formatStatusLabel, getStatusBadgeClass } from '../utils';
+import { fetchProjectSettings, updateProjectSettings, fetchFreeCustomers } from '../api';
+import { toPersianDigits, formatPersianDate, formatPersianDateTime, formatStatusLabel, getStatusBadgeClass, matchPersonnelToCustomer } from '../utils';
 import { IRAN_PROVINCES } from '../data/iranProvincesCities';
 
 interface FreeCustomersViewProps {
@@ -66,7 +66,26 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
   const [isEditingLimit, setIsEditingLimit] = useState(false);
   const [tempLimit, setTempLimit] = useState(claimLimit);
 
+  // Dedicated Free Customers Pool state (fetched directly for maximum speed and full organization scope)
+  const [dedicatedFreeCustomers, setDedicatedFreeCustomers] = useState<Customer[]>([]);
+  const [isLoadingPool, setIsLoadingPool] = useState(false);
+
+  const loadPool = async () => {
+    setIsLoadingPool(true);
+    try {
+      const data = await fetchFreeCustomers(1000);
+      if (Array.isArray(data)) {
+        setDedicatedFreeCustomers(data);
+      }
+    } catch (err) {
+      console.warn('Failed to load free customers pool:', err);
+    } finally {
+      setIsLoadingPool(false);
+    }
+  };
+
   useEffect(() => {
+    loadPool();
     fetchProjectSettings()
       .then((settings) => {
         if (settings && settings.free_customers_claim_limit) {
@@ -93,31 +112,40 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
   const [isProcessingClaim, setIsProcessingClaim] = useState(false);
 
   // -------------------------------------------------------------
-  // 1. Compute Free Customers
+  // 1. Compute Free Customers (Union of Dedicated Pool & Props)
   // -------------------------------------------------------------
   const now = new Date().getTime();
 
   const freeCustomers = useMemo(() => {
-    return customers.filter((c) => {
-      // Must not be already closed (Contract) or Blacklisted
-      if (c.status === 'قرارداد' || c.status === 'لیست سیاه') {
-        return false;
-      }
+    const poolMap = new Map<string, Customer>();
 
-      // Check if unassigned
+    // 1. Add customers from dedicated free pool endpoint
+    for (const c of dedicatedFreeCustomers) {
+      if (c && c.id) poolMap.set(c.id, c);
+    }
+
+    // 2. Add any free customer from props
+    for (const c of customers) {
+      if (!c || !c.id) continue;
+      if (c.status === 'قرارداد' || c.status === 'لیست سیاه') continue;
       const isUnassigned = !c.assigned_marketer_id || c.assigned_marketer_name === 'تخصیص نیافته';
-
-      // Check if deadline is passed
       const isDeadlinePassed = Boolean(
         c.assignment_deadline && now > new Date(c.assignment_deadline).getTime()
       );
+      if (c.is_expired || isDeadlinePassed || isUnassigned) {
+        poolMap.set(c.id, c);
+      }
+    }
 
-      // Check is_expired flag
-      const isExpired = Boolean(c.is_expired || isDeadlinePassed || isUnassigned);
-
-      return isExpired;
+    return Array.from(poolMap.values()).filter((c) => {
+      if (c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
+      const isUnassigned = !c.assigned_marketer_id || c.assigned_marketer_name === 'تخصیص نیافته';
+      const isDeadlinePassed = Boolean(
+        c.assignment_deadline && now > new Date(c.assignment_deadline).getTime()
+      );
+      return Boolean(c.is_expired || isDeadlinePassed || isUnassigned);
     });
-  }, [customers, now]);
+  }, [dedicatedFreeCustomers, customers, now]);
 
   // Map of reports grouped by customer_id
   const customerReportsMap = useMemo(() => {
@@ -135,26 +163,37 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
   }, [reports]);
 
   // -------------------------------------------------------------
-  // 2. Compute Current Marketer's Quota
+  // 2. Compute Current Marketer's Quota (ONLY claimed_from_pool!)
   // -------------------------------------------------------------
   const myId = currentPersonnel?.id || currentUser?.id || '';
   const myName = currentPersonnel?.name || currentUser?.name || '';
+  const myUserId = currentUser?.id || currentPersonnel?.user_id || '';
 
-  const myCustomers = useMemo(() => {
-    return customers.filter(
-      (c) => c.assigned_marketer_id === myId || (myId && c.assigned_marketer_name === myName)
-    );
-  }, [customers, myId, myName]);
+  // STRICT ISOLATION: Quota applies ONLY to customers claimed from the free pool.
+  // The marketer's regular/existing customers in Customers Management do NOT count against this quota.
+  const myClaimedPoolCustomers = useMemo(() => {
+    return customers.filter((c) => {
+      const isMine = matchPersonnelToCustomer(c, currentPersonnel, currentUser);
+      const wasClaimedFromPool = Boolean(c.claimed_from_pool === true || (c as any).claimed_from_pool === 'true');
+      return isMine && wasClaimedFromPool;
+    });
+  }, [customers, currentPersonnel, currentUser]);
 
   const mySuccessfulContractsCount = useMemo(() => {
-    return myCustomers.filter((c) => c.status === 'قرارداد').length;
-  }, [myCustomers]);
+    return myClaimedPoolCustomers.filter((c) => c.status === 'قرارداد').length;
+  }, [myClaimedPoolCustomers]);
 
   const myActiveUnclosedCount = useMemo(() => {
-    return myCustomers.filter((c) => c.status !== 'قرارداد' && c.status !== 'لیست سیاه').length;
-  }, [myCustomers]);
+    const nowTs = new Date().getTime();
+    return myClaimedPoolCustomers.filter((c) => {
+      if (c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
+      if (c.is_expired) return false;
+      if (c.assignment_deadline && nowTs > new Date(c.assignment_deadline).getTime()) return false;
+      return true;
+    }).length;
+  }, [myClaimedPoolCustomers]);
 
-  // Quota rule: Can claim if active unclosed < claimLimit OR has >= 1 successful contract
+  // Quota rule: Can claim if active unclosed claimed from pool < claimLimit OR has >= 1 successful contract
   const canClaim = mySuccessfulContractsCount > 0 || myActiveUnclosedCount < claimLimit;
   const quotaPercentage = Math.min(100, Math.round((myActiveUnclosedCount / claimLimit) * 100));
 
@@ -246,7 +285,7 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
     if (!claimingCustomer) return;
     if (!canClaim) {
       showToast(
-        `سقف مجاز (${toPersianDigits(claimLimit)} پرونده) شما تکمیل است. برای برداشت پرونده جدید باید حداقل یک قرارداد موفق داشته باشید.`,
+        `سقف مجاز (${toPersianDigits(claimLimit)} پرونده از حوضچه آزاد) تکمیل است. برای ادامه برداشت، حداقل یک قرارداد موفق به ثبت برسانید.`,
         'error'
       );
       return;
@@ -257,6 +296,7 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
       const success = await onClaimCustomer(claimingCustomer.id, claimDurationDays);
       if (success) {
         setClaimingCustomer(null);
+        await loadPool();
       }
     } finally {
       setIsProcessingClaim(false);
@@ -315,10 +355,8 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
             <div className="bg-[#141414] border border-[#262626] rounded-xl p-3 sm:p-4 text-xs text-[#A7A7A7] leading-relaxed flex items-start gap-2.5 mt-3">
               <HelpCircle className="w-4 h-4 text-[#1DB954] flex-shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold text-white ml-1">قانون طلایی حوضچه آزاد:</span>
-                شما می‌توانید پرونده‌های آزاد را به همراه تمامی تاریخچه تماس‌ها و یادداشت‌های مذاکره‌کنندگان قبلی مشاهده کرده و به خود اختصاص دهید.
-                هر کارشناس تا سقف <strong className="text-[#1DB954] font-mono">{toPersianDigits(claimLimit)}</strong> پرونده فعال می‌تواند بردارد؛
-                برای ادامه برداشت پس از سقف، باید حداقل <strong className="text-white">۱ قرارداد موفق</strong> به ثبت رسانده باشد.
+                <span className="font-bold text-white ml-1">قانون تفکیک سهمیه حوضچه آزاد:</span>
+                شما پرونده‌های اختصاصی خود در بخش مدیریت مشتریان را بدون هیچ محدودیتی دارید. سهمیه زیر <strong className="text-white">منحصراً</strong> مربوط به تعداد پرونده‌هایی است که همزمان می‌توانید <strong className="text-[#1DB954]">از حوضچه آزاد</strong> بردارید (سقف: <strong className="text-[#1DB954] font-mono">{toPersianDigits(claimLimit)}</strong> پرونده فعال). با بستن هر قرارداد موفق یا انقضای مهلت پرونده، ظرفیت سهمیه حوضچه شما آزاد می‌گردد.
               </div>
             </div>
           </div>
@@ -341,7 +379,7 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-[#282828]">
               <span className="text-xs font-bold text-white flex items-center gap-1.5">
                 <TrendingUp className="w-4 h-4 text-[#1DB954]" />
-                <span>وضعیت سهمیه برداشت شما</span>
+                <span>سهمیه برداشت از حوضچه آزاد</span>
               </span>
               <span
                 className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 ${
@@ -368,13 +406,18 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
               {/* Active Unclosed Count */}
               <div>
                 <div className="flex items-center justify-between text-xs mb-1.5">
-                  <span className="text-[#888]">پرونده‌های فعال تحت پیگیری شما:</span>
-                  <span className="font-mono font-bold text-white">
+                  <div>
+                    <span className="text-[#888]">پرونده‌های فعال از حوضچه:</span>
+                    <span className="block text-[10px] text-emerald-400/90 font-medium">
+                      مجزا از پرونده‌های عادی کارشناس
+                    </span>
+                  </div>
+                  <span className="font-mono font-bold text-white text-left">
                     {toPersianDigits(myActiveUnclosedCount)} از {toPersianDigits(claimLimit)} پرونده
                   </span>
                 </div>
                 {/* Progress bar */}
-                <div className="w-full h-2 rounded-full bg-[#121212] overflow-hidden border border-[#282828]">
+                <div className="w-full h-2 rounded-full bg-[#121212] overflow-hidden border border-[#282828] mt-1.5">
                   <div
                     className={`h-full transition-all duration-300 rounded-full ${
                       quotaPercentage >= 100
@@ -397,7 +440,7 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-white">قراردادهای موفق ثبت‌شده شما</div>
+                    <div className="text-xs font-bold text-white">قراردادهای حاصل از حوضچه آزاد</div>
                     <div className="text-[10px] text-[#888]">شرط باز ماندن نامحدود سهمیه</div>
                   </div>
                 </div>

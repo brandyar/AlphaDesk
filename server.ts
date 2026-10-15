@@ -654,6 +654,20 @@ function resolveDirectusTenantId(rawTenant: any): number | null {
   return null;
 }
 
+function normalizePersianString(str?: string | null): string {
+  if (!str) return '';
+  return String(str)
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/ة/g, 'ه')
+    .replace(/ؤ/g, 'و')
+    .replace(/إ|أ|آ/g, 'ا')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
 function matchesTenant(itemTenantId: any, activeTenantId: string): boolean {
   if (!activeTenantId || activeTenantId === 'all') return true;
   const itemStr =
@@ -661,11 +675,13 @@ function matchesTenant(itemTenantId: any, activeTenantId: string): boolean {
       ? String(itemTenantId.id)
       : itemTenantId !== null && itemTenantId !== undefined
       ? String(itemTenantId)
-      : 'default';
+      : 'all';
 
+  // If customer has no specific tenant assigned, it matches any active tenant
+  if (itemStr === 'all' || itemStr === 'null' || itemStr === 'undefined' || itemStr === '') return true;
   if (itemStr === activeTenantId) return true;
-  if (activeTenantId === 'default') {
-    if (itemStr === 'default') return true;
+  if (activeTenantId === 'default' || activeTenantId === '1') {
+    if (itemStr === 'default' || itemStr === '1') return true;
     if (tenantsData.length > 0) {
       if (itemStr === String(tenantsData[0].id) || (tenantsData[0].slug && itemStr === tenantsData[0].slug)) {
         return true;
@@ -690,7 +706,7 @@ function getRequestTenantId(req: Request): string {
   if (queryTenant && typeof queryTenant === 'string' && queryTenant.trim()) {
     return queryTenant.trim();
   }
-  return 'default';
+  return 'all';
 }
 
 let projectSettingsData: ProjectSettingsState = {
@@ -1518,14 +1534,42 @@ function invalidateReportsCache() {
 
 // ----------------- BFF API & RBAC LAYER ----------------- //
 
+function safeDecodeURIComponent(str?: string | null): string {
+  if (!str) return '';
+  try {
+    return decodeURIComponent(str);
+  } catch {
+    return String(str);
+  }
+}
+
 function getRequestUser(req: Request) {
   const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string) || '';
   const personnelId = (req.headers['x-personnel-id'] as string) || (req.query.personnel_id as string) || userId;
   const userRole = (req.headers['x-user-role'] as string) || (req.query.user_role as string) || '';
   const roleId = (req.headers['x-role-id'] as string) || (req.query.role_id as string) || '';
-  const userName = req.headers['x-user-name'] ? decodeURIComponent(req.headers['x-user-name'] as string) : '';
+  const rawUserName = req.headers['x-user-name'] as string;
+  let userName = safeDecodeURIComponent(rawUserName);
   const userEmail = (req.headers['x-user-email'] as string) || '';
   const tenantId = getRequestTenantId(req);
+
+  // If userName is missing from headers, auto-resolve from personnelData
+  if (!userName && (personnelId || userId || userEmail)) {
+    const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
+    const rawUid = cleanPId.replace(/^p-/, '');
+    const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
+    const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : '';
+
+    const pMatch = personnelData.find(
+      (p) =>
+        (cleanPId && (p.id?.toLowerCase() === cleanPId || p.id?.toLowerCase() === `p-${rawUid}`)) ||
+        (cleanUId && (p.user_id?.toLowerCase() === cleanUId || p.id?.toLowerCase() === cleanUId)) ||
+        (cleanEmail && p.email?.toLowerCase() === cleanEmail)
+    );
+    if (pMatch?.name) {
+      userName = pMatch.name;
+    }
+  }
 
   // Authenticated context exists only if a user or personnel ID or auth header is provided
   const hasUserContext = Boolean(userId || personnelId || userEmail || req.headers['authorization']);
@@ -2822,22 +2866,45 @@ app.get('/api/customers', async (req: Request, res: Response) => {
       let allCustomersList: any[] = [];
 
       // 1. NON-ADMIN MARKETER:
-      // Optimized path: query Directus directly for ONLY this marketer's customers,
-      // avoiding fetching 5,000+ items across the network!
+      // Optimized path: query Directus with multiple candidate keys (p-UID, raw UID, userId, and name)
       if (!isAdmin && (userId || personnelId || userName) && !isFreeOnly) {
         if (customersCache && now - customersCache.timestamp < CACHE_TTL_MS) {
           allCustomersList = customersCache.data;
         } else {
+          const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
+          const rawUid = cleanPId.replace(/^p-/, '');
+          const prefixedUid = cleanPId.startsWith('p-') ? cleanPId : `p-${cleanPId}`;
+
           const orClauses: string[] = [];
-          if (personnelId) orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_id][_eq]=${encodeURIComponent(personnelId)}`);
-          if (userId && userId !== personnelId) orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_id][_eq]=${encodeURIComponent(userId)}`);
-          if (userName) orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_name][_eq]=${encodeURIComponent(userName)}`);
+          if (cleanPId) {
+            orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`);
+            if (rawUid !== cleanPId) {
+              orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_id][_eq]=${encodeURIComponent(rawUid)}`);
+            }
+            if (prefixedUid !== cleanPId) {
+              orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_id][_eq]=${encodeURIComponent(prefixedUid)}`);
+            }
+          }
+          if (userId && userId !== cleanPId && userId !== rawUid) {
+            orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_id][_eq]=${encodeURIComponent(userId)}`);
+          }
+          if (userName) {
+            orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_name][_icontains]=${encodeURIComponent(userName)}`);
+          }
 
           const qStr = orClauses.length > 0 ? `&${orClauses.join('&')}` : '';
-          const directusQuery = `/items/customers?sort=-date_created&limit=1000&fields=*,contacts.*${qStr}`;
-          const fastRes = await directusFetch(directusQuery).catch(() => null);
+          const directusQuery = `/items/customers?sort=-date_created&limit=500&fields=*${qStr}`;
+          const fastRes = await directusFetch(directusQuery).catch((err) => {
+            console.warn('Targeted marketer query warning:', err.message);
+            return null;
+          });
+
           if (fastRes && Array.isArray(fastRes.data)) {
+            // Valid response from targeted query (even if 0 records)
             allCustomersList = fastRes.data;
+          } else {
+            // Only if Directus threw a network error, fall back to memory
+            allCustomersList = customersData;
           }
         }
       } else {
@@ -2847,37 +2914,49 @@ app.get('/api/customers', async (req: Request, res: Response) => {
           allCustomersList = customersCache.data;
         } else {
           let fetchRes: any;
-          if (reqLimit <= 0 || reqLimit >= 5000) {
-            fetchRes = await directusFetchAllPages('/items/customers?sort=-date_created&fields=*,contacts.*');
+          if (isFreeOnly) {
+            // Fast targeted query for free pool customers
+            fetchRes = await directusFetch('/items/customers?sort=-date_created&limit=1000&fields=*&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true').catch(() => null);
           } else {
-            fetchRes = await directusFetch(`/items/customers?sort=-date_created&meta=*&fields=*,contacts.*&limit=${reqLimit}&page=${reqPage}`);
+            fetchRes = await directusFetch(`/items/customers?sort=-date_created&meta=*&fields=*&limit=${Math.min(reqLimit, 1000)}&page=${reqPage}`).catch(() => null);
           }
           if (fetchRes && Array.isArray(fetchRes.data)) {
             allCustomersList = fetchRes.data;
-            customersCache = {
-              timestamp: now,
-              data: allCustomersList,
-              meta: fetchRes.meta,
-            };
+            if (!isFreeOnly) {
+              customersCache = {
+                timestamp: now,
+                data: allCustomersList,
+                meta: fetchRes.meta,
+              };
+            }
+          } else {
+            allCustomersList = customersData;
           }
         }
       }
 
       let list = allCustomersList.map((c: any) => computeCustomerExpiration(c));
 
-      // Tenant-based filtering
-      if (tenantId && tenantId !== 'all') {
-        list = list.filter((c: any) => matchesTenant(c.tenant_id, tenantId));
-      }
-
       // Role-Based Filtering:
-      // Marketer sees ONLY their own assigned customers (unless viewing free pool)
+      // Marketer sees ONLY their own assigned customers (robust multi-alias & Persian-normalized matching)
       if (!isAdmin && (userId || personnelId || userName) && !isFreeOnly) {
-        list = list.filter((c: any) =>
-          c.assigned_marketer_id === personnelId ||
-          c.assigned_marketer_id === userId ||
-          (userName && c.assigned_marketer_name === userName)
-        );
+        const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
+        const rawUid = cleanPId.replace(/^p-/, '');
+        const prefixedUid = cleanPId.startsWith('p-') ? cleanPId : `p-${cleanPId}`;
+        const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
+        const normUserName = normalizePersianString(userName);
+
+        list = list.filter((c: any) => {
+          const cId = c.assigned_marketer_id ? String(c.assigned_marketer_id).trim().toLowerCase() : '';
+          if (cleanPId && (cId === cleanPId || cId === rawUid || cId === prefixedUid)) return true;
+          if (cleanUId && (cId === cleanUId || cId === rawUid)) return true;
+
+          const cNameNorm = normalizePersianString(c.assigned_marketer_name);
+          if (normUserName && cNameNorm && (cNameNorm === normUserName || cNameNorm.includes(normUserName) || normUserName.includes(cNameNorm))) {
+            return true;
+          }
+          return false;
+        });
       } else if (isFreeOnly) {
         list = list.filter((c: any) => {
           if (c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
@@ -2887,6 +2966,11 @@ app.get('/api/customers', async (req: Request, res: Response) => {
           );
           return Boolean(c.is_expired || isDeadlinePassed || isUnassigned);
         });
+      }
+
+      // Tenant-based filtering (applied to admins or general browsing; marketer's assigned portfolio is never hidden by tenant mismatches)
+      if (tenantId && tenantId !== 'all' && (isAdmin || isFreeOnly)) {
+        list = list.filter((c: any) => matchesTenant(c.tenant_id, tenantId));
       }
 
       if (search && typeof search === 'string') {
@@ -2984,6 +3068,27 @@ app.get('/api/customers', async (req: Request, res: Response) => {
 });
 
 app.get('/api/customers/:id', async (req: Request, res: Response) => {
+  if (req.params.id === 'free-quota') {
+    const { personnelId, userId, userName } = getRequestUser(req);
+    const targetId = (req.query.personnel_id as string) || personnelId || userId;
+    const targetName = (req.query.personnel_name as string) || userName;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+    if (!targetId) {
+      return res.json({
+        claimLimit: limit,
+        activeUnclosedCount: 0,
+        successfulCount: 0,
+        canClaim: true,
+        remainingQuota: limit,
+        requiresSuccessToUnlock: false,
+      });
+    }
+
+    const quota = await computePersonnelFreeQuota(targetId, limit, targetName);
+    return res.json(quota);
+  }
+
   const { userId, userRole, userName } = getRequestUser(req);
 
   if (directusUrl && directusAdminToken) {
@@ -3564,29 +3669,77 @@ app.post('/api/customers/:id/reassign', async (req: Request, res: Response) => {
 // PROJECT SETTINGS & FREE POOL QUOTA (تنظیمات سامانه و حوضچه آزاد)
 // -------------------------------------------------------------
 
-// Helper to compute a marketer's active quota stats
-function computePersonnelFreeQuota(targetPersonnelId: string, customLimit?: number) {
+// Helper to compute a marketer's active quota stats for Free Pool
+async function computePersonnelFreeQuota(targetPersonnelId: string, customLimit?: number, targetPersonnelName?: string) {
   const effectiveLimit = customLimit || projectSettingsData.free_customers_claim_limit || 20;
+  const nowTs = Date.now();
 
-  const userCustomers = customersData.filter((c) => {
-    return (
-      c.assigned_marketer_id === targetPersonnelId ||
-      (c.assigned_marketer_name && targetPersonnelId && c.assigned_marketer_name === targetPersonnelId)
-    );
+  let claimedPoolCustomers: any[] = [];
+
+  const cleanPId = targetPersonnelId ? String(targetPersonnelId).trim().toLowerCase() : '';
+  const rawUid = cleanPId.replace(/^p-/, '');
+  const prefixedUid = cleanPId.startsWith('p-') ? cleanPId : `p-${cleanPId}`;
+  const normName = normalizePersianString(targetPersonnelName);
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const orClauses: string[] = [];
+      if (cleanPId) {
+        orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`);
+        if (rawUid !== cleanPId) orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_id][_eq]=${encodeURIComponent(rawUid)}`);
+        if (prefixedUid !== cleanPId) orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_id][_eq]=${encodeURIComponent(prefixedUid)}`);
+      }
+      if (targetPersonnelName) {
+        orClauses.push(`filter[_or][${orClauses.length}][assigned_marketer_name][_icontains]=${encodeURIComponent(targetPersonnelName)}`);
+      }
+
+      const qStr = orClauses.length > 0 ? `&${orClauses.join('&')}` : '';
+      const directusQuery = `/items/customers?limit=300&fields=id,status,assignment_deadline,is_expired,claimed_from_pool,assigned_marketer_id,assigned_marketer_name&filter[claimed_from_pool][_eq]=true${qStr}`;
+      const res = await directusFetch(directusQuery).catch(() => null);
+      if (res && Array.isArray(res.data)) {
+        claimedPoolCustomers = res.data.map(computeCustomerExpiration);
+      }
+    } catch {
+      // fallback to memory
+    }
+  }
+
+  if (claimedPoolCustomers.length === 0) {
+    const allCusts: any[] = (customersCache && customersCache.data && customersCache.data.length > 0)
+      ? customersCache.data
+      : customersData;
+
+    claimedPoolCustomers = allCusts.filter((c) => {
+      const isMine =
+        c.assigned_marketer_id === targetPersonnelId ||
+        c.assigned_marketer_id === cleanPId ||
+        c.assigned_marketer_id === rawUid ||
+        (normName && normalizePersianString(c.assigned_marketer_name) === normName);
+
+      const wasClaimedFromPool = Boolean(c.claimed_from_pool === true || c.claimed_from_pool === 'true');
+      return isMine && wasClaimedFromPool;
+    });
+  }
+
+  // Active unclosed from free pool (not closed as contract, not blacklisted, not expired)
+  const activeUnclosed = claimedPoolCustomers.filter((c) => {
+    if (c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
+    if (c.is_expired) return false;
+    if (c.assignment_deadline && nowTs > new Date(c.assignment_deadline).getTime()) return false;
+    return true;
   });
 
-  const activeUnclosed = userCustomers.filter(
-    (c) => c.status !== 'قرارداد' && c.status !== 'لیست سیاه'
-  );
-
-  const successfulContracts = userCustomers.filter(
+  // Successful contracts from the claimed pool
+  const successfulContracts = claimedPoolCustomers.filter(
     (c) => c.status === 'قرارداد'
   );
 
   const activeUnclosedCount = activeUnclosed.length;
   const successfulCount = successfulContracts.length;
-  // If marketer has at least 1 successful contract, they unlock continued claiming!
-  // If they have 0 successful contracts, they can claim up to effectiveLimit (default 20).
+
+  // Quota rule:
+  // If marketer has at least 1 successful contract from pool, they unlock continued claiming!
+  // Otherwise, they can claim up to effectiveLimit (default 20).
   const canClaim = successfulCount > 0 || activeUnclosedCount < effectiveLimit;
   const remainingQuota = successfulCount > 0 ? 999 : Math.max(0, effectiveLimit - activeUnclosedCount);
 
@@ -3656,8 +3809,9 @@ app.patch('/api/project-settings', async (req: Request, res: Response) => {
 
 // Get Quota Status for Free Customers Pool
 app.get('/api/customers/free-quota', async (req: Request, res: Response) => {
-  const { personnelId, userId } = getRequestUser(req);
+  const { personnelId, userId, userName } = getRequestUser(req);
   const targetId = (req.query.personnel_id as string) || personnelId || userId;
+  const targetName = (req.query.personnel_name as string) || userName;
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
 
   if (!targetId) {
@@ -3671,7 +3825,7 @@ app.get('/api/customers/free-quota', async (req: Request, res: Response) => {
     });
   }
 
-  const quota = computePersonnelFreeQuota(targetId, limit);
+  const quota = await computePersonnelFreeQuota(targetId, limit, targetName);
   res.json(quota);
 });
 
@@ -3691,11 +3845,11 @@ app.post('/api/customers/:id/claim-free', async (req: Request, res: Response) =>
   }
 
   // 1. Quota check
-  const quota = computePersonnelFreeQuota(targetPersonnelId, limit);
+  const quota = await computePersonnelFreeQuota(targetPersonnelId, limit, targetPersonnelName);
   if (!quota.canClaim) {
     return res.status(403).json({
       error: 'QUOTA_LIMIT_REACHED',
-      message: `شما به سقف مجاز (${limit} پرونده فعال) رسیده‌اید. برای اختصاص پرونده جدید از بخش مشتریان آزاد، باید حداقل یک قرارداد موفق به ثبت برسانید.`,
+      message: `شما به سقف مجاز (${limit} پرونده برداشته‌شده از حوضچه آزاد) رسیده‌اید. برای اختصاص پرونده جدید از بخش مشتریان آزاد، باید حداقل یک قرارداد موفق به ثبت برسانید.`,
       quota,
     });
   }
@@ -4125,26 +4279,54 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
         reportsList = Array.isArray(cRes?.data) ? cRes.data : [];
       } else if (!isAdmin && (userId || personnelId || userName)) {
         // 2. Non-admin marketer viewing their own reports:
-        // Check if reportsCache is warm
+        const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
+        const rawUid = cleanPId.replace(/^p-/, '');
+        const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
+        const normUserName = normalizePersianString(userName);
+
+        const filterReportsByMarketer = (items: any[]) => {
+          return items.filter((r: any) => {
+            const rNegNorm = normalizePersianString(r.negotiator_name);
+            const rCreated = r.created_by ? String(r.created_by).trim().toLowerCase() : '';
+            const rCreatedNorm = normalizePersianString(r.created_by);
+
+            if (normUserName && (rNegNorm === normUserName || rNegNorm.includes(normUserName) || normUserName.includes(rNegNorm))) return true;
+            if (normUserName && (rCreatedNorm === normUserName || rCreatedNorm.includes(normUserName) || normUserName.includes(rCreatedNorm))) return true;
+            if (cleanPId && (rCreated === cleanPId || rCreated === rawUid)) return true;
+            if (cleanUId && rCreated === cleanUId) return true;
+            return false;
+          });
+        };
+
         if (reportsCache && now - reportsCache.timestamp < CACHE_TTL_MS) {
-          reportsList = reportsCache.data.filter((r: any) =>
-            (userName && r.negotiator_name === userName) ||
-            r.created_by === userName ||
-            (userId && r.created_by === userId) ||
-            (personnelId && r.created_by === personnelId)
-          );
+          reportsList = filterReportsByMarketer(reportsCache.data);
         } else {
-          // Query Directus with marketer filter directly - 100x faster than fetching all 32,000!
+          // Query Directus with marketer filter
           const orClauses: string[] = [];
           if (userName) {
-            orClauses.push(`filter[_or][${orClauses.length}][negotiator_name][_eq]=${encodeURIComponent(userName)}`);
-            orClauses.push(`filter[_or][${orClauses.length}][created_by][_eq]=${encodeURIComponent(userName)}`);
+            orClauses.push(`filter[_or][${orClauses.length}][negotiator_name][_icontains]=${encodeURIComponent(userName)}`);
+            orClauses.push(`filter[_or][${orClauses.length}][created_by][_icontains]=${encodeURIComponent(userName)}`);
           }
           if (userId) orClauses.push(`filter[_or][${orClauses.length}][created_by][_eq]=${encodeURIComponent(userId)}`);
-          if (personnelId && personnelId !== userId) orClauses.push(`filter[_or][${orClauses.length}][created_by][_eq]=${encodeURIComponent(personnelId)}`);
+          if (cleanPId) {
+            orClauses.push(`filter[_or][${orClauses.length}][created_by][_eq]=${encodeURIComponent(cleanPId)}`);
+            if (rawUid !== cleanPId) {
+              orClauses.push(`filter[_or][${orClauses.length}][created_by][_eq]=${encodeURIComponent(rawUid)}`);
+            }
+          }
           const qStr = orClauses.length > 0 ? `&${orClauses.join('&')}` : '';
-          const fastRes = await directusFetch(`/items/customer_reports?sort=-date_created&limit=1000${qStr}`).catch(() => null);
-          reportsList = Array.isArray(fastRes?.data) ? fastRes.data : [];
+          const directusQuery = `/items/customer_reports?sort=-date_created&limit=500${qStr}`;
+          const fastRes = await directusFetch(directusQuery).catch((err) => {
+            console.warn('Targeted reports query warning:', err.message);
+            return null;
+          });
+          
+          if (fastRes && Array.isArray(fastRes.data)) {
+            reportsList = fastRes.data;
+          } else {
+            // Fallback to in-memory reportsData
+            reportsList = filterReportsByMarketer(reportsData);
+          }
         }
       } else {
         // 3. Admin viewing general reports:

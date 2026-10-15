@@ -103,6 +103,7 @@ import {
   getActiveTenantId,
   setActiveTenantId,
 } from './api';
+import { matchPersonnelToCustomer, matchPersonnelToReport } from './utils';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
@@ -353,6 +354,13 @@ export default function App() {
     if (authData.personnel) {
       setCurrentPersonnel(authData.personnel);
       setApiPersonnelContext(authData.personnel);
+
+      // Auto-set active tenant for personnel
+      if (!authData.user.is_admin && authData.personnel.tenant_id) {
+        const pTenant = String(authData.personnel.tenant_id);
+        setActiveTenantId(pTenant);
+        setActiveTenantIdState(pTenant);
+      }
     }
     showToast(`خوش آمدید ${authData.user.name} (${authData.user.is_admin ? 'مدیر سیستم' : 'کارشناس فروش'})`, 'success');
     loadAllData(authData.personnel, authData.user);
@@ -373,26 +381,18 @@ export default function App() {
 
   // Strictly user-scoped customers: if non-admin, strictly restrict to this marketer's portfolio
   const userScopedCustomers = React.useMemo(() => {
+    if (!currentUser) return [];
     if (isCurrentUserAdmin) return customers;
-    if (!currentPersonnel && !currentUser) return [];
-    return customers.filter((c) =>
-      (currentPersonnel && c.assigned_marketer_id === currentPersonnel.id) ||
-      (currentPersonnel?.user_id && c.assigned_marketer_id === currentPersonnel.user_id) ||
-      (currentPersonnel?.name && c.assigned_marketer_name === currentPersonnel.name) ||
-      (currentUser?.id && c.assigned_marketer_id === currentUser.id)
-    );
+
+    return customers.filter((c) => matchPersonnelToCustomer(c, currentPersonnel, currentUser));
   }, [customers, isCurrentUserAdmin, currentPersonnel, currentUser]);
 
   // Strictly user-scoped reports: if non-admin, strictly restrict to this marketer's reports
   const userScopedReports = React.useMemo(() => {
+    if (!currentUser) return [];
     if (isCurrentUserAdmin) return reports;
-    if (!currentPersonnel && !currentUser) return [];
-    return reports.filter((r) =>
-      (currentPersonnel?.name && r.negotiator_name === currentPersonnel.name) ||
-      r.created_by === currentPersonnel?.name ||
-      (currentPersonnel?.id && r.created_by === currentPersonnel.id) ||
-      (currentUser?.id && r.created_by === currentUser.id)
-    );
+
+    return reports.filter((r) => matchPersonnelToReport(r, currentPersonnel, currentUser));
   }, [reports, isCurrentUserAdmin, currentPersonnel, currentUser]);
 
   // Filter customers for current view

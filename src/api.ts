@@ -29,7 +29,7 @@ const TENANT_STORAGE_KEY = 'crm_active_tenant_id';
 let currentPersonnelContext: Personnel | null = null;
 let currentAuthUser: AuthUser | null = null;
 let currentAuthToken: string = '';
-let currentTenantId: string = 'default';
+let currentTenantId: string = 'all';
 
 // Load initial stored auth session & tenant if available
 try {
@@ -53,11 +53,11 @@ try {
 } catch {}
 
 export function getActiveTenantId(): string {
-  return currentTenantId || 'default';
+  return currentTenantId || 'all';
 }
 
 export function setActiveTenantId(id: string) {
-  currentTenantId = id || 'default';
+  currentTenantId = id || 'all';
   try {
     localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
   } catch {}
@@ -238,6 +238,7 @@ export async function fetchCustomers(filters?: {
   status?: string;
   marketer_id?: string;
   expired_only?: boolean;
+  free_only?: boolean;
   page?: number;
   limit?: number;
 }): Promise<Customer[]> {
@@ -246,14 +247,19 @@ export async function fetchCustomers(filters?: {
   if (filters?.status) params.append('status', filters.status);
   if (filters?.marketer_id) params.append('marketer_id', filters.marketer_id);
   if (filters?.expired_only) params.append('expired_only', 'true');
+  if (filters?.free_only) params.append('free_only', 'true');
   if (filters?.page) params.append('page', String(filters.page));
   if (filters?.limit !== undefined) params.append('limit', String(filters.limit));
-  else params.append('limit', '-1');
+  else params.append('limit', '500');
 
   const res = await fetch(`${BASE_URL}/customers?${params.toString()}`, {
     headers: getBffHeaders(),
   });
   return handleResponse<Customer[]>(res, 'خطا در دریافت لیست مشتریان');
+}
+
+export async function fetchFreeCustomers(limit: number = 1000): Promise<Customer[]> {
+  return fetchCustomers({ free_only: true, limit });
 }
 
 export async function fetchCustomersPaginated(filters?: {

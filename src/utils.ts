@@ -373,3 +373,101 @@ export function getLeadStatusTheme(status: LeadStatus): { color: string; bg: str
       return { color: 'text-[#E22134]', bg: 'bg-[#E22134]/10 border border-[#E22134]/30' };
   }
 }
+
+export function normalizePersianText(str?: string | null): string {
+  if (!str) return '';
+  return String(str)
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/ة/g, 'ه')
+    .replace(/ؤ/g, 'و')
+    .replace(/إ|أ|آ/g, 'ا')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+export function matchPersonnelToCustomer(
+  customer: { assigned_marketer_id?: string | null; assigned_marketer_name?: string | null },
+  personnel?: { id?: string | null; user_id?: string | null; username?: string | null; name?: string | null } | null,
+  user?: { id?: string | null; username?: string | null; name?: string | null } | null
+): boolean {
+  if (!customer) return false;
+  const custId = String(customer.assigned_marketer_id || '').trim().toLowerCase();
+  const custNameNorm = normalizePersianText(customer.assigned_marketer_name);
+
+  // Candidate IDs for this marketer
+  const candidateIds = new Set<string>();
+  if (personnel?.id) {
+    const pId = String(personnel.id).trim().toLowerCase();
+    candidateIds.add(pId);
+    candidateIds.add(pId.replace(/^p-/, ''));
+    if (!pId.startsWith('p-')) candidateIds.add(`p-${pId}`);
+  }
+  if (personnel?.user_id) candidateIds.add(String(personnel.user_id).trim().toLowerCase());
+  if (personnel?.username) candidateIds.add(String(personnel.username).trim().toLowerCase());
+  if (user?.id) candidateIds.add(String(user.id).trim().toLowerCase());
+  if (user?.username) candidateIds.add(String(user.username).trim().toLowerCase());
+
+  if (custId && candidateIds.has(custId)) return true;
+  if (custId && candidateIds.has(custId.replace(/^p-/, ''))) return true;
+
+  // Candidate Names
+  const pNameNorm = normalizePersianText(personnel?.name);
+  const uNameNorm = normalizePersianText(user?.name);
+
+  if (custNameNorm && pNameNorm && (custNameNorm === pNameNorm || custNameNorm.includes(pNameNorm) || pNameNorm.includes(custNameNorm))) {
+    return true;
+  }
+  if (custNameNorm && uNameNorm && (custNameNorm === uNameNorm || custNameNorm.includes(uNameNorm) || uNameNorm.includes(custNameNorm))) {
+    return true;
+  }
+
+  return false;
+}
+
+export function matchPersonnelToReport(
+  report: { negotiator_name?: string | null; created_by?: string | null },
+  personnel?: { id?: string | null; user_id?: string | null; username?: string | null; name?: string | null } | null,
+  user?: { id?: string | null; username?: string | null; name?: string | null } | null
+): boolean {
+  if (!report) return false;
+  const createdBy = String(report.created_by || '').trim().toLowerCase();
+  const negNameNorm = normalizePersianText(report.negotiator_name);
+  const createdByNorm = normalizePersianText(report.created_by);
+
+  const candidateIds = new Set<string>();
+  if (personnel?.id) {
+    const pId = String(personnel.id).trim().toLowerCase();
+    candidateIds.add(pId);
+    candidateIds.add(pId.replace(/^p-/, ''));
+    if (!pId.startsWith('p-')) candidateIds.add(`p-${pId}`);
+  }
+  if (personnel?.user_id) candidateIds.add(String(personnel.user_id).trim().toLowerCase());
+  if (personnel?.username) candidateIds.add(String(personnel.username).trim().toLowerCase());
+  if (user?.id) candidateIds.add(String(user.id).trim().toLowerCase());
+  if (user?.username) candidateIds.add(String(user.username).trim().toLowerCase());
+
+  if (createdBy && candidateIds.has(createdBy)) return true;
+  if (createdBy && candidateIds.has(createdBy.replace(/^p-/, ''))) return true;
+
+  const pNameNorm = normalizePersianText(personnel?.name);
+  const uNameNorm = normalizePersianText(user?.name);
+
+  if (pNameNorm && (negNameNorm === pNameNorm || negNameNorm.includes(pNameNorm) || pNameNorm.includes(negNameNorm))) {
+    return true;
+  }
+  if (uNameNorm && (negNameNorm === uNameNorm || negNameNorm.includes(uNameNorm) || uNameNorm.includes(negNameNorm))) {
+    return true;
+  }
+  if (pNameNorm && (createdByNorm === pNameNorm || createdByNorm.includes(pNameNorm) || pNameNorm.includes(createdByNorm))) {
+    return true;
+  }
+  if (uNameNorm && (createdByNorm === uNameNorm || createdByNorm.includes(uNameNorm) || uNameNorm.includes(createdByNorm))) {
+    return true;
+  }
+
+  return false;
+}
+
