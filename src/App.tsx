@@ -236,11 +236,9 @@ export default function App() {
         targetPContext?.role === 'admin'
       );
 
-      // Fast, lightweight query limits:
-      // If admin, load up to 5000 customers & 2000 reports (served in ~1ms from server cache).
-      // If non-admin marketer, load up to 500 customers & 500 reports (only their own records).
-      const customerLimit = isAdmin ? 5000 : 500;
-      const reportLimit = isAdmin ? 2000 : 500;
+      // Fetch complete datasets without artificial truncation:
+      const customerLimit = 20000;
+      const reportLimit = 50000;
 
       const [pData, cData, rData, lData, aData, bStatus, lrData, arData, tData] = await Promise.all([
         fetchPersonnel().catch(() => []),

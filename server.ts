@@ -1522,7 +1522,7 @@ interface DataCache<T> {
 }
 let customersCache: DataCache<any[]> | null = null;
 let reportsCache: DataCache<any[]> | null = null;
-const CACHE_TTL_MS = 25000; // 25 seconds cache
+const CACHE_TTL_MS = 300000; // 5 minutes cache
 
 function invalidateCustomersCache() {
   customersCache = null;
@@ -1530,6 +1530,29 @@ function invalidateCustomersCache() {
 
 function invalidateReportsCache() {
   reportsCache = null;
+}
+
+// Fetch all pages from Directus dynamically to prevent artificial data truncation
+async function fetchAllDirectusItems(
+  pathWithoutLimitAndPage: string,
+  pageSize = 500,
+  maxTotal = 50000
+): Promise<any[]> {
+  const allItems: any[] = [];
+  let page = 1;
+  const separator = pathWithoutLimitAndPage.includes('?') ? '&' : '?';
+  while (allItems.length < maxTotal) {
+    const pagePath = `${pathWithoutLimitAndPage}${separator}limit=${pageSize}&page=${page}`;
+    const res = await directusFetch(pagePath).catch((err) => {
+      console.warn(`fetchAllDirectusItems error on page ${page}:`, err.message);
+      return null;
+    });
+    if (!res || !Array.isArray(res.data) || res.data.length === 0) break;
+    allItems.push(...res.data);
+    if (res.data.length < pageSize) break;
+    page++;
+  }
+  return allItems;
 }
 
 // ----------------- BFF API & RBAC LAYER ----------------- //
@@ -2866,7 +2889,6 @@ app.get('/api/customers', async (req: Request, res: Response) => {
       let allCustomersList: any[] = [];
 
       // 1. NON-ADMIN MARKETER:
-      // Optimized path: query Directus with multiple candidate keys (p-UID, raw UID, userId, and name)
       if (!isAdmin && (userId || personnelId || userName) && !isFreeOnly) {
         if (customersCache && now - customersCache.timestamp < CACHE_TTL_MS) {
           allCustomersList = customersCache.data;
@@ -2893,43 +2915,33 @@ app.get('/api/customers', async (req: Request, res: Response) => {
           }
 
           const qStr = orClauses.length > 0 ? `&${orClauses.join('&')}` : '';
-          const directusQuery = `/items/customers?sort=-date_created&limit=500&fields=*${qStr}`;
-          const fastRes = await directusFetch(directusQuery).catch((err) => {
-            console.warn('Targeted marketer query warning:', err.message);
-            return null;
-          });
+          const directusQuery = `/items/customers?sort=-date_created&fields=*${qStr}`;
+          const fetchedItems = await fetchAllDirectusItems(directusQuery, 500, 10000);
 
-          if (fastRes && Array.isArray(fastRes.data)) {
-            // Valid response from targeted query (even if 0 records)
-            allCustomersList = fastRes.data;
+          if (fetchedItems && fetchedItems.length > 0) {
+            allCustomersList = fetchedItems;
           } else {
-            // Only if Directus threw a network error, fall back to memory
-            allCustomersList = customersData;
+            allCustomersList = fetchedItems || customersData;
           }
         }
       } else {
         // 2. ADMIN or FREE POOL:
-        // Use in-memory cache if warm, otherwise query Directus and populate cache
         if (customersCache && now - customersCache.timestamp < CACHE_TTL_MS) {
           allCustomersList = customersCache.data;
         } else {
-          let fetchRes: any;
           if (isFreeOnly) {
-            // Fast targeted query for free pool customers
-            fetchRes = await directusFetch('/items/customers?sort=-date_created&limit=1000&fields=*&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true').catch(() => null);
+            allCustomersList = await fetchAllDirectusItems('/items/customers?sort=-date_created&fields=*&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true', 500, 10000);
           } else {
-            fetchRes = await directusFetch(`/items/customers?sort=-date_created&meta=*&fields=*&limit=${Math.min(reqLimit, 1000)}&page=${reqPage}`).catch(() => null);
-          }
-          if (fetchRes && Array.isArray(fetchRes.data)) {
-            allCustomersList = fetchRes.data;
-            if (!isFreeOnly) {
+            allCustomersList = await fetchAllDirectusItems('/items/customers?sort=-date_created&fields=*', 500, 20000);
+            if (allCustomersList.length > 0) {
               customersCache = {
                 timestamp: now,
                 data: allCustomersList,
-                meta: fetchRes.meta,
+                meta: { total_count: allCustomersList.length },
               };
             }
-          } else {
+          }
+          if (allCustomersList.length === 0) {
             allCustomersList = customersData;
           }
         }
@@ -4274,9 +4286,7 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
 
       // 1. If viewing specific customer's reports:
       if (customer_id) {
-        const custFilter = `&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}&limit=200`;
-        const cRes = await directusFetch(`/items/customer_reports?sort=-date_created${custFilter}`);
-        reportsList = Array.isArray(cRes?.data) ? cRes.data : [];
+        reportsList = await fetchAllDirectusItems(`/items/customer_reports?sort=-id&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}`, 500, 5000);
       } else if (!isAdmin && (userId || personnelId || userName)) {
         // 2. Non-admin marketer viewing their own reports:
         const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
@@ -4290,7 +4300,7 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
             const rCreated = r.created_by ? String(r.created_by).trim().toLowerCase() : '';
             const rCreatedNorm = normalizePersianString(r.created_by);
 
-            if (normUserName && (rNegNorm === normUserName || rNegNorm.includes(normUserName) || normUserName.includes(rNegNorm))) return true;
+            if (normUserName && (rNegNorm === normUserName || rNegNorm.includes(normUserName) || normUserName.includes(rCreatedNorm))) return true;
             if (normUserName && (rCreatedNorm === normUserName || rCreatedNorm.includes(normUserName) || normUserName.includes(rCreatedNorm))) return true;
             if (cleanPId && (rCreated === cleanPId || rCreated === rawUid)) return true;
             if (cleanUId && rCreated === cleanUId) return true;
@@ -4315,16 +4325,12 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
             }
           }
           const qStr = orClauses.length > 0 ? `&${orClauses.join('&')}` : '';
-          const directusQuery = `/items/customer_reports?sort=-date_created&limit=500${qStr}`;
-          const fastRes = await directusFetch(directusQuery).catch((err) => {
-            console.warn('Targeted reports query warning:', err.message);
-            return null;
-          });
+          const directusQuery = `/items/customer_reports?sort=-id${qStr}`;
+          const fetchedReports = await fetchAllDirectusItems(directusQuery, 500, 20000);
           
-          if (fastRes && Array.isArray(fastRes.data)) {
-            reportsList = fastRes.data;
+          if (fetchedReports && fetchedReports.length > 0) {
+            reportsList = fetchedReports;
           } else {
-            // Fallback to in-memory reportsData
             reportsList = filterReportsByMarketer(reportsData);
           }
         }
@@ -4333,19 +4339,12 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
         if (reportsCache && now - reportsCache.timestamp < CACHE_TTL_MS) {
           reportsList = reportsCache.data;
         } else {
-          let fetchRes: any;
-          if (reqLimit <= 0 || reqLimit >= 5000) {
-            // Fetch up to 2500 recent reports to avoid freezing Directus with 35,000 items
-            fetchRes = await directusFetch('/items/customer_reports?sort=-date_created&limit=2500');
-          } else {
-            fetchRes = await directusFetch(`/items/customer_reports?sort=-date_created&meta=*&limit=${reqLimit}&page=${reqPage}`);
-          }
-          if (fetchRes && Array.isArray(fetchRes.data)) {
-            reportsList = fetchRes.data;
+          reportsList = await fetchAllDirectusItems('/items/customer_reports?sort=-id', 500, 50000);
+          if (reportsList.length > 0) {
             reportsCache = {
               timestamp: now,
               data: reportsList,
-              meta: fetchRes.meta,
+              meta: { total_count: reportsList.length },
             };
           }
         }
