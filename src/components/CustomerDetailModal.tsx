@@ -461,7 +461,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       value={newContactValue}
                       onChange={(e) => setNewContactValue(e.target.value)}
                       placeholder={newContactType === 'mobile' ? '09121234567' : newContactType === 'landline' ? '02188776655' : 'مقدار'}
-                      className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                      className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-[#1DB954] placeholder:text-right"
                     />
                   </div>
                   <div className="sm:col-span-3">
@@ -593,7 +593,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               </div>
             )}
           </div>
-            /* Quick Contact & Social Bars Fallback */
+            {/* Quick Contact & Social Bars Fallback */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Direct Numbers */}
               <div className="p-4 rounded-xl bg-[#121212] border border-[#282828] space-y-3">

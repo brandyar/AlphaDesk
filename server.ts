@@ -1624,7 +1624,46 @@ async function ensureReportsCache(forceRefresh = false): Promise<any[]> {
   return reportsCache?.data || reportsData;
 }
 
-// ----------------- BFF API & RBAC LAYER ----------------- //
+function formatAvatarUrl(avatar: string | null | undefined): string | undefined {
+  if (!avatar || typeof avatar !== 'string') return undefined;
+  const trimmed = avatar.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+  if (directusUrl) {
+    const cleanBase = directusUrl.replace(/\/$/, '');
+    if (trimmed.startsWith('/assets/')) return `${cleanBase}${trimmed}`;
+    if (trimmed.startsWith('/')) return `${cleanBase}${trimmed}`;
+    return `${cleanBase}/assets/${trimmed}`;
+  }
+  if (trimmed.startsWith('/')) return trimmed;
+  return `/api/assets/${trimmed}`;
+}
+
+app.get('/api/assets/:id', async (req: Request, res: Response) => {
+  const assetId = req.params.id;
+  if (directusUrl) {
+    try {
+      const assetUrl = `${directusUrl.replace(/\/$/, '')}/assets/${assetId}`;
+      const headers: Record<string, string> = {};
+      if (directusAdminToken) {
+        headers['Authorization'] = `Bearer ${directusAdminToken}`;
+      }
+      const fetchRes = await fetch(assetUrl, { headers });
+      if (fetchRes.ok) {
+        const contentType = fetchRes.headers.get('content-type') || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        const buffer = Buffer.from(await fetchRes.arrayBuffer());
+        return res.send(buffer);
+      }
+    } catch (e: any) {
+      console.warn('Asset proxy error:', e.message);
+    }
+  }
+  return res.status(404).send('Asset not found');
+});
 
 function safeDecodeURIComponent(str?: string | null): string {
   if (!str) return '';
@@ -1943,6 +1982,9 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
         }
       }
 
+      const enrichedP = personnelItem ? enrichPersonnel(personnelItem) : null;
+      const resolvedAvatar = formatAvatarUrl(user.avatar) || enrichedP?.avatar;
+
       return res.json({
         success: true,
         access_token: loginToken,
@@ -1955,9 +1997,10 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
           name: fullName,
           role_id: roleId,
           is_admin: isAdmin,
-          app_role: isAdmin ? 'admin' : 'marketer'
+          app_role: isAdmin ? 'admin' : 'marketer',
+          avatar: resolvedAvatar,
         },
-        personnel: personnelItem
+        personnel: enrichedP
       });
     } catch (err: any) {
       console.error('Login error:', err.message);
@@ -2001,19 +2044,48 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 
 app.get('/api/auth/me', async (req: Request, res: Response) => {
   const { userId, personnelId, userRole, isAdmin, userName, userEmail } = getRequestUser(req);
-  if (!userId && !personnelId) {
+  if (!userId && !personnelId && !userEmail) {
     return res.status(401).json({ error: 'کاربر وارد نشده است.' });
+  }
+
+  let avatarUrl: string | undefined = undefined;
+  let pItem: any = null;
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      if (userId) {
+        const uRes = await directusFetch(`/users/${userId}?fields=id,email,avatar,first_name,last_name`);
+        if (uRes?.data?.avatar) {
+          avatarUrl = formatAvatarUrl(uRes.data.avatar);
+        }
+      }
+      if (personnelId) {
+        const pRes = await directusFetch(`/items/personnel/${personnelId}`);
+        if (pRes?.data) pItem = pRes.data;
+      }
+    } catch {}
+  }
+
+  if (!pItem) {
+    pItem = personnelData.find(p => (personnelId && p.id === personnelId) || (userId && p.user_id === userId) || (userEmail && p.email?.toLowerCase() === userEmail?.toLowerCase()));
+  }
+
+  if (pItem) {
+    pItem = enrichPersonnel(pItem);
+    if (!avatarUrl && pItem.avatar) avatarUrl = pItem.avatar;
   }
 
   res.json({
     user: {
       id: userId || personnelId,
-      name: userName || 'کاربر سامانه',
-      email: userEmail,
+      name: userName || pItem?.name || 'کاربر سامانه',
+      email: userEmail || pItem?.email,
+      avatar: avatarUrl,
       is_admin: isAdmin,
       app_role: userRole
     },
-    personnel_id: personnelId
+    personnel_id: personnelId || pItem?.id,
+    personnel: pItem
   });
 });
 
@@ -2345,6 +2417,25 @@ app.delete('/api/tenants/:id', async (req: Request, res: Response) => {
 // Personnel API
 app.get('/api/personnel', async (req: Request, res: Response) => {
   const tenantId = getRequestTenantId(req);
+
+  let userAvatarMap: Record<string, string> = {};
+  if (directusUrl && directusAdminToken) {
+    try {
+      const usersRes = await directusFetch('/users?fields=id,email,avatar&limit=500').catch(() => null);
+      if (usersRes && Array.isArray(usersRes.data)) {
+        for (const u of usersRes.data) {
+          if (u.avatar) {
+            const formatted = formatAvatarUrl(u.avatar);
+            if (formatted) {
+              if (u.id) userAvatarMap[u.id] = formatted;
+              if (u.email) userAvatarMap[u.email.toLowerCase()] = formatted;
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
   const enrichPersonnel = (p: any) => {
     const rawT = p.tenant_id;
     const tId = typeof rawT === 'object' && rawT !== null
@@ -2361,8 +2452,14 @@ app.get('/api/personnel', async (req: Request, res: Response) => {
     } else if (tId) {
       allowedTenantIds = [tId];
     }
+
+    const cleanEmail = p.email ? p.email.toLowerCase().trim() : '';
+    const userAvatar = (p.user_id && userAvatarMap[p.user_id]) || (cleanEmail && userAvatarMap[cleanEmail]);
+    const resolvedAvatar = formatAvatarUrl(p.avatar) || userAvatar;
+
     return {
       ...p,
+      avatar: resolvedAvatar,
       tenant_id: tId,
       tenant_name: (typeof rawT === 'object' && rawT?.name) || (tObj ? tObj.name : (tId === 'default' ? 'سازمان مرکزی آلفادسک' : tId)),
       allowed_tenant_ids: allowedTenantIds,

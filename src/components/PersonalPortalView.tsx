@@ -54,6 +54,7 @@ import {
   gregorianIsoToJalali,
   getTodayJalali,
   JALALI_MONTH_NAMES,
+  getAvatarUrl,
 } from '../utils';
 import { PersianDatePicker } from './PersianDatePicker';
 import { uploadAvatar } from '../api';
@@ -586,7 +587,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
                   <div className="w-16 h-16 rounded-2xl bg-[#222] border-2 border-[#1DB954] overflow-hidden flex items-center justify-center text-white font-black text-xl shadow-lg shadow-black/40">
                     {profileAvatar ? (
                       <img
-                        src={profileAvatar}
+                        src={getAvatarUrl(profileAvatar)}
                         alt="avatar preview"
                         className="w-full h-full object-cover"
                       />

@@ -149,13 +149,13 @@ export const AddColdLeadModal: React.FC<AddColdLeadModalProps> = ({
             <div className="relative">
               <input
                 type="tel"
-                dir="ltr"
+                dir={phoneNumber ? 'ltr' : 'rtl'}
                 autoFocus
                 required
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 placeholder="مثال: 09123456789 یا 02188990011"
-                className="w-full h-11 px-3.5 pr-10 bg-[#121212] border border-[#333] focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] rounded-xl text-sm text-white placeholder-[#555] font-mono transition-all text-left"
+                className="w-full h-11 px-3.5 pr-10 bg-[#121212] border border-[#333] focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] rounded-xl text-sm text-white placeholder-[#555] font-mono transition-all text-right placeholder:text-right placeholder:text-slate-400"
               />
               <PhoneCall className="w-4 h-4 text-[#777] absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>

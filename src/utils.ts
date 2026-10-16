@@ -471,3 +471,15 @@ export function matchPersonnelToReport(
   return false;
 }
 
+export function getAvatarUrl(avatar?: string | null): string | undefined {
+  if (!avatar || typeof avatar !== 'string') return undefined;
+  const trimmed = avatar.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('/api/assets/')) return trimmed;
+  if (trimmed.startsWith('/assets/')) return `/api${trimmed}`;
+  if (trimmed.startsWith('/')) return trimmed;
+  return `/api/assets/${trimmed}`;
+}

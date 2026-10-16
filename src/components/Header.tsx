@@ -18,6 +18,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Personnel, AuthUser, Tenant } from '../types';
+import { getAvatarUrl } from '../utils';
 
 interface HeaderProps {
   searchQuery: string;
@@ -204,13 +205,24 @@ export const Header: React.FC<HeaderProps> = ({
               title="حساب کاربری و سازمان"
             >
               <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-sm ${
+                className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-sm overflow-hidden ${
                   isAdmin
                     ? 'bg-[#1DB954] text-black'
                     : 'bg-[#282828] text-[#1DB954] border border-[#3e3e3e]'
                 }`}
               >
-                {initial}
+                {(currentPersonnel?.avatar || currentUser?.avatar) ? (
+                  <img
+                    src={getAvatarUrl(currentPersonnel?.avatar || currentUser?.avatar)}
+                    alt={displayName}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <span>{initial}</span>
+                )}
               </div>
 
               <div className="hidden md:flex flex-col text-right leading-tight pr-0.5">

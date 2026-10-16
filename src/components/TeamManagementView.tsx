@@ -72,6 +72,7 @@ import {
   formatTimeRemaining,
   getStatusTheme,
   toPersianDigits,
+  getAvatarUrl,
 } from '../utils';
 
 export const FAMILY_RELATION_OPTIONS = [
@@ -1768,7 +1769,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-[#222] border border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-sm flex-shrink-0">
                               {p.avatar ? (
-                                <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
+                                <img src={getAvatarUrl(p.avatar)} alt={p.name} className="w-full h-full object-cover" />
                               ) : (
                                 <span>{p.name.charAt(0)}</span>
                               )}
@@ -1939,7 +1940,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-12 h-12 rounded-2xl bg-[#222] border-2 border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-base flex-shrink-0 shadow-md">
                           {p.avatar ? (
-                            <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
+                            <img src={getAvatarUrl(p.avatar)} alt={p.name} className="w-full h-full object-cover" />
                           ) : (
                             <span>{p.name.charAt(0)}</span>
                           )}

@@ -308,6 +308,7 @@ export interface AuthUser {
   first_name?: string;
   last_name?: string;
   role_id?: string;
+  avatar?: string;
   is_admin: boolean;
   app_role: 'admin' | 'marketer' | 'sales_manager';
 }
