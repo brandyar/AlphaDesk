@@ -18,6 +18,8 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import { Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
 import { formatTimeRemaining, formatPersianDate, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS } from '../utils';
@@ -55,7 +57,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   showExpiredOnly,
   onToggleExpiredOnly,
 }) => {
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(30);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -193,21 +195,51 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           </div>
         </div>
 
-        {/* Search input & Pagination Size */}
+        {/* Search input, View Mode & Pagination Size */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="جستجو در نام، مدیر، شماره یا شهر..."
+              placeholder="جستجو در مدیر، برند، شماره یا شهر..."
               className="h-9 w-52 sm:w-64 pl-8 pr-3 rounded-xl bg-[#282828] text-xs text-white placeholder-[#777] border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954]"
             />
             <Search className="w-3.5 h-3.5 text-[#777] absolute left-2.5 top-3 pointer-events-none" />
           </div>
 
+          {/* View Mode Toggle: List vs Card Grid */}
+          <div className="flex items-center gap-1 bg-[#121212] p-1 rounded-xl border border-[#2c2c2c]">
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                viewMode === 'table'
+                  ? 'bg-[#1DB954] text-black font-bold shadow-md'
+                  : 'text-[#888] hover:text-white'
+              }`}
+              title="نمایش لیستی (جدولی - دسکتاپ)"
+            >
+              <List className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span className="hidden sm:inline">لیست</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('grid')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                viewMode === 'grid'
+                  ? 'bg-[#1DB954] text-black font-bold shadow-md'
+                  : 'text-[#888] hover:text-white'
+              }`}
+              title="نمایش کارتی (موبایل)"
+            >
+              <LayoutGrid className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span className="hidden sm:inline">کارت</span>
+            </button>
+          </div>
+
           <div className="flex items-center gap-1.5 text-xs text-[#888]">
-            <span>تعداد در صفحه:</span>
+            <span>تعداد:</span>
             <select
               value={pageSize}
               onChange={(e) => {
@@ -229,7 +261,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         </div>
       </div>
 
-      {/* Customers Content: Grid View */}
+      {/* Customers Content: Table List or Card Grid */}
       {searchedCustomers.length === 0 ? (
         <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-4">
           <div className="w-14 h-14 rounded-full bg-[#282828] flex items-center justify-center text-[#535353] mx-auto">
@@ -249,7 +281,144 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <>
+          {/* DESKTOP TABLE LIST VIEW (Visible on md screens and above when viewMode is table) */}
+          <div className={`${viewMode === 'table' ? 'hidden md:block' : 'hidden'} bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden shadow-xl`}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse">
+                <thead>
+                  <tr className="bg-[#141414] border-b border-[#282828] text-[#888888] text-xs font-semibold">
+                    <th className="py-3.5 px-4">مدیر کسب‌وکار (عنوان اصلی) و نام برند</th>
+                    <th className="py-3.5 px-4">وضعیت پرونده</th>
+                    <th className="py-3.5 px-4">بازاریاب مسئول</th>
+                    <th className="py-3.5 px-4">مهلت پیگیری</th>
+                    <th className="py-3.5 px-4">ارتباط سریع</th>
+                    <th className="py-3.5 px-4 text-left">عملیات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#222222] text-xs text-[#CCCCCC]">
+                  {paginatedCustomers.map((c) => {
+                    const timer = formatTimeRemaining(c.assignment_deadline);
+                    const statusTheme = getStatusTheme(c.status);
+
+                    const contactsArr = Array.isArray(c.contacts) ? c.contacts : [];
+                    const mobilesArr = Array.isArray(c.mobile_numbers) ? c.mobile_numbers : [];
+                    const telegramsArr = Array.isArray(c.telegram_ids) ? c.telegram_ids : [];
+                    const instasArr = Array.isArray(c.instagram_ids) ? c.instagram_ids : [];
+
+                    const primaryPhone =
+                      contactsArr.find((ct) => ct && (ct.channel_type === 'mobile' || ct.channel_type === 'landline'))
+                        ?.value || mobilesArr[0] || '';
+                    const primaryTelegram =
+                      contactsArr.find((ct) => ct && ct.channel_type === 'telegram')?.value ||
+                      c.telegram_phone ||
+                      telegramsArr[0] || '';
+                    const primaryInsta =
+                      contactsArr.find((ct) => ct && ct.channel_type === 'instagram')?.value ||
+                      instasArr[0] || '';
+
+                    return (
+                      <tr
+                        key={c.id}
+                        onClick={() => onSelectCustomer(c)}
+                        className="hover:bg-[#202020] transition-colors cursor-pointer group"
+                      >
+                        {/* Primary Title: Manager Name */}
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-sm text-white group-hover:text-[#1DB954] transition-colors flex items-center gap-1.5">
+                            <Building className="w-3.5 h-3.5 text-[#1DB954] flex-shrink-0" />
+                            <span>{c.manager_name || 'مدیریت نامشخص'}</span>
+                          </div>
+                          <div className="text-[11px] text-[#888888] mt-0.5 flex items-center gap-1 flex-wrap">
+                            <span className="text-[#A7A7A7] font-semibold">برند/کسب‌وکار: {c.company_name}</span>
+                            {c.business_type && <span>· {c.business_type}</span>}
+                            {c.city && <span>· {c.city}</span>}
+                          </div>
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <span
+                            className={`inline-flex text-[11px] px-2.5 py-0.5 rounded-full border ${statusTheme.bg} ${statusTheme.color} font-medium`}
+                          >
+                            {formatStatusLabel(c.status)}
+                          </span>
+                        </td>
+
+                        {/* Marketer */}
+                        <td className="py-3.5 px-4 whitespace-nowrap text-white font-medium">
+                          {c.assigned_marketer_name || 'تخصیص نیافته'}
+                        </td>
+
+                        {/* Timer */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <span className={`px-2.5 py-1 rounded-full text-[11px] font-mono ${timer.badgeClass}`}>
+                            {timer.text}
+                          </span>
+                        </td>
+
+                        {/* Quick Contacts */}
+                        <td className="py-3.5 px-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5">
+                            {primaryPhone && (
+                              <a
+                                href={`tel:${primaryPhone}`}
+                                className="w-7 h-7 rounded-full bg-[#242424] hover:bg-[#1DB954] hover:text-black text-[#A7A7A7] flex items-center justify-center transition-colors"
+                                title={`تماس با ${primaryPhone}`}
+                              >
+                                <Phone className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                            {primaryTelegram && (
+                              <a
+                                href={
+                                  /^09\d{9}$/.test(primaryTelegram)
+                                    ? `https://t.me/+98${primaryTelegram.substring(1)}`
+                                    : `https://t.me/${primaryTelegram.replace(/^@/, '')}`
+                                }
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-7 h-7 rounded-full bg-[#242424] hover:bg-[#229ED9] hover:text-white text-[#A7A7A7] flex items-center justify-center transition-colors"
+                                title="پیام در تلگرام"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                            {primaryInsta && (
+                              <a
+                                href={`https://instagram.com/${primaryInsta.replace(/^@/, '')}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-7 h-7 rounded-full bg-[#242424] hover:bg-[#E1306C] hover:text-white text-[#A7A7A7] flex items-center justify-center transition-colors"
+                                title="پیج اینستاگرام"
+                              >
+                                <Instagram className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Action */}
+                        <td className="py-3.5 px-4 text-left whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => onSelectCustomer(c)}
+                            className="px-3 py-1 rounded-lg bg-[#242424] hover:bg-[#1DB954] text-[#A7A7A7] hover:text-black font-bold text-xs transition-colors flex items-center gap-1 ml-auto"
+                          >
+                            <span>مشاهده</span>
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* CARD GRID VIEW (Visible on mobile, or when viewMode === 'grid' on desktop) */}
+          <div className={`${viewMode === 'table' ? 'block md:hidden' : 'block'} grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5`}>
           {paginatedCustomers.map((c) => {
             const timer = formatTimeRemaining(c.assignment_deadline);
             const statusTheme = getStatusTheme(c.status);
@@ -264,11 +433,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <div>
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="min-w-0">
+                      {/* Primary Title: Manager Name */}
                       <h3 className="font-bold text-white text-base group-hover:text-[#1DB954] transition-colors truncate">
-                        {c.company_name}
+                        {c.manager_name || 'مدیریت نامشخص'}
                       </h3>
-                      <div className="text-xs text-[#A7A7A7] truncate">
-                        {c.business_type || 'صنف نامشخص'} · {c.city}
+                      {/* Subtitle: Business / Company Name */}
+                      <div className="text-xs text-[#A7A7A7] truncate mt-0.5">
+                        کسب‌وکار: <span className="text-white font-semibold">{c.company_name}</span> · {c.business_type || 'صنف نامشخص'} · {c.city}
                       </div>
                     </div>
 
@@ -383,6 +554,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             );
           })}
         </div>
+        </>
       )}
 
       {/* Pagination Controls */}

@@ -49,6 +49,8 @@ import {
   HeartHandshake,
   UserCog,
   Database,
+  List,
+  LayoutGrid,
 } from 'lucide-react';
 import { DataMigrationView } from './DataMigrationView';
 import {
@@ -494,6 +496,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   // -------------------------------------------------------------
   const [personnelSearch, setPersonnelSearch] = useState('');
   const [selectedTenantFilter, setSelectedTenantFilter] = useState<string>('all');
+  const [colleagueViewMode, setColleagueViewMode] = useState<'list' | 'grid'>('list');
   const [viewingFamilyModalPersonnel, setViewingFamilyModalPersonnel] = useState<Personnel | null>(null);
   const [editingColleague, setEditingColleague] = useState<Personnel | null>(null);
   const [isUpdatingColleague, setIsUpdatingColleague] = useState(false);
@@ -1681,6 +1684,36 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               )}
             </div>
 
+            {/* View Mode Toggle Switcher: List vs Card Grid */}
+            <div className="flex items-center gap-1 bg-[#121212] p-1 rounded-xl border border-[#2c2c2c]">
+              <button
+                type="button"
+                onClick={() => setColleagueViewMode('list')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  colleagueViewMode === 'list'
+                    ? 'bg-[#1DB954] text-black font-bold shadow-md'
+                    : 'text-[#888] hover:text-white'
+                }`}
+                title="نمایش لیستی (جدولی - دسکتاپ)"
+              >
+                <List className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span className="hidden sm:inline">لیست</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setColleagueViewMode('grid')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                  colleagueViewMode === 'grid'
+                    ? 'bg-[#1DB954] text-black font-bold shadow-md'
+                    : 'text-[#888] hover:text-white'
+                }`}
+                title="نمایش کارتی (موبایل)"
+              >
+                <LayoutGrid className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span className="hidden sm:inline">کارت</span>
+              </button>
+            </div>
+
             <button
               onClick={() => setActiveSubTab('new_colleague')}
               className="px-4 py-2 rounded-xl bg-[#1DB954] text-black font-bold text-xs flex items-center gap-1.5 shadow-md hover:bg-[#1ed760] transition-colors"
@@ -1690,214 +1723,388 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredPersonnel.map((p) => {
-              const assignedCusts = customers.filter((c) => c.assigned_marketer_id === p.id);
-              const wonCusts = assignedCusts.filter((c) => c.status === 'قرارداد');
-              const roleCfg = PERSONNEL_ROLE_CONFIG[p.role as PersonnelRole] || {
-                label: p.role,
-                badgeClass: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
-                icon: UserCheck,
-              };
-              const RoleIcon = roleCfg.icon;
+          {/* DESKTOP TABLE LIST VIEW (Visible on md screens and above when list mode active) */}
+          <div className={`${colleagueViewMode === 'list' ? 'hidden md:block' : 'hidden'} bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden shadow-xl`}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse">
+                <thead>
+                  <tr className="bg-[#141414] border-b border-[#282828] text-[#888888] text-xs font-semibold">
+                    <th className="py-3.5 px-4">مشخصات همکار</th>
+                    <th className="py-3.5 px-4">نقش سازمانی و شعب</th>
+                    <th className="py-3.5 px-4">اطلاعات تماس</th>
+                    <th className="py-3.5 px-4">آمار پرونده‌ها</th>
+                    <th className="py-3.5 px-4">دسترسی و خانواده</th>
+                    <th className="py-3.5 px-4 text-left">عملیات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#222222] text-xs text-[#CCCCCC]">
+                  {filteredPersonnel.map((p) => {
+                    const assignedCusts = customers.filter((c) => c.assigned_marketer_id === p.id);
+                    const wonCusts = assignedCusts.filter((c) => c.status === 'قرارداد');
+                    const roleCfg = PERSONNEL_ROLE_CONFIG[p.role as PersonnelRole] || {
+                      label: p.role,
+                      badgeClass: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
+                      icon: UserCheck,
+                    };
+                    const RoleIcon = roleCfg.icon;
 
-              // Build phone list for display
-              const cardPhones: Array<{ label: string; number: string }> = [];
-              if (p.phones && Array.isArray(p.phones) && p.phones.length > 0) {
-                p.phones.forEach((item, idx) => {
-                  if (typeof item === 'string') {
-                    if (item.trim()) cardPhones.push({ label: idx === 0 ? 'موبایل اصلی' : 'شماره دیگر', number: item });
-                  } else if (item && item.number) {
-                    cardPhones.push({ label: item.label || 'شماره تماس', number: item.number });
-                  }
-                });
-              } else if (p.phone) {
-                cardPhones.push({ label: 'موبایل اصلی', number: p.phone });
-              }
+                    const cardPhones: Array<{ label: string; number: string }> = [];
+                    if (p.phones && Array.isArray(p.phones) && p.phones.length > 0) {
+                      p.phones.forEach((item, idx) => {
+                        if (typeof item === 'string') {
+                          if (item.trim()) cardPhones.push({ label: idx === 0 ? 'موبایل' : 'شماره ۲', number: item });
+                        } else if (item && item.number) {
+                          cardPhones.push({ label: item.label || 'تماس', number: item.number });
+                        }
+                      });
+                    } else if (p.phone) {
+                      cardPhones.push({ label: 'موبایل', number: p.phone });
+                    }
 
-              const allowedCount = p.permissions?.allowed_menus?.length ?? (p.role === 'admin' ? 8 : 6);
-              const scopeLabel =
-                p.permissions?.report_view_scope === 'all' || p.role === 'admin'
-                  ? 'همه همکاران'
-                  : p.permissions?.report_view_scope === 'specific_personnel'
-                  ? `${toPersianDigits(p.permissions?.visible_report_personnel_ids?.length || 0)} همکار منتخب`
-                  : 'فقط گزارش خود';
+                    return (
+                      <tr key={p.id} className="hover:bg-[#202020] transition-colors">
+                        {/* Colleague Name & Avatar */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-[#222] border border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-sm flex-shrink-0">
+                              {p.avatar ? (
+                                <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <span>{p.name.charAt(0)}</span>
+                              )}
+                            </div>
+                            <div className="truncate">
+                              <div className="font-bold text-sm text-white flex items-center gap-1.5">
+                                <span>{p.name}</span>
+                                {p.role === 'admin' && (
+                                  <Shield className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                                )}
+                              </div>
+                              {p.username && (
+                                <div className="text-[11px] font-mono text-[#1DB954]" dir="ltr">
+                                  @{p.username}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
 
-              return (
-                <div
-                  key={p.id}
-                  className="bg-[#181818] border border-[#282828] hover:border-[#383838] rounded-2xl p-4 sm:p-5 space-y-4 transition-all shadow-md hover:shadow-xl"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-12 h-12 rounded-2xl bg-[#222] border-2 border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-base flex-shrink-0 shadow-md">
-                        {p.avatar ? (
-                          <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span>{p.name.charAt(0)}</span>
-                        )}
-                      </div>
-                      <div className="truncate">
-                        <div className="font-bold text-sm text-white truncate flex items-center gap-1.5">
-                          <span>{p.name}</span>
-                          {p.role === 'admin' && (
-                            <Shield className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                        {/* Role & Tenant */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="flex flex-col gap-1 items-start">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold border ${roleCfg.badgeClass}`}
+                            >
+                              <RoleIcon className="w-3 h-3" />
+                              <span>{roleCfg.label}</span>
+                            </span>
+                            <span className="text-[11px] text-[#A7A7A7] flex items-center gap-1">
+                              <Building2 className="w-3 h-3 text-[#1DB954]" />
+                              <span>{p.tenant_name || 'سازمان مرکزی'}</span>
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Contact Info */}
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-1">
+                            <div className="text-[11px] text-[#BBB] font-mono" dir="ltr">
+                              {p.email}
+                            </div>
+                            {cardPhones.length > 0 && (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {cardPhones.slice(0, 2).map((ph, idx) => (
+                                  <a
+                                    key={idx}
+                                    href={`tel:${ph.number}`}
+                                    dir="ltr"
+                                    className="font-mono text-[11px] text-white hover:text-[#1DB954] bg-[#121212] px-2 py-0.5 rounded border border-[#2c2c2c] transition-colors"
+                                  >
+                                    {ph.number}
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Customer Stats */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-3 text-xs font-mono">
+                            <div className="bg-[#121212] px-2.5 py-1 rounded-lg border border-[#2a2a2a]">
+                              <span className="text-[10px] text-[#888]">فعال: </span>
+                              <span className="text-white font-bold">{toPersianDigits(assignedCusts.length)}</span>
+                            </div>
+                            <div className="bg-[#121212] px-2.5 py-1 rounded-lg border border-[#2a2a2a]">
+                              <span className="text-[10px] text-[#888]">قرارداد: </span>
+                              <span className="text-[#1DB954] font-bold">{toPersianDigits(wonCusts.length)}</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Family / Permissions */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {(p.family_contacts && p.family_contacts.length > 0) || p.emergency_contact_phone ? (
+                            <button
+                              type="button"
+                              onClick={() => setViewingFamilyModalPersonnel(p)}
+                              className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                            >
+                              <HeartHandshake className="w-3.5 h-3.5 text-rose-400" />
+                              <span>تماس خانواده ({toPersianDigits(p.family_contacts?.length || 1)})</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openEditColleague(p)}
+                              className="px-2.5 py-1 rounded-lg bg-[#141414] hover:bg-[#202020] text-[#777] border border-dashed border-[#2c2c2c] text-xs transition-colors"
+                            >
+                              + شماره خانواده
+                            </button>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3.5 px-4 text-left whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 justify-end">
+                            <button
+                              onClick={() => openEditColleague(p)}
+                              className="p-1.5 rounded-lg bg-[#222] text-[#A7A7A7] hover:text-white hover:bg-[#333] transition-colors"
+                              title="ویرایش مشخصات و دسترسی‌ها"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-[#1DB954]" />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (confirm(`آیا از حذف همکار «${p.name}» اطمینان دارید؟`)) {
+                                  await onDeletePersonnel(p.id);
+                                  showToast(`همکار «${p.name}» با موفقیت حذف شد.`);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors"
+                              title="حذف همکار"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* CARD GRID VIEW (Visible on mobile, or when colleagueViewMode === 'grid' on desktop) */}
+          <div className={`${colleagueViewMode === 'list' ? 'block md:hidden' : 'block'} grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4`}>
+              {filteredPersonnel.map((p) => {
+                const assignedCusts = customers.filter((c) => c.assigned_marketer_id === p.id);
+                const wonCusts = assignedCusts.filter((c) => c.status === 'قرارداد');
+                const roleCfg = PERSONNEL_ROLE_CONFIG[p.role as PersonnelRole] || {
+                  label: p.role,
+                  badgeClass: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
+                  icon: UserCheck,
+                };
+                const RoleIcon = roleCfg.icon;
+
+                // Build phone list for display
+                const cardPhones: Array<{ label: string; number: string }> = [];
+                if (p.phones && Array.isArray(p.phones) && p.phones.length > 0) {
+                  p.phones.forEach((item, idx) => {
+                    if (typeof item === 'string') {
+                      if (item.trim()) cardPhones.push({ label: idx === 0 ? 'موبایل اصلی' : 'شماره دیگر', number: item });
+                    } else if (item && item.number) {
+                      cardPhones.push({ label: item.label || 'شماره تماس', number: item.number });
+                    }
+                  });
+                } else if (p.phone) {
+                  cardPhones.push({ label: 'موبایل اصلی', number: p.phone });
+                }
+
+                const allowedCount = p.permissions?.allowed_menus?.length ?? (p.role === 'admin' ? 8 : 6);
+                const scopeLabel =
+                  p.permissions?.report_view_scope === 'all' || p.role === 'admin'
+                    ? 'همه همکاران'
+                    : p.permissions?.report_view_scope === 'specific_personnel'
+                    ? `${toPersianDigits(p.permissions?.visible_report_personnel_ids?.length || 0)} همکار منتخب`
+                    : 'فقط گزارش خود';
+
+                return (
+                  <div
+                    key={p.id}
+                    className="bg-[#181818] border border-[#282828] hover:border-[#383838] rounded-2xl p-4 sm:p-5 space-y-4 transition-all shadow-md hover:shadow-xl"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-12 h-12 rounded-2xl bg-[#222] border-2 border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-base flex-shrink-0 shadow-md">
+                          {p.avatar ? (
+                            <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span>{p.name.charAt(0)}</span>
                           )}
                         </div>
-                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${roleCfg.badgeClass}`}
-                          >
-                            <RoleIcon className="w-3 h-3" />
-                            <span>{roleCfg.label}</span>
-                          </span>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-[#121212] border border-[#2c2c2c] text-[#A7A7A7]">
-                            <Building2 className="w-3 h-3 text-[#1DB954]" />
-                            <span>{p.tenant_name || 'سازمان مرکزی'}</span>
-                          </span>
+                        <div className="truncate">
+                          <div className="font-bold text-sm text-white truncate flex items-center gap-1.5">
+                            <span>{p.name}</span>
+                            {p.role === 'admin' && (
+                              <Shield className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                            )}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${roleCfg.badgeClass}`}
+                            >
+                              <RoleIcon className="w-3 h-3" />
+                              <span>{roleCfg.label}</span>
+                            </span>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-[#121212] border border-[#2c2c2c] text-[#A7A7A7]">
+                              <Building2 className="w-3 h-3 text-[#1DB954]" />
+                              <span>{p.tenant_name || 'سازمان مرکزی'}</span>
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => openEditColleague(p)}
-                        className="p-1.5 rounded-lg bg-[#222] text-[#A7A7A7] hover:text-white hover:bg-[#333] transition-colors"
-                        title="ویرایش مشخصات و دسترسی‌ها"
-                      >
-                        <Edit2 className="w-3.5 h-3.5 text-[#1DB954]" />
-                      </button>
-                      <button
-                        onClick={async () => {
-                          if (confirm(`آیا از حذف همکار «${p.name}» اطمینان دارید؟`)) {
-                            await onDeletePersonnel(p.id);
-                            showToast(`همکار «${p.name}» با موفقیت حذف شد.`);
-                          }
-                        }}
-                        className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors"
-                        title="حذف همکار"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Contact info & multiple phone numbers */}
-                  <div className="space-y-2 text-xs border-t border-[#242424] pt-3">
-                    <div className="flex items-center justify-between text-xs text-[#999]">
-                      <div className="flex items-center gap-2 truncate">
-                        <Mail className="w-3.5 h-3.5 text-[#666] flex-shrink-0" />
-                        <span className="font-mono text-[11px] truncate" dir="ltr">
-                          {p.email}
-                        </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => openEditColleague(p)}
+                          className="p-1.5 rounded-lg bg-[#222] text-[#A7A7A7] hover:text-white hover:bg-[#333] transition-colors"
+                          title="ویرایش مشخصات و دسترسی‌ها"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-[#1DB954]" />
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (confirm(`آیا از حذف همکار «${p.name}» اطمینان دارید؟`)) {
+                              await onDeletePersonnel(p.id);
+                              showToast(`همکار «${p.name}» با موفقیت حذف شد.`);
+                            }
+                          }}
+                          className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors"
+                          title="حذف همکار"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                      {p.username && (
-                        <span className="font-mono text-[10px] text-[#1DB954] bg-[#1DB954]/10 px-1.5 py-0.5 rounded" dir="ltr">
-                          @{p.username}
-                        </span>
+                    </div>
+
+                    {/* Contact info & multiple phone numbers */}
+                    <div className="space-y-2 text-xs border-t border-[#242424] pt-3">
+                      <div className="flex items-center justify-between text-xs text-[#999]">
+                        <div className="flex items-center gap-2 truncate">
+                          <Mail className="w-3.5 h-3.5 text-[#666] flex-shrink-0" />
+                          <span className="font-mono text-[11px] truncate" dir="ltr">
+                            {p.email}
+                          </span>
+                        </div>
+                        {p.username && (
+                          <span className="font-mono text-[10px] text-[#1DB954] bg-[#1DB954]/10 px-1.5 py-0.5 rounded" dir="ltr">
+                            @{p.username}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Phones list */}
+                      {cardPhones.length > 0 && (
+                        <div className="space-y-1 pt-1">
+                          {cardPhones.map((ph, phIdx) => (
+                            <div
+                              key={phIdx}
+                              className="flex items-center justify-between text-xs bg-[#121212] px-2.5 py-1.5 rounded-lg border border-[#222]"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Phone className="w-3 h-3 text-[#1DB954] flex-shrink-0" />
+                                <span className="text-[10px] text-[#888] truncate">{ph.label}:</span>
+                                <a
+                                  href={`tel:${ph.number}`}
+                                  dir="ltr"
+                                  className="font-mono text-[11px] text-white hover:text-[#1DB954] transition-colors"
+                                >
+                                  {ph.number}
+                                </a>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(ph.number);
+                                  showToast(`شماره ${ph.number} در حافظه کپی شد.`, 'info');
+                                }}
+                                className="text-[#666] hover:text-white p-1 rounded"
+                                title="کپی شماره"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
 
-                    {/* Phones list */}
-                    {cardPhones.length > 0 && (
-                      <div className="space-y-1 pt-1">
-                        {cardPhones.map((ph, phIdx) => (
-                          <div
-                            key={phIdx}
-                            className="flex items-center justify-between text-xs bg-[#121212] px-2.5 py-1.5 rounded-lg border border-[#222]"
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Phone className="w-3 h-3 text-[#1DB954] flex-shrink-0" />
-                              <span className="text-[10px] text-[#888] truncate">{ph.label}:</span>
-                              <a
-                                href={`tel:${ph.number}`}
-                                dir="ltr"
-                                className="font-mono text-[11px] text-white hover:text-[#1DB954] transition-colors"
-                              >
-                                {ph.number}
-                              </a>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(ph.number);
-                                showToast(`شماره ${ph.number} در حافظه کپی شد.`, 'info');
-                              }}
-                              className="text-[#666] hover:text-white p-1 rounded"
-                              title="کپی شماره"
-                            >
-                              <Copy className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Granular permissions overview badges */}
-                  <div className="flex items-center flex-wrap gap-1.5 pt-2 border-t border-[#222] text-[10px]">
-                    <span className="px-2 py-0.5 rounded-md bg-[#121212] border border-[#262626] text-[#BBB] flex items-center gap-1">
-                      <Layers className="w-3 h-3 text-[#1DB954]" />
-                      <span>{toPersianDigits(allowedCount)} منوی مجاز</span>
-                    </span>
-                    <span className="px-2 py-0.5 rounded-md bg-[#121212] border border-[#262626] text-[#BBB] flex items-center gap-1">
-                      <Eye className="w-3 h-3 text-blue-400" />
-                      <span>دید گزارش: {scopeLabel}</span>
-                    </span>
-                  </div>
-
-                  {/* Family Contacts Quick Action */}
-                  <div className="pt-2 border-t border-[#222]">
-                    {(p.family_contacts && p.family_contacts.length > 0) || p.emergency_contact_phone ? (
-                      <button
-                        type="button"
-                        onClick={() => setViewingFamilyModalPersonnel(p)}
-                        className="w-full py-1.5 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 text-[11px] font-semibold flex items-center justify-between transition-colors shadow-sm"
-                      >
-                        <span className="flex items-center gap-1.5">
-                          <HeartHandshake className="w-3.5 h-3.5 text-rose-400" />
-                          <span>اطلاعات تماس خانواده</span>
-                        </span>
-                        <span className="px-2 py-0.5 bg-rose-500/20 rounded-md text-[10px] font-bold text-rose-200">
-                          {toPersianDigits(
-                            p.family_contacts && p.family_contacts.length > 0
-                              ? p.family_contacts.length
-                              : 1
-                          )}{' '}
-                          عضو
-                        </span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => openEditColleague(p)}
-                        className="w-full py-1.5 px-2.5 rounded-xl bg-[#141414] hover:bg-[#202020] text-[#777] hover:text-[#B3B3B3] border border-dashed border-[#2c2c2c] text-[11px] flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        <HeartHandshake className="w-3.5 h-3.5 text-[#666]" />
-                        <span>ثبت شماره تماس خانواده همکار</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Stats snippet */}
-                  <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-[#121212] p-2.5 rounded-xl border border-[#222]">
-                    <div>
-                      <div className="text-[10px] text-[#777] font-sans">پرونده‌های فعال</div>
-                      <div className="text-white font-bold mt-0.5">
-                        {toPersianDigits(assignedCusts.length)} مشتری
-                      </div>
+                    {/* Granular permissions overview badges */}
+                    <div className="flex items-center flex-wrap gap-1.5 pt-2 border-t border-[#222] text-[10px]">
+                      <span className="px-2 py-0.5 rounded-md bg-[#121212] border border-[#262626] text-[#BBB] flex items-center gap-1">
+                        <Layers className="w-3 h-3 text-[#1DB954]" />
+                        <span>{toPersianDigits(allowedCount)} منوی مجاز</span>
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-[#121212] border border-[#262626] text-[#BBB] flex items-center gap-1">
+                        <Eye className="w-3 h-3 text-blue-400" />
+                        <span>دید گزارش: {scopeLabel}</span>
+                      </span>
                     </div>
-                    <div>
-                      <div className="text-[10px] text-[#777] font-sans">قرارداد نهایی</div>
-                      <div className="text-[#1DB954] font-bold mt-0.5">
-                        {toPersianDigits(wonCusts.length)} فقره
+
+                    {/* Family Contacts Quick Action */}
+                    <div className="pt-2 border-t border-[#222]">
+                      {(p.family_contacts && p.family_contacts.length > 0) || p.emergency_contact_phone ? (
+                        <button
+                          type="button"
+                          onClick={() => setViewingFamilyModalPersonnel(p)}
+                          className="w-full py-1.5 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 text-[11px] font-semibold flex items-center justify-between transition-colors shadow-sm"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <HeartHandshake className="w-3.5 h-3.5 text-rose-400" />
+                            <span>اطلاعات تماس خانواده</span>
+                          </span>
+                          <span className="px-2 py-0.5 bg-rose-500/20 rounded-md text-[10px] font-bold text-rose-200">
+                            {toPersianDigits(
+                              p.family_contacts && p.family_contacts.length > 0
+                                ? p.family_contacts.length
+                                : 1
+                            )}{' '}
+                            عضو
+                          </span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openEditColleague(p)}
+                          className="w-full py-1.5 px-2.5 rounded-xl bg-[#141414] hover:bg-[#202020] text-[#777] hover:text-[#B3B3B3] border border-dashed border-[#2c2c2c] text-[11px] flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <HeartHandshake className="w-3.5 h-3.5 text-[#666]" />
+                          <span>ثبت شماره تماس خانواده همکار</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Stats snippet */}
+                    <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-[#121212] p-2.5 rounded-xl border border-[#222]">
+                      <div>
+                        <div className="text-[10px] text-[#777] font-sans">پرونده‌های فعال</div>
+                        <div className="text-white font-bold mt-0.5">
+                          {toPersianDigits(assignedCusts.length)} مشتری
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-[#777] font-sans">قرارداد نهایی</div>
+                        <div className="text-[#1DB954] font-bold mt-0.5">
+                          {toPersianDigits(wonCusts.length)} فقره
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
         </div>
       )}
 
