@@ -5765,21 +5765,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       }
     }
 
-    // Tier 3: Fallback lockOwner or Referral keys ONLY if no Tier 1 or Tier 2 match
-    const fallbackKeys = [row.ReferralsFrom, row.referralsFrom, row.lockOwner, row.lockowner, row.Referrals, row.referrals];
-    for (const rawKey of fallbackKeys) {
-      if (!rawKey) continue;
-      const cleanKey = String(rawKey).trim().toLowerCase();
-      if (!isValidPersonnelKey(cleanKey)) continue;
-
-      let match =
-        legacyUidToPersonnelMap.get(cleanKey) ||
-        legacyUidToPersonnelMap.get(`p-${cleanKey}`) ||
-        legacyUidToPersonnelMap.get(cleanKey.replace(/^p-/, ''));
-
-      if (match) return match;
-    }
-
     return null;
   }
 
