@@ -5667,6 +5667,40 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
+  // 1.5 If personnelRows is supplied (even alongside customer/report chunks), link legacy UIDs (e.g. "2095") to existing personnel!
+  if (Array.isArray(personnelRows) && personnelRows.length > 0) {
+    for (const pRow of personnelRows) {
+      const uid = String(pRow.uid || pRow.ID || pRow.id || '').trim();
+      if (!uid || !isValidPersonnelKey(uid)) continue;
+
+      const username = String(pRow.username || '').trim().toLowerCase();
+      const rawPhone = String(pRow.contacts || pRow.phone || pRow.mobile || '').trim();
+      const normPhone = normalizeContactValue(rawPhone.split(/[,;\n]/)[0], 'mobile');
+      const fname = String(pRow.fname || '').trim();
+      const lname = String(pRow.lname || '').trim();
+      const fullName = (fname + ' ' + lname).trim();
+
+      // Find match in existing combinedPersonnel
+      const matchP = combinedPersonnel.find((p) => {
+        if (p.id && (String(p.id).toLowerCase() === uid.toLowerCase() || String(p.id).toLowerCase() === `p-${uid.toLowerCase()}`)) return true;
+        if (username && p.username && String(p.username).toLowerCase().trim() === username) return true;
+        if (normPhone && p.phone && normalizeContactValue(p.phone, 'mobile') === normPhone) return true;
+        if (fullName && p.name && String(p.name).trim().toLowerCase() === fullName.toLowerCase()) return true;
+        return false;
+      });
+
+      if (matchP) {
+        const uidLower = uid.toLowerCase();
+        legacyUidToPersonnelMap.set(uidLower, matchP);
+        legacyUidToPersonnelMap.set(`p-${uidLower}`, matchP);
+        if (username) {
+          legacyUidToPersonnelMap.set(username, matchP);
+          legacyUidToPersonnelMap.set(`p-${username}`, matchP);
+        }
+      }
+    }
+  }
+
   // Helper to check if a string key is valid (not '0', '1', 'null', 'NULL', 'undefined')
   function isValidPersonnelKey(k: any): boolean {
     if (!k) return false;
