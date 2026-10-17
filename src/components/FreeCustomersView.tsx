@@ -626,13 +626,14 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
                       </div>
                       <h4
                         onClick={() => onSelectCustomer(cust)}
-                        className="text-base font-black text-white hover:text-[#1DB954] cursor-pointer truncate transition-colors"
-                        title={cust.company_name}
+                        className="text-base font-black text-white hover:text-[#1DB954] cursor-pointer truncate transition-colors flex items-center gap-1.5"
+                        title={cust.manager_name || cust.company_name}
                       >
-                        {cust.company_name}
+                        <User className="w-4 h-4 text-[#1DB954] shrink-0" />
+                        <span>{cust.manager_name || cust.negotiator_name || cust.company_name}</span>
                       </h4>
                       <p className="text-xs text-[#888] truncate mt-0.5">
-                        {cust.business_type || 'صنف نامشخص'}
+                        {cust.company_name} {cust.business_type ? `• ${cust.business_type}` : ''}
                       </p>
                     </div>
 
@@ -648,12 +649,12 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
                   {/* Manager and Direct Contacts */}
                   <div className="bg-[#141414] border border-[#262626] rounded-xl p-3 space-y-2 mb-3 text-xs">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-[#B3B3B3]">
-                        <User className="w-3.5 h-3.5 text-[#888]" />
-                        <span className="truncate">{cust.manager_name || 'مدیریت ثبت نشده'}</span>
+                      <div className="flex items-center gap-1.5 text-[#B3B3B3] truncate">
+                        <Building className="w-3.5 h-3.5 text-[#888] shrink-0" />
+                        <span className="truncate">{cust.company_name} ({cust.business_type || 'صنف نامشخص'})</span>
                       </div>
                       {cust.status && (
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${getStatusBadgeClass(cust.status)}`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold shrink-0 ${getStatusBadgeClass(cust.status)}`}>
                           {formatStatusLabel(cust.status)}
                         </span>
                       )}
@@ -786,8 +787,8 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
             <table className="w-full text-right text-xs">
               <thead className="bg-[#141414] text-[#888] border-b border-[#282828]">
                 <tr>
-                  <th className="py-3 px-4 font-bold">شرکت / صنف</th>
-                  <th className="py-3 px-4 font-bold">مدیریت و تماس</th>
+                  <th className="py-3 px-4 font-bold">مدیر کسب و کار / شماره</th>
+                  <th className="py-3 px-4 font-bold">نام کسب و کار و صنف</th>
                   <th className="py-3 px-4 font-bold">استان / شهر</th>
                   <th className="py-3 px-4 font-bold">بازاریاب قبلی</th>
                   <th className="py-3 px-4 font-bold">وضعیت</th>
@@ -805,21 +806,22 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
                       <td className="py-3.5 px-4">
                         <div
                           onClick={() => onSelectCustomer(cust)}
-                          className="font-bold text-white hover:text-[#1DB954] cursor-pointer"
+                          className="font-bold text-white hover:text-[#1DB954] cursor-pointer flex items-center gap-1.5"
                         >
-                          {cust.company_name}
+                          <User className="w-3.5 h-3.5 text-[#1DB954] shrink-0" />
+                          <span>{cust.manager_name || cust.negotiator_name || cust.company_name}</span>
                         </div>
-                        <div className="text-[11px] text-[#777] mt-0.5">
-                          {cust.business_type || 'صنف نامشخص'}
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="text-white">{cust.manager_name || '-'}</div>
                         {primaryPhone && (
-                          <div className="text-[11px] font-mono text-[#1DB954] mt-0.5">
+                          <div className="text-[11px] font-mono text-[#1DB954] mt-0.5" dir="ltr">
                             {toPersianDigits(primaryPhone)}
                           </div>
                         )}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="text-white font-semibold">{cust.company_name}</div>
+                        <div className="text-[11px] text-[#777] mt-0.5">
+                          {cust.business_type || 'صنف نامشخص'}
+                        </div>
                       </td>
                       <td className="py-3.5 px-4 text-[#B3B3B3]">
                         {cust.province || '-'}

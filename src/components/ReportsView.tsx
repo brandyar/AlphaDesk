@@ -532,16 +532,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       <div className="flex items-start justify-between gap-2">
                         <button
                           onClick={() => onSelectCustomer(c)}
-                          className="font-bold text-sm text-white hover:text-[#1DB954] text-right truncate"
+                          className="font-bold text-sm text-white hover:text-[#1DB954] text-right truncate flex items-center gap-1.5"
                         >
-                          {c.company_name}
+                          <User className="w-4 h-4 text-[#1DB954] shrink-0" />
+                          <span>{c.manager_name || c.negotiator_name || c.company_name}</span>
                         </button>
                         <span className="text-[10px] px-2 py-0.5 rounded bg-[#E22134]/15 text-[#E22134] border border-[#E22134]/30 font-bold shrink-0">
                           فاقد گزارش
                         </span>
                       </div>
-                      <p className="text-xs text-[#A7A7A7] mt-1">
-                        {c.business_type || 'صنف نامشخص'} · {c.city}
+                      <p className="text-xs text-[#A7A7A7] mt-1 truncate">
+                        {c.company_name} {c.business_type ? `• ${c.business_type}` : ''} • {c.city}
                       </p>
                       {phone !== '-' && (
                         <div className="mt-2 text-xs text-white font-mono flex items-center gap-1.5" dir="ltr">
@@ -601,17 +602,23 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 {/* Header row */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    {/* Customer Name link */}
+                    {/* Manager / Negotiator Name link */}
                     {customer ? (
                       <button
                         onClick={() => onSelectCustomer(customer)}
                         className="font-bold text-sm text-white hover:text-[#1DB954] transition-colors flex items-center gap-1.5"
                       >
-                        <Building className="w-4 h-4 text-[#1DB954]" />
-                        <span>{customer.company_name}</span>
+                        <User className="w-4 h-4 text-[#1DB954]" />
+                        <span>{customer.manager_name || customer.negotiator_name || rep.negotiator_name || customer.company_name}</span>
+                        {customer.company_name && (
+                          <span className="text-xs text-[#888] font-normal">({customer.company_name})</span>
+                        )}
                       </button>
                     ) : (
-                      <span className="font-bold text-sm text-white">مشتری ناشناس</span>
+                      <span className="font-bold text-sm text-white flex items-center gap-1.5">
+                        <User className="w-4 h-4 text-[#1DB954]" />
+                        <span>{rep.negotiator_name || 'مدیر کسب و کار'}</span>
+                      </span>
                     )}
 
                     {/* Status Pill */}
