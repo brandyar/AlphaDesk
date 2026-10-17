@@ -5596,6 +5596,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   let importedCustomersCount = 0;
   let importedReportsCount = 0;
   let skippedCount = 0;
+  const skippedDetails: Array<{ companyName: string; phone: string; reason: string }> = [];
   const errors: string[] = [];
 
   // Helper chunker for Directus bulk requests
@@ -6091,8 +6092,25 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
 
       if (matchedCustomer) {
         // DUPLICATE CUSTOMER DETECTED!
-        // Re-assign existing customer in Directus to the correct personnel!
         skippedCount++;
+
+        let skipReason = 'رکوردی با مشخصات مشابه در سیستم موجود است';
+        if (callId && legacyCustomerRefMap.has(callId)) {
+          skipReason = `کد تماس تکراری (CallID: ${callId})`;
+        } else if (customerIdLegacy && legacyCustomerRefMap.has(customerIdLegacy)) {
+          skipReason = `کد مشتری تکراری (CustomerID: ${customerIdLegacy})`;
+        } else {
+          const matchedPhone = mobileList.find(m => existingPhoneToCustomerMap.has(m) || legacyCustomerRefMap.has(m)) || mobileList[0] || managerPhone;
+          skipReason = `شماره تلفن تکراری (${matchedPhone || 'همراه'}) - ثبت‌شده برای مشتری «${matchedCustomer.company_name || 'نامشخص'}»`;
+        }
+
+        if (skippedDetails.length < 1000) {
+          skippedDetails.push({
+            companyName: companyName || 'بدون نام',
+            phone: mobileList[0] || managerPhone || 'نامشخص',
+            reason: skipReason,
+          });
+        }
 
         if (assignedPersonnel && (matchedCustomer.assigned_marketer_id !== assignedPersonnel.id || matchedCustomer.assigned_marketer_name !== assignedPersonnel.name)) {
           matchedCustomer.assigned_marketer_id = assignedPersonnel.id;
@@ -6522,6 +6540,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     importedReportsCount,
     updatedCustomersCount: customersToPatchMap.size,
     skippedCount,
+    skippedDetails,
     errors,
     message: `پردازش با موفقیت انجام شد: ${importedPersonnelCount} کارشناس، ${importedCustomersCount} پرونده جدید ثبت، ${customersToPatchMap.size} پرونده به بازاریاب‌های مربوطه متصل/بروزرسانی شد و ${importedReportsCount} گزارش ثبت شد. (تعداد رکوردهای موجود نادیده گرفته‌شده: ${skippedCount})`
   });

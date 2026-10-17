@@ -865,6 +865,7 @@ export async function importLegacyMigrationData(payload: {
   importedCustomersCount: number;
   importedReportsCount: number;
   skippedCount: number;
+  skippedDetails?: Array<{ companyName: string; phone: string; reason: string }>;
   errors: string[];
   message: string;
 }> {

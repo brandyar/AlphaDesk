@@ -22,10 +22,13 @@ import {
   Play,
   Terminal,
   ShieldCheck,
-  Server
+  Server,
+  Download,
+  AlertCircle
 } from 'lucide-react';
 import { Tenant, Personnel } from '../types';
 import { importLegacyMigrationData, resetMigrationCache } from '../api';
+import { toPersianDigits } from '../utils';
 
 interface DataMigrationViewProps {
   tenants: Tenant[];
@@ -283,6 +286,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
       let sumReports = 0;
       let sumSkipped = 0;
       const allErrors: string[] = [];
+      const allSkippedDetails: Array<{ companyName: string; phone: string; reason: string }> = [];
 
       // ۱. اگر پرسنل وجود دارد ارسال می‌شوند
       if (totalAccounts > 0) {
@@ -323,6 +327,9 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
           sumCustomers += resC.importedCustomersCount || 0;
           sumSkipped += resC.skippedCount || 0;
+          if (resC.skippedDetails && Array.isArray(resC.skippedDetails)) {
+            allSkippedDetails.push(...resC.skippedDetails);
+          }
           if (resC.errors?.length) allErrors.push(...resC.errors);
           addLog(`دسته ${i + 1} مشتریان پردازش شد: ${resC.importedCustomersCount} پرونده جدید ثبت و ${resC.skippedCount || 0} پرونده موجود با بازاریاب و کارشناس مربوطه به روزرسانی گردید.`);
         }
@@ -368,6 +375,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         importedCustomersCount: sumCustomers,
         importedReportsCount: sumReports,
         skippedCount: sumSkipped,
+        skippedDetails: allSkippedDetails,
         errors: allErrors,
         message: `عملیات درون‌ریزی کامل داده‌ها با موفقیت به پایان رسید: ${sumPersonnel} کارشناس، ${sumCustomers} پرونده مشتری، و ${sumReports} گزارش مذاکره در پایگاه داده مرکزی ثبت گردیدند. (${sumSkipped} رکورد تکراری شناسایی و نادیده گرفته شد)`
       };
@@ -873,12 +881,44 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                   ذخیره‌سازی مستقیم در پایگاه داده مرکزی دایرکتوس
                 </span>
               </div>
-              {importResult.errors && importResult.errors.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-red-500/20 text-xs text-red-300 space-y-1">
-                  <div className="font-bold">جزئیات پیام‌های سرور:</div>
-                  {importResult.errors.map((e: string, idx: number) => (
-                    <div key={idx}>• {e}</div>
-                  ))}
+              {importResult.skippedDetails && importResult.skippedDetails.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-amber-500/20 text-xs text-amber-200 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-bold flex items-center gap-1.5 text-amber-400">
+                      <AlertCircle className="w-4 h-4 text-amber-400" />
+                      <span>دلایل و لیست رکوردهای نادیده گرفته‌شده ({toPersianDigits(importResult.skippedDetails.length)} مورد):</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const csvHeader = "نام کسب و کار\tشماره تماس\tدلیل ثبت نشدن\n";
+                        const csvRows = importResult.skippedDetails.map((s: any) => `${s.companyName}\t${s.phone}\t${s.reason}`).join("\n");
+                        const blob = new Blob(["\uFEFF" + csvHeader + csvRows], { type: 'text/tab-separated-values;charset=utf-8;' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement("a");
+                        link.setAttribute("href", url);
+                        link.setAttribute("download", `skipped_customers_report_${Date.now()}.tsv`);
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[11px] border border-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>دانلود گزارش کامل ردیف‌های نادیده گرفته شده (TSV)</span>
+                    </button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto bg-black/50 rounded-xl p-3 space-y-1.5 font-sans border border-amber-500/10 text-[11px]">
+                    {importResult.skippedDetails.slice(0, 100).map((s: any, idx: number) => (
+                      <div key={idx} className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/10 pb-1">
+                        <span className="font-bold text-white">{toPersianDigits(idx + 1)}. {s.companyName} ({s.phone})</span>
+                        <span className="text-amber-300/80 font-mono text-[10px]">{s.reason}</span>
+                      </div>
+                    ))}
+                    {importResult.skippedDetails.length > 100 && (
+                      <div className="text-center text-[#888] pt-1">و {toPersianDigits(importResult.skippedDetails.length - 100)} مورد دیگر (جهت مشاهده کامل روی دکمه دانلود فوق کلیک کنید)</div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
