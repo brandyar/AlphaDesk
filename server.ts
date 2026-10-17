@@ -3166,7 +3166,13 @@ app.get('/api/customers', async (req: Request, res: Response) => {
       res.setHeader('X-Page', String(reqPage));
       res.setHeader('X-Limit', String(reqLimit));
 
-      return res.json(list);
+      if (req.query.all === 'true' || reqLimit >= 20000) {
+        return res.json(list);
+      }
+
+      const startIndex = (reqPage - 1) * reqLimit;
+      const paginatedList = list.slice(startIndex, startIndex + reqLimit);
+      return res.json(paginatedList);
     } catch (e: any) {
       console.error('Fetch customers error:', e.message);
       return res.status(502).json({
@@ -4477,7 +4483,13 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
       res.setHeader('X-Page', String(reqPage));
       res.setHeader('X-Limit', String(reqLimit));
 
-      return res.json(reportsList);
+      if (req.query.all === 'true' || reqLimit >= 50000) {
+        return res.json(reportsList);
+      }
+
+      const startIndex = (reqPage - 1) * reqLimit;
+      const paginatedReports = reportsList.slice(startIndex, startIndex + reqLimit);
+      return res.json(paginatedReports);
     } catch (e: any) {
       return res.status(502).json({ error: `خطا در دریافت گزارش‌ها از پایگاه داده مرکزی: ${e.message}` });
     }

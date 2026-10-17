@@ -281,7 +281,7 @@ export async function fetchCustomers(filters?: {
   if (filters?.free_only) params.append('free_only', 'true');
   if (filters?.page) params.append('page', String(filters.page));
   if (filters?.limit !== undefined) params.append('limit', String(filters.limit));
-  else params.append('limit', '20000');
+  else params.append('limit', '2000');
 
   const res = await fetch(`${BASE_URL}/customers?${params.toString()}`, {
     headers: getBffHeaders(),
@@ -509,7 +509,7 @@ export async function fetchCustomerReports(
   if (customerId) params.append('customer_id', customerId);
   if (options?.page) params.append('page', String(options.page));
   if (options?.limit !== undefined) params.append('limit', String(options.limit));
-  else params.append('limit', '50000');
+  else params.append('limit', '2000');
 
   const q = params.toString() ? `?${params.toString()}` : '';
   const res = await fetch(`${BASE_URL}/customer-reports${q}`, {
