@@ -51,6 +51,8 @@ import {
   Database,
   List,
   LayoutGrid,
+  LogOut,
+  ShieldAlert,
 } from 'lucide-react';
 import { DataMigrationView } from './DataMigrationView';
 import {
@@ -244,6 +246,7 @@ interface TeamManagementViewProps {
   onBulkSwitchOwnership: (customerIds: string[], targetPersonnelId: string, targetPersonnelName: string, days: number) => Promise<void>;
   onUpdateLeaveStatus: (id: string, status: RequestStatus, managerNote?: string) => Promise<void>;
   onSelectCustomer: (customer: Customer) => void;
+  onLogoutAllUsers?: () => Promise<void>;
   onRefreshData?: () => Promise<void>;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
@@ -265,6 +268,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   onBulkSwitchOwnership,
   onUpdateLeaveStatus,
   onSelectCustomer,
+  onLogoutAllUsers,
   onRefreshData,
   showToast,
 }) => {
@@ -870,6 +874,22 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
     }
   };
 
+  const [isLogoutAllModalOpen, setIsLogoutAllModalOpen] = useState(false);
+  const [isSubmittingLogoutAll, setIsSubmittingLogoutAll] = useState(false);
+
+  const handleConfirmLogoutAll = async () => {
+    if (!onLogoutAllUsers) return;
+    setIsSubmittingLogoutAll(true);
+    try {
+      await onLogoutAllUsers();
+      setIsLogoutAllModalOpen(false);
+    } catch (err: any) {
+      showToast(err.message || 'خطا در خروج همگانی کاربران', 'error');
+    } finally {
+      setIsSubmittingLogoutAll(false);
+    }
+  };
+
   const pendingLeavesCount = leaveRequests.filter((r) => r.status === 'pending').length;
 
   return (
@@ -897,6 +917,17 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               </p>
             </div>
           </div>
+
+          {(isAdmin || currentPersonnel?.role === 'admin') && (
+            <button
+              onClick={() => setIsLogoutAllModalOpen(true)}
+              className="flex items-center gap-1.5 sm:gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 shadow-md shadow-red-950/30"
+              title="خروج و لغو نشست کاری تمامی کاربران لاگین‌شده در سامانه"
+            >
+              <LogOut className="w-4 h-4 text-red-400" />
+              <span>خروج همگانی کاربران</span>
+            </button>
+          )}
         </div>
 
         {/* Sub-menu Tabs */}
@@ -3141,6 +3172,59 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 }`}
               >
                 {isProcessingLeaveReview ? 'در حال ثبت...' : reviewAction === 'approved' ? 'تایید نهایی' : 'ثبت رد درخواست'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal: Confirmation for Logout All Active Users */}
+      {isLogoutAllModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-[#181818] border border-red-500/30 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-[#282828]">
+              <div className="flex items-center gap-2.5 text-red-400 font-bold text-base">
+                <ShieldAlert className="w-5 h-5 text-red-400" />
+                <span>تایید خروج همگانی کاربران</span>
+              </div>
+              <button
+                onClick={() => setIsLogoutAllModalOpen(false)}
+                className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-zinc-300 leading-relaxed">
+              آیا از خروج همگانی تمامی کاربران آنلاین و فعال مطمئن هستید؟
+              با تایید این گزینه، نشست کاری تمامی کاربران غیرفعال شده و از سامانه خارج خواهند شد.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#282828]">
+              <button
+                type="button"
+                onClick={() => setIsLogoutAllModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-300 hover:bg-zinc-800 transition-colors"
+                disabled={isSubmittingLogoutAll}
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLogoutAll}
+                disabled={isSubmittingLogoutAll}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/30 transition-all flex items-center gap-2"
+              >
+                {isSubmittingLogoutAll ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>در حال لغو نشست‌ها...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="w-4 h-4" />
+                    <span>تایید و خروج همه کاربران</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -1674,6 +1674,8 @@ function safeDecodeURIComponent(str?: string | null): string {
   }
 }
 
+let globalSessionRevocationTimestamp = 0;
+
 function getRequestUser(req: Request) {
   const userId = (req.headers['x-user-id'] as string) || (req.query.user_id as string) || '';
   const personnelId = (req.headers['x-personnel-id'] as string) || (req.query.personnel_id as string) || userId;
@@ -1683,6 +1685,13 @@ function getRequestUser(req: Request) {
   let userName = safeDecodeURIComponent(rawUserName);
   const userEmail = (req.headers['x-user-email'] as string) || '';
   const tenantId = getRequestTenantId(req);
+
+  const rawSessionIat = req.headers['x-session-iat'] as string;
+  const sessionIat = rawSessionIat ? parseInt(rawSessionIat, 10) : 0;
+  const isSessionRevoked = Boolean(
+    globalSessionRevocationTimestamp > 0 &&
+    (!sessionIat || sessionIat < globalSessionRevocationTimestamp)
+  );
 
   // If userName is missing from headers, auto-resolve from personnelData
   if (!userName && (personnelId || userId || userEmail)) {
@@ -1702,8 +1711,11 @@ function getRequestUser(req: Request) {
     }
   }
 
-  // Authenticated context exists only if a user or personnel ID or auth header is provided
-  const hasUserContext = Boolean(userId || personnelId || userEmail || req.headers['authorization']);
+  // Authenticated context exists only if a user or personnel ID or auth header is provided and NOT revoked
+  const hasUserContext = Boolean(
+    (userId || personnelId || userEmail || req.headers['authorization']) &&
+    !isSessionRevoked
+  );
 
   // Admin is strictly someone with admin role in authenticated context
   const isAdmin = Boolean(
@@ -1712,15 +1724,16 @@ function getRequestUser(req: Request) {
   );
 
   return {
-    userId,
-    personnelId,
+    userId: isSessionRevoked ? '' : userId,
+    personnelId: isSessionRevoked ? '' : personnelId,
     userRole: isAdmin ? 'admin' : (userRole || 'marketer'),
     roleId,
     isAdmin,
-    userName,
-    userEmail,
+    userName: isSessionRevoked ? '' : userName,
+    userEmail: isSessionRevoked ? '' : userEmail,
     tenantId,
     isAuthenticated: hasUserContext,
+    isSessionRevoked,
   };
 }
 
@@ -2043,9 +2056,9 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 });
 
 app.get('/api/auth/me', async (req: Request, res: Response) => {
-  const { userId, personnelId, userRole, isAdmin, userName, userEmail } = getRequestUser(req);
-  if (!userId && !personnelId && !userEmail) {
-    return res.status(401).json({ error: 'کاربر وارد نشده است.' });
+  const { userId, personnelId, userRole, isAdmin, userName, userEmail, isSessionRevoked } = getRequestUser(req);
+  if (isSessionRevoked || (!userId && !personnelId && !userEmail)) {
+    return res.status(401).json({ error: 'ALL_SESSIONS_REVOKED', message: 'نشست‌های کاری تمامی کاربران توسط مدیریت لغو شده است. لطفاً مجدداً وارد شوید.' });
   }
 
   let avatarUrl: string | undefined = undefined;
@@ -2086,6 +2099,21 @@ app.get('/api/auth/me', async (req: Request, res: Response) => {
     },
     personnel_id: personnelId || pItem?.id,
     personnel: pItem
+  });
+});
+
+app.post('/api/auth/logout-all', async (req: Request, res: Response) => {
+  const { isAdmin } = getRequestUser(req);
+  if (!isAdmin) {
+    return res.status(403).json({ error: 'FORBIDDEN', message: 'فقط مدیر ارشد سیستم مجاز به خروج همگانی کاربران است.' });
+  }
+
+  globalSessionRevocationTimestamp = Date.now();
+
+  return res.json({
+    success: true,
+    revocationTimestamp: globalSessionRevocationTimestamp,
+    message: 'تمامی نشست‌های کاری فعال در سامانه با موفقیت لغو شدند و تمامی کاربران لاگین‌شده خارج گردیدند.'
   });
 });
 
@@ -5540,6 +5568,8 @@ app.post('/api/migration/reset-cache', (req: Request, res: Response) => {
   reportsData = [];
   contactsData = [];
   personnelData = [...initialPersonnel];
+  invalidateCustomersCache();
+  invalidateReportsCache();
   return res.json({ success: true, message: 'حافظه موقت کش درون‌ریزی با موفقیت پاکسازی شد.' });
 });
 
@@ -5550,6 +5580,10 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   const { tenant_id, personnelRows = [], customerRows = [], reportRows = [] } = req.body;
   const targetTenantId = tenant_id || getRequestTenantId(req) || 'default';
   const targetTenantNum = resolveDirectusTenantId(targetTenantId);
+
+  // Invalidate Directus query caches at start of import to avoid stale data
+  invalidateCustomersCache();
+  invalidateReportsCache();
 
   // If a new personnel import step is started, clear old local migration arrays
   if (personnelRows.length > 0) {
@@ -5589,7 +5623,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
-  // Combine with local personnel (In Directus mode, ONLY use Directus personnel to avoid deleted memory ghosts)
+  // Combine with local personnel
   const combinedPersonnel: any[] = (directusUrl && directusAdminToken)
     ? [...directusPersonnelList]
     : (() => {
@@ -5600,22 +5634,37 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         return list;
       })();
 
-  // Index existing personnel
+  // Index existing personnel robustly across all ID and string variations
   for (const p of combinedPersonnel) {
     if (p.id) {
-      const pId = String(p.id).toLowerCase();
+      const pId = String(p.id).toLowerCase().trim();
       legacyUidToPersonnelMap.set(pId, p);
       if (pId.startsWith('p-')) {
         legacyUidToPersonnelMap.set(pId.substring(2), p);
+      } else {
+        legacyUidToPersonnelMap.set(`p-${pId}`, p);
       }
     }
-    if (p.username) legacyUidToPersonnelMap.set(String(p.username).toLowerCase(), p);
-    if (p.user_id) legacyUidToPersonnelMap.set(String(p.user_id).toLowerCase(), p);
+    if (p.username) {
+      const uLower = String(p.username).toLowerCase().trim();
+      legacyUidToPersonnelMap.set(uLower, p);
+      legacyUidToPersonnelMap.set(`p-${uLower}`, p);
+      if (uLower.startsWith('p-')) {
+        legacyUidToPersonnelMap.set(uLower.substring(2), p);
+      }
+    }
+    if (p.user_id) {
+      const uIdLower = String(p.user_id).toLowerCase().trim();
+      legacyUidToPersonnelMap.set(uIdLower, p);
+      legacyUidToPersonnelMap.set(`p-${uIdLower}`, p);
+    }
     if (p.phone) {
       const norm = normalizeContactValue(p.phone, 'mobile');
       if (norm) legacyUidToPersonnelMap.set(norm, p);
     }
-    if (p.name) legacyUidToPersonnelMap.set(String(p.name).trim().toLowerCase(), p);
+    if (p.name) {
+      legacyUidToPersonnelMap.set(String(p.name).trim().toLowerCase(), p);
+    }
   }
 
   // Helper to check if a string key is valid (not '0', '1', 'null', 'NULL', 'undefined')
@@ -5637,26 +5686,25 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
   // Helper to resolve personnel from legacy row across accounts/contacts/history fields
   function resolvePersonnelFromRow(row: any): any | null {
     if (!row) return null;
-    const candidateKeys = [
-      row.uid,
-      row.UID,
-      row.user_id,
-      row.userId,
-      row.ReferralsFrom,
-      row.referralsFrom,
-      row.lockOwner,
-      row.lockowner,
-      row.Referrals,
-      row.referrals,
-      row.negotiator,
-      row.negotiator_name,
-      row.operator,
-      row.writer,
-      row.userName,
-      row.username,
-    ];
 
-    for (const rawKey of candidateKeys) {
+    // Tier 1: Primary explicit UID fields
+    const uidKeys = [row.uid, row.UID, row.user_id, row.userId];
+    for (const rawKey of uidKeys) {
+      if (!rawKey) continue;
+      const cleanKey = String(rawKey).trim().toLowerCase();
+      if (!isValidPersonnelKey(cleanKey)) continue;
+
+      let match =
+        legacyUidToPersonnelMap.get(cleanKey) ||
+        legacyUidToPersonnelMap.get(`p-${cleanKey}`) ||
+        legacyUidToPersonnelMap.get(cleanKey.replace(/^p-/, ''));
+
+      if (match) return match;
+    }
+
+    // Tier 2: Negotiator / username / author name fields
+    const nameKeys = [row.negotiator, row.negotiator_name, row.operator, row.writer, row.userName, row.username];
+    for (const rawKey of nameKeys) {
       if (!rawKey) continue;
       const cleanKey = String(rawKey).trim().toLowerCase();
       if (!isValidPersonnelKey(cleanKey)) continue;
@@ -5681,6 +5729,21 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         });
         if (match) return match;
       }
+    }
+
+    // Tier 3: Fallback lockOwner or Referral keys ONLY if no Tier 1 or Tier 2 match
+    const fallbackKeys = [row.ReferralsFrom, row.referralsFrom, row.lockOwner, row.lockowner, row.Referrals, row.referrals];
+    for (const rawKey of fallbackKeys) {
+      if (!rawKey) continue;
+      const cleanKey = String(rawKey).trim().toLowerCase();
+      if (!isValidPersonnelKey(cleanKey)) continue;
+
+      let match =
+        legacyUidToPersonnelMap.get(cleanKey) ||
+        legacyUidToPersonnelMap.get(`p-${cleanKey}`) ||
+        legacyUidToPersonnelMap.get(cleanKey.replace(/^p-/, ''));
+
+      if (match) return match;
     }
 
     return null;

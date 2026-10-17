@@ -88,6 +88,7 @@ import {
   getStoredAuthSession,
   saveAuthSession,
   logoutUser,
+  logoutAllUsers,
   fetchLeaveRequests,
   createLeaveRequest,
   updateLeaveRequestStatus,
@@ -364,6 +365,23 @@ export default function App() {
     loadAllData(authData.personnel, authData.user);
   };
 
+  useEffect(() => {
+    const handleForceLogoutEvent = (e: any) => {
+      const msg = e.detail?.message || 'نشست کاری شما لغو شده است.';
+      setCurrentUser(null);
+      setCurrentPersonnel(null);
+      setApiPersonnelContext(null);
+      setCustomers([]);
+      setReports([]);
+      setColdLeads([]);
+      setAdminReports([]);
+      setIsAuthModalOpen(true);
+      showToast(msg, 'error');
+    };
+    window.addEventListener('crm_force_logout', handleForceLogoutEvent);
+    return () => window.removeEventListener('crm_force_logout', handleForceLogoutEvent);
+  }, []);
+
   const handleLogout = () => {
     logoutUser();
     setCurrentUser(null);
@@ -375,6 +393,16 @@ export default function App() {
     setAdminReports([]);
     showToast('از حساب کاربری خود خارج شدید.', 'info');
     loadAllData(null, null);
+  };
+
+  const handleLogoutAllUsers = async () => {
+    try {
+      const res = await logoutAllUsers();
+      showToast(res.message || 'تمامی کاربران با موفقیت از سامانه خارج شدند.', 'success');
+      handleLogout();
+    } catch (err: any) {
+      showToast(err.message || 'خطا در خروج همگانی کاربران', 'error');
+    }
   };
 
   // Strictly user-scoped customers: if non-admin, strictly restrict to this marketer's portfolio
@@ -1118,6 +1146,7 @@ export default function App() {
                   onBulkSwitchOwnership={handleBulkSwitchOwnership}
                   onUpdateLeaveStatus={handleUpdateLeaveStatus}
                   onSelectCustomer={openCustomerDetail}
+                  onLogoutAllUsers={handleLogoutAllUsers}
                   onRefreshData={loadAllData}
                   showToast={showToast}
                 />

@@ -39,6 +39,8 @@ try {
   }
 } catch {}
 
+let currentSessionIat: number = Date.now();
+
 try {
   const saved = localStorage.getItem(AUTH_STORAGE_KEY);
   if (saved) {
@@ -46,6 +48,7 @@ try {
     currentAuthToken = parsed.access_token || '';
     currentAuthUser = parsed.user || null;
     currentPersonnelContext = parsed.personnel || null;
+    currentSessionIat = parsed.session_iat || Date.now();
     if (parsed.user?.tenant_id && !localStorage.getItem(TENANT_STORAGE_KEY)) {
       currentTenantId = parsed.user.tenant_id;
     }
@@ -71,11 +74,12 @@ export function getApiPersonnelContext(): Personnel | null {
   return currentPersonnelContext;
 }
 
-export function getStoredAuthSession(): { user: AuthUser | null; personnel: Personnel | null; token: string } {
+export function getStoredAuthSession(): { user: AuthUser | null; personnel: Personnel | null; token: string; sessionIat: number } {
   return {
     user: currentAuthUser,
     personnel: currentPersonnelContext,
     token: currentAuthToken,
+    sessionIat: currentSessionIat,
   };
 }
 
@@ -83,8 +87,10 @@ export function saveAuthSession(data: AuthResponse) {
   currentAuthToken = data.access_token || '';
   currentAuthUser = data.user || null;
   currentPersonnelContext = data.personnel || null;
+  currentSessionIat = Date.now();
+  const sessionToSave = { ...data, session_iat: currentSessionIat };
   try {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessionToSave));
   } catch {}
 }
 
@@ -92,6 +98,7 @@ export function clearAuthSession() {
   currentAuthToken = '';
   currentAuthUser = null;
   currentPersonnelContext = null;
+  currentSessionIat = 0;
   try {
     localStorage.removeItem(AUTH_STORAGE_KEY);
   } catch {}
@@ -104,6 +111,10 @@ function getBffHeaders(customHeaders: Record<string, string> = {}): Record<strin
 
   if (currentAuthToken) {
     headers['Authorization'] = `Bearer ${currentAuthToken}`;
+  }
+
+  if (currentSessionIat > 0) {
+    headers['x-session-iat'] = String(currentSessionIat);
   }
 
   if (currentAuthUser) {
@@ -131,12 +142,22 @@ function getBffHeaders(customHeaders: Record<string, string> = {}): Record<strin
 async function handleResponse<T>(res: globalThis.Response, defaultErrorMsg: string): Promise<T> {
   if (!res.ok) {
     let errorMsg = defaultErrorMsg;
+    let errCode = '';
     try {
       const data = await res.json();
       errorMsg = data.message || data.error || defaultErrorMsg;
+      errCode = data.error || '';
     } catch {
       // ignore
     }
+
+    if (res.status === 401 || errCode === 'ALL_SESSIONS_REVOKED') {
+      clearAuthSession();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('crm_force_logout', { detail: { message: errorMsg } }));
+      }
+    }
+
     throw new Error(errorMsg);
   }
   return res.json();
@@ -179,6 +200,16 @@ export async function getMe(): Promise<any> {
 
 export async function logoutUser(): Promise<void> {
   clearAuthSession();
+}
+
+export async function logoutAllUsers(): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${BASE_URL}/auth/logout-all`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+  });
+  const data = await handleResponse<{ success: boolean; message: string }>(res, 'خطا در خروج همگانی کاربران');
+  clearAuthSession();
+  return data;
 }
 
 // ----------------- Core BFF Data APIs ----------------- //
