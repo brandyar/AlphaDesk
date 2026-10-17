@@ -5754,12 +5754,7 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
         match = combinedPersonnel.find((p) => {
           const pName = String(p.name || '').trim().toLowerCase();
           const pUser = String(p.username || '').trim().toLowerCase();
-          return (
-            pName === cleanKey ||
-            pUser === cleanKey ||
-            (pName && cleanKey.includes(pName)) ||
-            (pName && pName.includes(cleanKey))
-          );
+          return pName === cleanKey || pUser === cleanKey;
         });
         if (match) return match;
       }
@@ -6417,17 +6412,6 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
 
       const negotiatorName = matchedPersonnel ? matchedPersonnel.name : (rep.negotiator && isNaN(Number(rep.negotiator)) ? String(rep.negotiator).trim() : (targetCustomer.assigned_marketer_name || 'کارشناس مذاکره'));
       const createdByVal = matchedPersonnel ? matchedPersonnel.id : (targetCustomer.assigned_marketer_id || null);
-
-      // Auto-assign marketer to customer if customer currently has no assigned marketer or 'بدون مسئول'
-      if (matchedPersonnel && (!targetCustomer.assigned_marketer_id || targetCustomer.assigned_marketer_name === 'تخصیص نیافته' || targetCustomer.assigned_marketer_name === 'بدون مسئول')) {
-        targetCustomer.assigned_marketer_id = matchedPersonnel.id;
-        targetCustomer.assigned_marketer_name = matchedPersonnel.name;
-        customersToPatchMap.set(targetCustomer.id, {
-          id: targetCustomer.id,
-          assigned_marketer_id: matchedPersonnel.id,
-          assigned_marketer_name: matchedPersonnel.name,
-        });
-      }
 
       const reportText = String(rep.report || rep.text || 'مذاکره انجام شد.').trim();
       const phoneForReport = normCallNum || callNum || '';
