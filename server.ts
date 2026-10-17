@@ -729,6 +729,11 @@ const recentCustomerCreations: RecentCustomerCache[] = [];
 function normalizeContactValue(value: string, type?: string): string {
   if (!value) return '';
   let clean = value.trim();
+  const upper = clean.toUpperCase();
+  if (upper === 'NULL' || upper === 'UNDEFINED' || upper === 'NONE' || upper === '0' || upper === 'NULL,NULL' || clean.length === 0) {
+    return '';
+  }
+
   const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
   const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
   clean = clean.replace(/[۰-۹]/g, w => persianDigits.indexOf(w).toString());
@@ -747,6 +752,9 @@ function normalizeContactValue(value: string, type?: string): string {
   } else if (type === 'email' || type === 'website') {
     clean = clean.toLowerCase();
   }
+
+  const cleanUpper = clean.toUpperCase();
+  if (cleanUpper === 'NULL' || cleanUpper === 'UNDEFINED' || cleanUpper === 'NONE') return '';
 
   return clean;
 }
@@ -6028,13 +6036,27 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
 
   for (const row of customerRows) {
     try {
+      function isValidImportKey(k: any): boolean {
+        if (!k) return false;
+        const s = String(k).trim().toUpperCase();
+        return s !== '' && s !== '0' && s !== 'NULL' && s !== 'UNDEFINED' && s !== 'NONE' && s !== 'FALSE' && s !== 'TRUE';
+      }
+
       const callId = String(row.CallID || row.callid || row.id || '').trim();
       const customerIdLegacy = String(row.CustomerID || row.customerid || row.customerID || '').trim();
-      const companyName = String(row.CompanyName || row.companyName || row.marketName || 'بدون نام').trim();
+
+      let companyName = String(row.CompanyName || row.companyName || row.marketName || '').trim();
+      if (!isValidImportKey(companyName)) companyName = '';
+
+      let managerName = String(row.managerName || row.manager_name || '').trim();
+      if (!isValidImportKey(managerName)) managerName = '';
+
+      const finalCompanyName = companyName || managerName || 'بدون نام';
+      const finalManagerName = managerName || companyName || 'مدیریت';
+
       const businessType = String(row.job || row.business_type || '').trim();
       const province = String(row.province || '').trim();
       const city = String(row.city || '').trim();
-      const managerName = String(row.managerName || row.manager_name || '').trim();
       const managerPhone = String(row.managerPhone || '').trim();
       const rawMobiles = String(row.mobiles || '').trim();
       const rawLandlines = String(row.phonelines || '').trim();
@@ -6045,68 +6067,55 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
       const website = String(row.website || row.marketingWebsite || '').trim();
 
       const mobileList: string[] = [];
-      if (rawMobiles) {
+      if (rawMobiles && isValidImportKey(rawMobiles)) {
         rawMobiles.split(/[,;\n]/).forEach(m => {
           const norm = normalizeContactValue(m, 'mobile');
-          if (norm && !mobileList.includes(norm)) mobileList.push(norm);
+          if (norm && isValidImportKey(norm) && !mobileList.includes(norm)) mobileList.push(norm);
         });
       }
-      if (managerPhone) {
+      if (managerPhone && isValidImportKey(managerPhone)) {
         const norm = normalizeContactValue(managerPhone, 'mobile');
-        if (norm && !mobileList.includes(norm)) mobileList.push(norm);
+        if (norm && isValidImportKey(norm) && !mobileList.includes(norm)) mobileList.push(norm);
       }
-      if (tlgMobile) {
+      if (tlgMobile && isValidImportKey(tlgMobile)) {
         const norm = normalizeContactValue(tlgMobile, 'mobile');
-        if (norm && !mobileList.includes(norm)) mobileList.push(norm);
+        if (norm && isValidImportKey(norm) && !mobileList.includes(norm)) mobileList.push(norm);
       }
 
       const landlineList: string[] = [];
-      if (rawLandlines) {
+      if (rawLandlines && isValidImportKey(rawLandlines)) {
         rawLandlines.split(/[,;\n]/).forEach(l => {
           const norm = normalizeContactValue(l, 'landline');
-          if (norm && !landlineList.includes(norm)) landlineList.push(norm);
+          if (norm && isValidImportKey(norm) && !landlineList.includes(norm)) landlineList.push(norm);
         });
       }
 
-      // CHECK FOR DUPLICATE CUSTOMER BY CALLID, CUSTOMERID, OR MOBILE PHONE
+      // CHECK FOR DUPLICATE CUSTOMER STRICTLY BY CALLID OR CUSTOMERID (NOT BY PHONE NUMBER)
+      // So all duplicate marketer cards in legacy database are imported for later merging!
       let matchedCustomer: any = null;
-      if (callId && legacyCustomerRefMap.has(callId)) {
+      if (isValidImportKey(callId) && legacyCustomerRefMap.has(callId)) {
         matchedCustomer = legacyCustomerRefMap.get(callId);
-      } else if (customerIdLegacy && legacyCustomerRefMap.has(customerIdLegacy)) {
+      } else if (isValidImportKey(customerIdLegacy) && legacyCustomerRefMap.has(customerIdLegacy)) {
         matchedCustomer = legacyCustomerRefMap.get(customerIdLegacy);
-      } else {
-        for (const m of mobileList) {
-          if (existingPhoneToCustomerMap.has(m)) {
-            matchedCustomer = existingPhoneToCustomerMap.get(m);
-            break;
-          }
-          if (legacyCustomerRefMap.has(m)) {
-            matchedCustomer = legacyCustomerRefMap.get(m);
-            break;
-          }
-        }
       }
 
       // Extract accurate legacy marketer personnel
       const assignedPersonnel = resolvePersonnelFromRow(row);
 
       if (matchedCustomer) {
-        // DUPLICATE CUSTOMER DETECTED!
+        // DUPLICATE CUSTOMER DETECTED STRICTLY BY CALLID / CUSTOMERID!
         skippedCount++;
 
-        let skipReason = 'رکوردی با مشخصات مشابه در سیستم موجود است';
-        if (callId && legacyCustomerRefMap.has(callId)) {
+        let skipReason = 'کد تماس یا کد مشتری تکراری است';
+        if (isValidImportKey(callId) && legacyCustomerRefMap.has(callId)) {
           skipReason = `کد تماس تکراری (CallID: ${callId})`;
-        } else if (customerIdLegacy && legacyCustomerRefMap.has(customerIdLegacy)) {
+        } else if (isValidImportKey(customerIdLegacy) && legacyCustomerRefMap.has(customerIdLegacy)) {
           skipReason = `کد مشتری تکراری (CustomerID: ${customerIdLegacy})`;
-        } else {
-          const matchedPhone = mobileList.find(m => existingPhoneToCustomerMap.has(m) || legacyCustomerRefMap.has(m)) || mobileList[0] || managerPhone;
-          skipReason = `شماره تلفن تکراری (${matchedPhone || 'همراه'}) - ثبت‌شده برای مشتری «${matchedCustomer.company_name || 'نامشخص'}»`;
         }
 
         if (skippedDetails.length < 1000) {
           skippedDetails.push({
-            companyName: companyName || 'بدون نام',
+            companyName: finalCompanyName,
             phone: mobileList[0] || managerPhone || 'نامشخص',
             reason: skipReason,
           });
@@ -6122,12 +6131,8 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
           });
         }
 
-        if (callId) legacyCustomerRefMap.set(callId, matchedCustomer);
-        if (customerIdLegacy) legacyCustomerRefMap.set(customerIdLegacy, matchedCustomer);
-        for (const m of mobileList) {
-          legacyCustomerRefMap.set(m, matchedCustomer);
-          existingPhoneToCustomerMap.set(m, matchedCustomer);
-        }
+        if (isValidImportKey(callId)) legacyCustomerRefMap.set(callId, matchedCustomer);
+        if (isValidImportKey(customerIdLegacy)) legacyCustomerRefMap.set(customerIdLegacy, matchedCustomer);
         continue;
       }
 
@@ -6158,24 +6163,24 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
 
       const newCustObj: any = {
         id: newCustId,
-        company_name: companyName,
-        business_type: businessType || 'سایر اصناف',
-        province: province || 'نامشخص',
-        city: city || 'نامشخص',
-        manager_name: managerName || 'مدیریت',
+        company_name: finalCompanyName,
+        business_type: isValidImportKey(businessType) ? businessType : 'سایر اصناف',
+        province: isValidImportKey(province) ? province : 'نامشخص',
+        city: isValidImportKey(city) ? city : 'نامشخص',
+        manager_name: finalManagerName,
         manager_phones: [],
-        negotiator_name: managerName || 'مدیریت',
+        negotiator_name: finalManagerName,
         negotiator_phones: [],
-        mobile_numbers: [],
-        landline_numbers: [],
+        mobile_numbers: mobileList,
+        landline_numbers: landlineList,
         telegram_phone: null,
-        telegram_ids: [],
-        instagram_ids: [],
-        emails: [],
-        websites: [],
-        is_ecommerce: Boolean(website || row.system),
+        telegram_ids: isValidImportKey(telegId) ? [telegId] : [],
+        instagram_ids: isValidImportKey(instaId) ? [instaId] : [],
+        emails: isValidImportKey(email) ? [email] : [],
+        websites: isValidImportKey(website) ? [website] : [],
+        is_ecommerce: Boolean(website || (row.system && isValidImportKey(row.system))),
         interview_status: 'انتقال از سامانه قدیم',
-        interview_report: `پرونده انتقال‌یافته از پایگاه داده قدیم - کد تماس ${callId}`,
+        interview_report: `پرونده انتقال‌یافته از پایگاه داده قدیم - کد تماس ${callId || 'نامشخص'}`,
         interview_score: 5,
         next_followup_date: null,
         assigned_marketer_id: assignedPersonnel?.id || null,
@@ -6192,12 +6197,14 @@ app.post('/api/migration/import', async (req: Request, res: Response) => {
 
       customersToInsertBatch.push(newCustObj);
 
-      // Cache references for duplicate checking and report linking
-      if (callId) legacyCustomerRefMap.set(callId, newCustObj);
-      if (customerIdLegacy) legacyCustomerRefMap.set(customerIdLegacy, newCustObj);
+      // Cache references for report linking and duplicate checking
+      if (isValidImportKey(callId)) legacyCustomerRefMap.set(callId, newCustObj);
+      if (isValidImportKey(customerIdLegacy)) legacyCustomerRefMap.set(customerIdLegacy, newCustObj);
       for (const m of mobileList) {
-        legacyCustomerRefMap.set(m, newCustObj);
-        existingPhoneToCustomerMap.set(m, newCustObj);
+        if (isValidImportKey(m)) {
+          legacyCustomerRefMap.set(m, newCustObj);
+          existingPhoneToCustomerMap.set(m, newCustObj);
+        }
       }
 
       // Populate ALL communication channels into customer_contacts
