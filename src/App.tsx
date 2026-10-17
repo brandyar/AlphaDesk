@@ -237,9 +237,9 @@ export default function App() {
         targetPContext?.role === 'admin'
       );
 
-      // Optimized initial fetch limits for high performance & fast responsiveness
-      const customerLimit = 3000;
-      const reportLimit = 2000;
+      // Fetch complete datasets to ensure 100% exact item counts in dashboard, sidebar, and lists
+      const customerLimit = 20000;
+      const reportLimit = 50000;
 
       const [pData, cData, rData, lData, aData, bStatus, lrData, arData, tData] = await Promise.all([
         fetchPersonnel().catch(() => []),

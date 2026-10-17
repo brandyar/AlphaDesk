@@ -3075,7 +3075,7 @@ app.get('/api/customers', async (req: Request, res: Response) => {
   const { search, status, marketer_id, expired_only, page, limit, free_only } = req.query;
   const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
 
-  const reqLimit = limit ? parseInt(String(limit), 10) : 500;
+  const reqLimit = limit ? parseInt(String(limit), 10) : 20000;
   const reqPage = page ? parseInt(String(page), 10) : 1;
   const isFreeOnly = free_only === 'true';
 
@@ -3166,7 +3166,7 @@ app.get('/api/customers', async (req: Request, res: Response) => {
       res.setHeader('X-Page', String(reqPage));
       res.setHeader('X-Limit', String(reqLimit));
 
-      if (req.query.all === 'true' || reqLimit >= 20000) {
+      if (req.query.all === 'true' || !limit || reqLimit >= 20000) {
         return res.json(list);
       }
 
@@ -4424,7 +4424,7 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
   const { customer_id, page, limit } = req.query;
   const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
 
-  const reqLimit = limit ? parseInt(String(limit), 10) : (customer_id ? 200 : 500);
+  const reqLimit = limit ? parseInt(String(limit), 10) : (customer_id ? 500 : 50000);
   const reqPage = page ? parseInt(String(page), 10) : 1;
 
   // Security guard: unauthenticated request without customer_id gets nothing
@@ -4483,7 +4483,7 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
       res.setHeader('X-Page', String(reqPage));
       res.setHeader('X-Limit', String(reqLimit));
 
-      if (req.query.all === 'true' || reqLimit >= 50000) {
+      if (req.query.all === 'true' || !limit || reqLimit >= 50000) {
         return res.json(reportsList);
       }
 
