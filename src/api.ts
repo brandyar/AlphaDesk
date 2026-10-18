@@ -348,6 +348,7 @@ export async function fetchCustomers(filters?: {
   free_only?: boolean;
   page?: number;
   limit?: number;
+  all?: boolean;
 }): Promise<Customer[]> {
   const params = new URLSearchParams();
   if (filters?.search) params.append('search', filters.search);
@@ -356,7 +357,8 @@ export async function fetchCustomers(filters?: {
   if (filters?.expired_only) params.append('expired_only', 'true');
   if (filters?.free_only) params.append('free_only', 'true');
   if (filters?.page) params.append('page', String(filters.page));
-  if (filters?.limit !== undefined) params.append('limit', String(filters.limit));
+  params.append('limit', String(filters?.limit || 50000));
+  params.append('all', 'true');
 
   const res = await fetch(`${BASE_URL}/customers?${params.toString()}`, {
     headers: getBffHeaders(),
@@ -572,13 +574,13 @@ export async function deleteCustomerContact(id: string): Promise<void> {
 
 export async function fetchCustomerReports(
   customerId?: string,
-  options?: { page?: number; limit?: number }
+  options?: { page?: number; limit?: number; all?: boolean }
 ): Promise<CustomerReport[]> {
   const params = new URLSearchParams();
   if (customerId) params.append('customer_id', customerId);
   if (options?.page) params.append('page', String(options.page));
-  if (options?.limit !== undefined) params.append('limit', String(options.limit));
-  else params.append('limit', '100');
+  params.append('limit', String(options?.limit || 50000));
+  params.append('all', 'true');
 
   const q = params.toString() ? `?${params.toString()}` : '';
   const res = await fetch(`${BASE_URL}/customer-reports${q}`, {

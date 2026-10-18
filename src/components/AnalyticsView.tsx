@@ -112,8 +112,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     let isMounted = true;
     setIsLoadingAnalytics(true);
     Promise.all([
-      fetchCustomerReports(undefined, { limit: 500 }).catch(() => []),
-      fetchCustomers({ limit: 500 }).catch(() => []),
+      fetchCustomerReports(undefined, { limit: 50000 }).catch(() => []),
+      fetchCustomers({ limit: 50000 }).catch(() => []),
     ]).then(([reps, custs]) => {
       if (isMounted) {
         if (Array.isArray(reps) && reps.length > 0) setAllReportsData(reps);

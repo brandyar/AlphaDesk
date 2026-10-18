@@ -3536,6 +3536,44 @@ app.get('/api/customers', async (req: Request, res: Response) => {
     return res.json({ data: [], meta: { filter_count: 0, total_count: 0, page: reqPage, limit: reqLimit, total_pages: 1 } });
   }
 
+  if (isUnlimited) {
+    const cachedList = await ensureCustomersCache().catch(() => customersData);
+    updateExpirationFlags();
+    let list = cachedList.map(c => computeCustomerExpiration(c));
+    if (tenantId && tenantId !== 'all' && (isAdmin || isFreeOnly)) {
+      list = list.filter(c => matchesTenant(c.tenant_id, tenantId));
+    }
+    if (!isAdmin && (userId || personnelId) && !isFreeOnly) {
+      list = list.filter(c =>
+        c.assigned_marketer_id === personnelId ||
+        c.assigned_marketer_id === userId ||
+        (userName && c.assigned_marketer_name === userName)
+      );
+    }
+    if (search && typeof search === 'string') {
+      const s = search.toLowerCase();
+      list = list.filter(c =>
+        c.company_name?.toLowerCase().includes(s) ||
+        c.manager_name?.toLowerCase().includes(s) ||
+        c.city?.toLowerCase().includes(s) ||
+        c.business_type?.toLowerCase().includes(s)
+      );
+    }
+    if (status && status !== 'همه') {
+      list = list.filter(c => c.status === status);
+    }
+    if (marketer_id && marketer_id !== 'همه') {
+      list = list.filter(c => c.assigned_marketer_id === marketer_id);
+    }
+    if (expired_only === 'true') {
+      list = list.filter(c => c.is_expired);
+    }
+    if (isFreeOnly) {
+      list = list.filter(c => !c.assigned_marketer_id || c.is_expired);
+    }
+    return res.json(list);
+  }
+
   if (directusUrl && directusAdminToken) {
     try {
       let directusPath = `/items/customers?page=${reqPage}&limit=${reqLimit}&meta=filter_count&sort=-date_created`;
