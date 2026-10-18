@@ -1874,51 +1874,34 @@ async function fetchAllDirectusItems(
   maxTotal = 100000,
   concurrency = 3
 ): Promise<any[]> {
+  if (!directusUrl || !directusAdminToken) return [];
   const separator = pathWithoutLimitAndPage.includes('?') ? '&' : '?';
   const metaPath = `${pathWithoutLimitAndPage}${separator}limit=1&meta=*`;
-  const metaRes = await directusFetch(metaPath).catch(() => null);
-  const totalCount = metaRes?.meta?.total_count ?? metaRes?.meta?.filter_count;
+  const metaRes = await directusFetch(metaPath, {}, 1).catch(() => null);
+  if (!metaRes || !metaRes.meta) {
+    return [];
+  }
+  const totalCount = metaRes.meta.total_count ?? metaRes.meta.filter_count;
+  if (typeof totalCount !== 'number' || totalCount <= 0) return [];
 
-  if (metaRes && typeof totalCount === 'number' && totalCount >= 0) {
-    if (totalCount === 0) return [];
-    const targetTotal = Math.min(totalCount, maxTotal);
-    const totalPages = Math.ceil(targetTotal / pageSize);
-    const allItems: any[] = [];
+  const targetTotal = Math.min(totalCount, maxTotal);
+  const totalPages = Math.ceil(targetTotal / pageSize);
+  const allItems: any[] = [];
 
-    for (let i = 1; i <= totalPages; i += concurrency) {
-      const pagePromises = [];
-      for (let p = i; p < i + concurrency && p <= totalPages; p++) {
-        const pagePath = `${pathWithoutLimitAndPage}${separator}limit=${pageSize}&page=${p}`;
-        pagePromises.push(
-          directusFetch(pagePath).catch((err) => {
-            console.warn(`fetchAllDirectusItems error on page ${p}:`, err.message);
-            return null;
-          })
-        );
-      }
-      const pageResults = await Promise.all(pagePromises);
-      for (const res of pageResults) {
-        if (res && Array.isArray(res.data)) {
-          allItems.push(...res.data);
-        }
+  for (let i = 1; i <= totalPages; i += concurrency) {
+    const pagePromises = [];
+    for (let p = i; p < i + concurrency && p <= totalPages; p++) {
+      const pagePath = `${pathWithoutLimitAndPage}${separator}limit=${pageSize}&page=${p}`;
+      pagePromises.push(
+        directusFetch(pagePath, {}, 1).catch(() => null)
+      );
+    }
+    const pageResults = await Promise.all(pagePromises);
+    for (const res of pageResults) {
+      if (res && Array.isArray(res.data)) {
+        allItems.push(...res.data);
       }
     }
-    return allItems;
-  }
-
-  // Fallback sequential loop if meta count is unavailable
-  const allItems: any[] = [];
-  let page = 1;
-  while (allItems.length < maxTotal) {
-    const pagePath = `${pathWithoutLimitAndPage}${separator}limit=${pageSize}&page=${page}`;
-    const res = await directusFetch(pagePath).catch((err) => {
-      console.warn(`fetchAllDirectusItems fallback error on page ${page}:`, err.message);
-      return null;
-    });
-    if (!res || !Array.isArray(res.data) || res.data.length === 0) break;
-    allItems.push(...res.data);
-    if (res.data.length < pageSize) break;
-    page++;
   }
   return allItems;
 }
@@ -5170,6 +5153,11 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
       const resData = await directusFetch(path, {}, 1).catch(() => null);
       if (resData && Array.isArray(resData.data)) {
         let filtered = applyFilters(resData.data);
+        filtered.sort((a: any, b: any) => {
+          const tA = a.date_created ? new Date(a.date_created).getTime() : 0;
+          const tB = b.date_created ? new Date(b.date_created).getTime() : 0;
+          return tB - tA;
+        });
         const filterCount = filtered.length;
         const totalCount = resData.meta?.total_count ?? filterCount;
         const totalPages = Math.max(1, Math.ceil(filterCount / reqLimit));
@@ -5204,6 +5192,11 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
 
   // In-memory fallback
   let filteredRepList = applyFilters(allReports);
+  filteredRepList.sort((a: any, b: any) => {
+    const tA = a.date_created ? new Date(a.date_created).getTime() : 0;
+    const tB = b.date_created ? new Date(b.date_created).getTime() : 0;
+    return tB - tA;
+  });
   const filterCount = filteredRepList.length;
   const startIndex = (reqPage - 1) * reqLimit;
   const paginatedReports = filteredRepList.slice(startIndex, startIndex + reqLimit);
