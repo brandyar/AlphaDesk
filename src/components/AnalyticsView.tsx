@@ -102,6 +102,26 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   // Selected single day filter in daily views
   const [selectedDayDetail, setSelectedDayDetail] = useState<string | null>(null);
 
+  // Full analytics datasets
+  const [allReportsData, setAllReportsData] = useState<CustomerReport[]>(reports);
+  const [allCustomersData, setAllCustomersData] = useState<Customer[]>(customers);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    Promise.all([
+      fetchCustomerReports(undefined, { limit: 5000 }).catch(() => []),
+      fetchCustomers({ limit: 5000 }).catch(() => []),
+    ]).then(([reps, custs]) => {
+      if (isMounted) {
+        if (Array.isArray(reps) && reps.length > 0) setAllReportsData(reps);
+        if (Array.isArray(custs) && custs.length > 0) setAllCustomersData(custs);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [reports, customers]);
+
   // Determine current active personnel scope
   const targetPersonnel = useMemo(() => {
     if (!userIsAdmin) {
@@ -120,10 +140,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
   // Base filtered dataset matching user role and personnel selection
   const scopedReports = useMemo(() => {
+    const sourceReports = allReportsData.length > 0 ? allReportsData : reports;
     if (!userIsAdmin) {
       const myName = currentPersonnel?.name || currentUser?.name || '';
       const myId = currentPersonnel?.id || currentUser?.id || '';
-      return reports.filter(
+      return sourceReports.filter(
         (r) =>
           r.negotiator_name === myName ||
           r.created_by === myName ||
@@ -132,42 +153,45 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     }
 
     if (selectedPersonnelId === 'all') {
-      return reports;
+      return sourceReports;
     }
 
     const p = personnelList.find((item) => item.id === selectedPersonnelId);
-    if (!p) return reports;
+    if (!p) return sourceReports;
 
-    return reports.filter(
+    return sourceReports.filter(
       (r) =>
         r.negotiator_name === p.name ||
         r.created_by === p.name ||
         r.created_by === p.id
     );
-  }, [reports, userIsAdmin, selectedPersonnelId, personnelList, currentPersonnel, currentUser]);
+  }, [allReportsData, reports, userIsAdmin, currentPersonnel, currentUser, selectedPersonnelId, personnelList]);
 
   const scopedCustomers = useMemo(() => {
+    const sourceCustomers = allCustomersData.length > 0 ? allCustomersData : customers;
     if (!userIsAdmin) {
-      const myId = currentPersonnel?.id || currentUser?.id || '';
       const myName = currentPersonnel?.name || currentUser?.name || '';
-      return customers.filter(
+      const myId = currentPersonnel?.id || currentUser?.id || '';
+      return sourceCustomers.filter(
         (c) =>
-          (myId && c.assigned_marketer_id === myId) ||
-          (myName && c.assigned_marketer_name === myName)
+          c.assigned_marketer_name === myName ||
+          (myId && c.assigned_marketer_id === myId)
       );
     }
 
     if (selectedPersonnelId === 'all') {
-      return customers;
+      return sourceCustomers;
     }
 
     const p = personnelList.find((item) => item.id === selectedPersonnelId);
-    if (!p) return customers;
+    if (!p) return sourceCustomers;
 
-    return customers.filter(
-      (c) => c.assigned_marketer_id === p.id || c.assigned_marketer_name === p.name
+    return sourceCustomers.filter(
+      (c) =>
+        c.assigned_marketer_name === p.name ||
+        c.assigned_marketer_id === p.id
     );
-  }, [customers, userIsAdmin, selectedPersonnelId, personnelList, currentPersonnel, currentUser]);
+  }, [allCustomersData, customers, userIsAdmin, currentPersonnel, currentUser, selectedPersonnelId, personnelList]);
 
   // Calculate Date Boundaries for Periodic View
   const periodDateRange = useMemo(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   PhoneCall,
   Plus,
@@ -22,9 +22,12 @@ import {
   Send,
   LayoutGrid,
   List,
+  Loader2,
 } from 'lucide-react';
 import { ColdLead, Personnel, LeadStatus, AuthUser } from '../types';
 import { formatPersianDateTime, getLeadStatusTheme, toPersianDigits } from '../utils';
+import { fetchColdLeadsPaginated } from '../api';
+import { PaginationControl } from './PaginationControl';
 
 interface ColdLeadsViewProps {
   coldLeads: ColdLead[];
@@ -79,6 +82,48 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('همه');
   const [marketerFilter, setMarketerFilter] = useState<string>('همه');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [items, setItems] = useState<ColdLead[]>(coldLeads);
+  const [totalCount, setTotalCount] = useState<number>(coldLeads.length);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, marketerFilter, searchQuery]);
+
+  // Fetch paginated cold leads from Directus
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingPage(true);
+
+    fetchColdLeadsPaginated({
+      page: currentPage,
+      limit: pageSize,
+      search: searchQuery.trim(),
+      status: statusFilter !== 'همه' ? statusFilter : undefined,
+      marketer_id: marketerFilter !== 'همه' ? marketerFilter : undefined,
+    })
+      .then((res) => {
+        if (isMounted) {
+          setItems(res.data);
+          setTotalCount(res.meta.filter_count);
+          setTotalPages(res.meta.total_pages);
+        }
+      })
+      .catch((err) => console.warn('Failed to load paginated cold leads:', err))
+      .finally(() => {
+        if (isMounted) setIsLoadingPage(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentPage, pageSize, statusFilter, marketerFilter, searchQuery, coldLeads]);
 
   // Multi-selection state for Bulk Assignment
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
@@ -546,7 +591,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
         /* 1. GRID / CARDS VIEW                                          */
         /* ------------------------------------------------------------- */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredLeads.map((lead) => {
+          {items.map((lead) => {
             const statusTheme = getLeadStatusTheme(lead.status);
             const isSelected = selectedLeadIds.includes(lead.id);
             const marketerName = getLeadMarketerName(lead);
@@ -728,7 +773,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#222]">
-                {filteredLeads.map((lead) => {
+                {items.map((lead) => {
                   const statusTheme = getLeadStatusTheme(lead.status);
                   const isSelected = selectedLeadIds.includes(lead.id);
                   const marketerName = getLeadMarketerName(lead);
@@ -858,6 +903,18 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Pagination Controls */}
+      <PaginationControl
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        pageSize={pageSize}
+        displayedCount={items.length}
+        isLoading={isLoadingPage}
+        onPageChange={(p) => setCurrentPage(p)}
+        label="شماره اولیه"
+      />
     </div>
   );
 };

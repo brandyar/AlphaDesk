@@ -31,9 +31,10 @@ import {
   X,
 } from 'lucide-react';
 import { Customer, CustomerReport, Personnel, AuthUser } from '../types';
-import { fetchProjectSettings, updateProjectSettings, fetchFreeCustomers } from '../api';
+import { fetchProjectSettings, updateProjectSettings, fetchFreeCustomers, fetchCustomersPaginated } from '../api';
 import { toPersianDigits, formatPersianDate, formatPersianDateTime, formatStatusLabel, getStatusBadgeClass, matchPersonnelToCustomer } from '../utils';
 import { IRAN_PROVINCES } from '../data/iranProvincesCities';
+import { PaginationControl } from './PaginationControl';
 
 interface FreeCustomersViewProps {
   customers: Customer[];
@@ -70,13 +71,24 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
   const [dedicatedFreeCustomers, setDedicatedFreeCustomers] = useState<Customer[]>([]);
   const [isLoadingPool, setIsLoadingPool] = useState(false);
 
+  // Server-side pagination state
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(1);
+
   const loadPool = async () => {
     setIsLoadingPool(true);
     try {
-      const data = await fetchFreeCustomers(1000);
-      if (Array.isArray(data)) {
-        setDedicatedFreeCustomers(data);
-      }
+      const res = await fetchCustomersPaginated({
+        free_only: true,
+        page: currentPage,
+        limit: pageSize,
+        search: searchQuery.trim(),
+      });
+      setDedicatedFreeCustomers(res.data);
+      setTotalCount(res.meta.filter_count);
+      setTotalPages(res.meta.total_pages);
     } catch (err) {
       console.warn('Failed to load free customers pool:', err);
     } finally {
@@ -86,6 +98,9 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
 
   useEffect(() => {
     loadPool();
+  }, [currentPage, searchQuery]);
+
+  useEffect(() => {
     fetchProjectSettings()
       .then((settings) => {
         if (settings && settings.free_customers_claim_limit) {
@@ -874,6 +889,18 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Pagination Controls */}
+      <PaginationControl
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        pageSize={pageSize}
+        displayedCount={dedicatedFreeCustomers.length}
+        isLoading={isLoadingPool}
+        onPageChange={(p) => setCurrentPage(p)}
+        label="مشتری آزاد"
+      />
 
       {/* ------------------------------------------------------------- */}
       {/* 4. MODAL: Claim Customer Confirmation                          */}

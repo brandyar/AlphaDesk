@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ClipboardCheck,
   Plus,
@@ -15,10 +15,13 @@ import {
   ChevronUp,
   ListTodo,
   Layers,
+  Loader2,
 } from 'lucide-react';
 import { AdministrativeReport, Personnel, AuthUser, HourlyWorkLog } from '../types';
 import { formatPersianDate, formatPersianDateTime, toPersianDigits } from '../utils';
 import { PersianDatePicker } from './PersianDatePicker';
+import { fetchAdminReportsPaginated } from '../api';
+import { PaginationControl } from './PaginationControl';
 
 interface AdminReportsViewProps {
   adminReports: AdministrativeReport[];
@@ -61,6 +64,40 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
   const [challenges, setChallenges] = useState('');
   const [tomorrowPlan, setTomorrowPlan] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [items, setItems] = useState<AdministrativeReport[]>(adminReports);
+  const [totalCount, setTotalCount] = useState<number>(adminReports.length);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
+
+  // Fetch paginated admin reports from Directus
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingPage(true);
+
+    fetchAdminReportsPaginated({
+      page: currentPage,
+      limit: pageSize,
+    })
+      .then((res) => {
+        if (isMounted) {
+          setItems(res.data);
+          setTotalCount(res.meta.filter_count);
+          setTotalPages(res.meta.total_pages);
+        }
+      })
+      .catch((err) => console.warn('Failed to load paginated admin reports:', err))
+      .finally(() => {
+        if (isMounted) setIsLoadingPage(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentPage, pageSize, adminReports]);
 
   // Hourly logs state: keyed by slot
   const [hourlyLogs, setHourlyLogs] = useState<{ [slot: string]: string }>(() => {
@@ -218,7 +255,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
           <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
             <span>گزارش عملکرد روزانه پرسنل</span>
             <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold">
-              {toPersianDigits(adminReports.length)} گزارش ثبت شده
+              {toPersianDigits(totalCount)} گزارش ثبت شده
             </span>
           </h2>
           <p className="text-xs text-[#A7A7A7] mt-1">
@@ -275,14 +312,14 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
       </div>
 
       {/* Reports Feed */}
-      <div className="space-y-3">
-        {visibleReports.length === 0 ? (
+      <div className={`space-y-3 ${isLoadingPage ? 'opacity-50 pointer-events-none transition-opacity' : ''}`}>
+        {items.length === 0 && !isLoadingPage ? (
           <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
             <ClipboardCheck className="w-10 h-10 text-[#535353] mx-auto" />
             <p className="text-xs text-[#A7A7A7]">هنوز هیچ گزارش اداری ثبت نشده است.</p>
           </div>
         ) : (
-          visibleReports.map((report) => {
+          items.map((report) => {
             const hourlyItems = parseReportHourlyLogs(report);
             const isExpanded = expandedIds.has(report.id);
 
@@ -438,6 +475,18 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
           })
         )}
       </div>
+
+      {/* Pagination Controls */}
+      <PaginationControl
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        pageSize={pageSize}
+        displayedCount={items.length}
+        isLoading={isLoadingPage}
+        onPageChange={(p) => setCurrentPage(p)}
+        label="گزارش اداری"
+      />
 
       {/* Add Admin Report Modal */}
       {showAddModal && (

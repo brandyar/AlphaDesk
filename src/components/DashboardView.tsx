@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { Customer, CustomerReport, ColdLead, AdministrativeReport, Personnel, BffStatus } from '../types';
 import { formatTimeRemaining, formatPersianDate, formatToman, getStatusTheme, toPersianDigits } from '../utils';
+import { DashboardSummary, fetchDashboardSummary } from '../api';
 
 interface DashboardViewProps {
   customers: Customer[];
@@ -33,6 +34,7 @@ interface DashboardViewProps {
   adminReports: AdministrativeReport[];
   personnelList: Personnel[];
   bffStatus: BffStatus | null;
+  dashboardSummary?: DashboardSummary | null;
   onSelectCustomer: (customer: Customer) => void;
   onOpenNewCustomer: () => void;
   onOpenNewLead: () => void;
@@ -47,60 +49,79 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   adminReports,
   personnelList,
   bffStatus,
+  dashboardSummary,
   onSelectCustomer,
   onOpenNewCustomer,
   onOpenNewLead,
   onOpenAddReport,
   onNavigateToTab,
 }) => {
+  const [summary, setSummary] = React.useState<DashboardSummary | null>(dashboardSummary || null);
+
+  React.useEffect(() => {
+    fetchDashboardSummary()
+      .then((s) => setSummary(s))
+      .catch((err) => console.warn('Failed to load dashboard summary:', err));
+  }, []);
+
   const expiredCustomers = customers.filter((c) => c.is_expired);
   const contractsWon = customers.filter((c) => c.status === 'قرارداد');
   const inNegotiation = customers.filter(
     (c) => c.status === 'پیش نویس قرارداد' || c.status === 'پیگیری قرارداد'
   );
 
+  // Accurate Summary Totals
+  const totalCustomersCount = summary?.total_customers ?? customers.length;
+  const contractsWonCount = summary?.contracts_won_count ?? contractsWon.length;
+  const inNegotiationCount = summary?.in_negotiation_count ?? inNegotiation.length;
+  const expiredCustomersCount = summary?.expired_customers_count ?? expiredCustomers.length;
+
   // Financial contract totals
-  const totalContractRevenue = reports.reduce(
+  const totalContractRevenue = summary?.total_contract_revenue ?? reports.reduce(
     (acc, r) => acc + (Number(r.contract_amount) || 0),
     0
   );
 
   // Average negotiation score
   const scoredReports = reports.filter((r) => r.negotiation_score && r.negotiation_score > 0);
-  const avgScore =
-    scoredReports.length > 0
-      ? (scoredReports.reduce((acc, r) => acc + (r.negotiation_score || 0), 0) / scoredReports.length).toFixed(1)
-      : '۰';
+  const avgScore = summary?.avg_negotiation_score
+    ? toPersianDigits(summary.avg_negotiation_score)
+    : (scoredReports.length > 0
+        ? (scoredReports.reduce((acc, r) => acc + (r.negotiation_score || 0), 0) / scoredReports.length).toFixed(1)
+        : '۰');
 
   // Urgent upcoming followups (< 3 days or scheduled)
-  const upcomingFollowups = customers
-    .filter((c): c is Customer & { next_followup_date: string } => Boolean(c.next_followup_date))
-    .sort(
-      (a, b) =>
-        new Date(a.next_followup_date).getTime() - new Date(b.next_followup_date).getTime()
-    )
-    .slice(0, 5);
+  const upcomingFollowups = (summary?.upcoming_followups && summary.upcoming_followups.length > 0)
+    ? summary.upcoming_followups
+    : customers
+        .filter((c): c is Customer & { next_followup_date: string } => Boolean(c.next_followup_date))
+        .sort(
+          (a, b) =>
+            new Date(a.next_followup_date).getTime() - new Date(b.next_followup_date).getTime()
+        )
+        .slice(0, 5);
 
   // Customers in danger of expiring (< 3 days deadline)
-  const urgentExpiringCustomers = customers
-    .filter((c) => {
-      if (!c.assignment_deadline || c.is_expired || c.status === 'قرارداد') return false;
-      const days = Math.ceil(
-        (new Date(c.assignment_deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-      );
-      return days >= 0 && days <= 3;
-    })
-    .slice(0, 5);
+  const urgentExpiringCustomers = (summary?.urgent_expiring_customers && summary.urgent_expiring_customers.length > 0)
+    ? summary.urgent_expiring_customers
+    : customers
+        .filter((c) => {
+          if (!c.assignment_deadline || c.is_expired || c.status === 'قرارداد') return false;
+          const days = Math.ceil(
+            (new Date(c.assignment_deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+          );
+          return days >= 0 && days <= 3;
+        })
+        .slice(0, 5);
 
   // Status breakdown for progress bars
-  const totalCustomersCount = customers.length || 1;
   const statusStats = [
-    { label: 'قرارداد / فاکتور', count: contractsWon.length, color: 'bg-[#1DB954]', text: 'text-[#1DB954]' },
-    { label: 'در حال پیگیری و مذاکره', count: inNegotiation.length, color: 'bg-blue-500', text: 'text-blue-400' },
-    { label: 'مهلت‌های منقضی‌شده', count: expiredCustomers.length, color: 'bg-rose-500', text: 'text-rose-400' },
+    { label: 'قرارداد / فاکتور', count: contractsWonCount, color: 'bg-[#1DB954]', text: 'text-[#1DB954]' },
+    { label: 'در حال پیگیری و مذاکره', count: inNegotiationCount, color: 'bg-blue-500', text: 'text-blue-400' },
+    { label: 'مهلت‌های منقضی‌شده', count: expiredCustomersCount, color: 'bg-rose-500', text: 'text-rose-400' },
     {
       label: 'سایر وضعیت‌ها',
-      count: Math.max(0, customers.length - contractsWon.length - inNegotiation.length - expiredCustomers.length),
+      count: Math.max(0, totalCustomersCount - contractsWonCount - inNegotiationCount - expiredCustomersCount),
       color: 'bg-amber-500',
       text: 'text-amber-400',
     },
@@ -219,7 +240,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="text-[11px] text-[#A7A7A7] mt-2 flex items-center justify-between">
             <span>مجموع فاکتورهای موفق</span>
-            <span className="text-white font-bold">{toPersianDigits(contractsWon.length)} فقره</span>
+            <span className="text-white font-bold">{toPersianDigits(contractsWonCount)} فقره</span>
           </div>
         </div>
 
@@ -235,10 +256,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="text-3xl font-black text-white font-mono mt-3">
-            {toPersianDigits(customers.length)}
+            {toPersianDigits(totalCustomersCount)}
           </div>
           <div className="text-[11px] text-[#A7A7A7] mt-2 flex items-center gap-1">
-            <span className="text-[#1DB954] font-bold">{toPersianDigits(inNegotiation.length)}</span>
+            <span className="text-[#1DB954] font-bold">{toPersianDigits(inNegotiationCount)}</span>
             <span>مشتری در مرحله پیش‌نویس/پیگیری</span>
           </div>
         </div>
@@ -247,7 +268,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div
           onClick={() => onNavigateToTab('customers')}
           className={`p-5 rounded-2xl border transition-all group ${
-            expiredCustomers.length > 0
+            expiredCustomersCount > 0
               ? 'bg-[#E22134]/10 border-[#E22134]/40 hover:bg-[#E22134]/15'
               : 'bg-[#181818] border-[#282828] hover:bg-[#202020]'
           }`}
@@ -259,7 +280,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
           <div className="text-3xl font-black text-[#E22134] font-mono mt-3">
-            {toPersianDigits(expiredCustomers.length)}
+            {toPersianDigits(expiredCustomersCount)}
           </div>
           <div className="text-[11px] text-[#A7A7A7] mt-2">
             {expiredCustomers.length > 0

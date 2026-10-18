@@ -1027,6 +1027,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           phone: testSmsPhone,
           pattern_code: testSmsPattern,
           variables: { [testSmsVarKey]: testSmsVarVal },
+          api_key: projectSettings.ippanel_api,
+          sender: projectSettings.ippanel_sender || projectSettings.ippanel_line_number,
         }),
       });
       const data = await res.json();

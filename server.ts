@@ -758,11 +758,30 @@ let tenantSettingsMap: Map<string, TenantSettingsState> = new Map([
 async function sendIppanelSmsPattern(
   recipientPhone: string | null | undefined,
   patternCode: string | null | undefined,
-  variables: Record<string, string | number> = {}
+  variables: Record<string, string | number> = {},
+  overrideApiKey?: string,
+  overrideSender?: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!projectSettingsData.ippanel_api || !patternCode || !recipientPhone) {
-    return { success: false, error: 'MISSING_API_KEY_OR_PATTERN_OR_PHONE' };
+  // If API key is not yet loaded into memory, try to load it from Directus project_settings
+  if ((!projectSettingsData.ippanel_api || !projectSettingsData.ippanel_api.trim()) && directusUrl && directusAdminToken) {
+    try {
+      const resp = await directusFetch('/items/project_settings').catch(() => null);
+      if (resp?.data) {
+        const item = Array.isArray(resp.data) ? resp.data[0] : resp.data;
+        if (item) {
+          projectSettingsData = { ...projectSettingsData, ...item };
+        }
+      }
+    } catch {}
   }
+
+  const rawKey = (overrideApiKey || projectSettingsData.ippanel_api || '').trim();
+  if (!rawKey || !patternCode || !recipientPhone) {
+    return { success: false, error: 'کلید API سامانه پیامک، کد پترن یا شماره تلفن گیرنده وارد نشده است.' };
+  }
+
+  // Sanitize API key: Strip accidental 'Bearer ' or 'AccessKey ' prefixes
+  const cleanApiKey = rawKey.replace(/^(Bearer|AccessKey)\s+/i, '').trim();
 
   let cleanPhone = String(recipientPhone).replace(/[\s\-_()]/g, '').trim();
   cleanPhone = cleanPhone.replace(/^(\+98|0098)/, '0');
@@ -772,11 +791,10 @@ async function sendIppanelSmsPattern(
 
   if (!/^09\d{9}$/.test(cleanPhone)) {
     console.warn(`[IPPanel SMS] Skipped invalid phone number: ${recipientPhone}`);
-    return { success: false, error: 'INVALID_PHONE_NUMBER' };
+    return { success: false, error: 'شماره تلفن گیرنده نامعتبر است (فرمت مجاز: 09xxxxxxxxx)' };
   }
 
-  const apiKey = projectSettingsData.ippanel_api.trim();
-  const senderLine = (projectSettingsData.ippanel_sender || projectSettingsData.ippanel_line_number || '+983000505').trim();
+  const senderLine = (overrideSender || projectSettingsData.ippanel_sender || projectSettingsData.ippanel_line_number || '+983000505').trim();
 
   // Clean variables values
   const cleanVars: Record<string, string> = {};
@@ -784,66 +802,116 @@ async function sendIppanelSmsPattern(
     cleanVars[k] = v !== null && v !== undefined ? String(v).trim() : '';
   }
 
-  try {
-    const payload = {
-      code: patternCode.trim(),
-      sender: senderLine,
-      recipient: cleanPhone,
-      variable: cleanVars,
-    };
+  const api2Payload = {
+    code: patternCode.trim(),
+    sender: senderLine,
+    recipient: cleanPhone,
+    variable: cleanVars,
+  };
 
-    console.log(`[IPPanel SMS] Sending pattern '${patternCode}' to ${cleanPhone}...`, cleanVars);
+  const restPayload = {
+    pattern_code: patternCode.trim(),
+    originator: senderLine,
+    recipient: cleanPhone,
+    values: cleanVars,
+  };
 
-    // Primary attempt: api2.ippanel.com v1 pattern send
-    let res = await fetch('https://api2.ippanel.com/api/v1/sms/pattern/normal/send', {
-      method: 'POST',
+  console.log(`[IPPanel SMS] Attempting to send pattern '${patternCode}' to ${cleanPhone}...`, cleanVars);
+
+  // Strategy list with correct Authorization: AccessKey scheme or apikey header
+  const attempts = [
+    // 1. api2.ippanel.com with Authorization: AccessKey (IPPanel official scheme)
+    {
+      url: 'https://api2.ippanel.com/api/v1/sms/pattern/normal/send',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': apiKey,
-        'Authorization': apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`
+        'Authorization': `AccessKey ${cleanApiKey}`,
       },
-      body: JSON.stringify(payload),
-    }).catch((e) => {
-      console.warn('[IPPanel SMS] api2 fetch failed:', e.message);
-      return null;
-    });
+      body: JSON.stringify(api2Payload),
+      label: 'api2.ippanel.com (AccessKey)'
+    },
+    // 2. api2.ippanel.com with apikey header only
+    {
+      url: 'https://api2.ippanel.com/api/v1/sms/pattern/normal/send',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': cleanApiKey,
+      },
+      body: JSON.stringify(api2Payload),
+      label: 'api2.ippanel.com (apikey header)'
+    },
+    // 3. rest.ippanel.com with Authorization: AccessKey
+    {
+      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `AccessKey ${cleanApiKey}`,
+      },
+      body: JSON.stringify(restPayload),
+      label: 'rest.ippanel.com (AccessKey)'
+    },
+    // 4. rest.ippanel.com with apikey header
+    {
+      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': cleanApiKey,
+      },
+      body: JSON.stringify(restPayload),
+      label: 'rest.ippanel.com (apikey header)'
+    },
+    // 5. api.ippanel.com alternative edge host
+    {
+      url: 'https://api.ippanel.com/api/v1/sms/pattern/normal/send',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `AccessKey ${cleanApiKey}`,
+      },
+      body: JSON.stringify(api2Payload),
+      label: 'api.ippanel.com (AccessKey)'
+    }
+  ];
 
-    if (!res || !res.ok) {
-      // Fallback attempt: rest.ippanel.com v1 pattern send
-      const restPayload = {
-        pattern_code: patternCode.trim(),
-        originator: senderLine,
-        recipient: cleanPhone,
-        values: cleanVars,
-      };
+  let lastError = '';
 
-      res = await fetch('https://rest.ippanel.com/v1/messages/patterns/send', {
+  for (const attempt of attempts) {
+    try {
+      const res = await fetch(attempt.url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': apiKey,
-          'apikey': apiKey
-        },
-        body: JSON.stringify(restPayload),
-      }).catch((e) => {
-        console.warn('[IPPanel SMS] rest endpoint fetch failed:', e.message);
-        return null;
+        headers: attempt.headers,
+        body: attempt.body,
       });
-    }
 
-    if (res && res.ok) {
-      const json: any = await res.json().catch(() => ({}));
-      console.log(`[IPPanel SMS] Successfully sent pattern '${patternCode}' to ${cleanPhone}:`, json);
-      return { success: true, messageId: String(json?.data || json?.bulk_id || json?.message_id || 'OK') };
-    } else {
-      const errText = res ? await res.text().catch(() => 'Error response') : 'No response from IPPanel';
-      console.warn(`[IPPanel SMS] Failed to send pattern to ${cleanPhone}:`, errText);
-      return { success: false, error: errText };
+      if (res.ok) {
+        const json: any = await res.json().catch(() => ({}));
+        console.log(`[IPPanel SMS] Successfully sent via ${attempt.label}:`, json);
+        return {
+          success: true,
+          messageId: String(json?.data || json?.bulk_id || json?.message_id || 'OK')
+        };
+      } else {
+        const errBody = await res.text().catch(() => '');
+        lastError = `[${attempt.label}] HTTP ${res.status}: ${errBody}`;
+        console.warn(`[IPPanel SMS] ${attempt.label} failed with status ${res.status}:`, errBody);
+
+        // If error is not 401 unauthorized scheme, we might have hit a pattern or variable validation error
+        // But if it was 401 with scheme error, we continue to next attempt!
+        try {
+          const parsed = JSON.parse(errBody);
+          // If the error is about pattern or balance (not auth), we can break early and return exact message
+          if (parsed?.data?.error && !parsed.data.error.includes('scheme') && !parsed.data.error.includes('Unauthorized')) {
+            lastError = parsed.data.error || parsed.message || errBody;
+            break;
+          }
+        } catch {}
+      }
+    } catch (fetchErr: any) {
+      lastError = `[${attempt.label}] Network error: ${fetchErr.message}`;
+      console.warn(`[IPPanel SMS] Network error connecting to ${attempt.label}:`, fetchErr.message);
     }
-  } catch (err: any) {
-    console.error(`[IPPanel SMS] Error sending pattern to ${cleanPhone}:`, err.message);
-    return { success: false, error: err.message };
   }
+
+  return { success: false, error: lastError || 'خطا در برقراری ارتباط با درگاه IPPanel' };
 }
 
 // Send pattern SMS notification to a tenant's configured admin SMS numbers (sms_phones)
@@ -2384,6 +2452,93 @@ app.get('/api/bff-status', async (req: Request, res: Response) => {
 
   lastBffStatusCache = { timestamp: nowMs, data: responseData };
   res.json(responseData);
+});
+
+app.get('/api/dashboard-summary', async (req: Request, res: Response) => {
+  const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const tenantFilter = (tenantId && tenantId !== 'all') ? `&filter[tenant_id][_eq]=${encodeURIComponent(tenantId)}` : '';
+      const userFilter = (!isAdmin && (userId || personnelId)) ? `&filter[assigned_marketer_id][_eq]=${encodeURIComponent(personnelId || userId)}` : '';
+
+      const [cRes, cwRes, inRes, expRes, repRes, lRes, repRevRes, topFollowupsRes, urgentExpRes] = await Promise.all([
+        directusFetch(`/items/customers?limit=0&meta=filter_count${tenantFilter}${userFilter}`).catch(() => null),
+        directusFetch(`/items/customers?filter[status][_eq]=${encodeURIComponent('قرارداد')}&limit=0&meta=filter_count${tenantFilter}${userFilter}`).catch(() => null),
+        directusFetch(`/items/customers?filter[_or][0][status][_eq]=${encodeURIComponent('پیش نویس قرارداد')}&filter[_or][1][status][_eq]=${encodeURIComponent('پیگیری قرارداد')}&limit=0&meta=filter_count${tenantFilter}${userFilter}`).catch(() => null),
+        directusFetch(`/items/customers?filter[is_expired][_eq]=true&limit=0&meta=filter_count${tenantFilter}${userFilter}`).catch(() => null),
+        directusFetch(`/items/customer_reports?limit=0&meta=filter_count${tenantFilter}`).catch(() => null),
+        directusFetch(`/items/cold_leads?limit=0&meta=filter_count${tenantFilter}`).catch(() => null),
+        directusFetch(`/items/customer_reports?filter[contract_amount][_gt]=0&fields=contract_amount,negotiation_score${tenantFilter}&limit=5000`).catch(() => null),
+        directusFetch(`/items/customers?page=1&limit=5&sort=next_followup_date&fields=id,company_name,manager_name,next_followup_date,status,assigned_marketer_name${tenantFilter}${userFilter}`).catch(() => null),
+        directusFetch(`/items/customers?page=1&limit=5&filter[is_expired][_eq]=false&sort=assignment_deadline&fields=id,company_name,manager_name,assignment_deadline,status,assigned_marketer_name${tenantFilter}${userFilter}`).catch(() => null),
+      ]);
+
+      const totalCustomers = cRes?.meta?.filter_count ?? 0;
+      const contractsWonCount = cwRes?.meta?.filter_count ?? 0;
+      const inNegotiationCount = inRes?.meta?.filter_count ?? 0;
+      const expiredCustomersCount = expRes?.meta?.filter_count ?? 0;
+      const totalReportsCount = repRes?.meta?.filter_count ?? 0;
+      const totalColdLeadsCount = lRes?.meta?.filter_count ?? 0;
+
+      let totalContractRevenue = 0;
+      let scoreSum = 0;
+      let scoreCount = 0;
+
+      if (repRevRes && Array.isArray(repRevRes.data)) {
+        repRevRes.data.forEach((r: any) => {
+          if (r.contract_amount) totalContractRevenue += Number(r.contract_amount) || 0;
+          if (r.negotiation_score && Number(r.negotiation_score) > 0) {
+            scoreSum += Number(r.negotiation_score);
+            scoreCount++;
+          }
+        });
+      }
+
+      const avgNegotiationScore = scoreCount > 0 ? (scoreSum / scoreCount).toFixed(1) : '5.0';
+
+      return res.json({
+        total_customers: totalCustomers,
+        contracts_won_count: contractsWonCount,
+        in_negotiation_count: inNegotiationCount,
+        expired_customers_count: expiredCustomersCount,
+        total_reports_count: totalReportsCount,
+        total_cold_leads_count: totalColdLeadsCount,
+        total_contract_revenue: totalContractRevenue,
+        avg_negotiation_score: avgNegotiationScore,
+        upcoming_followups: topFollowupsRes?.data || [],
+        urgent_expiring_customers: urgentExpRes?.data || []
+      });
+    } catch (err: any) {
+      console.warn('Dashboard summary error:', err.message);
+    }
+  }
+
+  updateExpirationFlags();
+  let list = customersData;
+  if (tenantId && tenantId !== 'all') list = list.filter(c => matchesTenant(c.tenant_id, tenantId));
+  if (!isAdmin && (userId || personnelId)) list = list.filter(c => c.assigned_marketer_id === personnelId || c.assigned_marketer_id === userId);
+
+  const contractsWon = list.filter(c => c.status === 'قرارداد');
+  const inNegotiation = list.filter(c => c.status === 'پیش نویس قرارداد' || c.status === 'پیگیری قرارداد');
+  const expired = list.filter(c => c.is_expired);
+
+  const totalContractRevenue = reportsData.reduce((acc, r) => acc + (Number(r.contract_amount) || 0), 0);
+  const scored = reportsData.filter(r => r.negotiation_score && r.negotiation_score > 0);
+  const avgScore = scored.length > 0 ? (scored.reduce((acc, r) => acc + (r.negotiation_score || 0), 0) / scored.length).toFixed(1) : '5.0';
+
+  return res.json({
+    total_customers: list.length,
+    contracts_won_count: contractsWon.length,
+    in_negotiation_count: inNegotiation.length,
+    expired_customers_count: expired.length,
+    total_reports_count: reportsData.length,
+    total_cold_leads_count: coldLeadsData.length,
+    total_contract_revenue: totalContractRevenue,
+    avg_negotiation_score: avgScore,
+    upcoming_followups: list.filter(c => Boolean(c.next_followup_date)).slice(0, 5),
+    urgent_expiring_customers: list.filter(c => c.assignment_deadline && !c.is_expired).slice(0, 5)
+  });
 });
 
 app.post('/api/bff-config', async (req: Request, res: Response) => {
@@ -4254,12 +4409,12 @@ app.patch('/api/tenant-settings', async (req: Request, res: Response) => {
 
 // Test SMS endpoint for IPPanel Pattern Gateway
 app.post('/api/project-settings/test-sms', async (req: Request, res: Response) => {
-  const { phone, pattern_code, variables } = req.body;
+  const { phone, pattern_code, variables, api_key, sender } = req.body;
   if (!phone || !pattern_code) {
     return res.status(400).json({ error: 'شماره همراه گیرنده و کد پترن الزامی است.' });
   }
 
-  const result = await sendIppanelSmsPattern(phone, pattern_code, variables || {});
+  const result = await sendIppanelSmsPattern(phone, pattern_code, variables || {}, api_key, sender);
   if (result.success) {
     res.json({
       success: true,

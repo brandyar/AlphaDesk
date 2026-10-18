@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   MessageSquareText,
   Search,
@@ -19,9 +19,12 @@ import {
   ChevronsLeft,
   ChevronsRight,
   FileCheck2,
+  Loader2,
 } from 'lucide-react';
 import { CustomerReport, Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
 import { formatPersianDate, formatPersianDateTime, getStatusTheme, toPersianDigits, formatToman, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS } from '../utils';
+import { fetchCustomerReportsPaginated } from '../api';
+import { PaginationControl } from './PaginationControl';
 
 interface ReportsViewProps {
   reports: CustomerReport[];
@@ -81,10 +84,46 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(25);
 
+  const [items, setItems] = useState<CustomerReport[]>(reports);
+  const [totalCount, setTotalCount] = useState<number>(reports.length);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
+
   // Reset page when any filter changes
-  React.useEffect(() => {
+  useEffect(() => {
     setCurrentPage(1);
   }, [adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery]);
+
+  // Fetch paginated reports from Directus / BFF
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingPage(true);
+
+    fetchCustomerReportsPaginated(undefined, {
+      page: currentPage,
+      limit: pageSize,
+      search: searchQuery.trim(),
+      status: selectedStatus !== 'همه' ? selectedStatus : undefined,
+      negotiator: selectedNegotiator !== 'همه' ? selectedNegotiator : undefined,
+      adminFilter: userIsAdmin ? adminFilter : undefined,
+      staffFilter: !userIsAdmin ? staffFilter : undefined,
+    })
+      .then((res) => {
+        if (isMounted) {
+          setItems(res.data);
+          setTotalCount(res.meta.filter_count);
+          setTotalPages(res.meta.total_pages);
+        }
+      })
+      .catch((err) => console.warn('Failed to load paginated reports:', err))
+      .finally(() => {
+        if (isMounted) setIsLoadingPage(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentPage, pageSize, adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery, reports]);
 
   // Helper to check if a customer belongs to the current user
   const isMyCustomer = (c: Customer): boolean => {
@@ -364,13 +403,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     { id: 'expired' as StaffFilterType, label: 'منقضی شده' },
   ];
 
-  // Compute pagination
-  const totalCount = filteredReports.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const safePage = Math.min(Math.max(1, currentPage), totalPages);
-  const startIndex = (safePage - 1) * pageSize;
-  const paginatedReports = filteredReports.slice(startIndex, startIndex + pageSize);
-
   return (
     <div className="space-y-6">
       {/* Title & Action */}
@@ -380,8 +412,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             <span>گزارش‌های پیگیری و مذاکره با مشتریان</span>
             <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold">
               {staffFilter === 'unfollowed_referrals' && !userIsAdmin
-                ? `${unfollowedReferralCustomers.length} مشتری ارجاعی`
-                : `${filteredReports.length} گزارش`}
+                ? `${toPersianDigits(unfollowedReferralCustomers.length)} مشتری ارجاعی`
+                : `${toPersianDigits(totalCount)} گزارش`}
             </span>
           </h2>
           <p className="text-xs text-[#A7A7A7] mt-1">
@@ -577,14 +609,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </div>
         )
       ) : /* Standard Reports Feed */
-      filteredReports.length === 0 ? (
+      items.length === 0 && !isLoadingPage ? (
         <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
           <MessageSquareText className="w-10 h-10 text-[#535353] mx-auto" />
           <p className="text-xs text-[#A7A7A7]">هیچ گزارشی مطابق با فیلترهای انتخابی یافت نشد.</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {paginatedReports.map((rep) => {
+        <div className={`space-y-4 ${isLoadingPage ? 'opacity-50 pointer-events-none transition-opacity' : ''}`}>
+          {items.map((rep) => {
             const customer = customers.find((c) => c.id === rep.customer_id);
             const statusTheme = getStatusTheme(rep.negotiation_status);
             const daysToFollowup = getDaysUntil(rep.next_followup_date || customer?.next_followup_date);
@@ -750,61 +782,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       )}
 
       {/* Pagination Controls */}
-      {totalCount > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-[#181818] rounded-2xl border border-[#282828] text-xs">
-          <div className="text-[#888] font-medium">
-            نمایش <span className="text-white font-mono font-bold">{startIndex + 1}</span> تا{' '}
-            <span className="text-white font-mono font-bold">
-              {Math.min(startIndex + pageSize, totalCount)}
-            </span>{' '}
-            از کل <span className="text-[#1DB954] font-mono font-bold">{totalCount}</span> گزارش مذاکره
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setCurrentPage(1)}
-              disabled={safePage <= 1}
-              className="w-8 h-8 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed"
-              title="صفحه اول"
-            >
-              <ChevronsRight className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={safePage <= 1}
-              className="h-8 px-3 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center gap-1 transition-all cursor-pointer disabled:cursor-not-allowed"
-              title="صفحه قبلی"
-            >
-              <ChevronRight className="w-4 h-4" />
-              <span>قبلی</span>
-            </button>
-
-            <div className="px-3 py-1 bg-[#121212] rounded-lg border border-[#2a2a2a] text-white font-mono font-bold">
-              صفحه {safePage} از {totalPages}
-            </div>
-
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={safePage >= totalPages}
-              className="h-8 px-3 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center gap-1 transition-all cursor-pointer disabled:cursor-not-allowed"
-              title="صفحه بعدی"
-            >
-              <span>بعدی</span>
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => setCurrentPage(totalPages)}
-              disabled={safePage >= totalPages}
-              className="w-8 h-8 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed"
-              title="صفحه آخر"
-            >
-              <ChevronsLeft className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
+      <PaginationControl
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        pageSize={pageSize}
+        displayedCount={items.length}
+        isLoading={isLoadingPage}
+        onPageChange={(p) => setCurrentPage(p)}
+        label="گزارش مذاکره"
+      />
     </div>
   );
 };

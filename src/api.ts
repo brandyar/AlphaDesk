@@ -256,12 +256,86 @@ export async function fetchPersonnel(): Promise<Personnel[]> {
   return handleResponse<Personnel[]>(res, 'خطا در دریافت لیست پرسنل');
 }
 
+export interface PaginatedMeta {
+  filter_count: number;
+  total_count: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
+
 export interface PaginatedResult<T> {
   data: T[];
+  meta: PaginatedMeta;
   total: number;
   filteredTotal: number;
   page: number;
   limit: number;
+  totalPages: number;
+}
+
+export function normalizePaginatedResponse<T>(resData: any, reqPage = 1, reqLimit = 25): PaginatedResult<T> {
+  if (resData && Array.isArray(resData.data) && resData.meta) {
+    const filterCount = Number(resData.meta.filter_count) ?? resData.data.length;
+    const totalCount = Number(resData.meta.total_count) ?? filterCount;
+    const page = Number(resData.meta.page || reqPage);
+    const limit = Number(resData.meta.limit || reqLimit);
+    const totalPages = Number(resData.meta.total_pages || Math.max(1, Math.ceil(filterCount / (limit || 25))));
+    return {
+      data: resData.data,
+      meta: {
+        filter_count: filterCount,
+        total_count: totalCount,
+        page,
+        limit,
+        total_pages: totalPages,
+      },
+      total: totalCount,
+      filteredTotal: filterCount,
+      page,
+      limit,
+      totalPages,
+    };
+  }
+
+  const list = Array.isArray(resData) ? resData : (resData?.data && Array.isArray(resData.data)) ? resData.data : [];
+  const filterCount = list.length;
+  const totalPages = Math.max(1, Math.ceil(filterCount / (reqLimit || 25)));
+  return {
+    data: list,
+    meta: {
+      filter_count: filterCount,
+      total_count: filterCount,
+      page: reqPage,
+      limit: reqLimit,
+      total_pages: totalPages,
+    },
+    total: filterCount,
+    filteredTotal: filterCount,
+    page: reqPage,
+    limit: reqLimit,
+    totalPages,
+  };
+}
+
+export interface DashboardSummary {
+  total_customers: number;
+  contracts_won_count: number;
+  in_negotiation_count: number;
+  expired_customers_count: number;
+  total_reports_count: number;
+  total_cold_leads_count: number;
+  total_contract_revenue: number;
+  avg_negotiation_score: string | number;
+  upcoming_followups: Customer[];
+  urgent_expiring_customers: Customer[];
+}
+
+export async function fetchDashboardSummary(): Promise<DashboardSummary> {
+  const res = await fetch(`${BASE_URL}/dashboard-summary`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse<DashboardSummary>(res, 'خطا در دریافت آمار خلاصه داشبورد');
 }
 
 export async function fetchCustomers(filters?: {
@@ -281,7 +355,6 @@ export async function fetchCustomers(filters?: {
   if (filters?.free_only) params.append('free_only', 'true');
   if (filters?.page) params.append('page', String(filters.page));
   if (filters?.limit !== undefined) params.append('limit', String(filters.limit));
-  else params.append('limit', '100');
 
   const res = await fetch(`${BASE_URL}/customers?${params.toString()}`, {
     headers: getBffHeaders(),
@@ -301,6 +374,7 @@ export async function fetchCustomersPaginated(filters?: {
   status?: string;
   marketer_id?: string;
   expired_only?: boolean;
+  free_only?: boolean;
   page?: number;
   limit?: number;
 }): Promise<PaginatedResult<Customer>> {
@@ -309,25 +383,15 @@ export async function fetchCustomersPaginated(filters?: {
   if (filters?.status) params.append('status', filters.status);
   if (filters?.marketer_id) params.append('marketer_id', filters.marketer_id);
   if (filters?.expired_only) params.append('expired_only', 'true');
-  if (filters?.page) params.append('page', String(filters.page));
-  if (filters?.limit) params.append('limit', String(filters.limit));
+  if (filters?.free_only) params.append('free_only', 'true');
+  params.append('page', String(filters?.page || 1));
+  params.append('limit', String(filters?.limit || 25));
 
   const res = await fetch(`${BASE_URL}/customers?${params.toString()}`, {
     headers: getBffHeaders(),
   });
-  const data = await handleResponse<Customer[]>(res, 'خطا در دریافت لیست مشتریان');
-  const total = parseInt(res.headers.get('X-Total-Count') || String(data.length), 10);
-  const filteredTotal = parseInt(res.headers.get('X-Filter-Count') || String(data.length), 10);
-  const page = parseInt(res.headers.get('X-Page') || String(filters?.page || 1), 10);
-  const limit = parseInt(res.headers.get('X-Limit') || String(filters?.limit || 50), 10);
-
-  return {
-    data,
-    total,
-    filteredTotal,
-    page,
-    limit,
-  };
+  const resData = await handleResponse<any>(res, 'خطا در دریافت لیست مشتریان');
+  return normalizePaginatedResponse<Customer>(resData, filters?.page || 1, filters?.limit || 25);
 }
 
 export async function fetchCustomerById(id: string): Promise<Customer> {
@@ -526,30 +590,62 @@ export async function fetchCustomerReports(
 
 export async function fetchCustomerReportsPaginated(
   customerId?: string,
-  options?: { page?: number; limit?: number }
+  options?: { page?: number; limit?: number; search?: string; status?: string; negotiator?: string; adminFilter?: string; staffFilter?: string }
 ): Promise<PaginatedResult<CustomerReport>> {
   const params = new URLSearchParams();
   if (customerId) params.append('customer_id', customerId);
-  if (options?.page) params.append('page', String(options.page));
-  if (options?.limit) params.append('limit', String(options.limit));
+  if (options?.search) params.append('search', options.search);
+  if (options?.status) params.append('status', options.status);
+  if (options?.negotiator) params.append('negotiator', options.negotiator);
+  if (options?.adminFilter) params.append('admin_filter', options.adminFilter);
+  if (options?.staffFilter) params.append('staff_filter', options.staffFilter);
+  params.append('page', String(options?.page || 1));
+  params.append('limit', String(options?.limit || 25));
 
   const q = params.toString() ? `?${params.toString()}` : '';
   const res = await fetch(`${BASE_URL}/customer-reports${q}`, {
     headers: getBffHeaders(),
   });
-  const data = await handleResponse<CustomerReport[]>(res, 'خطا در دریافت گزارش‌های مذاکره');
-  const total = parseInt(res.headers.get('X-Total-Count') || String(data.length), 10);
-  const filteredTotal = parseInt(res.headers.get('X-Filter-Count') || String(data.length), 10);
-  const page = parseInt(res.headers.get('X-Page') || String(options?.page || 1), 10);
-  const limit = parseInt(res.headers.get('X-Limit') || String(options?.limit || 50), 10);
+  const resData = await handleResponse<any>(res, 'خطا در دریافت گزارش‌های مذاکره');
+  return normalizePaginatedResponse<CustomerReport>(resData, options?.page || 1, options?.limit || 25);
+}
 
-  return {
-    data,
-    total,
-    filteredTotal,
-    page,
-    limit,
-  };
+export async function fetchColdLeadsPaginated(options?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  marketer_id?: string;
+}): Promise<PaginatedResult<ColdLead>> {
+  const params = new URLSearchParams();
+  if (options?.search) params.append('search', options.search);
+  if (options?.status) params.append('status', options.status);
+  if (options?.marketer_id) params.append('marketer_id', options.marketer_id);
+  params.append('page', String(options?.page || 1));
+  params.append('limit', String(options?.limit || 25));
+
+  const res = await fetch(`${BASE_URL}/cold-leads?${params.toString()}`, {
+    headers: getBffHeaders(),
+  });
+  const resData = await handleResponse<any>(res, 'خطا در دریافت شماره‌های اولیه');
+  return normalizePaginatedResponse<ColdLead>(resData, options?.page || 1, options?.limit || 25);
+}
+
+export async function fetchAdminReportsPaginated(options?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+}): Promise<PaginatedResult<AdministrativeReport>> {
+  const params = new URLSearchParams();
+  if (options?.search) params.append('search', options.search);
+  params.append('page', String(options?.page || 1));
+  params.append('limit', String(options?.limit || 25));
+
+  const res = await fetch(`${BASE_URL}/admin-reports?${params.toString()}`, {
+    headers: getBffHeaders(),
+  });
+  const resData = await handleResponse<any>(res, 'خطا در دریافت گزارش‌های اداری');
+  return normalizePaginatedResponse<AdministrativeReport>(resData, options?.page || 1, options?.limit || 25);
 }
 
 export async function createCustomerReport(payload: Partial<CustomerReport>): Promise<CustomerReport> {

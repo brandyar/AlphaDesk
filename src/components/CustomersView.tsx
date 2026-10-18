@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Users,
   Search,
@@ -20,9 +20,12 @@ import {
   ChevronsRight,
   LayoutGrid,
   List,
+  Loader2,
 } from 'lucide-react';
 import { Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
-import { formatTimeRemaining, formatPersianDate, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS } from '../utils';
+import { formatTimeRemaining, formatPersianDate, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS, toPersianDigits } from '../utils';
+import { fetchCustomersPaginated } from '../api';
+import { PaginationControl } from './PaginationControl';
 
 interface CustomersViewProps {
   customers: Customer[];
@@ -62,31 +65,45 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [pageSize, setPageSize] = useState<number>(25);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  const [items, setItems] = useState<Customer[]>(customers);
+  const [totalCount, setTotalCount] = useState<number>(customers.length);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
+
   // Reset page to 1 when filters or search change
-  React.useEffect(() => {
+  useEffect(() => {
     setCurrentPage(1);
   }, [statusFilter, selectedMarketerId, showExpiredOnly, searchQuery]);
 
-  // Client-side search within the current dataset
-  const searchedCustomers = useMemo(() => {
-    if (!searchQuery.trim()) return customers;
-    const q = searchQuery.trim().toLowerCase();
-    return customers.filter(c => {
-      const matchCompany = c.company_name?.toLowerCase().includes(q);
-      const matchManager = c.manager_name?.toLowerCase().includes(q);
-      const matchCity = c.city?.toLowerCase().includes(q);
-      const matchJob = c.business_type?.toLowerCase().includes(q);
-      const matchPhone = Array.isArray(c.mobile_numbers) && c.mobile_numbers.some(m => m.includes(q));
-      return Boolean(matchCompany || matchManager || matchCity || matchJob || matchPhone);
-    });
-  }, [customers, searchQuery]);
+  // Fetch server-side paginated items on filter or page change
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingPage(true);
 
-  // Compute pagination slices
-  const totalCount = searchedCustomers.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const safePage = Math.min(Math.max(1, currentPage), totalPages);
-  const startIndex = (safePage - 1) * pageSize;
-  const paginatedCustomers = searchedCustomers.slice(startIndex, startIndex + pageSize);
+    fetchCustomersPaginated({
+      page: currentPage,
+      limit: pageSize,
+      search: searchQuery.trim(),
+      status: statusFilter !== 'همه' ? statusFilter : undefined,
+      marketer_id: selectedMarketerId !== 'همه' ? selectedMarketerId : undefined,
+      expired_only: showExpiredOnly,
+    })
+      .then((res) => {
+        if (isMounted) {
+          setItems(res.data);
+          setTotalCount(res.meta.filter_count);
+          setTotalPages(res.meta.total_pages);
+        }
+      })
+      .catch((err) => console.warn('Failed to load paginated customers:', err))
+      .finally(() => {
+        if (isMounted) setIsLoadingPage(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, customers]);
 
   const userIsAdmin = Boolean(
     isAdmin ||
@@ -105,7 +122,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
             <span>مدیریت مشتریان و پرونده‌ها</span>
             <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold">
-              {customers.length} پرونده
+              {toPersianDigits(totalCount)} پرونده
             </span>
           </h2>
           <p className="text-xs text-[#A7A7A7] mt-1">
@@ -558,61 +575,16 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       )}
 
       {/* Pagination Controls */}
-      {totalCount > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-[#181818] rounded-2xl border border-[#282828] text-xs">
-          <div className="text-[#888] font-medium">
-            نمایش <span className="text-white font-mono font-bold">{startIndex + 1}</span> تا{' '}
-            <span className="text-white font-mono font-bold">
-              {Math.min(startIndex + pageSize, totalCount)}
-            </span>{' '}
-            از کل <span className="text-[#1DB954] font-mono font-bold">{totalCount}</span> پرونده مشتری
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setCurrentPage(1)}
-              disabled={safePage <= 1}
-              className="w-8 h-8 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed"
-              title="صفحه اول"
-            >
-              <ChevronsRight className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={safePage <= 1}
-              className="h-8 px-3 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center gap-1 transition-all cursor-pointer disabled:cursor-not-allowed"
-              title="صفحه قبلی"
-            >
-              <ChevronRight className="w-4 h-4" />
-              <span>قبلی</span>
-            </button>
-
-            <div className="px-3 py-1 bg-[#121212] rounded-lg border border-[#2a2a2a] text-white font-mono font-bold">
-              صفحه {safePage} از {totalPages}
-            </div>
-
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={safePage >= totalPages}
-              className="h-8 px-3 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center gap-1 transition-all cursor-pointer disabled:cursor-not-allowed"
-              title="صفحه بعدی"
-            >
-              <span>بعدی</span>
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => setCurrentPage(totalPages)}
-              disabled={safePage >= totalPages}
-              className="w-8 h-8 rounded-lg bg-[#242424] hover:bg-[#303030] disabled:opacity-40 disabled:hover:bg-[#242424] text-white flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed"
-              title="صفحه آخر"
-            >
-              <ChevronsLeft className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
+      <PaginationControl
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalCount={totalCount}
+        pageSize={pageSize}
+        displayedCount={items.length}
+        isLoading={isLoadingPage}
+        onPageChange={(p) => setCurrentPage(p)}
+        label="پرونده مشتری"
+      />
     </div>
   );
 };
