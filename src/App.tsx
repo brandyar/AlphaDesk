@@ -35,6 +35,7 @@ import { MergeCustomersModal } from './components/MergeCustomersModal';
 import { AuthModal } from './components/AuthModal';
 import { TenantsManagementModal } from './components/TenantsManagementModal';
 import { TenantsManagementView } from './components/TenantsManagementView';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 import {
   Customer,
@@ -103,6 +104,8 @@ import {
   fetchTenants,
   getActiveTenantId,
   setActiveTenantId,
+  fetchDashboardSummary,
+  DashboardSummary,
 } from './api';
 import { matchPersonnelToCustomer, matchPersonnelToReport } from './utils';
 
@@ -139,6 +142,7 @@ export default function App() {
   const [personnelList, setPersonnelList] = useState<Personnel[]>([]);
   const [currentPersonnel, setCurrentPersonnel] = useState<Personnel | null>(initialSession.personnel);
   const [bffStatus, setBffStatus] = useState<BffStatus | null>(null);
+  const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null);
 
   // Multi-Tenancy State
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -167,8 +171,6 @@ export default function App() {
   const [prefilledLeadNotes, setPrefilledLeadNotes] = useState('');
 
   const [loading, setLoading] = useState(true);
-  const [displayedTab, setDisplayedTab] = useState<NavTab>(activeTab);
-  const [isTabTransitioning, setIsTabTransitioning] = useState(false);
 
   // Load and refresh tenants
   const loadTenants = async () => {
@@ -206,18 +208,6 @@ export default function App() {
     loadAllData();
   };
 
-  // Smooth Tab Transition Handler
-  useEffect(() => {
-    if (activeTab !== displayedTab) {
-      setIsTabTransitioning(true);
-      const timer = setTimeout(() => {
-        setDisplayedTab(activeTab);
-        setIsTabTransitioning(false);
-      }, 140);
-      return () => clearTimeout(timer);
-    }
-  }, [activeTab, displayedTab]);
-
   // Initial Data Load
   const isFetchingRef = useRef(false);
 
@@ -237,11 +227,11 @@ export default function App() {
         targetPContext?.role === 'admin'
       );
 
-      // Fetch initial datasets with optimized limits for instant responsive loading
+      // Fast responsive initial limits (views load their own paginated items)
       const customerLimit = 100;
       const reportLimit = 100;
 
-      const [pData, cData, rData, lData, aData, bStatus, lrData, arData, tData] = await Promise.all([
+      const [pData, cData, rData, lData, aData, bStatus, lrData, arData, tData, dSummary] = await Promise.all([
         fetchPersonnel().catch(() => []),
         fetchCustomers({ limit: customerLimit }).catch(() => []),
         fetchCustomerReports(undefined, { limit: reportLimit }).catch(() => []),
@@ -251,6 +241,7 @@ export default function App() {
         fetchLeaveRequests().catch(() => []),
         fetchAdvanceRequests().catch(() => []),
         fetchTenants().catch(() => []),
+        fetchDashboardSummary().catch(() => null),
       ]);
 
       setPersonnelList(pData);
@@ -312,6 +303,7 @@ export default function App() {
       setBffStatus(bStatus);
       setLeaveRequests(lrData);
       setAdvanceRequests(arData);
+      if (dSummary) setDashboardSummary(dSummary);
     } catch (e) {
       console.error('Error loading data:', e);
     } finally {
@@ -877,12 +869,12 @@ export default function App() {
           setIsMobileMenuOpen(false);
         }}
         counts={{
-          customers: userScopedCustomers.length,
-          expiredCustomers: expiredCount,
-          freeCustomers: freeCustomersCount,
-          coldLeads: isCurrentUserAdmin ? coldLeads.length : coldLeads.filter(l => l.assigned_to === currentPersonnel?.id).length,
-          reports: userScopedReports.length,
-          adminReports: adminReports.length,
+          customers: dashboardSummary?.total_customers ?? userScopedCustomers.length,
+          expiredCustomers: dashboardSummary?.expired_customers_count ?? expiredCount,
+          freeCustomers: dashboardSummary?.free_customers_count ?? freeCustomersCount,
+          coldLeads: dashboardSummary?.total_cold_leads_count ?? (isCurrentUserAdmin ? coldLeads.length : coldLeads.filter((l) => l.assigned_to === currentPersonnel?.id).length),
+          reports: dashboardSummary?.total_reports_count ?? userScopedReports.length,
+          adminReports: dashboardSummary?.admin_reports_count ?? adminReports.length,
           pendingLeaves: leaveRequests.filter((r) => r.status === 'pending').length,
           pendingAdvances: advanceRequests.filter((r) => r.status === 'pending').length,
           totalPersonnel: personnelList.length,
@@ -946,258 +938,250 @@ export default function App() {
 
         {/* Dynamic Main View */}
         <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 lg:p-8 pb-24 lg:pb-8 relative">
-          {/* Subtle Top Loading Line for Page Transitions */}
-          {isTabTransitioning && (
-            <div className="fixed top-16 sm:top-18 left-0 right-0 z-40 h-[3px] bg-gradient-to-r from-transparent via-[#1DB954] to-transparent animate-pulse shadow-sm shadow-[#1DB954]/50" />
-          )}
-
           {loading ? (
             <div className="flex flex-col items-center justify-center h-64 space-y-3">
               <div className="w-8 h-8 rounded-full border-2 border-[#1DB954] border-t-transparent animate-spin" />
               <div className="text-xs text-[#A7A7A7]">در حال بارگذاری اطلاعات سامانه...</div>
             </div>
           ) : (
-            <div
-              className={`transition-all duration-150 ease-out ${
-                isTabTransitioning
-                  ? 'opacity-40 translate-y-1 blur-[0.5px]'
-                  : 'opacity-100 translate-y-0 blur-0'
-              }`}
-            >
-              {displayedTab === 'dashboard' && (
-                <DashboardView
-                  customers={userScopedCustomers}
-                  reports={userScopedReports}
-                  coldLeads={coldLeads}
-                  adminReports={adminReports}
-                  personnelList={personnelList}
-                  bffStatus={bffStatus}
-                  onSelectCustomer={openCustomerDetail}
-                  onOpenNewCustomer={() => {
-                    setEditingCustomer(null);
-                    setIsCustomerModalOpen(true);
-                  }}
-                  onOpenNewLead={() => setIsAddLeadModalOpen(true)}
-                  onOpenAddReport={() => {
-                    setReportPreselectedCustomerId(undefined);
-                    setIsAddReportModalOpen(true);
-                  }}
-                  onNavigateToTab={(tab, sub) => {
-                    setActiveTab(tab);
-                    if (sub) setPortalSubTab(sub as PortalTab);
-                  }}
-                />
-              )}
+            <div className="w-full">
+              <ErrorBoundary key={activeTab} fallbackTitle="خطا در بارگذاری این صفحه" onReset={loadAllData}>
+                {activeTab === 'dashboard' && (
+                  <DashboardView
+                    customers={userScopedCustomers}
+                    reports={userScopedReports}
+                    coldLeads={coldLeads}
+                    adminReports={adminReports}
+                    personnelList={personnelList}
+                    bffStatus={bffStatus}
+                    dashboardSummary={dashboardSummary}
+                    onSelectCustomer={openCustomerDetail}
+                    onOpenNewCustomer={() => {
+                      setEditingCustomer(null);
+                      setIsCustomerModalOpen(true);
+                    }}
+                    onOpenNewLead={() => setIsAddLeadModalOpen(true)}
+                    onOpenAddReport={() => {
+                      setReportPreselectedCustomerId(undefined);
+                      setIsAddReportModalOpen(true);
+                    }}
+                    onNavigateToTab={(tab, sub) => {
+                      setActiveTab(tab);
+                      if (sub) setPortalSubTab(sub as PortalTab);
+                    }}
+                  />
+                )}
 
-              {displayedTab === 'customers' && (
-                <CustomersView
-                  customers={filteredCustomers}
-                  personnelList={personnelList}
-                  currentPersonnel={currentPersonnel}
-                  currentUser={currentUser}
-                  isAdmin={Boolean(
-                    currentUser?.is_admin ||
-                    currentUser?.app_role === 'admin' ||
-                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                    currentPersonnel?.role === 'admin'
-                  )}
-                  onSelectCustomer={openCustomerDetail}
-                  onOpenNewCustomerModal={() => {
-                    setEditingCustomer(null);
-                    setPrefilledLeadPhone('');
-                    setPrefilledLeadName('');
-                    setPrefilledLeadNotes('');
-                    setIsCustomerModalOpen(true);
-                  }}
-                  onOpenMergeModal={() => {
-                    setMergeInitialCustomerIds([]);
-                    setIsMergeModalOpen(true);
-                  }}
-                  selectedMarketerId={selectedMarketerId}
-                  onSelectMarketerId={setSelectedMarketerId}
-                  statusFilter={statusFilter}
-                  onSelectStatusFilter={setStatusFilter}
-                  showExpiredOnly={showExpiredOnly}
-                  onToggleExpiredOnly={setShowExpiredOnly}
-                />
-              )}
+                {activeTab === 'customers' && (
+                  <CustomersView
+                    customers={filteredCustomers}
+                    personnelList={personnelList}
+                    currentPersonnel={currentPersonnel}
+                    currentUser={currentUser}
+                    isAdmin={Boolean(
+                      currentUser?.is_admin ||
+                      currentUser?.app_role === 'admin' ||
+                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                      currentPersonnel?.role === 'admin'
+                    )}
+                    onSelectCustomer={openCustomerDetail}
+                    onOpenNewCustomerModal={() => {
+                      setEditingCustomer(null);
+                      setPrefilledLeadPhone('');
+                      setPrefilledLeadName('');
+                      setPrefilledLeadNotes('');
+                      setIsCustomerModalOpen(true);
+                    }}
+                    onOpenMergeModal={() => {
+                      setMergeInitialCustomerIds([]);
+                      setIsMergeModalOpen(true);
+                    }}
+                    selectedMarketerId={selectedMarketerId}
+                    onSelectMarketerId={setSelectedMarketerId}
+                    statusFilter={statusFilter}
+                    onSelectStatusFilter={setStatusFilter}
+                    showExpiredOnly={showExpiredOnly}
+                    onToggleExpiredOnly={setShowExpiredOnly}
+                  />
+                )}
 
-              {displayedTab === 'free_customers' && (
-                <FreeCustomersView
-                  customers={customers}
-                  reports={reports}
-                  personnelList={personnelList}
-                  currentPersonnel={currentPersonnel}
-                  currentUser={currentUser}
-                  isAdmin={Boolean(
-                    currentUser?.is_admin ||
-                    currentUser?.app_role === 'admin' ||
-                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                    currentPersonnel?.role === 'admin'
-                  )}
-                  onClaimCustomer={handleClaimCustomer}
-                  onSelectCustomer={openCustomerDetail}
-                  showToast={showToast}
-                />
-              )}
+                {activeTab === 'free_customers' && (
+                  <FreeCustomersView
+                    customers={customers}
+                    reports={reports}
+                    personnelList={personnelList}
+                    currentPersonnel={currentPersonnel}
+                    currentUser={currentUser}
+                    isAdmin={Boolean(
+                      currentUser?.is_admin ||
+                      currentUser?.app_role === 'admin' ||
+                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                      currentPersonnel?.role === 'admin'
+                    )}
+                    onClaimCustomer={handleClaimCustomer}
+                    onSelectCustomer={openCustomerDetail}
+                    showToast={showToast}
+                  />
+                )}
 
-              {displayedTab === 'reports' && (
-                <ReportsView
-                  reports={userScopedReports}
-                  customers={userScopedCustomers}
-                  personnelList={personnelList}
-                  currentPersonnel={currentPersonnel}
-                  currentUser={currentUser}
-                  isAdmin={Boolean(
-                    currentUser?.is_admin ||
-                    currentUser?.app_role === 'admin' ||
-                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                    currentPersonnel?.role === 'admin'
-                  )}
-                  onOpenAddReportModal={(customerId?: string) => {
-                    setReportPreselectedCustomerId(customerId);
-                    setIsAddReportModalOpen(true);
-                  }}
-                  onSelectCustomer={openCustomerDetail}
-                />
-              )}
+                {activeTab === 'reports' && (
+                  <ReportsView
+                    reports={userScopedReports}
+                    customers={userScopedCustomers}
+                    personnelList={personnelList}
+                    currentPersonnel={currentPersonnel}
+                    currentUser={currentUser}
+                    isAdmin={Boolean(
+                      currentUser?.is_admin ||
+                      currentUser?.app_role === 'admin' ||
+                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                      currentPersonnel?.role === 'admin'
+                    )}
+                    onOpenAddReportModal={(customerId?: string) => {
+                      setReportPreselectedCustomerId(customerId);
+                      setIsAddReportModalOpen(true);
+                    }}
+                    onSelectCustomer={openCustomerDetail}
+                  />
+                )}
 
-              {displayedTab === 'analytics' && (
-                <AnalyticsView
-                  reports={userScopedReports}
-                  customers={userScopedCustomers}
-                  personnelList={personnelList}
-                  currentPersonnel={currentPersonnel}
-                  currentUser={currentUser}
-                  isAdmin={Boolean(
-                    currentUser?.is_admin ||
-                    currentUser?.app_role === 'admin' ||
-                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                    currentPersonnel?.role === 'admin'
-                  )}
-                  onSelectCustomer={openCustomerDetail}
-                />
-              )}
+                {activeTab === 'analytics' && (
+                  <AnalyticsView
+                    reports={userScopedReports}
+                    customers={userScopedCustomers}
+                    personnelList={personnelList}
+                    currentPersonnel={currentPersonnel}
+                    currentUser={currentUser}
+                    isAdmin={Boolean(
+                      currentUser?.is_admin ||
+                      currentUser?.app_role === 'admin' ||
+                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                      currentPersonnel?.role === 'admin'
+                    )}
+                    onSelectCustomer={openCustomerDetail}
+                  />
+                )}
 
-              {displayedTab === 'cold_leads' && (
-                <ColdLeadsView
-                  coldLeads={coldLeads}
-                  personnelList={personnelList}
-                  currentPersonnel={currentPersonnel}
-                  currentUser={currentUser}
-                  isAdmin={Boolean(
-                    currentUser?.is_admin ||
-                    currentUser?.app_role === 'admin' ||
-                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                    currentPersonnel?.role === 'admin'
-                  )}
-                  onAddLead={handleAddColdLead}
-                  onUpdateLeadStatus={handleUpdateLeadStatus}
-                  onUpdateLeadAssignedTo={handleUpdateLeadAssignedTo}
-                  onBulkAssignLeads={handleBulkAssignLeads}
-                  onDeleteLead={handleDeleteLead}
-                  onConvertToCustomer={handleConvertToCustomer}
-                  showToast={showToast}
-                />
-              )}
+                {activeTab === 'cold_leads' && (
+                  <ColdLeadsView
+                    coldLeads={coldLeads}
+                    personnelList={personnelList}
+                    currentPersonnel={currentPersonnel}
+                    currentUser={currentUser}
+                    isAdmin={Boolean(
+                      currentUser?.is_admin ||
+                      currentUser?.app_role === 'admin' ||
+                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                      currentPersonnel?.role === 'admin'
+                    )}
+                    onAddLead={handleAddColdLead}
+                    onUpdateLeadStatus={handleUpdateLeadStatus}
+                    onUpdateLeadAssignedTo={handleUpdateLeadAssignedTo}
+                    onBulkAssignLeads={handleBulkAssignLeads}
+                    onDeleteLead={handleDeleteLead}
+                    onConvertToCustomer={handleConvertToCustomer}
+                    showToast={showToast}
+                  />
+                )}
 
-              {displayedTab === 'admin_reports' && (
-                <AdminReportsView
-                  adminReports={adminReports}
-                  personnelList={personnelList}
-                  currentPersonnel={currentPersonnel}
-                  currentUser={currentUser}
-                  isAdmin={Boolean(
-                    currentUser?.is_admin ||
-                    currentUser?.app_role === 'admin' ||
-                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                    currentPersonnel?.role === 'admin'
-                  )}
-                  onSubmitReport={handleSubmitAdminReport}
-                />
-              )}
+                {activeTab === 'admin_reports' && (
+                  <AdminReportsView
+                    adminReports={adminReports}
+                    personnelList={personnelList}
+                    currentPersonnel={currentPersonnel}
+                    currentUser={currentUser}
+                    isAdmin={Boolean(
+                      currentUser?.is_admin ||
+                      currentUser?.app_role === 'admin' ||
+                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                      currentPersonnel?.role === 'admin'
+                    )}
+                    onSubmitReport={handleSubmitAdminReport}
+                  />
+                )}
 
-              {displayedTab === 'team' && (
-                <TeamManagementView
-                  initialSubTab={teamSubTab}
-                  personnelList={personnelList}
-                  customers={customers}
-                  leaveRequests={leaveRequests}
-                  currentPersonnel={currentPersonnel}
-                  isAdmin={Boolean(
-                    currentUser?.is_admin ||
-                    currentUser?.app_role === 'admin' ||
-                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                    currentPersonnel?.role === 'admin'
-                  )}
-                  tenants={tenants}
-                  activeTenantId={activeTenantId}
-                  onCreatePersonnel={handleCreatePersonnel}
-                  onUpdatePersonnel={handleUpdatePersonnel}
-                  onDeletePersonnel={handleDeletePersonnel}
-                  onBulkExtendOwnership={handleBulkExtendOwnership}
-                  onBulkSwitchOwnership={handleBulkSwitchOwnership}
-                  onUpdateLeaveStatus={handleUpdateLeaveStatus}
-                  onSelectCustomer={openCustomerDetail}
-                  onLogoutAllUsers={handleLogoutAllUsers}
-                  onRefreshData={loadAllData}
-                  showToast={showToast}
-                />
-              )}
+                {activeTab === 'team' && (
+                  <TeamManagementView
+                    initialSubTab={teamSubTab}
+                    personnelList={personnelList}
+                    customers={customers}
+                    leaveRequests={leaveRequests}
+                    currentPersonnel={currentPersonnel}
+                    isAdmin={Boolean(
+                      currentUser?.is_admin ||
+                      currentUser?.app_role === 'admin' ||
+                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                      currentPersonnel?.role === 'admin'
+                    )}
+                    tenants={tenants}
+                    activeTenantId={activeTenantId}
+                    onCreatePersonnel={handleCreatePersonnel}
+                    onUpdatePersonnel={handleUpdatePersonnel}
+                    onDeletePersonnel={handleDeletePersonnel}
+                    onBulkExtendOwnership={handleBulkExtendOwnership}
+                    onBulkSwitchOwnership={handleBulkSwitchOwnership}
+                    onUpdateLeaveStatus={handleUpdateLeaveStatus}
+                    onSelectCustomer={openCustomerDetail}
+                    onLogoutAllUsers={handleLogoutAllUsers}
+                    onRefreshData={loadAllData}
+                    showToast={showToast}
+                  />
+                )}
 
-              {displayedTab === 'personal_portal' && (
-                <PersonalPortalView
-                  currentPersonnel={currentPersonnel}
-                  currentUser={currentUser}
-                  isAdmin={Boolean(
-                    currentUser?.is_admin ||
-                    currentUser?.app_role === 'admin' ||
-                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                    currentPersonnel?.role === 'admin'
-                  )}
-                  leaveRequests={leaveRequests}
-                  advanceRequests={advanceRequests}
-                  personnelList={personnelList}
-                  initialTab={portalSubTab}
-                  onUpdateProfile={handleUpdateProfile}
-                  onChangePassword={handleChangePassword}
-                  onCreateLeaveRequest={handleCreateLeaveRequest}
-                  onUpdateLeaveStatus={handleUpdateLeaveStatus}
-                  onDeleteLeaveRequest={handleDeleteLeaveRequest}
-                  onCreateAdvanceRequest={handleCreateAdvanceRequest}
-                  onUpdateAdvanceStatus={handleUpdateAdvanceStatus}
-                  onDeleteAdvanceRequest={handleDeleteAdvanceRequest}
-                  onLogout={handleLogout}
-                  showToast={showToast}
-                />
-              )}
+                {activeTab === 'personal_portal' && (
+                  <PersonalPortalView
+                    currentPersonnel={currentPersonnel}
+                    currentUser={currentUser}
+                    isAdmin={Boolean(
+                      currentUser?.is_admin ||
+                      currentUser?.app_role === 'admin' ||
+                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                      currentPersonnel?.role === 'admin'
+                    )}
+                    leaveRequests={leaveRequests}
+                    advanceRequests={advanceRequests}
+                    personnelList={personnelList}
+                    initialTab={portalSubTab}
+                    onUpdateProfile={handleUpdateProfile}
+                    onChangePassword={handleChangePassword}
+                    onCreateLeaveRequest={handleCreateLeaveRequest}
+                    onUpdateLeaveStatus={handleUpdateLeaveStatus}
+                    onDeleteLeaveRequest={handleDeleteLeaveRequest}
+                    onCreateAdvanceRequest={handleCreateAdvanceRequest}
+                    onUpdateAdvanceStatus={handleUpdateAdvanceStatus}
+                    onDeleteAdvanceRequest={handleDeleteAdvanceRequest}
+                    onLogout={handleLogout}
+                    showToast={showToast}
+                  />
+                )}
 
-              {displayedTab === 'tenants' && (
-                <TenantsManagementView
-                  tenants={tenants}
-                  activeTenantId={activeTenantId}
-                  onSelectTenant={handleSelectTenant}
-                  onRefreshTenants={loadTenants}
-                  showToast={showToast}
-                  isAdmin={Boolean(
-                    currentUser?.is_admin ||
-                    currentUser?.app_role === 'admin' ||
-                    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                    currentPersonnel?.role === 'admin'
-                  )}
-                  customers={customers}
-                  personnelList={personnelList}
-                />
-              )}
+                {activeTab === 'tenants' && (
+                  <TenantsManagementView
+                    tenants={tenants}
+                    activeTenantId={activeTenantId}
+                    onSelectTenant={handleSelectTenant}
+                    onRefreshTenants={loadTenants}
+                    showToast={showToast}
+                    isAdmin={Boolean(
+                      currentUser?.is_admin ||
+                      currentUser?.app_role === 'admin' ||
+                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
+                      currentPersonnel?.role === 'admin'
+                    )}
+                    customers={customers}
+                    personnelList={personnelList}
+                  />
+                )}
+              </ErrorBoundary>
             </div>
           )}
         </main>

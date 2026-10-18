@@ -71,6 +71,14 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
   const [dedicatedFreeCustomers, setDedicatedFreeCustomers] = useState<Customer[]>([]);
   const [isLoadingPool, setIsLoadingPool] = useState(false);
 
+  // Search & Filter States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedProvince, setSelectedProvince] = useState('');
+  const [selectedPrevMarketer, setSelectedPrevMarketer] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [sortBy, setSortBy] = useState<'recent_expired' | 'score' | 'reports_count'>('recent_expired');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+
   // Server-side pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(25);
@@ -109,14 +117,6 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
       })
       .catch(() => {});
   }, []);
-
-  // Search & Filter States
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedProvince, setSelectedProvince] = useState('');
-  const [selectedPrevMarketer, setSelectedPrevMarketer] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
-  const [sortBy, setSortBy] = useState<'recent_expired' | 'score' | 'reports_count'>('recent_expired');
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
   // Accordion for viewing previous reports
   const [expandedReportCustId, setExpandedReportCustId] = useState<string | null>(null);

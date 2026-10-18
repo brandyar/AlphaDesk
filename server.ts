@@ -795,12 +795,49 @@ async function sendIppanelSmsPattern(
   }
 
   const senderLine = (overrideSender || projectSettingsData.ippanel_sender || projectSettingsData.ippanel_line_number || '+983000505').trim();
+  const senderWithoutPlus = senderLine.replace(/^\+/, '');
+  const cleanPhoneE164 = cleanPhone.startsWith('0') ? '+98' + cleanPhone.substring(1) : (cleanPhone.startsWith('+98') ? cleanPhone : '+98' + cleanPhone);
 
-  // Clean variables values
+  // Clean variables values: remove empty keys to prevent 400 Bad Request
   const cleanVars: Record<string, string> = {};
-  for (const [k, v] of Object.entries(variables)) {
-    cleanVars[k] = v !== null && v !== undefined ? String(v).trim() : '';
+  for (const [k, v] of Object.entries(variables || {})) {
+    if (k && String(k).trim()) {
+      cleanVars[String(k).trim()] = v !== null && v !== undefined ? String(v).trim() : '';
+    }
   }
+
+
+
+  // Strategy list with all IPPanel standard protocols:
+  // 1. rest.ippanel.com (Standard IPPanel REST SDK with apikey header and 989... format)
+  // 2. rest.ippanel.com (with 09... format)
+  // 3. rest.ippanel.com (with alt sender without plus)
+  // 4. api2.ippanel.com (with apikey header)
+  // 5. api2.ippanel.com (with AccessKey header)
+  // 6. edge.ippanel.com (with AccessKey header and +98 format)
+  // 7. edge.ippanel.com (with apikey header)
+  const cleanPhone98 = cleanPhone.startsWith('0') ? '98' + cleanPhone.substring(1) : cleanPhone;
+
+  const restPayload98 = {
+    pattern_code: patternCode.trim(),
+    originator: senderLine,
+    recipient: cleanPhone98,
+    values: cleanVars,
+  };
+
+  const restPayload09 = {
+    pattern_code: patternCode.trim(),
+    originator: senderLine,
+    recipient: cleanPhone,
+    values: cleanVars,
+  };
+
+  const restPayloadAltSender = {
+    pattern_code: patternCode.trim(),
+    originator: senderWithoutPlus,
+    recipient: cleanPhone98,
+    values: cleanVars,
+  };
 
   const api2Payload = {
     code: patternCode.trim(),
@@ -809,18 +846,70 @@ async function sendIppanelSmsPattern(
     variable: cleanVars,
   };
 
-  const restPayload = {
-    pattern_code: patternCode.trim(),
-    originator: senderLine,
+  const api2PayloadAltSender = {
+    code: patternCode.trim(),
+    sender: senderWithoutPlus,
     recipient: cleanPhone,
-    values: cleanVars,
+    variable: cleanVars,
   };
 
-  console.log(`[IPPanel SMS] Attempting to send pattern '${patternCode}' to ${cleanPhone}...`, cleanVars);
+  const edgePayload = {
+    sending_type: 'pattern',
+    from_number: senderLine,
+    code: patternCode.trim(),
+    recipients: [cleanPhoneE164],
+    params: cleanVars,
+  };
 
-  // Strategy list with correct Authorization: AccessKey scheme or apikey header
-  const attempts = [
-    // 1. api2.ippanel.com with Authorization: AccessKey (IPPanel official scheme)
+  console.log(`[IPPanel SMS] Sending pattern '${patternCode}' to ${cleanPhone} (sender: ${senderLine})...`, cleanVars);
+
+  const attempts: Array<{
+    url: string;
+    headers: Record<string, string>;
+    body: string;
+    label: string;
+  }> = [
+    // 1. rest.ippanel.com with apikey and 989... format (Most common official format)
+    {
+      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': cleanApiKey,
+      },
+      body: JSON.stringify(restPayload98),
+      label: 'rest.ippanel.com (apikey, 989...)'
+    },
+    // 2. rest.ippanel.com with apikey and 09... format
+    {
+      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': cleanApiKey,
+      },
+      body: JSON.stringify(restPayload09),
+      label: 'rest.ippanel.com (apikey, 09...)'
+    },
+    // 3. rest.ippanel.com with alt sender
+    {
+      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': cleanApiKey,
+      },
+      body: JSON.stringify(restPayloadAltSender),
+      label: 'rest.ippanel.com (alt sender)'
+    },
+    // 4. api2.ippanel.com with apikey header
+    {
+      url: 'https://api2.ippanel.com/api/v1/sms/pattern/normal/send',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': cleanApiKey,
+      },
+      body: JSON.stringify(api2Payload),
+      label: 'api2.ippanel.com (apikey)'
+    },
+    // 5. api2.ippanel.com with AccessKey header
     {
       url: 'https://api2.ippanel.com/api/v1/sms/pattern/normal/send',
       headers: {
@@ -830,45 +919,35 @@ async function sendIppanelSmsPattern(
       body: JSON.stringify(api2Payload),
       label: 'api2.ippanel.com (AccessKey)'
     },
-    // 2. api2.ippanel.com with apikey header only
+    // 6. edge.ippanel.com with AccessKey
     {
-      url: 'https://api2.ippanel.com/api/v1/sms/pattern/normal/send',
+      url: 'https://edge.ippanel.com/v1/api/send',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `AccessKey ${cleanApiKey}`,
+      },
+      body: JSON.stringify(edgePayload),
+      label: 'edge.ippanel.com (AccessKey)'
+    },
+    // 7. edge.ippanel.com with apikey
+    {
+      url: 'https://edge.ippanel.com/v1/api/send',
       headers: {
         'Content-Type': 'application/json',
         'apikey': cleanApiKey,
       },
-      body: JSON.stringify(api2Payload),
-      label: 'api2.ippanel.com (apikey header)'
+      body: JSON.stringify(edgePayload),
+      label: 'edge.ippanel.com (apikey)'
     },
-    // 3. rest.ippanel.com with Authorization: AccessKey
+    // 8. rest.ippanel.com with AccessKey
     {
       url: 'https://rest.ippanel.com/v1/messages/patterns/send',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `AccessKey ${cleanApiKey}`,
       },
-      body: JSON.stringify(restPayload),
+      body: JSON.stringify(restPayload98),
       label: 'rest.ippanel.com (AccessKey)'
-    },
-    // 4. rest.ippanel.com with apikey header
-    {
-      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': cleanApiKey,
-      },
-      body: JSON.stringify(restPayload),
-      label: 'rest.ippanel.com (apikey header)'
-    },
-    // 5. api.ippanel.com alternative edge host
-    {
-      url: 'https://api.ippanel.com/api/v1/sms/pattern/normal/send',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `AccessKey ${cleanApiKey}`,
-      },
-      body: JSON.stringify(api2Payload),
-      label: 'api.ippanel.com (AccessKey)'
     }
   ];
 
@@ -887,23 +966,34 @@ async function sendIppanelSmsPattern(
         console.log(`[IPPanel SMS] Successfully sent via ${attempt.label}:`, json);
         return {
           success: true,
-          messageId: String(json?.data || json?.bulk_id || json?.message_id || 'OK')
+          messageId: String(json?.data || json?.bulk_id || json?.message_id || json?.id || 'OK')
         };
       } else {
         const errBody = await res.text().catch(() => '');
-        lastError = `[${attempt.label}] HTTP ${res.status}: ${errBody}`;
         console.warn(`[IPPanel SMS] ${attempt.label} failed with status ${res.status}:`, errBody);
 
-        // If error is not 401 unauthorized scheme, we might have hit a pattern or variable validation error
-        // But if it was 401 with scheme error, we continue to next attempt!
+        let detailedMsg = errBody;
         try {
           const parsed = JSON.parse(errBody);
-          // If the error is about pattern or balance (not auth), we can break early and return exact message
-          if (parsed?.data?.error && !parsed.data.error.includes('scheme') && !parsed.data.error.includes('Unauthorized')) {
-            lastError = parsed.data.error || parsed.message || errBody;
-            break;
+          if (parsed?.data?.error) {
+            detailedMsg = parsed.data.error;
+          } else if (parsed?.message) {
+            detailedMsg = parsed.message;
+          } else if (parsed?.error) {
+            detailedMsg = parsed.error;
           }
         } catch {}
+
+        lastError = detailedMsg || `HTTP ${res.status}`;
+
+        // If the error indicates insufficient credit or balance, report immediately
+        if (
+          detailedMsg.includes('اعتبار') ||
+          detailedMsg.includes('balance') ||
+          detailedMsg.includes('credit')
+        ) {
+          break;
+        }
       }
     } catch (fetchErr: any) {
       lastError = `[${attempt.label}] Network error: ${fetchErr.message}`;
@@ -2461,15 +2551,24 @@ app.get('/api/dashboard-summary', async (req: Request, res: Response) => {
     try {
       const tenantFilter = (tenantId && tenantId !== 'all') ? `&filter[tenant_id][_eq]=${encodeURIComponent(tenantId)}` : '';
       const userFilter = (!isAdmin && (userId || personnelId)) ? `&filter[assigned_marketer_id][_eq]=${encodeURIComponent(personnelId || userId)}` : '';
+      const leadsUserFilter = (!isAdmin && (userId || personnelId)) ? `&filter[assigned_to][_eq]=${encodeURIComponent(personnelId || userId)}` : '';
+      const reportsUserFilter = (!isAdmin && (userName || personnelId || userId))
+        ? `&filter[_or][0][negotiator_name][_eq]=${encodeURIComponent(userName || '')}&filter[_or][1][created_by][_eq]=${encodeURIComponent(personnelId || userId || '')}`
+        : '';
+      const adminReportsUserFilter = (!isAdmin && (personnelId || userId))
+        ? `&filter[personnel_id][_eq]=${encodeURIComponent(personnelId || userId)}`
+        : '';
 
-      const [cRes, cwRes, inRes, expRes, repRes, lRes, repRevRes, topFollowupsRes, urgentExpRes] = await Promise.all([
+      const [cRes, cwRes, inRes, expRes, repRes, lRes, freeCustRes, admRes, repRevRes, topFollowupsRes, urgentExpRes] = await Promise.all([
         directusFetch(`/items/customers?limit=0&meta=filter_count${tenantFilter}${userFilter}`).catch(() => null),
         directusFetch(`/items/customers?filter[status][_eq]=${encodeURIComponent('قرارداد')}&limit=0&meta=filter_count${tenantFilter}${userFilter}`).catch(() => null),
         directusFetch(`/items/customers?filter[_or][0][status][_eq]=${encodeURIComponent('پیش نویس قرارداد')}&filter[_or][1][status][_eq]=${encodeURIComponent('پیگیری قرارداد')}&limit=0&meta=filter_count${tenantFilter}${userFilter}`).catch(() => null),
         directusFetch(`/items/customers?filter[is_expired][_eq]=true&limit=0&meta=filter_count${tenantFilter}${userFilter}`).catch(() => null),
-        directusFetch(`/items/customer_reports?limit=0&meta=filter_count${tenantFilter}`).catch(() => null),
-        directusFetch(`/items/cold_leads?limit=0&meta=filter_count${tenantFilter}`).catch(() => null),
-        directusFetch(`/items/customer_reports?filter[contract_amount][_gt]=0&fields=contract_amount,negotiation_score${tenantFilter}&limit=5000`).catch(() => null),
+        directusFetch(`/items/customer_reports?limit=0&meta=filter_count${tenantFilter}${reportsUserFilter}`).catch(() => null),
+        directusFetch(`/items/cold_leads?limit=0&meta=filter_count${tenantFilter}${leadsUserFilter}`).catch(() => null),
+        directusFetch(`/items/customers?filter[_and][0][status][_nin]=${encodeURIComponent('قرارداد,لیست سیاه')}&filter[_and][1][_or][0][assigned_marketer_id][_null]=true&filter[_and][1][_or][1][is_expired][_eq]=true&limit=0&meta=filter_count${tenantFilter}`).catch(() => null),
+        directusFetch(`/items/administrative_reports?limit=0&meta=filter_count${tenantFilter}${adminReportsUserFilter}`).catch(() => null),
+        directusFetch(`/items/customer_reports?filter[contract_amount][_gt]=0&fields=contract_amount,negotiation_score${tenantFilter}${reportsUserFilter}&limit=5000`).catch(() => null),
         directusFetch(`/items/customers?page=1&limit=5&sort=next_followup_date&fields=id,company_name,manager_name,next_followup_date,status,assigned_marketer_name${tenantFilter}${userFilter}`).catch(() => null),
         directusFetch(`/items/customers?page=1&limit=5&filter[is_expired][_eq]=false&sort=assignment_deadline&fields=id,company_name,manager_name,assignment_deadline,status,assigned_marketer_name${tenantFilter}${userFilter}`).catch(() => null),
       ]);
@@ -2480,6 +2579,8 @@ app.get('/api/dashboard-summary', async (req: Request, res: Response) => {
       const expiredCustomersCount = expRes?.meta?.filter_count ?? 0;
       const totalReportsCount = repRes?.meta?.filter_count ?? 0;
       const totalColdLeadsCount = lRes?.meta?.filter_count ?? 0;
+      const freeCustomersCount = freeCustRes?.meta?.filter_count ?? 0;
+      const adminReportsCount = admRes?.meta?.filter_count ?? 0;
 
       let totalContractRevenue = 0;
       let scoreSum = 0;
@@ -2504,6 +2605,8 @@ app.get('/api/dashboard-summary', async (req: Request, res: Response) => {
         expired_customers_count: expiredCustomersCount,
         total_reports_count: totalReportsCount,
         total_cold_leads_count: totalColdLeadsCount,
+        free_customers_count: freeCustomersCount,
+        admin_reports_count: adminReportsCount,
         total_contract_revenue: totalContractRevenue,
         avg_negotiation_score: avgNegotiationScore,
         upcoming_followups: topFollowupsRes?.data || [],
@@ -2523,8 +2626,32 @@ app.get('/api/dashboard-summary', async (req: Request, res: Response) => {
   const inNegotiation = list.filter(c => c.status === 'پیش نویس قرارداد' || c.status === 'پیگیری قرارداد');
   const expired = list.filter(c => c.is_expired);
 
-  const totalContractRevenue = reportsData.reduce((acc, r) => acc + (Number(r.contract_amount) || 0), 0);
-  const scored = reportsData.filter(r => r.negotiation_score && r.negotiation_score > 0);
+  let scopedReps = reportsData;
+  if (tenantId && tenantId !== 'all') scopedReps = scopedReps.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
+  if (!isAdmin && (userName || personnelId || userId)) {
+    scopedReps = scopedReps.filter(r => r.negotiator_name === userName || r.created_by === personnelId || r.created_by === userId);
+  }
+
+  let scopedLeads = coldLeadsData;
+  if (tenantId && tenantId !== 'all') scopedLeads = scopedLeads.filter((l: any) => matchesTenant(l.tenant_id, tenantId));
+  if (!isAdmin && (userId || personnelId)) {
+    scopedLeads = scopedLeads.filter(l => l.assigned_to === personnelId || l.assigned_to === userId);
+  }
+
+  let scopedAdminReps = adminReportsData;
+  if (tenantId && tenantId !== 'all') scopedAdminReps = scopedAdminReps.filter((a: any) => matchesTenant(a.tenant_id, tenantId));
+  if (!isAdmin && (personnelId || userId)) {
+    scopedAdminReps = scopedAdminReps.filter((a: any) => a.personnel_id === personnelId || a.personnel_id === userId);
+  }
+
+  const freeCusts = customersData.filter(c => {
+    if (tenantId && tenantId !== 'all' && !matchesTenant(c.tenant_id, tenantId)) return false;
+    if (c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
+    return !c.assigned_marketer_id || c.is_expired;
+  });
+
+  const totalContractRevenue = scopedReps.reduce((acc, r) => acc + (Number(r.contract_amount) || 0), 0);
+  const scored = scopedReps.filter(r => r.negotiation_score && r.negotiation_score > 0);
   const avgScore = scored.length > 0 ? (scored.reduce((acc, r) => acc + (r.negotiation_score || 0), 0) / scored.length).toFixed(1) : '5.0';
 
   return res.json({
@@ -2532,8 +2659,10 @@ app.get('/api/dashboard-summary', async (req: Request, res: Response) => {
     contracts_won_count: contractsWon.length,
     in_negotiation_count: inNegotiation.length,
     expired_customers_count: expired.length,
-    total_reports_count: reportsData.length,
-    total_cold_leads_count: coldLeadsData.length,
+    total_reports_count: scopedReps.length,
+    total_cold_leads_count: scopedLeads.length,
+    free_customers_count: freeCusts.length,
+    admin_reports_count: scopedAdminReps.length,
     total_contract_revenue: totalContractRevenue,
     avg_negotiation_score: avgScore,
     upcoming_followups: list.filter(c => Boolean(c.next_followup_date)).slice(0, 5),

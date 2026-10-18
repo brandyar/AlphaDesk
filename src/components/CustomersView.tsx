@@ -103,7 +103,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, customers]);
+  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery]);
 
   const userIsAdmin = Boolean(
     isAdmin ||
@@ -279,7 +279,12 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       </div>
 
       {/* Customers Content: Table List or Card Grid */}
-      {searchedCustomers.length === 0 ? (
+      {isLoadingPage && items.length === 0 ? (
+        <div className="p-16 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
+          <Loader2 className="w-8 h-8 text-[#1DB954] animate-spin mx-auto" />
+          <p className="text-xs text-[#A7A7A7]">در حال بارگذاری پرونده‌های مشتریان...</p>
+        </div>
+      ) : items.length === 0 ? (
         <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-4">
           <div className="w-14 h-14 rounded-full bg-[#282828] flex items-center justify-center text-[#535353] mx-auto">
             <Users className="w-7 h-7" />
@@ -298,7 +303,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           </button>
         </div>
       ) : (
-        <>
+        <div className={isLoadingPage ? 'opacity-50 pointer-events-none transition-opacity' : ''}>
           {/* DESKTOP TABLE LIST VIEW (Visible on md screens and above when viewMode is table) */}
           <div className={`${viewMode === 'table' ? 'hidden md:block' : 'hidden'} bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden shadow-xl`}>
             <div className="overflow-x-auto">
@@ -314,7 +319,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#222222] text-xs text-[#CCCCCC]">
-                  {paginatedCustomers.map((c) => {
+                  {items.map((c) => {
                     const timer = formatTimeRemaining(c.assignment_deadline);
                     const statusTheme = getStatusTheme(c.status);
 
@@ -436,7 +441,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
           {/* CARD GRID VIEW (Visible on mobile, or when viewMode === 'grid' on desktop) */}
           <div className={`${viewMode === 'table' ? 'block md:hidden' : 'block'} grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5`}>
-          {paginatedCustomers.map((c) => {
+          {items.map((c) => {
             const timer = formatTimeRemaining(c.assignment_deadline);
             const statusTheme = getStatusTheme(c.status);
 
@@ -571,7 +576,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             );
           })}
         </div>
-        </>
+        </div>
       )}
 
       {/* Pagination Controls */}

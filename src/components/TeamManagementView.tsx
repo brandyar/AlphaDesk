@@ -55,6 +55,7 @@ import {
   ShieldAlert,
   EyeOff,
   Save,
+  AlertTriangle,
 } from 'lucide-react';
 import { DataMigrationView } from './DataMigrationView';
 import {
@@ -917,6 +918,9 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   const [testSmsPattern, setTestSmsPattern] = useState('');
   const [testSmsVarKey, setTestSmsVarKey] = useState('name');
   const [testSmsVarVal, setTestSmsVarVal] = useState('سارا احمدی');
+  const [testSmsVarKey2, setTestSmsVarKey2] = useState('');
+  const [testSmsVarVal2, setTestSmsVarVal2] = useState('');
+  const [testSmsError, setTestSmsError] = useState<string | null>(null);
   const [isSendingTestSms, setIsSendingTestSms] = useState(false);
 
   useEffect(() => {
@@ -1019,14 +1023,19 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       return;
     }
     setIsSendingTestSms(true);
+    setTestSmsError(null);
     try {
+      const vars: Record<string, string> = {};
+      if (testSmsVarKey.trim()) vars[testSmsVarKey.trim()] = testSmsVarVal;
+      if (testSmsVarKey2.trim()) vars[testSmsVarKey2.trim()] = testSmsVarVal2;
+
       const res = await fetch('/api/project-settings/test-sms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: testSmsPhone,
           pattern_code: testSmsPattern,
-          variables: { [testSmsVarKey]: testSmsVarVal },
+          variables: vars,
           api_key: projectSettings.ippanel_api,
           sender: projectSettings.ippanel_sender || projectSettings.ippanel_line_number,
         }),
@@ -1036,9 +1045,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
         showToast('پیامک تست با موفقیت از طریق درگاه IPPanel ارسال گردید.', 'success');
         setTestSmsModalOpen(false);
       } else {
-        showToast(data.message || 'خطا در ارسال پیامک تست', 'error');
+        const errMsg = data.error || data.message || 'خطا در ارسال پیامک تست';
+        setTestSmsError(errMsg);
+        showToast(data.message || errMsg, 'error');
       }
     } catch (e: any) {
+      setTestSmsError(e.message);
       showToast('خطا در ارسال پیامک: ' + e.message, 'error');
     } finally {
       setIsSendingTestSms(false);
@@ -3311,29 +3323,70 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3 bg-[#121212] p-3 rounded-xl border border-[#222]">
-                <div>
-                  <label className="block text-[11px] text-[#777] mb-1">نام کلید متغیر ({`variable`})</label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={testSmsVarKey}
-                    onChange={(e) => setTestSmsVarKey(e.target.value)}
-                    placeholder="name"
-                    className="w-full h-8 px-2 bg-[#181818] rounded-lg text-white border border-[#333] font-mono text-xs"
-                  />
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-3 bg-[#121212] p-3 rounded-xl border border-[#222]">
+                  <div>
+                    <label className="block text-[11px] text-[#777] mb-1">نام کلید متغیر اول (اختیاری)</label>
+                    <input
+                      type="text"
+                      dir="ltr"
+                      value={testSmsVarKey}
+                      onChange={(e) => setTestSmsVarKey(e.target.value)}
+                      placeholder="code یا name"
+                      className="w-full h-8 px-2 bg-[#181818] rounded-lg text-white border border-[#333] font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-[#777] mb-1">مقدار متغیر اول</label>
+                    <input
+                      type="text"
+                      value={testSmsVarVal}
+                      onChange={(e) => setTestSmsVarVal(e.target.value)}
+                      placeholder="12345 یا سارا احمدی"
+                      className="w-full h-8 px-2 bg-[#181818] rounded-lg text-white border border-[#333] text-xs"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[11px] text-[#777] mb-1">مقدار نمونه متغیر</label>
-                  <input
-                    type="text"
-                    value={testSmsVarVal}
-                    onChange={(e) => setTestSmsVarVal(e.target.value)}
-                    placeholder="سارا احمدی"
-                    className="w-full h-8 px-2 bg-[#181818] rounded-lg text-white border border-[#333] text-xs"
-                  />
+
+                <div className="grid grid-cols-2 gap-3 bg-[#121212] p-3 rounded-xl border border-[#222]">
+                  <div>
+                    <label className="block text-[11px] text-[#777] mb-1">نام کلید متغیر دوم (اختیاری)</label>
+                    <input
+                      type="text"
+                      dir="ltr"
+                      value={testSmsVarKey2}
+                      onChange={(e) => setTestSmsVarKey2(e.target.value)}
+                      placeholder="مثلاً: date یا username"
+                      className="w-full h-8 px-2 bg-[#181818] rounded-lg text-white border border-[#333] font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-[#777] mb-1">مقدار متغیر دوم</label>
+                    <input
+                      type="text"
+                      value={testSmsVarVal2}
+                      onChange={(e) => setTestSmsVarVal2(e.target.value)}
+                      placeholder="مقدار متغیر دوم"
+                      className="w-full h-8 px-2 bg-[#181818] rounded-lg text-white border border-[#333] text-xs"
+                    />
+                  </div>
                 </div>
               </div>
+
+              {testSmsError && (
+                <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl space-y-1.5 text-xs text-red-200">
+                  <div className="font-bold flex items-center gap-1.5 text-red-400">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>خطا در ارسال پیامک:</span>
+                  </div>
+                  <div className="font-mono text-[11px] bg-black/40 p-2 rounded border border-red-500/20" dir="ltr">
+                    {testSmsError}
+                  </div>
+                  <div className="text-[11px] text-[#AAA] leading-relaxed pt-1">
+                    💡 <strong className="text-white">نکات راهنما برای رفع خطای ۴۰۰:</strong> اگر پترن شما در سامانه پیامک دارای متغیر است (مانند <code className="text-emerald-400 font-mono">%code%</code>)، نام کلید متغیر را دقیقاً همان کلمه (مثلاً <code className="text-emerald-400 font-mono">code</code>) بدون علامت % وارد نمایید.
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#282828]">

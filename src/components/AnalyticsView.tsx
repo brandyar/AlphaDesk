@@ -44,6 +44,7 @@ import {
   JALALI_MONTH_NAMES,
 } from '../utils';
 import { PersianDatePicker } from './PersianDatePicker';
+import { fetchCustomerReports, fetchCustomers } from '../api';
 
 interface AnalyticsViewProps {
   reports: CustomerReport[];
@@ -105,22 +106,26 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   // Full analytics datasets
   const [allReportsData, setAllReportsData] = useState<CustomerReport[]>(reports);
   const [allCustomersData, setAllCustomersData] = useState<Customer[]>(customers);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState<boolean>(false);
 
   React.useEffect(() => {
     let isMounted = true;
+    setIsLoadingAnalytics(true);
     Promise.all([
-      fetchCustomerReports(undefined, { limit: 5000 }).catch(() => []),
-      fetchCustomers({ limit: 5000 }).catch(() => []),
+      fetchCustomerReports(undefined, { limit: 500 }).catch(() => []),
+      fetchCustomers({ limit: 500 }).catch(() => []),
     ]).then(([reps, custs]) => {
       if (isMounted) {
         if (Array.isArray(reps) && reps.length > 0) setAllReportsData(reps);
         if (Array.isArray(custs) && custs.length > 0) setAllCustomersData(custs);
       }
+    }).finally(() => {
+      if (isMounted) setIsLoadingAnalytics(false);
     });
     return () => {
       isMounted = false;
     };
-  }, [reports, customers]);
+  }, []);
 
   // Determine current active personnel scope
   const targetPersonnel = useMemo(() => {

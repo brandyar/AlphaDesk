@@ -325,6 +325,8 @@ export interface DashboardSummary {
   expired_customers_count: number;
   total_reports_count: number;
   total_cold_leads_count: number;
+  free_customers_count?: number;
+  admin_reports_count?: number;
   total_contract_revenue: number;
   avg_negotiation_score: string | number;
   upcoming_followups: Customer[];

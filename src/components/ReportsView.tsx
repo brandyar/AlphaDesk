@@ -123,7 +123,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery, reports]);
+  }, [currentPage, pageSize, adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery]);
 
   // Helper to check if a customer belongs to the current user
   const isMyCustomer = (c: Customer): boolean => {
@@ -609,7 +609,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </div>
         )
       ) : /* Standard Reports Feed */
-      items.length === 0 && !isLoadingPage ? (
+      isLoadingPage && items.length === 0 ? (
+        <div className="p-16 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
+          <Loader2 className="w-8 h-8 text-[#1DB954] animate-spin mx-auto" />
+          <p className="text-xs text-[#A7A7A7]">در حال بارگذاری گزارش‌های مذاکره...</p>
+        </div>
+      ) : items.length === 0 ? (
         <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
           <MessageSquareText className="w-10 h-10 text-[#535353] mx-auto" />
           <p className="text-xs text-[#A7A7A7]">هیچ گزارشی مطابق با فیلترهای انتخابی یافت نشد.</p>
