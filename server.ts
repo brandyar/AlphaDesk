@@ -5008,20 +5008,156 @@ app.post('/api/customers/merge', async (req: Request, res: Response) => {
   });
 });
 app.get('/api/customer-reports', async (req: Request, res: Response) => {
-  const { customer_id, page, limit, all } = req.query;
+  const { customer_id, page, limit, all, search, status, negotiator, admin_filter, staff_filter } = req.query;
   const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
 
   const isUnlimited = all === 'true' || limit === 'all' || limit === '50000';
-  const reqLimit = isUnlimited ? 500 : (limit ? Math.min(Math.max(1, parseInt(String(limit), 10)), 500) : 25);
+  const reqLimit = isUnlimited ? 5000 : (limit ? Math.min(Math.max(1, parseInt(String(limit), 10)), 5000) : 25);
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
 
   if (!isAdmin && !userId && !personnelId && !userName && !customer_id) {
     return res.json({ data: [], meta: { filter_count: 0, total_count: 0, page: reqPage, limit: reqLimit, total_pages: 1 } });
   }
 
+  // Helper date functions
+  const getDaysUntil = (dateIso?: string | null): number | null => {
+    if (!dateIso) return null;
+    try {
+      const target = new Date(dateIso).getTime();
+      const now = new Date().getTime();
+      const diffMs = target - now;
+      return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    } catch {
+      return null;
+    }
+  };
+
+  const isActiveDate = (dateIso?: string | null): boolean => {
+    if (!dateIso) return false;
+    const days = getDaysUntil(dateIso);
+    return days !== null && days >= 0;
+  };
+
+  // Process filters on a list of reports
+  const applyFilters = (list: any[]) => {
+    let result = list;
+
+    if (tenantId && tenantId !== 'all') {
+      result = result.filter(r => matchesTenant(r.tenant_id, tenantId));
+    }
+
+    if (customer_id) {
+      result = result.filter(r => r.customer_id === customer_id);
+    } else if (!isAdmin) {
+      result = result.filter(r => {
+        const matchNegotiator = userName && r.negotiator_name === userName;
+        const matchCreatedBy = (userId && r.created_by === userId) || (personnelId && r.created_by === personnelId) || (userName && r.created_by === userName);
+        const customer = customersData.find(c => c.id === r.customer_id);
+        const matchCustomer = customer && (
+          customer.assigned_marketer_id === personnelId ||
+          customer.assigned_marketer_id === userId ||
+          (userName && customer.assigned_marketer_name === userName)
+        );
+        return matchNegotiator || matchCreatedBy || matchCustomer;
+      });
+    }
+
+    if (status && status !== 'همه') {
+      if (String(status) === 'قرارداد' || String(status) === 'قرارداد / فاکتور') {
+        result = result.filter(r => {
+          const stStr = String(r.negotiation_status);
+          return stStr === 'قرارداد' || stStr === 'قرارداد / فاکتور' || stStr === 'قرارداد/فاکتور';
+        });
+      } else {
+        result = result.filter(r => r.negotiation_status === status);
+      }
+    }
+
+    if (negotiator && negotiator !== 'همه') {
+      result = result.filter(r => r.negotiator_name === negotiator);
+    }
+
+    if (search && typeof search === 'string' && search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter(rep => {
+        const customer = customersData.find(c => c.id === rep.customer_id);
+        const matchCompany = customer?.company_name?.toLowerCase().includes(q);
+        const matchReport = rep.report_text?.toLowerCase().includes(q);
+        const matchPhone = rep.negotiation_phone?.includes(q);
+        const matchNegotiator = rep.negotiator_name?.toLowerCase().includes(q);
+        const matchContract = rep.contract_number?.toLowerCase().includes(q);
+        return Boolean(matchCompany || matchReport || matchPhone || matchNegotiator || matchContract);
+      });
+    }
+
+    if (isAdmin && admin_filter && admin_filter !== 'all') {
+      if (admin_filter === 'active_followups') {
+        result = result.filter(r => {
+          const c = customersData.find(cust => cust.id === r.customer_id);
+          return isActiveDate(r.next_followup_date || c?.next_followup_date);
+        });
+      } else if (admin_filter === 'no_followup') {
+        result = result.filter(r => {
+          const c = customersData.find(cust => cust.id === r.customer_id);
+          return !r.next_followup_date && !c?.next_followup_date;
+        });
+      } else if (admin_filter === 'expired_customers') {
+        result = result.filter(r => {
+          const c = customersData.find(cust => cust.id === r.customer_id);
+          return c && (c.is_expired || (c.assignment_deadline && getDaysUntil(c.assignment_deadline)! < 0));
+        });
+      } else if (admin_filter === 'near_expiry_customers') {
+        result = result.filter(r => {
+          const c = customersData.find(cust => cust.id === r.customer_id);
+          const days = c?.assignment_deadline ? getDaysUntil(c.assignment_deadline) : null;
+          return days !== null && days >= 0 && days <= 3;
+        });
+      }
+    }
+
+    if (!isAdmin && staff_filter) {
+      if (staff_filter === 'active_followups') {
+        result = result.filter(r => {
+          const c = customersData.find(cust => cust.id === r.customer_id);
+          return isActiveDate(r.next_followup_date || c?.next_followup_date);
+        });
+      } else if (staff_filter === 'no_followup') {
+        result = result.filter(r => {
+          const c = customersData.find(cust => cust.id === r.customer_id);
+          return !r.next_followup_date && !c?.next_followup_date;
+        });
+      } else if (staff_filter === 'due_less_3_days') {
+        result = result.filter(r => {
+          const c = customersData.find(cust => cust.id === r.customer_id);
+          const days = r.next_followup_date ? getDaysUntil(r.next_followup_date) : (c?.next_followup_date ? getDaysUntil(c.next_followup_date) : null);
+          return days !== null && days >= 0 && days <= 3;
+        });
+      } else if (staff_filter === 'due_less_7_days') {
+        result = result.filter(r => {
+          const c = customersData.find(cust => cust.id === r.customer_id);
+          const days = r.next_followup_date ? getDaysUntil(r.next_followup_date) : (c?.next_followup_date ? getDaysUntil(c.next_followup_date) : null);
+          return days !== null && days >= 0 && days <= 7;
+        });
+      } else if (staff_filter === 'due_less_10_days') {
+        result = result.filter(r => {
+          const c = customersData.find(cust => cust.id === r.customer_id);
+          const days = r.next_followup_date ? getDaysUntil(r.next_followup_date) : (c?.next_followup_date ? getDaysUntil(c.next_followup_date) : null);
+          return days !== null && days >= 0 && days <= 10;
+        });
+      } else if (staff_filter === 'expired') {
+        result = result.filter(r => {
+          const c = customersData.find(cust => cust.id === r.customer_id);
+          return c && (c.is_expired || (c.assignment_deadline && getDaysUntil(c.assignment_deadline)! < 0));
+        });
+      }
+    }
+
+    return result;
+  };
+
   if (directusUrl && directusAdminToken) {
     try {
-      let path = `/items/customer_reports?page=${reqPage}&limit=${reqLimit}&meta=filter_count&sort=-date_created`;
+      let path = `/items/customer_reports?page=1&limit=2000&meta=filter_count&sort=-date_created`;
       path += `&fields=id,customer_id,negotiator_name,negotiation_phone,report_text,negotiation_score,next_followup_date,negotiation_status,created_by,contract_number,contract_date,contract_items,contract_amount,date_created,tenant_id`;
 
       if (customer_id) {
@@ -5030,14 +5166,13 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
 
       const resData = await directusFetch(path, {}, 1).catch(() => null);
       if (resData && Array.isArray(resData.data)) {
-        let items = resData.data;
-        if (tenantId && tenantId !== 'all') {
-          items = items.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
-        }
-
-        const filterCount = resData.meta?.filter_count ?? items.length;
+        let filtered = applyFilters(resData.data);
+        const filterCount = filtered.length;
         const totalCount = resData.meta?.total_count ?? filterCount;
         const totalPages = Math.max(1, Math.ceil(filterCount / reqLimit));
+
+        const startIndex = (reqPage - 1) * reqLimit;
+        const paginatedItems = filtered.slice(startIndex, startIndex + reqLimit);
 
         res.setHeader('X-Total-Count', String(totalCount));
         res.setHeader('X-Filter-Count', String(filterCount));
@@ -5045,11 +5180,11 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
         res.setHeader('X-Limit', String(reqLimit));
 
         if (isUnlimited) {
-          return res.json(items);
+          return res.json(filtered);
         }
 
         return res.json({
-          data: items,
+          data: paginatedItems,
           meta: {
             filter_count: filterCount,
             total_count: totalCount,
@@ -5065,24 +5200,10 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
   }
 
   // In-memory fallback
-  let repList = reportsData;
-  if (tenantId && tenantId !== 'all') {
-    repList = repList.filter(r => matchesTenant((r as any).tenant_id, tenantId));
-  }
-  if (customer_id) {
-    repList = repList.filter(r => r.customer_id === customer_id);
-  } else if (!isAdmin && (userId || personnelId || userName)) {
-    repList = repList.filter(r =>
-      (userName && r.negotiator_name === userName) ||
-      r.created_by === userName ||
-      (userId && r.created_by === userId) ||
-      (personnelId && r.created_by === personnelId)
-    );
-  }
-
-  const filterCount = repList.length;
+  let filteredRepList = applyFilters(reportsData);
+  const filterCount = filteredRepList.length;
   const startIndex = (reqPage - 1) * reqLimit;
-  const paginatedReports = repList.slice(startIndex, startIndex + reqLimit);
+  const paginatedReports = filteredRepList.slice(startIndex, startIndex + reqLimit);
   const totalPages = Math.max(1, Math.ceil(filterCount / reqLimit));
 
   res.setHeader('X-Total-Count', String(reportsData.length));
@@ -5091,7 +5212,7 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
   res.setHeader('X-Limit', String(reqLimit));
 
   if (isUnlimited) {
-    return res.json(repList);
+    return res.json(filteredRepList);
   }
 
   return res.json({
