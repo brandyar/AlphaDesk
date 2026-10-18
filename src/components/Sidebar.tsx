@@ -609,6 +609,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       </span>
                     </button>
                   )}
+
+                  {/* 7. IPPanel SMS Settings */}
+                  {(isAdmin || currentPersonnel?.role === 'admin') && (
+                    <button
+                      onClick={() => {
+                        onSelectTab('team', 'sms_settings');
+                        onCloseMobile?.();
+                      }}
+                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                        isTeamActive && teamSubTab === 'sms_settings'
+                          ? 'bg-[#1DB954]/15 text-[#1DB954]'
+                          : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <MessageSquareText className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'sms_settings' ? 'text-[#1DB954]' : 'text-emerald-400'}`} />
+                        <span>تنظیمات پیامک (IPPanel)</span>
+                      </div>
+                      <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">
+                        پترن‌ها
+                      </span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>

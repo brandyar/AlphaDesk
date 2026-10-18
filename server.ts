@@ -586,7 +586,32 @@ let advanceRequestsData: SalaryAdvanceRequest[] = [...initialAdvanceRequests];
 export interface ProjectSettingsState {
   id?: number;
   ippanel_api?: string;
+  ippanel_sender?: string;
+  ippanel_line_number?: string;
   free_customers_claim_limit?: number;
+
+  login_pattern?: string;
+  login_pattern_text?: string;
+  dayli_leave_request_pattern?: string;
+  dayli_leave_request_text?: string;
+  hourly_leave_request_pattern?: string;
+  hourly_leave_request_text?: string;
+  dayli_leave_reject_pattern?: string;
+  dayli_leave_reject_text?: string;
+  dayli_leave_accept_pattern?: string;
+  dayli_leave_accept_text?: string;
+  hourly_leave_reject_pattern?: string;
+  hourly_leave_reject_text?: string;
+  hourly_leave_accept_pattern?: string;
+  hourly_leave_accept_text?: string;
+  addvance_request_pattern?: string;
+  addvance_request_text?: string;
+  addvance_reject_pattern?: string;
+  addvance_reject_text?: string;
+  addvance_accept_pattern?: string;
+  addvance_accept_text?: string;
+  lower_addvance_accept_pattern?: string;
+  lower_addvance_accept_text?: string;
 }
 
 export interface Tenant {
@@ -712,8 +737,152 @@ function getRequestTenantId(req: Request): string {
 let projectSettingsData: ProjectSettingsState = {
   id: 1,
   ippanel_api: '',
+  ippanel_sender: '+983000505',
+  ippanel_line_number: '+983000505',
   free_customers_claim_limit: 20,
 };
+
+export interface TenantSettingsState {
+  id?: string | number;
+  tenant_id: string;
+  sms_phones?: string[];
+  date_created?: string;
+  date_updated?: string;
+}
+
+let tenantSettingsMap: Map<string, TenantSettingsState> = new Map([
+  ['default', { id: 'ts-default', tenant_id: 'default', sms_phones: ['09121112233'] }],
+]);
+
+// Helper function to send SMS via IPPanel Pattern Gateway
+async function sendIppanelSmsPattern(
+  recipientPhone: string | null | undefined,
+  patternCode: string | null | undefined,
+  variables: Record<string, string | number> = {}
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  if (!projectSettingsData.ippanel_api || !patternCode || !recipientPhone) {
+    return { success: false, error: 'MISSING_API_KEY_OR_PATTERN_OR_PHONE' };
+  }
+
+  let cleanPhone = String(recipientPhone).replace(/[\s\-_()]/g, '').trim();
+  cleanPhone = cleanPhone.replace(/^(\+98|0098)/, '0');
+  if (/^9\d{9}$/.test(cleanPhone)) {
+    cleanPhone = '0' + cleanPhone;
+  }
+
+  if (!/^09\d{9}$/.test(cleanPhone)) {
+    console.warn(`[IPPanel SMS] Skipped invalid phone number: ${recipientPhone}`);
+    return { success: false, error: 'INVALID_PHONE_NUMBER' };
+  }
+
+  const apiKey = projectSettingsData.ippanel_api.trim();
+  const senderLine = (projectSettingsData.ippanel_sender || projectSettingsData.ippanel_line_number || '+983000505').trim();
+
+  // Clean variables values
+  const cleanVars: Record<string, string> = {};
+  for (const [k, v] of Object.entries(variables)) {
+    cleanVars[k] = v !== null && v !== undefined ? String(v).trim() : '';
+  }
+
+  try {
+    const payload = {
+      code: patternCode.trim(),
+      sender: senderLine,
+      recipient: cleanPhone,
+      variable: cleanVars,
+    };
+
+    console.log(`[IPPanel SMS] Sending pattern '${patternCode}' to ${cleanPhone}...`, cleanVars);
+
+    // Primary attempt: api2.ippanel.com v1 pattern send
+    let res = await fetch('https://api2.ippanel.com/api/v1/sms/pattern/normal/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': apiKey,
+        'Authorization': apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(payload),
+    }).catch((e) => {
+      console.warn('[IPPanel SMS] api2 fetch failed:', e.message);
+      return null;
+    });
+
+    if (!res || !res.ok) {
+      // Fallback attempt: rest.ippanel.com v1 pattern send
+      const restPayload = {
+        pattern_code: patternCode.trim(),
+        originator: senderLine,
+        recipient: cleanPhone,
+        values: cleanVars,
+      };
+
+      res = await fetch('https://rest.ippanel.com/v1/messages/patterns/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': apiKey,
+          'apikey': apiKey
+        },
+        body: JSON.stringify(restPayload),
+      }).catch((e) => {
+        console.warn('[IPPanel SMS] rest endpoint fetch failed:', e.message);
+        return null;
+      });
+    }
+
+    if (res && res.ok) {
+      const json: any = await res.json().catch(() => ({}));
+      console.log(`[IPPanel SMS] Successfully sent pattern '${patternCode}' to ${cleanPhone}:`, json);
+      return { success: true, messageId: String(json?.data || json?.bulk_id || json?.message_id || 'OK') };
+    } else {
+      const errText = res ? await res.text().catch(() => 'Error response') : 'No response from IPPanel';
+      console.warn(`[IPPanel SMS] Failed to send pattern to ${cleanPhone}:`, errText);
+      return { success: false, error: errText };
+    }
+  } catch (err: any) {
+    console.error(`[IPPanel SMS] Error sending pattern to ${cleanPhone}:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// Send pattern SMS notification to a tenant's configured admin SMS numbers (sms_phones)
+async function sendTenantAdminsSmsPattern(
+  tenantId: string | null | undefined,
+  patternCode: string | null | undefined,
+  variables: Record<string, string | number> = {}
+) {
+  if (!patternCode) return;
+  const tId = tenantId || 'default';
+
+  let smsPhones: string[] = [];
+  if (directusUrl && directusAdminToken) {
+    try {
+      const res = await directusFetch(`/items/tenant_settings?filter[tenant_id][_eq]=${encodeURIComponent(tId)}`).catch(() => null);
+      if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+        const raw = res.data[0].sms_phones;
+        smsPhones = Array.isArray(raw)
+          ? raw
+          : typeof raw === 'string'
+          ? raw.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : [];
+      }
+    } catch {}
+  }
+
+  if (smsPhones.length === 0) {
+    const local = tenantSettingsMap.get(tId) || tenantSettingsMap.get('default');
+    if (local?.sms_phones) {
+      smsPhones = Array.isArray(local.sms_phones) ? local.sms_phones : String(local.sms_phones).split(',').map(s => s.trim()).filter(Boolean);
+    }
+  }
+
+  for (const phone of smsPhones) {
+    if (phone) {
+      sendIppanelSmsPattern(phone, patternCode, variables).catch(e => console.warn(`[IPPanel SMS] Failed to notify tenant admin ${phone}:`, e.message));
+    }
+  }
+}
 
 // Concurrency mutex and recent creation cache to prevent double-registration
 const activeCustomerCreationLocks = new Set<string>();
@@ -858,7 +1027,7 @@ async function directusFetch(path: string, options: RequestInit = {}, retries = 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
 
       const res = await fetch(url, {
         ...options,
@@ -887,7 +1056,7 @@ async function directusFetch(path: string, options: RequestInit = {}, retries = 
           parsedMessage.includes('rate limit');
 
         if (isPressureOrRateLimit && attempt < retries) {
-          const backoffMs = 1200 * Math.pow(2, attempt) + Math.random() * 500;
+          const backoffMs = 500 * Math.pow(2, attempt) + Math.random() * 200;
           console.warn(`Directus under pressure (${res.status}: ${parsedMessage}). Retrying in ${Math.round(backoffMs)}ms (Attempt ${attempt + 1}/${retries})...`);
           await new Promise(r => setTimeout(r, backoffMs));
           continue;
@@ -909,7 +1078,7 @@ async function directusFetch(path: string, options: RequestInit = {}, retries = 
       return { data: text, text };
     } catch (err: any) {
       if (attempt < retries && (err.name === 'AbortError' || err.message?.includes('fetch failed') || err.message?.includes('Under pressure') || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT')) {
-        const backoffMs = 1000 * Math.pow(2, attempt) + Math.random() * 400;
+        const backoffMs = 400 * Math.pow(2, attempt) + Math.random() * 200;
         await new Promise(r => setTimeout(r, backoffMs));
         continue;
       }
@@ -918,17 +1087,17 @@ async function directusFetch(path: string, options: RequestInit = {}, retries = 
   }
 }
 
-// Auto-paginated Directus fetcher that seamlessly retrieves all records beyond Directus 10,000 limit
+// Fast Paginated Directus fetcher
 async function directusFetchAllPages(basePath: string, options: RequestInit = {}): Promise<{ data: any[]; meta?: any }> {
-  const PAGE_SIZE = 5000;
+  const PAGE_SIZE = 250;
   const [pathOnly, queryString] = basePath.split('?');
   const params = new URLSearchParams(queryString || '');
-  params.set('limit', String(PAGE_SIZE));
-  params.set('page', '1');
-  if (!params.has('meta')) params.set('meta', '*');
+  if (!params.has('limit')) params.set('limit', String(PAGE_SIZE));
+  if (!params.has('page')) params.set('page', '1');
+  if (!params.has('meta')) params.set('meta', 'filter_count');
 
   const page1Url = `${pathOnly}?${params.toString()}`;
-  const page1Res = await directusFetch(page1Url, options);
+  const page1Res = await directusFetch(page1Url, options).catch(() => null);
 
   if (!page1Res || !Array.isArray(page1Res.data)) {
     return { data: page1Res?.data || [], meta: page1Res?.meta };
@@ -2006,6 +2175,21 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
       const enrichedP = personnelItem ? enrichPersonnel(personnelItem) : null;
       const resolvedAvatar = formatAvatarUrl(user.avatar) || enrichedP?.avatar;
 
+      if (projectSettingsData.login_pattern) {
+        const uPhone = personnelItem?.phone || enrichedP?.phone || normalizedPhone;
+        if (uPhone) {
+          const now = new Date();
+          const dStr = now.toLocaleDateString('fa-IR');
+          const tStr = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+          sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, {
+            name: fullName || personnelItem?.name || 'کاربر',
+            date: dStr,
+            time: tStr,
+            username: personnelItem?.username || user.email || ''
+          }).catch(e => console.warn('Login SMS pattern send warning:', e.message));
+        }
+      }
+
       return res.json({
         success: true,
         access_token: loginToken,
@@ -3072,164 +3256,142 @@ app.delete('/api/contacts/:id', async (req: Request, res: Response) => {
 
 // Customers API with BFF Role-Based Access Control and Performance Caching
 app.get('/api/customers', async (req: Request, res: Response) => {
-  const { search, status, marketer_id, expired_only, page, limit, free_only } = req.query;
+  const { search, status, marketer_id, expired_only, page, limit, free_only, all } = req.query;
   const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
 
-  const reqLimit = limit ? parseInt(String(limit), 10) : 20000;
-  const reqPage = page ? parseInt(String(page), 10) : 1;
+  const isUnlimited = all === 'true' || limit === 'all' || limit === '20000';
+  const reqLimit = isUnlimited ? 500 : (limit ? Math.min(Math.max(1, parseInt(String(limit), 10)), 500) : 25);
+  const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
   const isFreeOnly = free_only === 'true';
 
-  // Security guard: If request is from an unauthenticated user (guest / initial load before auth),
-  // NEVER expose company customers. Only return empty list or free pool if requested.
+  // Security guard for unauthenticated calls
   if (!isAdmin && !userId && !personnelId && !isFreeOnly) {
-    return res.json([]);
+    return res.json({ data: [], meta: { filter_count: 0, total_count: 0, page: reqPage, limit: reqLimit, total_pages: 1 } });
   }
 
   if (directusUrl && directusAdminToken) {
     try {
-      let allCustomersList: any[] = [];
-      if (isFreeOnly) {
-        allCustomersList = await fetchAllDirectusItems('/items/customers?sort=-date_created&fields=*&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true', 500, 100000, 3);
-      } else {
-        allCustomersList = await ensureCustomersCache();
+      let directusPath = `/items/customers?page=${reqPage}&limit=${reqLimit}&meta=filter_count&sort=-date_created`;
+      directusPath += `&fields=id,company_name,business_type,province,city,manager_name,negotiator_name,mobile_numbers,landline_numbers,next_followup_date,assigned_marketer_id,assigned_marketer_name,assignment_deadline,status,is_expired,claimed_from_pool,date_created,date_updated,tenant_id`;
+
+      if (status && status !== 'همه') {
+        directusPath += `&filter[status][_eq]=${encodeURIComponent(String(status))}`;
       }
-
-      let list = allCustomersList.map((c: any) => computeCustomerExpiration(c));
-
-      // Role-Based Filtering:
-      // Marketer sees ONLY their own assigned customers (robust multi-alias & Persian-normalized matching)
-      if (!isAdmin && (userId || personnelId || userName) && !isFreeOnly) {
-        const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
-        const rawUid = cleanPId.replace(/^p-/, '');
-        const prefixedUid = cleanPId.startsWith('p-') ? cleanPId : `p-${cleanPId}`;
-        const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
-        const normUserName = normalizePersianString(userName);
-
-        list = list.filter((c: any) => {
-          const cId = c.assigned_marketer_id ? String(c.assigned_marketer_id).trim().toLowerCase() : '';
-          if (cleanPId && (cId === cleanPId || cId === rawUid || cId === prefixedUid)) return true;
-          if (cleanUId && (cId === cleanUId || cId === rawUid)) return true;
-
-          const cNameNorm = normalizePersianString(c.assigned_marketer_name);
-          if (normUserName && cNameNorm && (cNameNorm === normUserName || cNameNorm.includes(normUserName) || normUserName.includes(cNameNorm))) {
-            return true;
-          }
-          return false;
-        });
-      } else if (isFreeOnly) {
-        list = list.filter((c: any) => {
-          if (c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
-          const isUnassigned = !c.assigned_marketer_id || c.assigned_marketer_name === 'تخصیص نیافته';
-          const isDeadlinePassed = Boolean(
-            c.assignment_deadline && new Date().getTime() > new Date(c.assignment_deadline).getTime()
-          );
-          return Boolean(c.is_expired || isDeadlinePassed || isUnassigned);
-        });
+      if (marketer_id && marketer_id !== 'همه') {
+        directusPath += `&filter[assigned_marketer_id][_eq]=${encodeURIComponent(String(marketer_id))}`;
       }
-
-      // Tenant-based filtering (applied to admins or general browsing; marketer's assigned portfolio is never hidden by tenant mismatches)
-      if (tenantId && tenantId !== 'all' && (isAdmin || isFreeOnly)) {
-        list = list.filter((c: any) => matchesTenant(c.tenant_id, tenantId));
-      }
-
-      if (search && typeof search === 'string') {
-        const s = search.toLowerCase();
-        list = list.filter((c: any) =>
-          c.company_name?.toLowerCase().includes(s) ||
-          c.manager_name?.toLowerCase().includes(s) ||
-          c.city?.toLowerCase().includes(s) ||
-          c.business_type?.toLowerCase().includes(s) ||
-          (Array.isArray(c.mobile_numbers) && c.mobile_numbers.some((m: string) => m.includes(s))) ||
-          (Array.isArray(c.contacts) && c.contacts.some((ct: any) =>
-            ct.value?.toLowerCase().includes(s) ||
-            ct.contact_name?.toLowerCase().includes(s) ||
-            ct.contact_role?.toLowerCase().includes(s)
-          ))
-        );
-      }
-
-      if (status && typeof status === 'string' && status !== 'همه') {
-        list = list.filter((c: any) => c.status === status);
-      }
-
-      if (marketer_id && typeof marketer_id === 'string' && marketer_id !== 'همه') {
-        list = list.filter((c: any) => c.assigned_marketer_id === marketer_id);
-      }
-
       if (expired_only === 'true') {
-        list = list.filter((c: any) => c.is_expired);
+        directusPath += `&filter[is_expired][_eq]=true`;
+      }
+      if (isFreeOnly) {
+        directusPath += `&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true`;
       }
 
-      const totalCount = list.length;
-      res.setHeader('X-Total-Count', String(totalCount));
-      res.setHeader('X-Filter-Count', String(totalCount));
-      res.setHeader('X-Page', String(reqPage));
-      res.setHeader('X-Limit', String(reqLimit));
+      const resData = await directusFetch(directusPath, {}, 1).catch(() => null);
+      if (resData && Array.isArray(resData.data)) {
+        let items = resData.data.map((c: any) => computeCustomerExpiration(c));
 
-      if (req.query.all === 'true' || !limit || reqLimit >= 20000) {
-        return res.json(list);
+        if (!isAdmin && (userId || personnelId || userName) && !isFreeOnly) {
+          const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
+          const rawUid = cleanPId.replace(/^p-/, '');
+          const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
+          const normUserName = normalizePersianString(userName);
+
+          items = items.filter((c: any) => {
+            const cId = c.assigned_marketer_id ? String(c.assigned_marketer_id).trim().toLowerCase() : '';
+            if (cleanPId && (cId === cleanPId || cId === rawUid)) return true;
+            if (cleanUId && (cId === cleanUId || cId === rawUid)) return true;
+            const cNameNorm = normalizePersianString(c.assigned_marketer_name);
+            if (normUserName && cNameNorm && (cNameNorm === normUserName || cNameNorm.includes(normUserName))) return true;
+            return false;
+          });
+        }
+
+        const filterCount = resData.meta?.filter_count ?? items.length;
+        const totalCount = resData.meta?.total_count ?? filterCount;
+        const totalPages = Math.max(1, Math.ceil(filterCount / reqLimit));
+
+        res.setHeader('X-Total-Count', String(totalCount));
+        res.setHeader('X-Filter-Count', String(filterCount));
+        res.setHeader('X-Page', String(reqPage));
+        res.setHeader('X-Limit', String(reqLimit));
+
+        if (isUnlimited) {
+          return res.json(items);
+        }
+
+        return res.json({
+          data: items,
+          meta: {
+            filter_count: filterCount,
+            total_count: totalCount,
+            page: reqPage,
+            limit: reqLimit,
+            total_pages: totalPages
+          }
+        });
       }
-
-      const startIndex = (reqPage - 1) * reqLimit;
-      const paginatedList = list.slice(startIndex, startIndex + reqLimit);
-      return res.json(paginatedList);
     } catch (e: any) {
-      console.error('Fetch customers error:', e.message);
-      return res.status(502).json({
-        error: 'DB_UNREACHABLE',
-        message: `عدم دسترسی به پایگاه داده مرکزی: ${e.message}`
-      });
+      console.warn('Directus customer query fallback to in-memory store:', e.message);
     }
   }
 
-  // Fallback to local memory ONLY if database is NOT configured
+  // Fallback to in-memory store
   updateExpirationFlags();
-  let filtered = customersData.map(c => ({
-    ...c,
-    contacts: contactsData.filter(ct => ct.customer_id === c.id)
-  }));
-
-  if (tenantId && tenantId !== 'all') {
-    filtered = filtered.filter(c => matchesTenant(c.tenant_id, tenantId));
+  let list = customersData.map(c => computeCustomerExpiration(c));
+  if (tenantId && tenantId !== 'all' && (isAdmin || isFreeOnly)) {
+    list = list.filter(c => matchesTenant(c.tenant_id, tenantId));
   }
-
-  if (!isAdmin && (userId || personnelId)) {
-    filtered = filtered.filter(c =>
+  if (!isAdmin && (userId || personnelId) && !isFreeOnly) {
+    list = list.filter(c =>
       c.assigned_marketer_id === personnelId ||
       c.assigned_marketer_id === userId ||
       (userName && c.assigned_marketer_name === userName)
     );
   }
-
   if (search && typeof search === 'string') {
     const s = search.toLowerCase();
-    filtered = filtered.filter(c =>
-      c.company_name.toLowerCase().includes(s) ||
-      c.manager_name.toLowerCase().includes(s) ||
-      c.city.toLowerCase().includes(s) ||
-      c.business_type.toLowerCase().includes(s) ||
-      c.mobile_numbers.some(m => m.includes(s)) ||
-      c.contacts?.some(ct =>
-        ct.value.toLowerCase().includes(s) ||
-        (ct.contact_name && ct.contact_name.toLowerCase().includes(s)) ||
-        (ct.contact_role && ct.contact_role.toLowerCase().includes(s))
-      )
+    list = list.filter(c =>
+      c.company_name?.toLowerCase().includes(s) ||
+      c.manager_name?.toLowerCase().includes(s) ||
+      c.city?.toLowerCase().includes(s) ||
+      c.business_type?.toLowerCase().includes(s)
     );
   }
-
-  if (status && typeof status === 'string' && status !== 'همه') {
-    filtered = filtered.filter(c => c.status === status);
+  if (status && status !== 'همه') {
+    list = list.filter(c => c.status === status);
   }
-
-  if (marketer_id && typeof marketer_id === 'string' && marketer_id !== 'همه') {
-    filtered = filtered.filter(c => c.assigned_marketer_id === marketer_id);
+  if (marketer_id && marketer_id !== 'همه') {
+    list = list.filter(c => c.assigned_marketer_id === marketer_id);
   }
-
   if (expired_only === 'true') {
-    filtered = filtered.filter(c => c.is_expired);
+    list = list.filter(c => c.is_expired);
   }
 
-  res.json(filtered);
+  const filterCount = list.length;
+  const startIndex = (reqPage - 1) * reqLimit;
+  const paginated = list.slice(startIndex, startIndex + reqLimit);
+  const totalPages = Math.max(1, Math.ceil(filterCount / reqLimit));
+
+  res.setHeader('X-Total-Count', String(customersData.length));
+  res.setHeader('X-Filter-Count', String(filterCount));
+  res.setHeader('X-Page', String(reqPage));
+  res.setHeader('X-Limit', String(reqLimit));
+
+  if (isUnlimited) {
+    return res.json(list);
+  }
+
+  return res.json({
+    data: paginated,
+    meta: {
+      filter_count: filterCount,
+      total_count: customersData.length,
+      page: reqPage,
+      limit: reqLimit,
+      total_pages: totalPages
+    }
+  });
 });
 
 app.get('/api/customers/:id', async (req: Request, res: Response) => {
@@ -3918,6 +4080,15 @@ async function computePersonnelFreeQuota(targetPersonnelId: string, customLimit?
   };
 }
 
+function isCentralAdmin(req: Request): boolean {
+  const { isAdmin, tenantId, userRole } = getRequestUser(req);
+  if (!isAdmin && userRole !== 'admin') return false;
+  const reqTenant = getRequestTenantId(req);
+  if (reqTenant === 'default' || reqTenant === '1' || reqTenant === 'all') return true;
+  if (!tenantId || tenantId === 'all' || tenantId === 'default' || tenantId === '1') return true;
+  return false;
+}
+
 // Get Project Settings (Directus singleton with fallback)
 app.get('/api/project-settings', async (req: Request, res: Response) => {
   if (directusUrl && directusAdminToken) {
@@ -3936,17 +4107,24 @@ app.get('/api/project-settings', async (req: Request, res: Response) => {
   res.json(projectSettingsData);
 });
 
-// Update Project Settings (Admin only)
+// Update Project Settings (Central Admin only)
 app.patch('/api/project-settings', async (req: Request, res: Response) => {
-  const { isAdmin, userRole } = getRequestUser(req);
-  if (!isAdmin && userRole !== 'admin') {
+  if (!isCentralAdmin(req)) {
     return res.status(403).json({
       error: 'FORBIDDEN',
-      message: 'فقط مدیر سیستم مجاز به تغییر تنظیمات سامانه است.',
+      message: 'تنظیمات اصلی پیامک و پترن‌ها فقط توسط مدیر ارشد سازمان مرکزی قابل ویرایش است.',
     });
   }
 
   const patch = req.body;
+  
+  // Ensure ippanel_sender is kept synced with ippanel_line_number if provided
+  if (patch.ippanel_sender) {
+    patch.ippanel_line_number = patch.ippanel_sender;
+  } else if (patch.ippanel_line_number) {
+    patch.ippanel_sender = patch.ippanel_line_number;
+  }
+
   projectSettingsData = { ...projectSettingsData, ...patch };
 
   if (directusUrl && directusAdminToken) {
@@ -3970,6 +4148,131 @@ app.patch('/api/project-settings', async (req: Request, res: Response) => {
   }
 
   res.json(projectSettingsData);
+});
+
+// -------------------------------------------------------------
+// TENANT SETTINGS API (تنظیمات اختصاصی هر سازمان - شماره‌های پیامک ادمین)
+// -------------------------------------------------------------
+
+app.get('/api/tenant-settings', async (req: Request, res: Response) => {
+  const reqTenant = getRequestTenantId(req) || 'default';
+  const targetTenant = (req.query.tenant_id as string) || reqTenant;
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const resp = await directusFetch(`/items/tenant_settings?filter[tenant_id][_eq]=${encodeURIComponent(targetTenant)}`).catch(() => null);
+      if (resp?.data && Array.isArray(resp.data) && resp.data.length > 0) {
+        const item = resp.data[0];
+        const rawPhones = item.sms_phones;
+        const smsPhonesArray = Array.isArray(rawPhones)
+          ? rawPhones
+          : typeof rawPhones === 'string'
+          ? rawPhones.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : [];
+
+        return res.json({
+          ...item,
+          tenant_id: targetTenant,
+          sms_phones: smsPhonesArray,
+        });
+      }
+    } catch {}
+  }
+
+  const local = tenantSettingsMap.get(targetTenant) || { tenant_id: targetTenant, sms_phones: [] };
+  res.json(local);
+});
+
+app.patch('/api/tenant-settings', async (req: Request, res: Response) => {
+  const { isAdmin, userRole } = getRequestUser(req);
+  if (!isAdmin && userRole !== 'admin') {
+    return res.status(403).json({
+      error: 'FORBIDDEN',
+      message: 'فقط مدیر سازمان مجاز به ویرایش شماره‌های پیامک اطلاع‌رسانی است.',
+    });
+  }
+
+  const reqTenant = getRequestTenantId(req) || 'default';
+  const targetTenant = (req.body.tenant_id as string) || reqTenant;
+  const rawPhones = req.body.sms_phones;
+
+  const smsPhonesArray = Array.isArray(rawPhones)
+    ? rawPhones.map(String).map((s: string) => s.trim()).filter(Boolean)
+    : typeof rawPhones === 'string'
+    ? rawPhones.split(',').map((s: string) => s.trim()).filter(Boolean)
+    : [];
+
+  const nowIso = new Date().toISOString();
+  const patchData = {
+    tenant_id: targetTenant,
+    sms_phones: smsPhonesArray,
+    date_updated: nowIso,
+  };
+
+  tenantSettingsMap.set(targetTenant, {
+    ...(tenantSettingsMap.get(targetTenant) || {}),
+    ...patchData,
+  });
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const existing = await directusFetch(`/items/tenant_settings?filter[tenant_id][_eq]=${encodeURIComponent(targetTenant)}`).catch(() => null);
+      if (existing?.data && Array.isArray(existing.data) && existing.data.length > 0) {
+        const rowId = existing.data[0].id;
+        const patched = await directusFetch(`/items/tenant_settings/${rowId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ sms_phones: smsPhonesArray, date_updated: nowIso }),
+        });
+        if (patched?.data) {
+          return res.json(patched.data);
+        }
+      } else {
+        const created = await directusFetch('/items/tenant_settings', {
+          method: 'POST',
+          body: JSON.stringify({
+            tenant_id: targetTenant,
+            sms_phones: smsPhonesArray,
+            date_created: nowIso,
+            date_updated: nowIso,
+          }),
+        });
+        if (created?.data) {
+          return res.json(created.data);
+        }
+      }
+    } catch (err: any) {
+      console.warn('Directus tenant_settings save warning:', err.message);
+    }
+  }
+
+  res.json({
+    success: true,
+    tenant_id: targetTenant,
+    sms_phones: smsPhonesArray,
+  });
+});
+
+// Test SMS endpoint for IPPanel Pattern Gateway
+app.post('/api/project-settings/test-sms', async (req: Request, res: Response) => {
+  const { phone, pattern_code, variables } = req.body;
+  if (!phone || !pattern_code) {
+    return res.status(400).json({ error: 'شماره همراه گیرنده و کد پترن الزامی است.' });
+  }
+
+  const result = await sendIppanelSmsPattern(phone, pattern_code, variables || {});
+  if (result.success) {
+    res.json({
+      success: true,
+      message: 'پیامک تست با موفقیت از طریق درگاه IPPanel به شماره مقصد ارسال گردید.',
+      messageId: result.messageId
+    });
+  } else {
+    res.status(400).json({
+      success: false,
+      error: result.error,
+      message: `خطا در ارسال پیامک با IPPanel: ${result.error}`
+    });
+  }
 });
 
 // Get Quota Status for Free Customers Pool
@@ -4421,80 +4724,63 @@ app.post('/api/customers/merge', async (req: Request, res: Response) => {
   });
 });
 app.get('/api/customer-reports', async (req: Request, res: Response) => {
-  const { customer_id, page, limit } = req.query;
+  const { customer_id, page, limit, all } = req.query;
   const { userId, personnelId, userRole, isAdmin, userName, tenantId } = getRequestUser(req);
 
-  const reqLimit = limit ? parseInt(String(limit), 10) : (customer_id ? 500 : 50000);
-  const reqPage = page ? parseInt(String(page), 10) : 1;
+  const isUnlimited = all === 'true' || limit === 'all' || limit === '50000';
+  const reqLimit = isUnlimited ? 500 : (limit ? Math.min(Math.max(1, parseInt(String(limit), 10)), 500) : 25);
+  const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
 
-  // Security guard: unauthenticated request without customer_id gets nothing
   if (!isAdmin && !userId && !personnelId && !userName && !customer_id) {
-    return res.json([]);
+    return res.json({ data: [], meta: { filter_count: 0, total_count: 0, page: reqPage, limit: reqLimit, total_pages: 1 } });
   }
 
   if (directusUrl && directusAdminToken) {
     try {
-      let reportsList: any[] = [];
+      let path = `/items/customer_reports?page=${reqPage}&limit=${reqLimit}&meta=filter_count&sort=-date_created`;
+      path += `&fields=id,customer_id,negotiator_name,negotiation_phone,report_text,negotiation_score,next_followup_date,negotiation_status,created_by,contract_number,contract_date,contract_items,contract_amount,date_created,tenant_id`;
 
       if (customer_id) {
-        reportsList = await fetchAllDirectusItems(`/items/customer_reports?sort=-id&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}`, 500, 10000, 3);
-      } else {
-        const allReports = await ensureReportsCache();
-        if (!isAdmin && (userId || personnelId || userName)) {
-          const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
-          const rawUid = cleanPId.replace(/^p-/, '');
-          const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
-          const normUserName = normalizePersianString(userName);
+        path += `&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}`;
+      }
 
-          reportsList = allReports.filter((r: any) => {
-            const rNegNorm = normalizePersianString(r.negotiator_name);
-            const rCreated = r.created_by ? String(r.created_by).trim().toLowerCase() : '';
-            const rCreatedNorm = normalizePersianString(r.created_by);
-
-            if (normUserName && (rNegNorm === normUserName || rNegNorm.includes(normUserName) || normUserName.includes(rCreatedNorm))) return true;
-            if (normUserName && (rCreatedNorm === normUserName || rCreatedNorm.includes(normUserName) || normUserName.includes(rCreatedNorm))) return true;
-            if (cleanPId && (rCreated === cleanPId || rCreated === rawUid)) return true;
-            if (cleanUId && rCreated === cleanUId) return true;
-            return false;
-          });
-        } else {
-          reportsList = allReports;
+      const resData = await directusFetch(path, {}, 1).catch(() => null);
+      if (resData && Array.isArray(resData.data)) {
+        let items = resData.data;
+        if (tenantId && tenantId !== 'all') {
+          items = items.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
         }
+
+        const filterCount = resData.meta?.filter_count ?? items.length;
+        const totalCount = resData.meta?.total_count ?? filterCount;
+        const totalPages = Math.max(1, Math.ceil(filterCount / reqLimit));
+
+        res.setHeader('X-Total-Count', String(totalCount));
+        res.setHeader('X-Filter-Count', String(filterCount));
+        res.setHeader('X-Page', String(reqPage));
+        res.setHeader('X-Limit', String(reqLimit));
+
+        if (isUnlimited) {
+          return res.json(items);
+        }
+
+        return res.json({
+          data: items,
+          meta: {
+            filter_count: filterCount,
+            total_count: totalCount,
+            page: reqPage,
+            limit: reqLimit,
+            total_pages: totalPages
+          }
+        });
       }
-
-      // Tenant-based filtering
-      if (tenantId && tenantId !== 'all') {
-        reportsList = reportsList.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
-      }
-
-      // Non-admin safety filter
-      if (!isAdmin && (userId || personnelId || userName) && !customer_id) {
-        reportsList = reportsList.filter((r: any) =>
-          (userName && r.negotiator_name === userName) ||
-          r.created_by === userName ||
-          (userId && r.created_by === userId) ||
-          (personnelId && r.created_by === personnelId)
-        );
-      }
-
-      const totalCount = reportsList.length;
-      res.setHeader('X-Total-Count', String(totalCount));
-      res.setHeader('X-Filter-Count', String(totalCount));
-      res.setHeader('X-Page', String(reqPage));
-      res.setHeader('X-Limit', String(reqLimit));
-
-      if (req.query.all === 'true' || !limit || reqLimit >= 50000) {
-        return res.json(reportsList);
-      }
-
-      const startIndex = (reqPage - 1) * reqLimit;
-      const paginatedReports = reportsList.slice(startIndex, startIndex + reqLimit);
-      return res.json(paginatedReports);
     } catch (e: any) {
-      return res.status(502).json({ error: `خطا در دریافت گزارش‌ها از پایگاه داده مرکزی: ${e.message}` });
+      console.warn('Reports Directus query fallback:', e.message);
     }
   }
 
+  // In-memory fallback
   let repList = reportsData;
   if (tenantId && tenantId !== 'all') {
     repList = repList.filter(r => matchesTenant((r as any).tenant_id, tenantId));
@@ -4509,7 +4795,35 @@ app.get('/api/customer-reports', async (req: Request, res: Response) => {
       (personnelId && r.created_by === personnelId)
     );
   }
-  res.json(repList);
+
+  const filterCount = repList.length;
+  const startIndex = (reqPage - 1) * reqLimit;
+  const paginatedReports = repList.slice(startIndex, startIndex + reqLimit);
+  const totalPages = Math.max(1, Math.ceil(filterCount / reqLimit));
+
+  res.setHeader('X-Total-Count', String(reportsData.length));
+  res.setHeader('X-Filter-Count', String(filterCount));
+  res.setHeader('X-Page', String(reqPage));
+  res.setHeader('X-Limit', String(reqLimit));
+
+  if (isUnlimited) {
+    return res.json(repList);
+  }
+
+  return res.json({
+    data: paginatedReports,
+    meta: {
+      filter_count: filterCount,
+      total_count: reportsData.length,
+      page: reqPage,
+      limit: reqLimit,
+      total_pages: totalPages
+    }
+  });
+});
+
+app.get('/api/reports', async (req: Request, res: Response) => {
+  return (app as any)._router.handle({ ...req, url: '/api/customer-reports' }, res);
 });
 
 app.post('/api/customer-reports', async (req: Request, res: Response) => {
@@ -5120,6 +5434,30 @@ app.post('/api/leave-requests', async (req: Request, res: Response) => {
     date_created: nowIso
   };
 
+  // Trigger SMS Pattern Notification for Leave Request Creation
+  const applicantP = personnelData.find(p => p.id === newRequest.personnel_id || p.user_id === newRequest.personnel_id);
+  const applicantPhone = applicantP?.phone;
+
+  if (applicantPhone) {
+    if (newRequest.leave_type === 'daily' && projectSettingsData.dayli_leave_request_pattern) {
+      sendIppanelSmsPattern(applicantPhone, projectSettingsData.dayli_leave_request_pattern, {
+        name: newRequest.personnel_name,
+        days: String(newRequest.days_count || 1),
+        start_date: newRequest.start_date || '',
+        reason: newRequest.reason || '-'
+      }).catch(e => console.warn('Daily leave request SMS error:', e.message));
+    } else if (newRequest.leave_type === 'hourly' && projectSettingsData.hourly_leave_request_pattern) {
+      sendIppanelSmsPattern(applicantPhone, projectSettingsData.hourly_leave_request_pattern, {
+        name: newRequest.personnel_name,
+        hours: String(newRequest.hours_count || 1),
+        start_time: newRequest.start_time || '',
+        end_time: newRequest.end_time || '',
+        date: newRequest.start_date || '',
+        reason: newRequest.reason || '-'
+      }).catch(e => console.warn('Hourly leave request SMS error:', e.message));
+    }
+  }
+
   if (directusUrl && directusAdminToken) {
     try {
       const directusLeavePayload = {
@@ -5159,6 +5497,34 @@ app.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
     reviewed_by: userName || 'مدیر سیستم',
     reviewed_at: nowIso
   };
+
+  const targetReq = leaveRequestsData.find(r => r.id === id);
+  if (targetReq) {
+    const applicantP = personnelData.find(p => p.id === targetReq.personnel_id || p.user_id === targetReq.personnel_id);
+    const applicantPhone = applicantP?.phone;
+
+    if (applicantPhone) {
+      let patternToUse = '';
+      if (status === 'approved') {
+        patternToUse = targetReq.leave_type === 'daily'
+          ? (projectSettingsData.dayli_leave_accept_pattern || '')
+          : (projectSettingsData.hourly_leave_accept_pattern || '');
+      } else if (status === 'rejected') {
+        patternToUse = targetReq.leave_type === 'daily'
+          ? (projectSettingsData.dayli_leave_reject_pattern || '')
+          : (projectSettingsData.hourly_leave_reject_pattern || '');
+      }
+
+      if (patternToUse) {
+        sendIppanelSmsPattern(applicantPhone, patternToUse, {
+          name: targetReq.personnel_name,
+          manager_note: manager_note || 'بررسی شد',
+          reviewed_by: userName || 'مدیریت',
+          start_date: targetReq.start_date || ''
+        }).catch(e => console.warn('Leave request status SMS error:', e.message));
+      }
+    }
+  }
 
   if (directusUrl && directusAdminToken) {
     try {
@@ -5284,6 +5650,19 @@ app.post('/api/advance-requests', async (req: Request, res: Response) => {
     date_created: nowIso
   };
 
+  // Trigger SMS Pattern for Advance Request Creation
+  if (projectSettingsData.addvance_request_pattern) {
+    const applicantP = personnelData.find(p => p.id === newRequest.personnel_id || p.user_id === newRequest.personnel_id);
+    if (applicantP?.phone) {
+      sendIppanelSmsPattern(applicantP.phone, projectSettingsData.addvance_request_pattern, {
+        name: newRequest.personnel_name,
+        amount: String(newRequest.amount),
+        month: newRequest.target_month || '',
+        reason: newRequest.reason || '-'
+      }).catch(e => console.warn('Advance request SMS error:', e.message));
+    }
+  }
+
   if (directusUrl && directusAdminToken) {
     try {
       const directusAdvancePayload = {
@@ -5322,6 +5701,33 @@ app.patch('/api/advance-requests/:id', async (req: Request, res: Response) => {
     reviewed_by: userName || 'مدیر سیستم',
     reviewed_at: nowIso
   };
+
+  const targetAdv = advanceRequestsData.find(r => r.id === id);
+  if (targetAdv) {
+    const applicantP = personnelData.find(p => p.id === targetAdv.personnel_id || p.user_id === targetAdv.personnel_id);
+    if (applicantP?.phone) {
+      let patternToUse = '';
+      if (status === 'approved') {
+        const approvedNum = approved_amount !== undefined ? Number(approved_amount) : Number(targetAdv.amount);
+        if (approvedNum < Number(targetAdv.amount) && projectSettingsData.lower_addvance_accept_pattern) {
+          patternToUse = projectSettingsData.lower_addvance_accept_pattern;
+        } else {
+          patternToUse = projectSettingsData.addvance_accept_pattern || '';
+        }
+      } else if (status === 'rejected') {
+        patternToUse = projectSettingsData.addvance_reject_pattern || '';
+      }
+
+      if (patternToUse) {
+        sendIppanelSmsPattern(applicantP.phone, patternToUse, {
+          name: targetAdv.personnel_name,
+          amount: String(approved_amount !== undefined ? approved_amount : targetAdv.amount),
+          manager_note: manager_note || 'بررسی شد',
+          reviewed_by: userName || 'مدیریت'
+        }).catch(e => console.warn('Advance request status SMS error:', e.message));
+      }
+    }
+  }
 
   if (directusUrl && directusAdminToken) {
     try {

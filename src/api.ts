@@ -281,12 +281,15 @@ export async function fetchCustomers(filters?: {
   if (filters?.free_only) params.append('free_only', 'true');
   if (filters?.page) params.append('page', String(filters.page));
   if (filters?.limit !== undefined) params.append('limit', String(filters.limit));
-  else params.append('limit', '20000');
+  else params.append('limit', '100');
 
   const res = await fetch(`${BASE_URL}/customers?${params.toString()}`, {
     headers: getBffHeaders(),
   });
-  return handleResponse<Customer[]>(res, 'خطا در دریافت لیست مشتریان');
+  const resData: any = await handleResponse(res, 'خطا در دریافت لیست مشتریان');
+  if (Array.isArray(resData)) return resData;
+  if (resData && Array.isArray(resData.data)) return resData.data;
+  return [];
 }
 
 export async function fetchFreeCustomers(limit: number = 1000): Promise<Customer[]> {
@@ -509,13 +512,16 @@ export async function fetchCustomerReports(
   if (customerId) params.append('customer_id', customerId);
   if (options?.page) params.append('page', String(options.page));
   if (options?.limit !== undefined) params.append('limit', String(options.limit));
-  else params.append('limit', '50000');
+  else params.append('limit', '100');
 
   const q = params.toString() ? `?${params.toString()}` : '';
   const res = await fetch(`${BASE_URL}/customer-reports${q}`, {
     headers: getBffHeaders(),
   });
-  return handleResponse<CustomerReport[]>(res, 'خطا در دریافت گزارش‌های مذاکره');
+  const resData: any = await handleResponse(res, 'خطا در دریافت گزارش‌های مذاکره');
+  if (Array.isArray(resData)) return resData;
+  if (resData && Array.isArray(resData.data)) return resData.data;
+  return [];
 }
 
 export async function fetchCustomerReportsPaginated(
@@ -555,11 +561,19 @@ export async function createCustomerReport(payload: Partial<CustomerReport>): Pr
   return handleResponse<CustomerReport>(res, 'خطا در ثبت گزارش مذاکره در پایگاه داده');
 }
 
-export async function fetchColdLeads(): Promise<ColdLead[]> {
-  const res = await fetch(`${BASE_URL}/cold-leads`, {
+export async function fetchColdLeads(options?: { page?: number; limit?: number }): Promise<ColdLead[]> {
+  const params = new URLSearchParams();
+  if (options?.page) params.append('page', String(options.page));
+  if (options?.limit) params.append('limit', String(options.limit));
+  else params.append('limit', '100');
+
+  const res = await fetch(`${BASE_URL}/cold-leads?${params.toString()}`, {
     headers: getBffHeaders(),
   });
-  return handleResponse<ColdLead[]>(res, 'خطا در دریافت شماره‌های اولیه');
+  const resData: any = await handleResponse(res, 'خطا در دریافت شماره‌های اولیه');
+  if (Array.isArray(resData)) return resData;
+  if (resData && Array.isArray(resData.data)) return resData.data;
+  return [];
 }
 
 export async function createColdLead(payload: Partial<ColdLead>): Promise<ColdLead> {
@@ -611,11 +625,19 @@ export async function convertColdLead(id: string, customerData?: Partial<Custome
   return handleResponse<{ customer: Customer; lead?: ColdLead }>(res, 'خطا در تبدیل لید به مشتری در پایگاه داده');
 }
 
-export async function fetchAdminReports(): Promise<AdministrativeReport[]> {
-  const res = await fetch(`${BASE_URL}/administrative-reports`, {
+export async function fetchAdminReports(options?: { page?: number; limit?: number }): Promise<AdministrativeReport[]> {
+  const params = new URLSearchParams();
+  if (options?.page) params.append('page', String(options.page));
+  if (options?.limit) params.append('limit', String(options.limit));
+  else params.append('limit', '100');
+
+  const res = await fetch(`${BASE_URL}/admin-reports?${params.toString()}`, {
     headers: getBffHeaders(),
   });
-  return handleResponse<AdministrativeReport[]>(res, 'خطا در دریافت گزارش‌های اداری');
+  const resData: any = await handleResponse(res, 'خطا در دریافت گزارش کار پرسنل');
+  if (Array.isArray(resData)) return resData;
+  if (resData && Array.isArray(resData.data)) return resData.data;
+  return [];
 }
 
 export async function createAdminReport(payload: Partial<AdministrativeReport>): Promise<AdministrativeReport> {

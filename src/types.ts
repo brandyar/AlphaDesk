@@ -338,7 +338,8 @@ export type TeamSubTab =
   | 'extend_ownership'
   | 'switch_ownership'
   | 'leave_approvals'
-  | 'import_data';
+  | 'import_data'
+  | 'sms_settings';
 
 export interface DataMigrationPreviewItem {
   id?: string;
@@ -396,6 +397,41 @@ export interface BffStatus {
 export interface ProjectSettings {
   id?: number;
   ippanel_api?: string;
+  ippanel_sender?: string;
+  ippanel_line_number?: string;
   free_customers_claim_limit?: number;
+
+  // Patterns & pattern texts for IPPanel SMS Gateway
+  login_pattern?: string;
+  login_pattern_text?: string;
+  dayli_leave_request_pattern?: string;
+  dayli_leave_request_text?: string;
+  hourly_leave_request_pattern?: string;
+  hourly_leave_request_text?: string;
+  dayli_leave_reject_pattern?: string;
+  dayli_leave_reject_text?: string;
+  dayli_leave_accept_pattern?: string;
+  dayli_leave_accept_text?: string;
+  hourly_leave_reject_pattern?: string;
+  hourly_leave_reject_text?: string;
+  hourly_leave_accept_pattern?: string;
+  hourly_leave_accept_text?: string;
+  addvance_request_pattern?: string;
+  addvance_request_text?: string;
+  addvance_reject_pattern?: string;
+  addvance_reject_text?: string;
+  addvance_accept_pattern?: string;
+  addvance_accept_text?: string;
+  lower_addvance_accept_pattern?: string;
+  lower_addvance_accept_text?: string;
 }
+
+export interface TenantSettings {
+  id?: string | number;
+  tenant_id: string;
+  sms_phones?: string | string[];
+  date_created?: string;
+  date_updated?: string;
+}
+
 

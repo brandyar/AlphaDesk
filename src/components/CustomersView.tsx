@@ -59,7 +59,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(30);
+  const [pageSize, setPageSize] = useState<number>(25);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Reset page to 1 when filters or search change
