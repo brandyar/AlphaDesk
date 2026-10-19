@@ -6,15 +6,15 @@ import {
   personnelData,
   setPersonnelData,
   DIRECTUS_STAFF_ROLE_ID,
-} from '../config';
-import { directusFetch } from '../directus/client';
-import { resolveDirectusTenantId } from '../directus/sync';
+} from '../config.ts';
+import { directusFetch } from '../directus/client.ts';
+import { resolveDirectusTenantId } from '../directus/sync.ts';
 import {
   getRequestTenantId,
   getRequestUser,
   formatAvatarUrl,
-} from '../middlewares/auth.middleware';
-import { Personnel } from '../types';
+} from '../middlewares/auth.middleware.ts';
+import { Personnel } from '../types.ts';
 
 const router = Router();
 

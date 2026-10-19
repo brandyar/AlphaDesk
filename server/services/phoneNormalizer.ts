@@ -5,14 +5,14 @@ import {
   addDays,
   customersData,
   contactsData,
-} from '../config';
-import { directusFetch } from '../directus/client';
+} from '../config.ts';
+import { directusFetch } from '../directus/client.ts';
 import {
   computeCustomerExpiration,
   updateExpirationFlags,
-} from '../directus/cache';
-import { resolveDirectusTenantId } from '../directus/sync';
-import { CustomerContact } from '../types';
+} from '../directus/cache.ts';
+import { resolveDirectusTenantId } from '../directus/sync.ts';
+import { CustomerContact } from '../types.ts';
 
 export function normalizePersianString(str?: string | null): string {
   if (!str) return '';

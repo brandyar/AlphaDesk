@@ -1,4 +1,4 @@
-import { directusUrl, directusAdminToken } from '../config';
+import { directusUrl, directusAdminToken } from '../config.ts';
 
 // Directus API Request Forwarder with retry, backoff and rate-limit/pressure resilience
 export async function directusFetch(path: string, options: RequestInit = {}, retries = 3): Promise<any> {

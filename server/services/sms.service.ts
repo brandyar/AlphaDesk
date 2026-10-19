@@ -4,8 +4,8 @@ import {
   projectSettingsData,
   updateProjectSettingsData,
   tenantSettingsMap,
-} from '../config';
-import { directusFetch } from '../directus/client';
+} from '../config.ts';
+import { directusFetch } from '../directus/client.ts';
 
 export function getPatternTextForCode(code: string | null | undefined): string {
   if (!code) return '';

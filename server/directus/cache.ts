@@ -5,8 +5,8 @@ import {
   setCustomersData,
   reportsData,
   tenantsData,
-} from '../config';
-import { fetchAllDirectusItems } from './client';
+} from '../config.ts';
+import { fetchAllDirectusItems } from './client.ts';
 
 interface DataCache<T> {
   timestamp: number;

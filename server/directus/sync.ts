@@ -7,9 +7,9 @@ import {
   initialPersonnel,
   personnelData,
   setPersonnelData,
-} from '../config';
-import { directusFetch } from './client';
-import { Tenant } from '../types';
+} from '../config.ts';
+import { directusFetch } from './client.ts';
+import { Tenant } from '../types.ts';
 
 export function resolveDirectusTenantId(rawTenant: any): number | null {
   const validIds = tenantsData

@@ -5,15 +5,15 @@ import {
   directusAdminToken,
   coldLeadsData,
   setColdLeadsData,
-} from '../config';
-import { directusFetch, directusFetchAllPages } from '../directus/client';
-import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware';
-import { resolvePersonnelId, resolveDirectusTenantId } from '../directus/sync';
+} from '../config.ts';
+import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
+import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
+import { resolvePersonnelId, resolveDirectusTenantId } from '../directus/sync.ts';
 import {
   cleanCustomerPayloadForDirectus,
   normalizeContactValue,
-} from '../services/phoneNormalizer';
-import { CustomerContact } from '../types';
+} from '../services/phoneNormalizer.ts';
+import { CustomerContact } from '../types.ts';
 
 const router = Router();
 

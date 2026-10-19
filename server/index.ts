@@ -7,21 +7,21 @@ import {
   directusUrl,
   directusAdminToken,
   updateProjectSettingsData,
-} from './config';
-import { directusFetch } from './directus/client';
-import { ensureDirectusTenants, ensureDirectusPersonnel } from './directus/sync';
-import { rateLimiter } from './middlewares/rateLimit.middleware';
+} from './config.ts';
+import { directusFetch } from './directus/client.ts';
+import { ensureDirectusTenants, ensureDirectusPersonnel } from './directus/sync.ts';
+import { rateLimiter } from './middlewares/rateLimit.middleware.ts';
 
-import authRoutes from './routes/auth.routes';
-import personnelRoutes from './routes/personnel.routes';
-import customerRoutes from './routes/customers.routes';
-import reportRoutes from './routes/reports.routes';
-import coldLeadRoutes from './routes/coldLeads.routes';
-import leaveRequestRoutes from './routes/leaveRequests.routes';
-import advanceRequestRoutes from './routes/advanceRequests.routes';
-import tenantRoutes from './routes/tenants.routes';
-import adminReportRoutes from './routes/adminReports.routes';
-import systemRoutes from './routes/system.routes';
+import authRoutes from './routes/auth.routes.ts';
+import personnelRoutes from './routes/personnel.routes.ts';
+import customerRoutes from './routes/customers.routes.ts';
+import reportRoutes from './routes/reports.routes.ts';
+import coldLeadRoutes from './routes/coldLeads.routes.ts';
+import leaveRequestRoutes from './routes/leaveRequests.routes.ts';
+import advanceRequestRoutes from './routes/advanceRequests.routes.ts';
+import tenantRoutes from './routes/tenants.routes.ts';
+import adminReportRoutes from './routes/adminReports.routes.ts';
+import systemRoutes from './routes/system.routes.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

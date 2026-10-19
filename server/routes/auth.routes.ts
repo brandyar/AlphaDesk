@@ -9,14 +9,14 @@ import {
   DIRECTUS_STAFF_ROLE_ID,
   projectSettingsData,
   setGlobalSessionRevocationTimestamp,
-} from '../config';
-import { directusFetch } from '../directus/client';
+} from '../config.ts';
+import { directusFetch } from '../directus/client.ts';
 import {
   formatAvatarUrl,
   getRequestUser,
-} from '../middlewares/auth.middleware';
-import { sendIppanelSmsPattern, sendTenantAdminsSmsPattern } from '../services/sms.service';
-import { enrichPersonnel } from '../routes/personnel.routes';
+} from '../middlewares/auth.middleware.ts';
+import { sendIppanelSmsPattern, sendTenantAdminsSmsPattern } from '../services/sms.service.ts';
+import { enrichPersonnel } from './personnel.routes.ts';
 
 const router = Router();
 

@@ -16,13 +16,13 @@ import {
   contactsData,
   setContactsData,
   initialPersonnel,
-} from '../config';
-import { directusFetch, directusSafeBatchInsert, directusSafeBatchPatch } from '../directus/client';
-import { getRequestUser, getRequestTenantId } from '../middlewares/auth.middleware';
-import { invalidateCustomersCache, invalidateReportsCache } from '../directus/cache';
-import { resolveDirectusTenantId } from '../directus/sync';
-import { normalizeContactValue } from '../services/phoneNormalizer';
-import { Personnel } from '../types';
+} from '../config.ts';
+import { directusFetch, directusSafeBatchInsert, directusSafeBatchPatch } from '../directus/client.ts';
+import { getRequestUser, getRequestTenantId } from '../middlewares/auth.middleware.ts';
+import { invalidateCustomersCache, invalidateReportsCache } from '../directus/cache.ts';
+import { resolveDirectusTenantId } from '../directus/sync.ts';
+import { normalizeContactValue } from '../services/phoneNormalizer.ts';
+import { Personnel } from '../types.ts';
 
 const router = Router();
 

@@ -5,8 +5,8 @@ import {
   personnelData,
   globalSessionRevocationTimestamp,
   DIRECTUS_ADMIN_ROLE_IDS,
-} from '../config';
-import { RequestUserContext } from '../types';
+} from '../config.ts';
+import { RequestUserContext } from '../types.ts';
 
 export function matchesTenant(itemTenantId: any, activeTenantId: string): boolean {
   if (!activeTenantId || activeTenantId === 'all') return true;

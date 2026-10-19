@@ -3,11 +3,11 @@ import crypto from 'crypto';
 import {
   directusUrl,
   directusAdminToken,
-} from '../config';
-import { directusFetch, directusFetchAllPages } from '../directus/client';
-import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware';
-import { resolvePersonnelId, resolveDirectusTenantId } from '../directus/sync';
-import { AdministrativeReport } from '../types';
+} from '../config.ts';
+import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
+import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
+import { resolvePersonnelId, resolveDirectusTenantId } from '../directus/sync.ts';
+import { AdministrativeReport } from '../types.ts';
 
 const router = Router();
 

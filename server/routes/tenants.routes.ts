@@ -4,11 +4,11 @@ import {
   directusAdminToken,
   tenantsData,
   setTenantsData,
-} from '../config';
-import { directusFetch } from '../directus/client';
-import { ensureDirectusTenants } from '../directus/sync';
-import { getRequestUser } from '../middlewares/auth.middleware';
-import { Tenant } from '../types';
+} from '../config.ts';
+import { directusFetch } from '../directus/client.ts';
+import { ensureDirectusTenants } from '../directus/sync.ts';
+import { getRequestUser } from '../middlewares/auth.middleware.ts';
+import { Tenant } from '../types.ts';
 
 const router = Router();
 

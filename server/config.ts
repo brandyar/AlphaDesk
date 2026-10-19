@@ -11,7 +11,7 @@ import {
   ProjectSettingsState,
   Tenant,
   TenantSettingsState,
-} from './types';
+} from './types.ts';
 
 dotenv.config();
 

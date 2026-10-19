@@ -5,18 +5,18 @@ import {
   directusAdminToken,
   reportsData,
   customersData,
-} from '../config';
-import { directusFetch, directusFetchAllPages } from '../directus/client';
+} from '../config.ts';
+import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
 import {
   ensureCustomersCache,
   ensureReportsCache,
   invalidateCustomersCache,
   invalidateReportsCache,
-} from '../directus/cache';
-import { getSafeDirectusPersonnelForeignKey } from '../directus/sync';
-import { cleanCustomerPayloadForDirectus } from '../services/phoneNormalizer';
-import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware';
-import { CustomerReport } from '../types';
+} from '../directus/cache.ts';
+import { getSafeDirectusPersonnelForeignKey } from '../directus/sync.ts';
+import { cleanCustomerPayloadForDirectus } from '../services/phoneNormalizer.ts';
+import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
+import { CustomerReport } from '../types.ts';
 
 const router = Router();
 

@@ -6,12 +6,12 @@ import {
   advanceRequestsData,
   personnelData,
   projectSettingsData,
-} from '../config';
-import { directusFetch, directusFetchAllPages } from '../directus/client';
-import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware';
-import { sendIppanelSmsPattern, sendTenantAdminsSmsPattern } from '../services/sms.service';
-import { resolvePersonnelId, getSafeDirectusPersonnelForeignKey, resolveDirectusTenantId } from '../directus/sync';
-import { SalaryAdvanceRequest } from '../types';
+} from '../config.ts';
+import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
+import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
+import { sendIppanelSmsPattern, sendTenantAdminsSmsPattern } from '../services/sms.service.ts';
+import { resolvePersonnelId, getSafeDirectusPersonnelForeignKey, resolveDirectusTenantId } from '../directus/sync.ts';
+import { SalaryAdvanceRequest } from '../types.ts';
 
 const router = Router();
 

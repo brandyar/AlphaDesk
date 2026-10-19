@@ -9,8 +9,8 @@ import {
   reportsData,
   personnelData,
   addDays,
-} from '../config';
-import { directusFetch, directusFetchAllPages } from '../directus/client';
+} from '../config.ts';
+import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
 import {
   ensureCustomersCache,
   invalidateCustomersCache,
@@ -19,24 +19,24 @@ import {
   updateExpirationFlags,
   activeCustomerCreationLocks,
   recentCustomerCreations,
-} from '../directus/cache';
+} from '../directus/cache.ts';
 import {
   resolvePersonnelId,
   getSafeDirectusPersonnelForeignKey,
-} from '../directus/sync';
+} from '../directus/sync.ts';
 import {
   cleanCustomerPayloadForDirectus,
   extractCustomerContacts,
   asyncCheckContactDuplicate,
   normalizeContactValue,
   normalizePersianString,
-} from '../services/phoneNormalizer';
+} from '../services/phoneNormalizer.ts';
 import {
   getRequestTenantId,
   getRequestUser,
   matchesTenant,
-} from '../middlewares/auth.middleware';
-import { CustomerContact, Customer } from '../types';
+} from '../middlewares/auth.middleware.ts';
+import { CustomerContact, Customer } from '../types.ts';
 
 const router = Router();
 
