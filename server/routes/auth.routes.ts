@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import {
   directusUrl,
@@ -21,8 +21,14 @@ import { enrichPersonnel } from './personnel.routes.ts';
 const router = Router();
 
 // Proxy for directus assets/avatars
-router.get('/assets/:id', async (req: Request, res: Response) => {
+const handleAssetProxy = async (req: Request, res: Response, next: NextFunction) => {
   const assetId = req.params.id;
+
+  // Pass through static frontend build files (.js, .css, .map, etc.) to express.static / Vite
+  if (assetId && /\.(js|css|map|woff2?|ttf|eot|ico|svg)$/i.test(assetId)) {
+    return next();
+  }
+
   if (directusUrl) {
     try {
       const assetUrl = `${directusUrl.replace(/\/$/, '')}/assets/${assetId}`;
@@ -43,7 +49,10 @@ router.get('/assets/:id', async (req: Request, res: Response) => {
     }
   }
   return res.status(404).send('Asset not found');
-});
+};
+
+router.get('/assets/:id', handleAssetProxy);
+router.get('/api/assets/:id', handleAssetProxy);
 
 router.post('/register', async (req: Request, res: Response) => {
   const { email, password, name, phone, first_name, last_name } = req.body;
