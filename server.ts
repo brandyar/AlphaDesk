@@ -650,16 +650,17 @@ let tenantsData: Tenant[] = [
 ];
 
 function resolveDirectusTenantId(rawTenant: any): number | null {
-  if (rawTenant === null || rawTenant === undefined || rawTenant === '' || rawTenant === 'all') {
-    if (tenantsData.length > 0) {
-      const num = Number(tenantsData[0].id);
-      if (!isNaN(num) && isFinite(num) && num > 0) return num;
-    }
-    return null;
+  const validIds = tenantsData
+    .map(t => Number(t.id))
+    .filter(n => !isNaN(n) && isFinite(n) && n > 0);
+
+  if (rawTenant === null || rawTenant === undefined || rawTenant === '' || rawTenant === 'all' || rawTenant === 'default') {
+    if (validIds.length > 0) return validIds[0];
+    return 1;
   }
   const directNum = Number(rawTenant);
   if (!isNaN(directNum) && isFinite(directNum) && directNum > 0) {
-    return directNum;
+    if (validIds.length === 0 || validIds.includes(directNum)) return directNum;
   }
   const str = String(rawTenant).trim().toLowerCase();
   const match = tenantsData.find(
@@ -670,13 +671,11 @@ function resolveDirectusTenantId(rawTenant: any): number | null {
   );
   if (match) {
     const matchNum = Number(match.id);
-    if (!isNaN(matchNum) && isFinite(matchNum) && matchNum > 0) return matchNum;
+    if (!isNaN(matchNum) && isFinite(matchNum)) {
+      if (validIds.length === 0 || validIds.includes(matchNum)) return matchNum;
+    }
   }
-  if (tenantsData.length > 0) {
-    const fallbackNum = Number(tenantsData[0].id);
-    if (!isNaN(fallbackNum) && isFinite(fallbackNum) && fallbackNum > 0) return fallbackNum;
-  }
-  return null;
+  return validIds[0] || 1;
 }
 
 function normalizePersianString(str?: string | null): string {
@@ -1562,37 +1561,134 @@ async function ensureDirectusTenants() {
   }
 }
 
-// Auto-seed personnel into Directus so foreign key assigned_marketer_id is always satisfied
+// Auto-seed and synchronize personnel with Directus
 async function ensureDirectusPersonnel() {
   if (!directusUrl || !directusAdminToken) return;
   try {
-    const res = await directusFetch('/items/personnel?limit=100');
-    if (res && Array.isArray(res.data) && res.data.length === 0) {
-      console.log('Seeding initial personnel into Directus...');
-      const defaultTenantId = resolveDirectusTenantId('default');
-      await directusFetch('/items/personnel', {
-        method: 'POST',
-        body: JSON.stringify(initialPersonnel.map(p => ({
-          id: p.id,
-          name: p.name,
-          role: p.role,
-          phone: p.phone,
-          email: p.email,
-          status: 'active',
-          ...(defaultTenantId ? { tenant_id: defaultTenantId } : {})
-        })))
-      });
-      console.log('Directus personnel auto-seeded successfully.');
+    const res = await directusFetch('/items/personnel?limit=500&sort=id');
+    if (res && Array.isArray(res.data)) {
+      if (res.data.length > 0) {
+        personnelData = res.data;
+        console.log(`Directus personnel synchronized (${personnelData.length} records).`);
+      }
+      const existingIds = new Set(res.data.map((p: any) => String(p.id)));
+      const missingPersonnel = initialPersonnel.filter(p => !existingIds.has(String(p.id)));
+      if (missingPersonnel.length > 0) {
+        console.log(`Seeding ${missingPersonnel.length} missing initial personnel into Directus...`);
+        const defaultTenantId = resolveDirectusTenantId('default') || 1;
+        for (const p of missingPersonnel) {
+          await directusFetch('/items/personnel', {
+            method: 'POST',
+            body: JSON.stringify({
+              id: p.id,
+              name: p.name,
+              role: p.role,
+              phone: p.phone,
+              email: p.email,
+              status: 'active',
+              username: p.username,
+              tenant_id: defaultTenantId
+            })
+          }).catch((e: any) => console.warn(`Could not seed personnel ${p.id}:`, e.message));
+        }
+        const refreshed = await directusFetch('/items/personnel?limit=500&sort=id').catch(() => null);
+        if (refreshed?.data && Array.isArray(refreshed.data)) {
+          personnelData = refreshed.data;
+        }
+      }
     }
   } catch (err: any) {
-    console.warn('Could not auto-seed personnel into Directus:', err.message);
+    console.warn('Could not sync personnel with Directus:', err.message);
   }
+}
+
+// Safely resolve any identifier to a valid personnel ID in Directus
+async function getSafeDirectusPersonnelForeignKey(rawIdentifier: string | null | undefined, fallbackName?: string): Promise<string | null> {
+  if (!directusUrl || !directusAdminToken) return rawIdentifier || null;
+  if (!rawIdentifier && !fallbackName) return null;
+
+  const clean = rawIdentifier ? String(rawIdentifier).trim() : '';
+
+  try {
+    // 1. If clean ID provided and not generic placeholder, check in Directus directly
+    if (clean && clean !== 'none' && clean !== 'همه') {
+      const byId = await directusFetch(`/items/personnel/${encodeURIComponent(clean)}`).catch(() => null);
+      if (byId?.data?.id) {
+        return String(byId.data.id);
+      }
+    }
+
+    // 2. Check if clean matches user_id or email or username in Directus
+    if (clean) {
+      const byMatch = await directusFetch(`/items/personnel?filter[_or][0][user_id][_eq]=${encodeURIComponent(clean)}&filter[_or][1][email][_eq]=${encodeURIComponent(clean)}&filter[_or][2][username][_eq]=${encodeURIComponent(clean)}&limit=1`).catch(() => null);
+      if (byMatch?.data && Array.isArray(byMatch.data) && byMatch.data.length > 0) {
+        return String(byMatch.data[0].id);
+      }
+    }
+
+    // 3. Match by name in Directus
+    const searchName = fallbackName || clean;
+    if (searchName && searchName.length > 2) {
+      const byName = await directusFetch(`/items/personnel?filter[name][_eq]=${encodeURIComponent(searchName)}&limit=1`).catch(() => null);
+      if (byName?.data && Array.isArray(byName.data) && byName.data.length > 0) {
+        return String(byName.data[0].id);
+      }
+    }
+
+    // 4. Check in synchronized local personnelData
+    const local = personnelData.find(p => p.id === clean || (p as any).user_id === clean || p.email === clean || p.name === searchName);
+    if (local?.id) {
+      const checkLocal = await directusFetch(`/items/personnel/${encodeURIComponent(local.id)}`).catch(() => null);
+      if (checkLocal?.data?.id) {
+        return String(checkLocal.data.id);
+      }
+    }
+
+    // 5. Check if it's a UUID of directus user
+    if (clean && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) {
+      const userRes = await directusFetch(`/users/${clean}`).catch(() => null);
+      if (userRes?.data?.id) {
+        const u = userRes.data;
+        const uName = (`${u.first_name || ''} ${u.last_name || ''}`).trim() || u.email;
+        const newPId = crypto.randomUUID();
+        const createdP = await directusFetch('/items/personnel', {
+          method: 'POST',
+          body: JSON.stringify({
+            id: newPId,
+            name: uName,
+            email: u.email,
+            phone: '',
+            role: 'marketer',
+            status: 'active',
+            user_id: u.id,
+            tenant_id: resolveDirectusTenantId('default') || 1
+          })
+        }).catch(() => null);
+        if (createdP?.data?.id) {
+          return String(createdP.data.id);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn('Error resolving safe Directus personnel foreign key:', err.message);
+  }
+
+  // Return null so foreign key is set to NULL in Directus instead of throwing INVALID_FOREIGN_KEY
+  return null;
 }
 
 // Resolve any raw ID / user_id / email / name to a valid personnel.id in Directus
 async function resolvePersonnelId(rawIdentifier: string | null | undefined, fallbackName?: string): Promise<{ personnelId: string | null; personnelName?: string }> {
   if (!rawIdentifier || rawIdentifier === 'none' || rawIdentifier === 'همه' || String(rawIdentifier).trim() === '') {
-    return { personnelId: null };
+    if (fallbackName && directusUrl && directusAdminToken) {
+      try {
+        const byName = await directusFetch(`/items/personnel?filter[name][_eq]=${encodeURIComponent(fallbackName)}&limit=1`).catch(() => null);
+        if (byName?.data && Array.isArray(byName.data) && byName.data.length > 0) {
+          return { personnelId: byName.data[0].id, personnelName: byName.data[0].name };
+        }
+      } catch {}
+    }
+    return { personnelId: null, personnelName: fallbackName };
   }
   const clean = String(rawIdentifier).trim();
 
@@ -1614,6 +1710,12 @@ async function resolvePersonnelId(rawIdentifier: string | null | undefined, fall
       const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(clean)}`).catch(() => null);
       if (byEmail?.data && Array.isArray(byEmail.data) && byEmail.data.length > 0) {
         return { personnelId: byEmail.data[0].id, personnelName: byEmail.data[0].name };
+      }
+
+      // 3b. Check if clean matches username
+      const byUsername = await directusFetch(`/items/personnel?filter[username][_eq]=${encodeURIComponent(clean)}`).catch(() => null);
+      if (byUsername?.data && Array.isArray(byUsername.data) && byUsername.data.length > 0) {
+        return { personnelId: byUsername.data[0].id, personnelName: byUsername.data[0].name };
       }
 
       // 4. Check if clean matches name
@@ -1641,7 +1743,8 @@ async function resolvePersonnelId(rawIdentifier: string | null | undefined, fall
               phone: '',
               role: 'marketer',
               status: 'active',
-              user_id: u.id
+              user_id: u.id,
+              tenant_id: resolveDirectusTenantId('default') || 1
             })
           }).catch(() => {});
           return { personnelId: newPId, personnelName: uName };
@@ -1658,7 +1761,7 @@ async function resolvePersonnelId(rawIdentifier: string | null | undefined, fall
     return { personnelId: local.id, personnelName: local.name };
   }
 
-  return { personnelId: null };
+  return { personnelId: null, personnelName: fallbackName };
 }
 
 function enrichPersonnel(p: any): any {
@@ -6060,21 +6163,55 @@ app.post('/api/leave-requests', async (req: Request, res: Response) => {
 
   const rawPId = payload.personnel_id || personnelId || userId;
   const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
+  let targetPersonnelId = resolved.personnelId;
+  let targetPersonnelName = resolved.personnelName || payload.personnel_name || userName || 'کارشناس شرکت';
+
+  if (!targetPersonnelId) {
+    const pMatch = personnelData.find(p => p.name === targetPersonnelName || p.id === rawPId) || personnelData[0];
+    if (pMatch?.id) targetPersonnelId = pMatch.id;
+  }
 
   const targetTenantId = payload.tenant_id || tenantId || 'default';
+  const resolvedTenantNum = resolveDirectusTenantId(targetTenantId);
+
+  let isoStartDate = nowIso;
+  if (payload.start_date) {
+    isoStartDate = payload.start_date.includes('T') ? payload.start_date : `${payload.start_date}T00:00:00.000Z`;
+  }
+  let isoEndDate: string | null = null;
+  if (payload.leave_type === 'daily' && payload.end_date) {
+    isoEndDate = payload.end_date.includes('T') ? payload.end_date : `${payload.end_date}T00:00:00.000Z`;
+  }
+
+  // Calculate days_count accurately
+  let calculatedDays = payload.leave_type === 'daily' ? Number(payload.days_count) : null;
+  if (payload.leave_type === 'daily' && (!calculatedDays || calculatedDays <= 0)) {
+    if (payload.start_date && payload.end_date) {
+      try {
+        const s = new Date(payload.start_date.split('T')[0]).getTime();
+        const e = new Date(payload.end_date.split('T')[0]).getTime();
+        const diffDays = Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
+        calculatedDays = Math.max(1, diffDays);
+      } catch {
+        calculatedDays = 1;
+      }
+    } else {
+      calculatedDays = 1;
+    }
+  }
 
   const newRequest: LeaveRequest = {
     id: newId,
     tenant_id: targetTenantId,
-    personnel_id: resolved.personnelId || personnelId || userId || 'p-1',
-    personnel_name: resolved.personnelName || payload.personnel_name || userName || 'کارشناس شرکت',
+    personnel_id: targetPersonnelId || 'p-1',
+    personnel_name: targetPersonnelName,
     leave_type: payload.leave_type === 'hourly' ? 'hourly' : 'daily',
-    start_date: payload.start_date || nowIso.split('T')[0],
-    end_date: payload.leave_type === 'daily' ? payload.end_date || null : null,
+    start_date: isoStartDate,
+    end_date: isoEndDate,
     start_time: payload.leave_type === 'hourly' ? payload.start_time || null : null,
     end_time: payload.leave_type === 'hourly' ? payload.end_time || null : null,
     hours_count: payload.leave_type === 'hourly' ? Number(payload.hours_count) || null : null,
-    days_count: payload.leave_type === 'daily' ? Number(payload.days_count) || 1 : null,
+    days_count: calculatedDays,
     reason: payload.reason || '',
     status: 'pending',
     manager_note: null,
@@ -6083,10 +6220,15 @@ app.post('/api/leave-requests', async (req: Request, res: Response) => {
     date_created: nowIso
   };
 
+  // Find applicant phone for SMS
+  let applicantPhone = '';
+  const applicantP = personnelData.find(p => p.id === targetPersonnelId || p.user_id === targetPersonnelId || p.name === targetPersonnelName);
+  if (applicantP?.phone) {
+    applicantPhone = applicantP.phone;
+  }
+
   // Trigger SMS Pattern Notification for Leave Request Creation
-  const applicantP = personnelData.find(p => p.id === newRequest.personnel_id || p.user_id === newRequest.personnel_id);
-  const applicantPhone = applicantP?.phone;
-  const nameParts = (newRequest.personnel_name || '').trim().split(' ');
+  const nameParts = (targetPersonnelName || '').trim().split(' ');
   const fName = nameParts[0] || 'همکار';
   const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'گرامی';
   const now = new Date();
@@ -6095,16 +6237,16 @@ app.post('/api/leave-requests', async (req: Request, res: Response) => {
   const leaveVars: Record<string, string> = {
     name: fName,
     family: lName,
-    fullName: newRequest.personnel_name,
+    fullName: targetPersonnelName,
     mobile: applicantPhone || 'نامشخص',
     phone: applicantPhone || 'نامشخص',
     request_date: jalaliDate,
     leave_type: newRequest.leave_type === 'daily' ? 'مرخصی روزانه' : 'مرخصی ساعتی',
     days: String(newRequest.days_count || 1),
     hours: String(newRequest.hours_count || 1),
-    start_date: newRequest.start_date || jalaliDate,
-    end_date: newRequest.end_date || newRequest.start_date || jalaliDate,
-    leave_date: newRequest.start_date || jalaliDate,
+    start_date: payload.start_date || jalaliDate,
+    end_date: payload.end_date || payload.start_date || jalaliDate,
+    leave_date: payload.start_date || jalaliDate,
     start_time: newRequest.start_time || '',
     end_time: newRequest.end_time || '',
     from_time: newRequest.start_time || '',
@@ -6127,20 +6269,69 @@ app.post('/api/leave-requests', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      const directusLeavePayload = {
-        ...newRequest,
-        tenant_id: resolveDirectusTenantId(targetTenantId)
+      // Resolve safe personnel foreign key for Directus
+      const safeDirectusPersonnelId = await getSafeDirectusPersonnelForeignKey(targetPersonnelId, targetPersonnelName);
+
+      const directusLeavePayload: any = {
+        personnel_id: safeDirectusPersonnelId,
+        personnel_name: targetPersonnelName,
+        leave_type: payload.leave_type === 'hourly' ? 'hourly' : 'daily',
+        start_date: isoStartDate,
+        end_date: isoEndDate,
+        start_time: payload.leave_type === 'hourly' ? payload.start_time || null : null,
+        end_time: payload.leave_type === 'hourly' ? payload.end_time || null : null,
+        hours_count: payload.leave_type === 'hourly' ? Number(payload.hours_count) || null : null,
+        days_count: calculatedDays,
+        reason: payload.reason || '',
+        status: 'pending',
+        manager_note: null,
+        reviewed_by: null,
+        reviewed_at: null,
+        date_created: nowIso,
+        tenant_id: resolvedTenantNum
       };
-      const created = await directusFetch('/items/leave_requests', {
+
+      console.log('[Directus leave_requests POST] Submitting to Directus:', directusLeavePayload);
+      let created = await directusFetch('/items/leave_requests', {
         method: 'POST',
         body: JSON.stringify(directusLeavePayload)
+      }).catch(async (primaryErr: any) => {
+        console.warn('[Directus leave_requests POST] Primary attempt error:', primaryErr.message);
+        // Resilient fallback: If foreign key validation failed, retry with sanitized NULL foreign keys
+        if (primaryErr.message && (primaryErr.message.includes('foreign key') || primaryErr.message.includes('FOREIGN_KEY') || primaryErr.message.includes('personnel_id') || primaryErr.message.includes('tenant_id'))) {
+          console.log('[Directus leave_requests POST RETRY] Retrying with sanitized foreign keys...');
+          return await directusFetch('/items/leave_requests', {
+            method: 'POST',
+            body: JSON.stringify({
+              ...directusLeavePayload,
+              personnel_id: null,
+              tenant_id: 1
+            })
+          });
+        }
+        throw primaryErr;
       });
+
       if (created?.data) {
-        leaveRequestsData.unshift(created.data);
-        return res.status(201).json(created.data);
+        console.log('[Directus leave_requests POST] Successfully created in Directus with ID:', created.data.id);
+        const savedItem: LeaveRequest = {
+          ...created.data,
+          id: String(created.data.id),
+          personnel_id: targetPersonnelId || (created.data.personnel_id ? String(created.data.personnel_id) : 'p-1'),
+          personnel_name: created.data.personnel_name || targetPersonnelName,
+          tenant_id: targetTenantId
+        };
+        leaveRequestsData.unshift(savedItem);
+        return res.status(201).json(savedItem);
+      } else {
+        console.warn('[Directus leave_requests POST] Directus returned no data:', created);
       }
     } catch (err: any) {
-      // Fallback
+      console.error('[Directus leave_requests POST ERROR]:', err.message);
+      return res.status(500).json({
+        error: 'LEAVE_REQUEST_SAVE_FAILED',
+        message: `خطا در ذخیره درخواست مرخصی در پایگاه داده: ${err.message}`
+      });
     }
   }
 
@@ -6151,10 +6342,13 @@ app.post('/api/leave-requests', async (req: Request, res: Response) => {
 app.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { status, manager_note } = req.body;
-  const { userName, isAdmin } = getRequestUser(req);
+  const { userName, isAdmin, userRole, personnelId } = getRequestUser(req);
 
-  if (!isAdmin) {
-    return res.status(403).json({ error: 'فقط مدیر سیستم اجازه تغییر وضعیت درخواست را دارد.' });
+  // Check permission: Admin, sales_manager, or personnel with can_approve_leaves
+  const currentP = personnelData.find(p => p.id === personnelId);
+  const canApprove = isAdmin || userRole === 'admin' || userRole === 'sales_manager' || currentP?.permissions?.can_approve_leaves;
+  if (!canApprove) {
+    return res.status(403).json({ error: 'شما دسترسی لازم برای تایید یا رد درخواست‌های مرخصی را ندارید.' });
   }
 
   const nowIso = new Date().toISOString();
@@ -6165,9 +6359,24 @@ app.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
     reviewed_at: nowIso
   };
 
-  const targetReq = leaveRequestsData.find(r => r.id === id);
+  // Find target request from in-memory or fetch from Directus if missing
+  let targetReq = leaveRequestsData.find(r => String(r.id) === String(id));
+  if (!targetReq && directusUrl && directusAdminToken) {
+    try {
+      const dReq = await directusFetch(`/items/leave_requests/${id}`).catch(() => null);
+      if (dReq?.data) {
+        targetReq = {
+          ...dReq.data,
+          id: String(dReq.data.id),
+          personnel_id: typeof dReq.data.personnel_id === 'object' && dReq.data.personnel_id !== null ? dReq.data.personnel_id.id : String(dReq.data.personnel_id || ''),
+          personnel_name: dReq.data.personnel_name || 'کارشناس شرکت'
+        };
+      }
+    } catch {}
+  }
+
   if (targetReq) {
-    const applicantP = personnelData.find(p => p.id === targetReq.personnel_id || p.user_id === targetReq.personnel_id);
+    const applicantP = personnelData.find(p => p.id === targetReq!.personnel_id || p.user_id === targetReq!.personnel_id || p.name === targetReq!.personnel_name);
     const applicantPhone = applicantP?.phone;
 
     let patternToUse = '';
@@ -6205,7 +6414,7 @@ app.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
         to_time: targetReq.end_time || '',
         days: String(targetReq.days_count || 1),
         hours: String(targetReq.hours_count || 1),
-        manager_note: manager_note || 'بررسی شد',
+        manager_note: manager_note || (status === 'approved' ? 'تایید شد' : 'رد شد'),
         reviewed_by: userName || 'مدیریت'
       };
 
@@ -6225,14 +6434,24 @@ app.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
         body: JSON.stringify(updatePayload)
       });
       if (updated?.data) {
-        const idx = leaveRequestsData.findIndex(r => r.id === id);
-        if (idx >= 0) leaveRequestsData[idx] = { ...leaveRequestsData[idx], ...updated.data };
-        return res.json(updated.data);
+        const itemWithStrId = {
+          ...updated.data,
+          id: String(updated.data.id),
+          personnel_name: updated.data.personnel_name || targetReq?.personnel_name,
+          personnel_id: targetReq?.personnel_id || (updated.data.personnel_id ? String(updated.data.personnel_id) : 'p-1'),
+          tenant_id: targetReq?.tenant_id || 'default'
+        };
+        const idx = leaveRequestsData.findIndex(r => String(r.id) === String(id));
+        if (idx >= 0) leaveRequestsData[idx] = { ...leaveRequestsData[idx], ...itemWithStrId };
+        else leaveRequestsData.unshift(itemWithStrId);
+        return res.json(itemWithStrId);
       }
-    } catch (err: any) {}
+    } catch (err: any) {
+      console.warn('Directus leave_requests PATCH error:', err.message);
+    }
   }
 
-  const idx = leaveRequestsData.findIndex(r => r.id === id);
+  const idx = leaveRequestsData.findIndex(r => String(r.id) === String(id));
   if (idx >= 0) {
     leaveRequestsData[idx] = { ...leaveRequestsData[idx], ...updatePayload };
     return res.json(leaveRequestsData[idx]);
@@ -6320,17 +6539,30 @@ app.post('/api/advance-requests', async (req: Request, res: Response) => {
 
   const rawPId = payload.personnel_id || personnelId || userId;
   const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
+  let targetPersonnelId = resolved.personnelId;
+  let targetPersonnelName = resolved.personnelName || payload.personnel_name || userName || 'کارشناس شرکت';
+
+  if (!targetPersonnelId) {
+    const pMatch = personnelData.find(p => p.name === targetPersonnelName || p.id === rawPId) || personnelData[0];
+    if (pMatch?.id) targetPersonnelId = pMatch.id;
+  }
 
   const targetTenantId = payload.tenant_id || tenantId || 'default';
+  const resolvedTenantNum = resolveDirectusTenantId(targetTenantId);
+
+  let isoNeededDate: string | null = null;
+  if (payload.needed_date) {
+    isoNeededDate = payload.needed_date.includes('T') ? payload.needed_date : `${payload.needed_date}T00:00:00.000Z`;
+  }
 
   const newRequest: SalaryAdvanceRequest = {
     id: newId,
     tenant_id: targetTenantId,
-    personnel_id: resolved.personnelId || personnelId || userId || 'p-1',
-    personnel_name: resolved.personnelName || payload.personnel_name || userName || 'کارشناس شرکت',
+    personnel_id: targetPersonnelId || 'p-1',
+    personnel_name: targetPersonnelName,
     amount: Number(payload.amount) || 0,
     target_month: payload.target_month || '',
-    needed_date: payload.needed_date || null,
+    needed_date: isoNeededDate,
     reason: payload.reason || '',
     bank_card_number: payload.bank_card_number || null,
     iban: payload.iban || null,
@@ -6342,11 +6574,16 @@ app.post('/api/advance-requests', async (req: Request, res: Response) => {
     date_created: nowIso
   };
 
+  // Find applicant phone for SMS
+  let applicantPhone = '';
+  const applicantP = personnelData.find(p => p.id === targetPersonnelId || p.user_id === targetPersonnelId || p.name === targetPersonnelName);
+  if (applicantP?.phone) {
+    applicantPhone = applicantP.phone;
+  }
+
   // Trigger SMS Pattern for Advance Request Creation
   if (projectSettingsData.addvance_request_pattern) {
-    const applicantP = personnelData.find(p => p.id === newRequest.personnel_id || p.user_id === newRequest.personnel_id);
-    const applicantPhone = applicantP?.phone;
-    const nameParts = (newRequest.personnel_name || '').trim().split(' ');
+    const nameParts = (targetPersonnelName || '').trim().split(' ');
     const fName = nameParts[0] || 'همکار';
     const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'گرامی';
     const now = new Date();
@@ -6356,7 +6593,7 @@ app.post('/api/advance-requests', async (req: Request, res: Response) => {
     const advVars = {
       name: fName,
       family: lName,
-      fullName: newRequest.personnel_name,
+      fullName: targetPersonnelName,
       mobile: applicantPhone || 'نامشخص',
       phone: applicantPhone || 'نامشخص',
       amount: amountStr,
@@ -6376,19 +6613,65 @@ app.post('/api/advance-requests', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      const directusAdvancePayload = {
-        ...newRequest,
-        tenant_id: resolveDirectusTenantId(targetTenantId)
+      const safeDirectusPersonnelId = await getSafeDirectusPersonnelForeignKey(targetPersonnelId, targetPersonnelName);
+
+      const directusAdvancePayload: any = {
+        personnel_id: safeDirectusPersonnelId,
+        personnel_name: targetPersonnelName,
+        amount: Number(payload.amount) || 0,
+        target_month: payload.target_month || '',
+        needed_date: isoNeededDate,
+        reason: payload.reason || '',
+        bank_card_number: payload.bank_card_number || null,
+        iban: payload.iban || null,
+        status: 'pending',
+        approved_amount: null,
+        manager_note: null,
+        reviewed_by: null,
+        reviewed_at: null,
+        date_created: nowIso,
+        tenant_id: resolvedTenantNum
       };
-      const created = await directusFetch('/items/advance_requests', {
+
+      console.log('[Directus advance_requests POST] Submitting to Directus:', directusAdvancePayload);
+      let created = await directusFetch('/items/advance_requests', {
         method: 'POST',
         body: JSON.stringify(directusAdvancePayload)
+      }).catch(async (primaryErr: any) => {
+        console.warn('[Directus advance_requests POST] Primary attempt error:', primaryErr.message);
+        if (primaryErr.message && (primaryErr.message.includes('foreign key') || primaryErr.message.includes('FOREIGN_KEY') || primaryErr.message.includes('personnel_id') || primaryErr.message.includes('tenant_id'))) {
+          console.log('[Directus advance_requests POST RETRY] Retrying with sanitized foreign keys...');
+          return await directusFetch('/items/advance_requests', {
+            method: 'POST',
+            body: JSON.stringify({
+              ...directusAdvancePayload,
+              personnel_id: null,
+              tenant_id: 1
+            })
+          });
+        }
+        throw primaryErr;
       });
+
       if (created?.data) {
-        advanceRequestsData.unshift(created.data);
-        return res.status(201).json(created.data);
+        console.log('[Directus advance_requests POST] Successfully created with ID:', created.data.id);
+        const savedItem: SalaryAdvanceRequest = {
+          ...created.data,
+          id: String(created.data.id),
+          personnel_id: targetPersonnelId || (created.data.personnel_id ? String(created.data.personnel_id) : 'p-1'),
+          personnel_name: created.data.personnel_name || targetPersonnelName,
+          tenant_id: targetTenantId
+        };
+        advanceRequestsData.unshift(savedItem);
+        return res.status(201).json(savedItem);
       }
-    } catch (err: any) {}
+    } catch (err: any) {
+      console.error('[Directus advance_requests POST ERROR]:', err.message);
+      return res.status(500).json({
+        error: 'ADVANCE_REQUEST_SAVE_FAILED',
+        message: `خطا در ثبت درخواست مساعده در پایگاه داده: ${err.message}`
+      });
+    }
   }
 
   advanceRequestsData.unshift(newRequest);
@@ -6413,7 +6696,7 @@ app.patch('/api/advance-requests/:id', async (req: Request, res: Response) => {
     reviewed_at: nowIso
   };
 
-  const targetAdv = advanceRequestsData.find(r => r.id === id);
+  const targetAdv = advanceRequestsData.find(r => String(r.id) === String(id));
   if (targetAdv) {
     const applicantP = personnelData.find(p => p.id === targetAdv.personnel_id || p.user_id === targetAdv.personnel_id);
     const applicantPhone = applicantP?.phone;
@@ -6471,14 +6754,17 @@ app.patch('/api/advance-requests/:id', async (req: Request, res: Response) => {
         body: JSON.stringify(updatePayload)
       });
       if (updated?.data) {
-        const idx = advanceRequestsData.findIndex(r => r.id === id);
-        if (idx >= 0) advanceRequestsData[idx] = { ...advanceRequestsData[idx], ...updated.data };
-        return res.json(updated.data);
+        const itemWithStrId = { ...updated.data, id: String(updated.data.id) };
+        const idx = advanceRequestsData.findIndex(r => String(r.id) === String(id));
+        if (idx >= 0) advanceRequestsData[idx] = { ...advanceRequestsData[idx], ...itemWithStrId };
+        return res.json(itemWithStrId);
       }
-    } catch (err: any) {}
+    } catch (err: any) {
+      console.warn('Directus advance_requests PATCH error:', err.message);
+    }
   }
 
-  const idx = advanceRequestsData.findIndex(r => r.id === id);
+  const idx = advanceRequestsData.findIndex(r => String(r.id) === String(id));
   if (idx >= 0) {
     advanceRequestsData[idx] = { ...advanceRequestsData[idx], ...updatePayload };
     return res.json(advanceRequestsData[idx]);
