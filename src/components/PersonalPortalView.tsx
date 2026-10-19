@@ -58,6 +58,10 @@ import {
 } from '../utils';
 import { PersianDatePicker } from './PersianDatePicker';
 import { uploadAvatar } from '../api';
+import { ProfileTab } from './personal-portal/ProfileTab';
+import { PasswordTab } from './personal-portal/PasswordTab';
+import { LeaveRequestsTab } from './personal-portal/LeaveRequestsTab';
+import { AdvanceRequestsTab } from './personal-portal/AdvanceRequestsTab';
 
 export type PortalTab = 'profile' | 'advance' | 'leave' | 'logout';
 
@@ -539,283 +543,45 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       {/* ------------------------------------------------------------- */}
       {activeTab === 'profile' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Profile Details Form */}
-          <div className="lg:col-span-2 bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-6 space-y-6">
-            <div className="flex items-center gap-2 border-b border-[#282828] pb-4">
-              <User className="w-5 h-5 text-[#1DB954]" />
-              <div>
-                <h3 className="text-base font-bold text-white">اطلاعات هویتی و پرسنلی</h3>
-                <p className="text-xs text-[#888]">
-                  مشخصات خود را تکمیل کنید تا در احکام و واریزی‌های مساعده استفاده شود.
-                </p>
-              </div>
-            </div>
-
-            {/* Avatar File Upload */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-[#B3B3B3] flex items-center justify-between">
-                <span>تصویر پروفایل (آواتار پرسنلی):</span>
-                {profileAvatar && (
-                  <button
-                    type="button"
-                    onClick={() => setProfileAvatar('')}
-                    className="text-[11px] text-rose-400 hover:underline"
-                  >
-                    حذف تصویر
-                  </button>
-                )}
-              </label>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png, image/jpeg, image/webp, image/gif"
-                onChange={handleAvatarFileChange}
-                className="hidden"
-              />
-
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className={`p-4 sm:p-5 rounded-2xl border-2 border-dashed transition-all flex flex-col sm:flex-row items-center gap-4 cursor-pointer group ${
-                  profileAvatar
-                    ? 'bg-[#121212] border-[#1DB954]/50 hover:border-[#1DB954]'
-                    : 'bg-[#121212] border-[#333] hover:border-[#1DB954] hover:bg-[#161616]'
-                }`}
-              >
-                {/* Avatar Preview */}
-                <div className="relative flex-shrink-0">
-                  <div className="w-16 h-16 rounded-2xl bg-[#222] border-2 border-[#1DB954] overflow-hidden flex items-center justify-center text-white font-black text-xl shadow-lg shadow-black/40">
-                    {profileAvatar ? (
-                      <img
-                        src={getAvatarUrl(profileAvatar)}
-                        alt="avatar preview"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-[#1DB954] text-lg font-bold">
-                        {profileName.charAt(0) || 'ک'}
-                      </span>
-                    )}
-                  </div>
-                  {isUploadingAvatar && (
-                    <div className="absolute inset-0 bg-black/70 rounded-2xl flex items-center justify-center">
-                      <div className="w-5 h-5 border-2 border-[#1DB954] border-t-transparent rounded-full animate-spin" />
-                    </div>
-                  )}
-                </div>
-
-                {/* Upload Action Description */}
-                <div className="flex-1 text-center sm:text-right space-y-1">
-                  <div className="flex items-center justify-center sm:justify-start gap-2">
-                    <Upload className="w-4 h-4 text-[#1DB954]" />
-                    <span className="text-xs font-bold text-white group-hover:text-[#1DB954] transition-colors">
-                      {profileAvatar ? 'کلیک کنید برای تغییر تصویر' : 'انتخاب یا بارگذاری تصویر جدید'}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-[#777]">
-                    فرمت‌های مجاز: JPG, PNG, WEBP (حداکثر ۵ مگابایت) • ذخیره مستقیم در پایگاه داده
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    fileInputRef.current?.click();
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-[#222] group-hover:bg-[#1DB954] text-white group-hover:text-black font-bold text-xs border border-[#333] transition-all flex items-center gap-1.5 flex-shrink-0"
-                >
-                  <Camera className="w-3.5 h-3.5" />
-                  <span>انتخاب فایل</span>
-                </button>
-              </div>
-            </div>
-
-            <form onSubmit={handleSaveProfile} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    نام و نام خانوادگی
-                  </label>
-                  <input
-                    type="text"
-                    value={profileName}
-                    onChange={(e) => setProfileName(e.target.value)}
-                    required
-                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    نام کاربری ورود (شناسه یکتا)
-                  </label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={profileUsername}
-                    onChange={(e) => setProfileUsername(e.target.value)}
-                    placeholder="مثال: sara_ahmadi"
-                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    شماره موبایل
-                  </label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={profilePhone}
-                    onChange={(e) => setProfilePhone(e.target.value)}
-                    placeholder="0912..."
-                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    کد ملی
-                  </label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={profileNationalId}
-                    onChange={(e) => setProfileNationalId(e.target.value)}
-                    placeholder="۰۰۱۲۳۴۵۶۷۸"
-                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    ایمیل کاربری (غیرقابل ویرایش)
-                  </label>
-                  <input
-                    type="email"
-                    dir="ltr"
-                    disabled
-                    value={currentPersonnel?.email || currentUser?.email || ''}
-                    className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-[#777] border border-[#2c2c2c] cursor-not-allowed font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    شماره کارت بانکی (جهت واریز مساعده و حقوق)
-                  </label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={profileBankCard}
-                    onChange={(e) => setProfileBankCard(e.target.value)}
-                    placeholder="6037-9975-..."
-                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono tracking-wider"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    شماره شبا (IBAN)
-                  </label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={profileIban}
-                    onChange={(e) => setProfileIban(e.target.value)}
-                    placeholder="IR12017..."
-                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="submit"
-                  disabled={isSavingProfile}
-                  className="px-6 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-xs shadow-lg shadow-[#1DB954]/25 transition-all disabled:opacity-50"
-                >
-                  {isSavingProfile ? 'در حال ذخیره...' : 'ذخیره مشخصات پروفایل'}
-                </button>
-              </div>
-            </form>
+          <div className="lg:col-span-2">
+            <ProfileTab
+              profileName={profileName}
+              setProfileName={setProfileName}
+              profileUsername={profileUsername}
+              setProfileUsername={setProfileUsername}
+              profilePhone={profilePhone}
+              setProfilePhone={setProfilePhone}
+              profileNationalId={profileNationalId}
+              setProfileNationalId={setProfileNationalId}
+              currentPersonnel={currentPersonnel}
+              currentUser={currentUser}
+              profileBankCard={profileBankCard}
+              setProfileBankCard={setProfileBankCard}
+              profileIban={profileIban}
+              setProfileIban={setProfileIban}
+              profileAvatar={profileAvatar}
+              setProfileAvatar={setProfileAvatar}
+              isSavingProfile={isSavingProfile}
+              isUploadingAvatar={isUploadingAvatar}
+              fileInputRef={fileInputRef}
+              handleAvatarFileChange={handleAvatarFileChange}
+              handleSaveProfile={handleSaveProfile}
+            />
           </div>
 
-          {/* Change Password Card */}
-          <div className="bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-6 space-y-6">
-            <div className="flex items-center gap-2 border-b border-[#282828] pb-4">
-              <KeyRound className="w-5 h-5 text-[#1DB954]" />
-              <div>
-                <h3 className="text-base font-bold text-white">تغییر رمز عبور</h3>
-                <p className="text-xs text-[#888]">رمز عبور ورود به سامانه را تغییر دهید.</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleChangePassword} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                  رمز عبور فعلی (اختیاری)
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    dir="ltr"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#777] hover:text-white"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                  رمز عبور جدید (حداقل ۶ کاراکتر)
-                </label>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  dir="ltr"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                  تکرار رمز عبور جدید
-                </label>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  dir="ltr"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                />
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={isChangingPassword}
-                  className="w-full py-2.5 rounded-xl bg-[#282828] hover:bg-[#333] text-white border border-[#3e3e3e] font-bold text-xs transition-all disabled:opacity-50"
-                >
-                  {isChangingPassword ? 'در حال ثبت...' : 'بروزرسانی رمز عبور'}
-                </button>
-              </div>
-            </form>
+          <div>
+            <PasswordTab
+              currentPassword={currentPassword}
+              setCurrentPassword={setCurrentPassword}
+              newPassword={newPassword}
+              setNewPassword={setNewPassword}
+              confirmPassword={confirmPassword}
+              setConfirmPassword={setConfirmPassword}
+              showPassword={showPassword}
+              setShowPassword={setShowPassword}
+              isChangingPassword={isChangingPassword}
+              handleChangePassword={handleChangePassword}
+            />
           </div>
         </div>
       )}
@@ -824,532 +590,68 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       {/* 3. TAB 2: LEAVE REQUESTS */}
       {/* ------------------------------------------------------------- */}
       {activeTab === 'leave' && (
-        <div className="space-y-6">
-          {/* New Leave Request Form */}
-          <div className="bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-6 space-y-5">
-            <div className="flex items-center gap-2 border-b border-[#282828] pb-3">
-              <CalendarDays className="w-5 h-5 text-[#1DB954]" />
-              <div>
-                <h3 className="text-base font-bold text-white">ثبت درخواست مرخصی جدید</h3>
-                <p className="text-xs text-[#888]">
-                  مرخصی‌های روزانه و ساعتی خود را ثبت کنید تا به اطلاع مدیریت برسد.
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmitLeave} className="space-y-4">
-              {/* Type Switcher: Daily vs Hourly */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold text-[#B3B3B3]">نوع مرخصی:</span>
-                <div className="flex items-center gap-2 bg-[#121212] p-1 rounded-xl border border-[#282828]">
-                  <button
-                    type="button"
-                    onClick={() => setLeaveType('daily')}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      leaveType === 'daily'
-                        ? 'bg-[#1DB954] text-black shadow-sm'
-                        : 'text-[#888] hover:text-white'
-                    }`}
-                  >
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>مرخصی روزانه</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setLeaveType('hourly')}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      leaveType === 'hourly'
-                        ? 'bg-[#1DB954] text-black shadow-sm'
-                        : 'text-[#888] hover:text-white'
-                    }`}
-                  >
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>مرخصی ساعتی</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Conditional Date / Time Fields */}
-              {leaveType === 'daily' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <PersianDatePicker
-                      label="از تاریخ (شروع مرخصی)"
-                      value={leaveStartDate}
-                      onChange={(iso) => setLeaveStartDate(iso)}
-                    />
-                  </div>
-                  <div>
-                    <PersianDatePicker
-                      label="تا تاریخ (پایان مرخصی)"
-                      value={leaveEndDate}
-                      onChange={(iso) => setLeaveEndDate(iso)}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <PersianDatePicker
-                      label="تاریخ مرخصی ساعتی"
-                      value={leaveStartDate}
-                      onChange={(iso) => setLeaveStartDate(iso)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                      از ساعت
-                    </label>
-                    <input
-                      type="time"
-                      value={leaveStartTime}
-                      onChange={(e) => setLeaveStartTime(e.target.value)}
-                      className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                      تا ساعت
-                    </label>
-                    <input
-                      type="time"
-                      value={leaveEndTime}
-                      onChange={(e) => setLeaveEndTime(e.target.value)}
-                      className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Duration Preview for Hourly */}
-              {leaveType === 'hourly' && (
-                <div className="text-xs text-[#A7A7A7] bg-[#121212] p-2.5 rounded-xl border border-[#282828] flex items-center justify-between">
-                  <span>مدت زمان مرخصی محاسبه شده:</span>
-                  <span className="text-[#1DB954] font-bold font-mono text-sm">
-                    {toPersianDigits(calculatedHourlyDuration)} ساعت
-                  </span>
-                </div>
-              )}
-
-              {/* Reason Field */}
-              <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                  علت و شرح مرخصی *
-                </label>
-                <textarea
-                  value={leaveReason}
-                  onChange={(e) => setLeaveReason(e.target.value)}
-                  placeholder="شرح کامل دلیل درخواست مرخصی..."
-                  rows={3}
-                  required
-                  className="w-full p-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none leading-relaxed"
-                />
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  disabled={isSubmittingLeave}
-                  className="px-6 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-xs shadow-lg shadow-[#1DB954]/25 transition-all disabled:opacity-50 flex items-center gap-2"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>{isSubmittingLeave ? 'در حال ثبت...' : 'ارسال درخواست مرخصی'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* List of Leave Requests */}
-          <div className="bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-6 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#282828] pb-3">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-[#1DB954]" />
-                <h3 className="text-sm font-bold text-white">
-                  {isAdmin ? 'همه درخواست‌های مرخصی پرسنل' : 'درخواست‌های مرخصی من'}
-                </h3>
-                <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-[#242424] text-[#A7A7A7]">
-                  {toPersianDigits(filteredLeaveRequests.length)} مورد
-                </span>
-              </div>
-
-              {/* Status Filter */}
-              <div className="flex items-center gap-2">
-                <select
-                  value={leaveStatusFilter}
-                  onChange={(e) => setLeaveStatusFilter(e.target.value)}
-                  className="h-8 px-3 rounded-xl bg-[#121212] text-xs text-white border border-[#2c2c2c] focus:outline-none"
-                >
-                  <option value="all">همه وضعیت‌ها</option>
-                  <option value="pending">در انتظار بررسی</option>
-                  <option value="approved">تایید شده</option>
-                  <option value="rejected">رد شده</option>
-                </select>
-
-                {isAdmin && (
-                  <input
-                    type="text"
-                    value={leaveSearch}
-                    onChange={(e) => setLeaveSearch(e.target.value)}
-                    placeholder="جستجو در علت یا نام..."
-                    className="h-8 px-3 rounded-xl bg-[#121212] text-xs text-white border border-[#2c2c2c] focus:outline-none w-36 sm:w-44"
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* Requests Table / Cards */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
-                <thead>
-                  <tr className="border-b border-[#282828] text-[#888]">
-                    <th className="py-2.5 px-3 font-semibold">متقاضی</th>
-                    <th className="py-2.5 px-3 font-semibold">نوع مرخصی</th>
-                    <th className="py-2.5 px-3 font-semibold">بازه زمانی / ساعت</th>
-                    <th className="py-2.5 px-3 font-semibold">علت</th>
-                    <th className="py-2.5 px-3 font-semibold">وضعیت</th>
-                    <th className="py-2.5 px-3 font-semibold">نظر مدیر</th>
-                    <th className="py-2.5 px-3 font-semibold">عملیات</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#222]">
-                  {filteredLeaveRequests.map((req) => {
-                    const badge = getRequestStatusBadge(req.status);
-                    const isHourly = req.leave_type === 'hourly';
-
-                    return (
-                      <tr key={req.id} className="hover:bg-[#202020] transition-colors">
-                        <td className="py-3 px-3 font-bold text-white">
-                          {req.personnel_name}
-                        </td>
-                        <td className="py-3 px-3">
-                          <span
-                            className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
-                              isHourly
-                                ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
-                                : 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-                            }`}
-                          >
-                            {isHourly ? 'ساعتی' : 'روزانه'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 font-mono text-white">
-                          {isHourly ? (
-                            <div>
-                              <div>{toPersianDigits(gregorianIsoToJalali(req.start_date))}</div>
-                              <div className="text-[11px] text-[#888]">
-                                از {toPersianDigits(req.start_time || '')} تا {toPersianDigits(req.end_time || '')} ({toPersianDigits(req.hours_count || '')} ساعت)
-                              </div>
-                            </div>
-                          ) : (
-                            <div>
-                              <span>{toPersianDigits(gregorianIsoToJalali(req.start_date))}</span>
-                              {req.end_date && req.end_date !== req.start_date && (
-                                <span className="text-[#888]"> الی {toPersianDigits(gregorianIsoToJalali(req.end_date))}</span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3 px-3 text-[#bbb] max-w-xs truncate">
-                          {req.reason}
-                        </td>
-                        <td className="py-3 px-3">
-                          <span
-                            className={`text-[10px] px-2.5 py-0.5 rounded-full border font-bold flex items-center gap-1 w-fit ${badge.bg}`}
-                          >
-                            <badge.icon className="w-3 h-3" />
-                            <span>{badge.label}</span>
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-[#888] max-w-xs truncate">
-                          {req.manager_note || '-'}
-                        </td>
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-2">
-                            {isAdmin && req.status === 'pending' ? (
-                              <button
-                                onClick={() => {
-                                  setReviewModalItem({ type: 'leave', item: req });
-                                  setReviewAction('approved');
-                                  setReviewManagerNote('');
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-[11px] transition-all"
-                              >
-                                بررسی و تعیین
-                              </button>
-                            ) : req.status === 'pending' ? (
-                              <button
-                                onClick={() => onDeleteLeaveRequest(req.id)}
-                                className="p-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors"
-                                title="حذف درخواست"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            ) : (
-                              <span className="text-[11px] text-[#555]">ثبت نهایی</span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filteredLeaveRequests.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="py-8 text-center text-xs text-[#777]">
-                        هیچ درخواست مرخصی یافت نشد.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <LeaveRequestsTab
+          leaveType={leaveType}
+          setLeaveType={setLeaveType}
+          leaveStartDate={leaveStartDate}
+          setLeaveStartDate={setLeaveStartDate}
+          leaveEndDate={leaveEndDate}
+          setLeaveEndDate={setLeaveEndDate}
+          leaveStartTime={leaveStartTime}
+          setLeaveStartTime={setLeaveStartTime}
+          leaveEndTime={leaveEndTime}
+          setLeaveEndTime={setLeaveEndTime}
+          calculatedHourlyDuration={calculatedHourlyDuration}
+          leaveReason={leaveReason}
+          setLeaveReason={setLeaveReason}
+          isSubmittingLeave={isSubmittingLeave}
+          handleSubmitLeave={handleSubmitLeave}
+          isAdmin={isAdmin}
+          filteredLeaveRequests={filteredLeaveRequests}
+          leaveStatusFilter={leaveStatusFilter}
+          setLeaveStatusFilter={setLeaveStatusFilter}
+          leaveSearch={leaveSearch}
+          setLeaveSearch={setLeaveSearch}
+          getRequestStatusBadge={getRequestStatusBadge}
+          setReviewModalItem={setReviewModalItem}
+          setReviewAction={setReviewAction}
+          setReviewManagerNote={setReviewManagerNote}
+          onDeleteLeaveRequest={onDeleteLeaveRequest}
+        />
       )}
 
       {/* ------------------------------------------------------------- */}
       {/* 4. TAB 3: SALARY ADVANCE REQUESTS */}
       {/* ------------------------------------------------------------- */}
       {activeTab === 'advance' && (
-        <div className="space-y-6">
-          {/* New Advance Request Form */}
-          <div className="bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-6 space-y-5">
-            <div className="flex items-center gap-2 border-b border-[#282828] pb-3">
-              <Wallet className="w-5 h-5 text-[#1DB954]" />
-              <div>
-                <h3 className="text-base font-bold text-white">ثبت درخواست مساعده مالی</h3>
-                <p className="text-xs text-[#888]">
-                  درخواست مساعده حقوق خود را ثبت کنید تا پس از بررسی مدیریت واریز گردد.
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmitAdvance} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    مبلغ درخواستی (تومان) *
-                  </label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={advanceAmount}
-                    onChange={(e) => setAdvanceAmount(e.target.value)}
-                    placeholder="5,000,000"
-                    required
-                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono font-bold text-sm"
-                  />
-                  <div className="text-[11px] text-[#1DB954] mt-1 font-mono">
-                    معادل: {formatToman(Number(advanceAmount.replace(/[^0-9]/g, '')) || 0)}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    مربوط به حقوق ماه
-                  </label>
-                  <input
-                    type="text"
-                    value={advanceMonth}
-                    onChange={(e) => setAdvanceMonth(e.target.value)}
-                    placeholder="مهر ۱۴۰۵"
-                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <PersianDatePicker
-                    label="تاریخ مورد نیاز دریافت"
-                    value={advanceNeededDate}
-                    onChange={(iso) => setAdvanceNeededDate(iso)}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    شماره کارت جهت واریز
-                  </label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={advanceCard}
-                    onChange={(e) => setAdvanceCard(e.target.value)}
-                    placeholder="6037-9975-..."
-                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono tracking-wider"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    شماره شبا (IBAN)
-                  </label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={advanceIban}
-                    onChange={(e) => setAdvanceIban(e.target.value)}
-                    placeholder="IR12017..."
-                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                  علت و ضرورت درخواست مساعده *
-                </label>
-                <textarea
-                  value={advanceReason}
-                  onChange={(e) => setAdvanceReason(e.target.value)}
-                  placeholder="شرح دلیل درخواست مساعده مالی..."
-                  rows={3}
-                  required
-                  className="w-full p-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none leading-relaxed"
-                />
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  disabled={isSubmittingAdvance}
-                  className="px-6 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-xs shadow-lg shadow-[#1DB954]/25 transition-all disabled:opacity-50 flex items-center gap-2"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>{isSubmittingAdvance ? 'در حال ثبت...' : 'ارسال درخواست مساعده'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* List of Advance Requests */}
-          <div className="bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-6 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#282828] pb-3">
-              <div className="flex items-center gap-2">
-                <Coins className="w-4 h-4 text-[#1DB954]" />
-                <h3 className="text-sm font-bold text-white">
-                  {isAdmin ? 'همه درخواست‌های مساعده پرسنل' : 'درخواست‌های مساعده من'}
-                </h3>
-                <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-[#242424] text-[#A7A7A7]">
-                  {toPersianDigits(filteredAdvanceRequests.length)} مورد
-                </span>
-              </div>
-
-              {/* Filters */}
-              <div className="flex items-center gap-2">
-                <select
-                  value={advanceStatusFilter}
-                  onChange={(e) => setAdvanceStatusFilter(e.target.value)}
-                  className="h-8 px-3 rounded-xl bg-[#121212] text-xs text-white border border-[#2c2c2c] focus:outline-none"
-                >
-                  <option value="all">همه وضعیت‌ها</option>
-                  <option value="pending">در انتظار بررسی</option>
-                  <option value="approved">تایید شده</option>
-                  <option value="rejected">رد شده</option>
-                </select>
-
-                {isAdmin && (
-                  <input
-                    type="text"
-                    value={advanceSearch}
-                    onChange={(e) => setAdvanceSearch(e.target.value)}
-                    placeholder="جستجو در نام یا شرح..."
-                    className="h-8 px-3 rounded-xl bg-[#121212] text-xs text-white border border-[#2c2c2c] focus:outline-none w-36 sm:w-44"
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* Advance Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
-                <thead>
-                  <tr className="border-b border-[#282828] text-[#888]">
-                    <th className="py-2.5 px-3 font-semibold">متقاضی</th>
-                    <th className="py-2.5 px-3 font-semibold">مبلغ درخواستی</th>
-                    <th className="py-2.5 px-3 font-semibold">مبلغ تاییدشده</th>
-                    <th className="py-2.5 px-3 font-semibold">ماه هدف</th>
-                    <th className="py-2.5 px-3 font-semibold">علت</th>
-                    <th className="py-2.5 px-3 font-semibold">وضعیت</th>
-                    <th className="py-2.5 px-3 font-semibold">نظر مدیریت</th>
-                    <th className="py-2.5 px-3 font-semibold">عملیات</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#222]">
-                  {filteredAdvanceRequests.map((req) => {
-                    const badge = getRequestStatusBadge(req.status);
-
-                    return (
-                      <tr key={req.id} className="hover:bg-[#202020] transition-colors">
-                        <td className="py-3 px-3 font-bold text-white">
-                          {req.personnel_name}
-                        </td>
-                        <td className="py-3 px-3 font-mono font-bold text-white">
-                          {formatToman(req.amount)}
-                        </td>
-                        <td className="py-3 px-3 font-mono font-bold text-[#1DB954]">
-                          {req.approved_amount ? formatToman(req.approved_amount) : '-'}
-                        </td>
-                        <td className="py-3 px-3 text-[#A7A7A7]">
-                          {req.target_month || '-'}
-                        </td>
-                        <td className="py-3 px-3 text-[#bbb] max-w-xs truncate">
-                          {req.reason}
-                        </td>
-                        <td className="py-3 px-3">
-                          <span
-                            className={`text-[10px] px-2.5 py-0.5 rounded-full border font-bold flex items-center gap-1 w-fit ${badge.bg}`}
-                          >
-                            <badge.icon className="w-3 h-3" />
-                            <span>{badge.label}</span>
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-[#888] max-w-xs truncate">
-                          {req.manager_note || '-'}
-                        </td>
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-2">
-                            {isAdmin && req.status === 'pending' ? (
-                              <button
-                                onClick={() => {
-                                  setReviewModalItem({ type: 'advance', item: req });
-                                  setReviewAction('approved');
-                                  setReviewApprovedAmount(String(req.amount));
-                                  setReviewManagerNote('');
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-[11px] transition-all"
-                              >
-                                بررسی و واریز
-                              </button>
-                            ) : req.status === 'pending' ? (
-                              <button
-                                onClick={() => onDeleteAdvanceRequest(req.id)}
-                                className="p-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors"
-                                title="حذف درخواست"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            ) : (
-                              <span className="text-[11px] text-[#555]">ثبت نهایی</span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filteredAdvanceRequests.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="py-8 text-center text-xs text-[#777]">
-                        هیچ درخواست مساعده‌ای یافت نشد.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <AdvanceRequestsTab
+          advanceAmount={advanceAmount}
+          setAdvanceAmount={setAdvanceAmount}
+          advanceMonth={advanceMonth}
+          setAdvanceMonth={setAdvanceMonth}
+          advanceNeededDate={advanceNeededDate}
+          setAdvanceNeededDate={setAdvanceNeededDate}
+          advanceCard={advanceCard}
+          setAdvanceCard={setAdvanceCard}
+          advanceIban={advanceIban}
+          setAdvanceIban={setAdvanceIban}
+          advanceReason={advanceReason}
+          setAdvanceReason={setAdvanceReason}
+          isSubmittingAdvance={isSubmittingAdvance}
+          handleSubmitAdvance={handleSubmitAdvance}
+          isAdmin={isAdmin}
+          filteredAdvanceRequests={filteredAdvanceRequests}
+          advanceStatusFilter={advanceStatusFilter}
+          setAdvanceStatusFilter={setAdvanceStatusFilter}
+          advanceSearch={advanceSearch}
+          setAdvanceSearch={setAdvanceSearch}
+          getRequestStatusBadge={getRequestStatusBadge}
+          setReviewModalItem={setReviewModalItem}
+          setReviewAction={setReviewAction}
+          setReviewApprovedAmount={setReviewApprovedAmount}
+          setReviewManagerNote={setReviewManagerNote}
+          onDeleteAdvanceRequest={onDeleteAdvanceRequest}
+        />
       )}
 
       {/* ------------------------------------------------------------- */}
