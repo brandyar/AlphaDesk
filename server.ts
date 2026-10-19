@@ -3591,6 +3591,10 @@ app.get('/api/customers', async (req: Request, res: Response) => {
       if (isFreeOnly) {
         directusPath += `&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true`;
       }
+      if (search && typeof search === 'string' && search.trim()) {
+        const s = search.trim();
+        directusPath += `&filter[_or][0][company_name][_icontains]=${encodeURIComponent(s)}&filter[_or][1][manager_name][_icontains]=${encodeURIComponent(s)}&filter[_or][2][city][_icontains]=${encodeURIComponent(s)}&filter[_or][3][business_type][_icontains]=${encodeURIComponent(s)}`;
+      }
 
       const resData = await directusFetch(directusPath, {}, 1).catch(() => null);
       if (resData && Array.isArray(resData.data)) {
@@ -3610,6 +3614,18 @@ app.get('/api/customers', async (req: Request, res: Response) => {
             if (normUserName && cNameNorm && (cNameNorm === normUserName || cNameNorm.includes(normUserName))) return true;
             return false;
           });
+        }
+
+        if (search && typeof search === 'string' && search.trim()) {
+          const s = search.trim().toLowerCase();
+          items = items.filter((c: any) =>
+            c.company_name?.toLowerCase().includes(s) ||
+            c.manager_name?.toLowerCase().includes(s) ||
+            c.city?.toLowerCase().includes(s) ||
+            c.business_type?.toLowerCase().includes(s) ||
+            (Array.isArray(c.mobile_numbers) && c.mobile_numbers.some((m: string) => m.includes(s))) ||
+            (Array.isArray(c.landline_numbers) && c.landline_numbers.some((l: string) => l.includes(s)))
+          );
         }
 
         const filterCount = resData.meta?.filter_count ?? items.length;
@@ -7422,6 +7438,17 @@ async function setupViteOrStatic() {
   if (directusUrl && directusAdminToken) {
     ensureDirectusTenants()
       .then(() => ensureDirectusPersonnel())
+      .then(async () => {
+        try {
+          const resp = await directusFetch('/items/project_settings').catch(() => null);
+          if (resp?.data) {
+            const item = Array.isArray(resp.data) ? resp.data[0] : resp.data;
+            if (item) {
+              projectSettingsData = { ...projectSettingsData, ...item };
+            }
+          }
+        } catch {}
+      })
       .catch((err) => console.warn('Database initialization warning:', err.message));
   }
 
