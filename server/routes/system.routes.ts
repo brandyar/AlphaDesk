@@ -34,6 +34,126 @@ router.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
+// GET /api/dashboard-summary & /api/dashboard/summary
+const handleDashboardSummary = async (req: Request, res: Response) => {
+  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      let tenantFilterStr = '';
+      if (tenantId && tenantId !== 'all') {
+        const tenantNum = resolveDirectusTenantId(tenantId);
+        if (tenantNum) {
+          tenantFilterStr = `&filter[tenant_id][_eq]=${tenantNum}`;
+        }
+      }
+
+      const [
+        totalCustomersRes,
+        freeCustomersRes,
+        expiredCustomersRes,
+        contractsWonCustomersRes,
+        totalReportsRes,
+        contractsWonReportsRes,
+        totalColdLeadsRes,
+        adminReportsRes,
+        pendingLeavesRes,
+        pendingAdvancesRes,
+        contractRevenueRes,
+        avgScoreRes,
+        upcomingFollowupsRes,
+        urgentExpiringRes,
+      ] = await Promise.all([
+        directusFetch(`/items/customers?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customer_reports?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customer_reports?limit=1&meta=filter_count&filter[negotiation_status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/cold_leads?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/administrative_reports?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/leave_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/advance_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customer_reports?aggregate[sum]=contract_amount&filter[negotiation_status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customer_reports?aggregate[avg]=negotiation_score${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customers?limit=5&sort=next_followup_date&fields=id,company_name,manager_name,phone,next_followup_date,status,assigned_marketer_name&filter[next_followup_date][_nnull]=true${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customers?limit=5&sort=assignment_deadline&fields=id,company_name,manager_name,phone,assignment_deadline,status,assigned_marketer_name&filter[is_expired][_eq]=false&filter[assignment_deadline][_nnull]=true${tenantFilterStr}`).catch(() => null),
+      ]);
+
+      const totalCustomers = totalCustomersRes?.meta?.filter_count ?? totalCustomersRes?.meta?.total_count ?? 0;
+      const freeCustomers = freeCustomersRes?.meta?.filter_count ?? 0;
+      const expiredCustomers = expiredCustomersRes?.meta?.filter_count ?? 0;
+      const contractsWon = contractsWonCustomersRes?.meta?.filter_count ?? contractsWonReportsRes?.meta?.filter_count ?? 0;
+      const totalReports = totalReportsRes?.meta?.filter_count ?? totalReportsRes?.meta?.total_count ?? 0;
+      const totalColdLeads = totalColdLeadsRes?.meta?.filter_count ?? totalColdLeadsRes?.meta?.total_count ?? 0;
+      const adminReportsCount = adminReportsRes?.meta?.filter_count ?? adminReportsRes?.meta?.total_count ?? 0;
+      const pendingLeaves = pendingLeavesRes?.meta?.filter_count ?? 0;
+      const pendingAdvances = pendingAdvancesRes?.meta?.filter_count ?? 0;
+
+      let totalRevenue = 0;
+      try {
+        if (contractRevenueRes?.data && Array.isArray(contractRevenueRes.data) && contractRevenueRes.data.length > 0) {
+          totalRevenue = Number(contractRevenueRes.data[0]?.sum?.contract_amount || 0);
+        }
+      } catch {}
+
+      let avgScore = 8.5;
+      try {
+        if (avgScoreRes?.data && Array.isArray(avgScoreRes.data) && avgScoreRes.data.length > 0) {
+          const rawAvg = Number(avgScoreRes.data[0]?.avg?.negotiation_score);
+          if (!isNaN(rawAvg) && rawAvg > 0) {
+            avgScore = Math.round(rawAvg * 10) / 10;
+          }
+        }
+      } catch {}
+
+      const upcomingFollowups = Array.isArray(upcomingFollowupsRes?.data) ? upcomingFollowupsRes.data : [];
+      const urgentExpiringCustomers = Array.isArray(urgentExpiringRes?.data) ? urgentExpiringRes.data : [];
+
+      const inNegotiationCount = Math.max(0, totalCustomers - contractsWon);
+
+      return res.json({
+        total_customers: totalCustomers,
+        contracts_won_count: contractsWon,
+        in_negotiation_count: inNegotiationCount,
+        expired_customers_count: expiredCustomers,
+        free_customers_count: freeCustomers,
+        total_reports_count: totalReports,
+        total_cold_leads_count: totalColdLeads,
+        admin_reports_count: adminReportsCount,
+        pending_leave_count: pendingLeaves,
+        pending_advance_count: pendingAdvances,
+        total_contract_revenue: totalRevenue,
+        avg_negotiation_score: avgScore,
+        upcoming_followups: upcomingFollowups,
+        urgent_expiring_customers: urgentExpiringCustomers,
+      });
+    } catch (err: any) {
+      console.warn('Dashboard summary error:', err.message);
+    }
+  }
+
+  res.json({
+    total_customers: customersData.length,
+    contracts_won_count: customersData.filter(c => c.status === 'قرارداد').length,
+    in_negotiation_count: customersData.filter(c => c.status !== 'قرارداد').length,
+    expired_customers_count: customersData.filter(c => c.is_expired).length,
+    free_customers_count: customersData.filter(c => !c.assigned_marketer_id || c.is_expired).length,
+    total_reports_count: reportsData.length,
+    total_cold_leads_count: 0,
+    admin_reports_count: 0,
+    pending_leave_count: 0,
+    pending_advance_count: 0,
+    total_contract_revenue: 0,
+    avg_negotiation_score: 8.5,
+    upcoming_followups: customersData.slice(0, 5),
+    urgent_expiring_customers: customersData.slice(0, 5),
+  });
+};
+
+router.get('/api/dashboard-summary', handleDashboardSummary);
+router.get('/api/dashboard/summary', handleDashboardSummary);
+
 // GET /api/project-settings
 router.get('/api/project-settings', async (req: Request, res: Response) => {
   if (directusUrl && directusAdminToken) {

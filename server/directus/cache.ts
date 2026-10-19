@@ -34,9 +34,9 @@ export async function ensureCustomersCache(forceRefresh = false): Promise<any[]>
 
   const items = await fetchAllDirectusItems(
     '/items/customers?sort=-date_created&fields=*',
-    500,
-    100000,
-    3
+    100,
+    300,
+    2
   );
   if (items && items.length > 0) {
     customersCache = {
@@ -55,7 +55,7 @@ export async function ensureReportsCache(forceRefresh = false): Promise<any[]> {
     return reportsCache.data;
   }
 
-  const items = await fetchAllDirectusItems('/items/customer_reports?sort=-id', 500, 100000, 3);
+  const items = await fetchAllDirectusItems('/items/customer_reports?sort=-id', 100, 300, 2);
   if (items && items.length > 0) {
     reportsCache = {
       timestamp: Date.now(),
