@@ -754,6 +754,119 @@ let tenantSettingsMap: Map<string, TenantSettingsState> = new Map([
   ['default', { id: 'ts-default', tenant_id: 'default', sms_phones: ['09121112233'] }],
 ]);
 
+// Helper function to find pattern text from project settings
+function getPatternTextForCode(code: string | null | undefined): string {
+  if (!code) return '';
+  const c = String(code).trim();
+  if (projectSettingsData.login_pattern?.trim() === c) return projectSettingsData.login_pattern_text || '';
+  if (projectSettingsData.dayli_leave_request_pattern?.trim() === c) return projectSettingsData.dayli_leave_request_text || '';
+  if (projectSettingsData.hourly_leave_request_pattern?.trim() === c) return projectSettingsData.hourly_leave_request_text || '';
+  if (projectSettingsData.dayli_leave_accept_pattern?.trim() === c) return projectSettingsData.dayli_leave_accept_text || '';
+  if (projectSettingsData.dayli_leave_reject_pattern?.trim() === c) return projectSettingsData.dayli_leave_reject_text || '';
+  if (projectSettingsData.hourly_leave_accept_pattern?.trim() === c) return projectSettingsData.hourly_leave_accept_text || '';
+  if (projectSettingsData.hourly_leave_reject_pattern?.trim() === c) return projectSettingsData.hourly_leave_reject_text || '';
+  if (projectSettingsData.addvance_request_pattern?.trim() === c) return projectSettingsData.addvance_request_text || '';
+  if (projectSettingsData.addvance_accept_pattern?.trim() === c) return projectSettingsData.addvance_accept_text || '';
+  if (projectSettingsData.lower_addvance_accept_pattern?.trim() === c) return projectSettingsData.lower_addvance_accept_text || '';
+  if (projectSettingsData.addvance_reject_pattern?.trim() === c) return projectSettingsData.addvance_reject_text || '';
+  return '';
+}
+
+// Automatically resolve and populate all variables expected by IPPanel patterns based on the pattern text
+function resolvePatternVariables(
+  patternCode: string,
+  recipientPhone: string,
+  variables: Record<string, string | number> = {}
+): Record<string, string> {
+  const patternText = getPatternTextForCode(patternCode);
+  const cleanVars: Record<string, string> = {};
+
+  // Copy explicitly provided variables
+  for (const [k, v] of Object.entries(variables || {})) {
+    if (k && String(k).trim()) {
+      cleanVars[String(k).trim()] = v !== null && v !== undefined ? String(v).trim() : '';
+    }
+  }
+
+  // Extract all placeholders like %var% or {var} from patternText
+  const foundPlaceholders = new Set<string>();
+  if (patternText) {
+    const pPercent = patternText.match(/%([a-zA-Z0-9_]+)%/g);
+    if (pPercent) {
+      for (const m of pPercent) {
+        foundPlaceholders.add(m.replace(/%/g, '').trim());
+      }
+    }
+    const pBraces = patternText.match(/\{([a-zA-Z0-9_]+)\}/g);
+    if (pBraces) {
+      for (const m of pBraces) {
+        foundPlaceholders.add(m.replace(/[{}]/g, '').trim());
+      }
+    }
+  }
+
+  // Standard defaults based on current Persian date/time
+  const now = new Date();
+  const jalaliDate = now.toLocaleDateString('fa-IR');
+  const jalaliTime = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+
+  // Intelligent resolution for placeholders if missing in cleanVars
+  for (const ph of foundPlaceholders) {
+    if (cleanVars[ph] !== undefined && cleanVars[ph] !== '') continue;
+
+    const lower = ph.toLowerCase();
+    if (lower === 'mobile' || lower === 'phone') {
+      cleanVars[ph] = cleanVars.mobile || cleanVars.phone || recipientPhone || '09120000000';
+    } else if (lower === 'family' || lower === 'last_name') {
+      const fullName = cleanVars.fullName || cleanVars.name || 'همکار گرامی';
+      const parts = fullName.split(' ');
+      cleanVars[ph] = parts.length > 1 ? parts.slice(1).join(' ') : 'گرامی';
+    } else if (lower === 'name' || lower === 'first_name') {
+      const fullName = cleanVars.fullName || cleanVars.name || 'همکار';
+      const parts = fullName.split(' ');
+      cleanVars[ph] = parts[0] || 'همکار';
+    } else if (lower === 'date' || lower === 'request_date' || lower === 'approval_date') {
+      cleanVars[ph] = cleanVars.date || cleanVars.request_date || cleanVars.approval_date || jalaliDate;
+    } else if (lower === 'time') {
+      cleanVars[ph] = cleanVars.time || jalaliTime;
+    } else if (lower === 'ip') {
+      cleanVars[ph] = cleanVars.ip || '127.0.0.1';
+    } else if (lower === 'device') {
+      cleanVars[ph] = cleanVars.device || 'سامانه وب آلفادسک';
+    } else if (lower === 'leave_type') {
+      cleanVars[ph] = cleanVars.leave_type || 'مرخصی';
+    } else if (lower === 'leave_date') {
+      cleanVars[ph] = cleanVars.leave_date || cleanVars.start_date || cleanVars.date || jalaliDate;
+    } else if (lower === 'from_time') {
+      cleanVars[ph] = cleanVars.from_time || cleanVars.start_time || '09:00';
+    } else if (lower === 'to_time') {
+      cleanVars[ph] = cleanVars.to_time || cleanVars.end_time || '17:00';
+    } else if (lower === 'start_time') {
+      cleanVars[ph] = cleanVars.start_time || cleanVars.from_time || '09:00';
+    } else if (lower === 'end_time') {
+      cleanVars[ph] = cleanVars.end_time || cleanVars.to_time || '17:00';
+    } else if (lower === 'start_date') {
+      cleanVars[ph] = cleanVars.start_date || cleanVars.leave_date || jalaliDate;
+    } else if (lower === 'end_date') {
+      cleanVars[ph] = cleanVars.end_date || cleanVars.start_date || jalaliDate;
+    } else if (lower === 'amount' || lower === 'requested_amount' || lower === 'approved_amount') {
+      cleanVars[ph] = cleanVars[ph] || cleanVars.amount || cleanVars.requested_amount || cleanVars.approved_amount || '0';
+    } else if (lower === 'reason') {
+      cleanVars[ph] = cleanVars.reason || '-';
+    } else if (lower === 'manager_note') {
+      cleanVars[ph] = cleanVars.manager_note || 'بررسی شد';
+    } else if (lower === 'reviewed_by') {
+      cleanVars[ph] = cleanVars.reviewed_by || 'مدیریت';
+    } else if (lower === 'username') {
+      cleanVars[ph] = cleanVars.username || '-';
+    } else {
+      cleanVars[ph] = cleanVars[ph] || '-';
+    }
+  }
+
+  return cleanVars;
+}
+
 // Helper function to send SMS via IPPanel Pattern Gateway
 async function sendIppanelSmsPattern(
   recipientPhone: string | null | undefined,
@@ -794,29 +907,13 @@ async function sendIppanelSmsPattern(
     return { success: false, error: 'شماره تلفن گیرنده نامعتبر است (فرمت مجاز: 09xxxxxxxxx)' };
   }
 
-  const senderLine = (overrideSender || projectSettingsData.ippanel_sender || projectSettingsData.ippanel_line_number || '+983000505').trim();
+  const senderLine = (overrideSender || projectSettingsData.ippanel_sender || projectSettingsData.ippanel_line_number || '90001356').trim();
   const senderWithoutPlus = senderLine.replace(/^\+/, '');
   const cleanPhoneE164 = cleanPhone.startsWith('0') ? '+98' + cleanPhone.substring(1) : (cleanPhone.startsWith('+98') ? cleanPhone : '+98' + cleanPhone);
-
-  // Clean variables values: remove empty keys to prevent 400 Bad Request
-  const cleanVars: Record<string, string> = {};
-  for (const [k, v] of Object.entries(variables || {})) {
-    if (k && String(k).trim()) {
-      cleanVars[String(k).trim()] = v !== null && v !== undefined ? String(v).trim() : '';
-    }
-  }
-
-
-
-  // Strategy list with all IPPanel standard protocols:
-  // 1. rest.ippanel.com (Standard IPPanel REST SDK with apikey header and 989... format)
-  // 2. rest.ippanel.com (with 09... format)
-  // 3. rest.ippanel.com (with alt sender without plus)
-  // 4. api2.ippanel.com (with apikey header)
-  // 5. api2.ippanel.com (with AccessKey header)
-  // 6. edge.ippanel.com (with AccessKey header and +98 format)
-  // 7. edge.ippanel.com (with apikey header)
   const cleanPhone98 = cleanPhone.startsWith('0') ? '98' + cleanPhone.substring(1) : cleanPhone;
+
+  // Resolve and guarantee all variables required by the pattern text
+  const cleanVars = resolvePatternVariables(patternCode.trim(), cleanPhone, variables);
 
   const restPayload98 = {
     pattern_code: patternCode.trim(),
@@ -861,7 +958,7 @@ async function sendIppanelSmsPattern(
     params: cleanVars,
   };
 
-  console.log(`[IPPanel SMS] Sending pattern '${patternCode}' to ${cleanPhone} (sender: ${senderLine})...`, cleanVars);
+  console.log(`[IPPanel SMS] Sending pattern '${patternCode}' to ${cleanPhone} (sender: ${senderLine}) with variables:`, cleanVars);
 
   const attempts: Array<{
     url: string;
@@ -869,7 +966,7 @@ async function sendIppanelSmsPattern(
     body: string;
     label: string;
   }> = [
-    // 1. rest.ippanel.com with apikey and 989... format (Most common official format)
+    // 1. rest.ippanel.com with apikey and 989... format
     {
       url: 'https://rest.ippanel.com/v1/messages/patterns/send',
       headers: {
@@ -939,7 +1036,17 @@ async function sendIppanelSmsPattern(
       body: JSON.stringify(edgePayload),
       label: 'edge.ippanel.com (apikey)'
     },
-    // 8. rest.ippanel.com with AccessKey
+    // 8. ippanel.com/api/v1/sms/pattern/normal/send
+    {
+      url: 'https://ippanel.com/api/v1/sms/pattern/normal/send',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': cleanApiKey,
+      },
+      body: JSON.stringify(api2Payload),
+      label: 'ippanel.com (apikey)'
+    },
+    // 9. rest.ippanel.com with AccessKey
     {
       url: 'https://rest.ippanel.com/v1/messages/patterns/send',
       headers: {
@@ -982,7 +1089,11 @@ async function sendIppanelSmsPattern(
           } else if (parsed?.error) {
             detailedMsg = parsed.error;
           }
-        } catch {}
+        } catch {
+          if (res.status === 502 && (errBody.includes('ArvanCloud') || errBody.includes('502'))) {
+            detailedMsg = 'درگاه IPPanel به دلیل محدودیت شبکه (Geo-IP) به درخواست‌های خارج از کشور پاسخ نمی‌دهد (خطای 502 سرور میانی). پس از دیپلوی روی سرور ایران پیامک با موفقیت ارسال خواهد شد.';
+          }
+        }
 
         lastError = detailedMsg || `HTTP ${res.status}`;
 
@@ -1006,39 +1117,56 @@ async function sendIppanelSmsPattern(
 
 // Send pattern SMS notification to a tenant's configured admin SMS numbers (sms_phones)
 async function sendTenantAdminsSmsPattern(
-  tenantId: string | null | undefined,
+  tenantId: string | number | null | undefined,
   patternCode: string | null | undefined,
   variables: Record<string, string | number> = {}
 ) {
   if (!patternCode) return;
-  const tId = tenantId || 'default';
+  const tIdStr = tenantId !== undefined && tenantId !== null ? String(tenantId).trim() : 'default';
 
-  let smsPhones: string[] = [];
+  const collectedPhones = new Set<string>();
+
+  // 1. Query tenant_settings from Directus
   if (directusUrl && directusAdminToken) {
     try {
-      const res = await directusFetch(`/items/tenant_settings?filter[tenant_id][_eq]=${encodeURIComponent(tId)}`).catch(() => null);
-      if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
-        const raw = res.data[0].sms_phones;
-        smsPhones = Array.isArray(raw)
-          ? raw
-          : typeof raw === 'string'
-          ? raw.split(',').map((s: string) => s.trim()).filter(Boolean)
-          : [];
+      let res = await directusFetch(`/items/tenant_settings?filter[tenant_id][_eq]=${encodeURIComponent(tIdStr)}`).catch(() => null);
+      if (!res?.data || (Array.isArray(res.data) && res.data.length === 0)) {
+        res = await directusFetch('/items/tenant_settings').catch(() => null);
       }
-    } catch {}
+      if (res?.data) {
+        const items = Array.isArray(res.data) ? res.data : [res.data];
+        for (const item of items) {
+          const raw = item?.sms_phones;
+          if (Array.isArray(raw)) {
+            raw.forEach((p: any) => p && collectedPhones.add(String(p).trim()));
+          } else if (typeof raw === 'string') {
+            raw.split(',').forEach((p: string) => p.trim() && collectedPhones.add(p.trim()));
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn('[IPPanel SMS] Directus tenant_settings lookup warning:', err.message);
+    }
   }
 
-  if (smsPhones.length === 0) {
-    const local = tenantSettingsMap.get(tId) || tenantSettingsMap.get('default');
+  // 2. Local tenantSettingsMap fallback
+  for (const [, local] of tenantSettingsMap.entries()) {
     if (local?.sms_phones) {
-      smsPhones = Array.isArray(local.sms_phones) ? local.sms_phones : String(local.sms_phones).split(',').map(s => s.trim()).filter(Boolean);
+      const pArr = Array.isArray(local.sms_phones) ? local.sms_phones : String(local.sms_phones).split(',');
+      pArr.forEach(p => p.trim() && collectedPhones.add(p.trim()));
     }
   }
 
-  for (const phone of smsPhones) {
-    if (phone) {
-      sendIppanelSmsPattern(phone, patternCode, variables).catch(e => console.warn(`[IPPanel SMS] Failed to notify tenant admin ${phone}:`, e.message));
-    }
+  if (collectedPhones.size === 0) {
+    console.warn('[IPPanel SMS] No admin phone numbers found in tenant_settings to send notification.');
+    return;
+  }
+
+  console.log(`[IPPanel SMS] Notifying ${collectedPhones.size} tenant admins with pattern '${patternCode}'...`);
+  for (const phone of collectedPhones) {
+    sendIppanelSmsPattern(phone, patternCode, variables).catch(e =>
+      console.warn(`[IPPanel SMS] Failed to notify tenant admin ${phone}:`, e.message)
+    );
   }
 }
 
@@ -2318,17 +2446,39 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 
       if (projectSettingsData.login_pattern) {
         const uPhone = personnelItem?.phone || enrichedP?.phone || normalizedPhone;
+        const now = new Date();
+        const dStr = now.toLocaleDateString('fa-IR');
+        const tStr = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+        const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || '127.0.0.1';
+        const userAgent = (req.headers['user-agent'] as string) || '';
+        const deviceName = /mobile|android|iphone/i.test(userAgent) ? 'موبایل' : 'رایانه (وب)';
+        const nameParts = (fullName || personnelItem?.name || 'همکار گرامی').trim().split(' ');
+        const fName = nameParts[0] || 'همکار';
+        const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'گرامی';
+
+        const loginVars = {
+          name: fName,
+          family: lName,
+          fullName: fullName || personnelItem?.name || 'همکار گرامی',
+          mobile: uPhone || 'نامشخص',
+          phone: uPhone || 'نامشخص',
+          date: dStr,
+          time: tStr,
+          ip: clientIp,
+          device: deviceName,
+          username: personnelItem?.username || user.email || ''
+        };
+
+        // 1. Send SMS to the user who logged in
         if (uPhone) {
-          const now = new Date();
-          const dStr = now.toLocaleDateString('fa-IR');
-          const tStr = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
-          sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, {
-            name: fullName || personnelItem?.name || 'کاربر',
-            date: dStr,
-            time: tStr,
-            username: personnelItem?.username || user.email || ''
-          }).catch(e => console.warn('Login SMS pattern send warning:', e.message));
+          sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars)
+            .catch(e => console.warn('Login SMS pattern send to user warning:', e.message));
         }
+
+        // 2. Send SMS to tenant admins configured in settings
+        const userTenantId = personnelItem?.tenant_id || 'default';
+        sendTenantAdminsSmsPattern(userTenantId, projectSettingsData.login_pattern, loginVars)
+          .catch(e => console.warn('Login SMS pattern send to admin warning:', e.message));
       }
 
       return res.json({
@@ -2369,6 +2519,40 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   const found = personnelData.find(checkMatches) || initialPersonnel.find(checkMatches);
 
   if (found) {
+    if (projectSettingsData.login_pattern) {
+      const uPhone = found.phone || normalizedPhone;
+      const now = new Date();
+      const dStr = now.toLocaleDateString('fa-IR');
+      const tStr = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+      const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || '127.0.0.1';
+      const userAgent = (req.headers['user-agent'] as string) || '';
+      const deviceName = /mobile|android|iphone/i.test(userAgent) ? 'موبایل' : 'رایانه (وب)';
+      const nameParts = (found.name || 'همکار گرامی').trim().split(' ');
+      const fName = nameParts[0] || 'همکار';
+      const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'گرامی';
+
+      const loginVars = {
+        name: fName,
+        family: lName,
+        fullName: found.name,
+        mobile: uPhone || 'نامشخص',
+        phone: uPhone || 'نامشخص',
+        date: dStr,
+        time: tStr,
+        ip: clientIp,
+        device: deviceName,
+        username: found.username || found.email || ''
+      };
+
+      if (uPhone) {
+        sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars)
+          .catch(e => console.warn('Login SMS pattern send to user warning:', e.message));
+      }
+
+      sendTenantAdminsSmsPattern(found.tenant_id || 'default', projectSettingsData.login_pattern, loginVars)
+        .catch(e => console.warn('Login SMS pattern send to admin warning:', e.message));
+    }
+
     return res.json({
       success: true,
       access_token: 'local-token-' + found.id,
@@ -4481,7 +4665,10 @@ app.get('/api/tenant-settings', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      const resp = await directusFetch(`/items/tenant_settings?filter[tenant_id][_eq]=${encodeURIComponent(targetTenant)}`).catch(() => null);
+      let resp = await directusFetch(`/items/tenant_settings?filter[tenant_id][_eq]=${encodeURIComponent(targetTenant)}`).catch(() => null);
+      if (!resp?.data || (Array.isArray(resp.data) && resp.data.length === 0)) {
+        resp = await directusFetch('/items/tenant_settings').catch(() => null);
+      }
       if (resp?.data && Array.isArray(resp.data) && resp.data.length > 0) {
         const item = resp.data[0];
         const rawPhones = item.sms_phones;
@@ -4493,7 +4680,7 @@ app.get('/api/tenant-settings', async (req: Request, res: Response) => {
 
         return res.json({
           ...item,
-          tenant_id: targetTenant,
+          tenant_id: item.tenant_id || targetTenant,
           sms_phones: smsPhonesArray,
         });
       }
@@ -5899,25 +6086,43 @@ app.post('/api/leave-requests', async (req: Request, res: Response) => {
   // Trigger SMS Pattern Notification for Leave Request Creation
   const applicantP = personnelData.find(p => p.id === newRequest.personnel_id || p.user_id === newRequest.personnel_id);
   const applicantPhone = applicantP?.phone;
+  const nameParts = (newRequest.personnel_name || '').trim().split(' ');
+  const fName = nameParts[0] || 'همکار';
+  const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'گرامی';
+  const now = new Date();
+  const jalaliDate = now.toLocaleDateString('fa-IR');
 
-  if (applicantPhone) {
-    if (newRequest.leave_type === 'daily' && projectSettingsData.dayli_leave_request_pattern) {
-      sendIppanelSmsPattern(applicantPhone, projectSettingsData.dayli_leave_request_pattern, {
-        name: newRequest.personnel_name,
-        days: String(newRequest.days_count || 1),
-        start_date: newRequest.start_date || '',
-        reason: newRequest.reason || '-'
-      }).catch(e => console.warn('Daily leave request SMS error:', e.message));
-    } else if (newRequest.leave_type === 'hourly' && projectSettingsData.hourly_leave_request_pattern) {
-      sendIppanelSmsPattern(applicantPhone, projectSettingsData.hourly_leave_request_pattern, {
-        name: newRequest.personnel_name,
-        hours: String(newRequest.hours_count || 1),
-        start_time: newRequest.start_time || '',
-        end_time: newRequest.end_time || '',
-        date: newRequest.start_date || '',
-        reason: newRequest.reason || '-'
-      }).catch(e => console.warn('Hourly leave request SMS error:', e.message));
+  const leaveVars: Record<string, string> = {
+    name: fName,
+    family: lName,
+    fullName: newRequest.personnel_name,
+    mobile: applicantPhone || 'نامشخص',
+    phone: applicantPhone || 'نامشخص',
+    request_date: jalaliDate,
+    leave_type: newRequest.leave_type === 'daily' ? 'مرخصی روزانه' : 'مرخصی ساعتی',
+    days: String(newRequest.days_count || 1),
+    hours: String(newRequest.hours_count || 1),
+    start_date: newRequest.start_date || jalaliDate,
+    end_date: newRequest.end_date || newRequest.start_date || jalaliDate,
+    leave_date: newRequest.start_date || jalaliDate,
+    start_time: newRequest.start_time || '',
+    end_time: newRequest.end_time || '',
+    from_time: newRequest.start_time || '',
+    to_time: newRequest.end_time || '',
+    reason: newRequest.reason || '-'
+  };
+
+  const patternToUse = newRequest.leave_type === 'daily'
+    ? projectSettingsData.dayli_leave_request_pattern
+    : projectSettingsData.hourly_leave_request_pattern;
+
+  if (patternToUse) {
+    if (applicantPhone) {
+      sendIppanelSmsPattern(applicantPhone, patternToUse, leaveVars)
+        .catch(e => console.warn('Leave request SMS to applicant error:', e.message));
     }
+    sendTenantAdminsSmsPattern(targetTenantId, patternToUse, leaveVars)
+      .catch(e => console.warn('Leave request SMS to admin error:', e.message));
   }
 
   if (directusUrl && directusAdminToken) {
@@ -5965,26 +6170,51 @@ app.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
     const applicantP = personnelData.find(p => p.id === targetReq.personnel_id || p.user_id === targetReq.personnel_id);
     const applicantPhone = applicantP?.phone;
 
-    if (applicantPhone) {
-      let patternToUse = '';
-      if (status === 'approved') {
-        patternToUse = targetReq.leave_type === 'daily'
-          ? (projectSettingsData.dayli_leave_accept_pattern || '')
-          : (projectSettingsData.hourly_leave_accept_pattern || '');
-      } else if (status === 'rejected') {
-        patternToUse = targetReq.leave_type === 'daily'
-          ? (projectSettingsData.dayli_leave_reject_pattern || '')
-          : (projectSettingsData.hourly_leave_reject_pattern || '');
-      }
+    let patternToUse = '';
+    if (status === 'approved') {
+      patternToUse = targetReq.leave_type === 'daily'
+        ? (projectSettingsData.dayli_leave_accept_pattern || '')
+        : (projectSettingsData.hourly_leave_accept_pattern || '');
+    } else if (status === 'rejected') {
+      patternToUse = targetReq.leave_type === 'daily'
+        ? (projectSettingsData.dayli_leave_reject_pattern || '')
+        : (projectSettingsData.hourly_leave_reject_pattern || '');
+    }
 
-      if (patternToUse) {
-        sendIppanelSmsPattern(applicantPhone, patternToUse, {
-          name: targetReq.personnel_name,
-          manager_note: manager_note || 'بررسی شد',
-          reviewed_by: userName || 'مدیریت',
-          start_date: targetReq.start_date || ''
-        }).catch(e => console.warn('Leave request status SMS error:', e.message));
+    if (patternToUse) {
+      const nameParts = (targetReq.personnel_name || '').trim().split(' ');
+      const fName = nameParts[0] || 'همکار';
+      const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'گرامی';
+      const now = new Date();
+      const jalaliDate = now.toLocaleDateString('fa-IR');
+
+      const statusVars = {
+        name: fName,
+        family: lName,
+        fullName: targetReq.personnel_name,
+        mobile: applicantPhone || 'نامشخص',
+        phone: applicantPhone || 'نامشخص',
+        request_date: targetReq.date_created ? new Date(targetReq.date_created).toLocaleDateString('fa-IR') : jalaliDate,
+        leave_type: targetReq.leave_type === 'daily' ? 'مرخصی روزانه' : 'مرخصی ساعتی',
+        leave_date: targetReq.start_date || jalaliDate,
+        start_date: targetReq.start_date || jalaliDate,
+        end_date: targetReq.end_date || targetReq.start_date || jalaliDate,
+        start_time: targetReq.start_time || '',
+        end_time: targetReq.end_time || '',
+        from_time: targetReq.start_time || '',
+        to_time: targetReq.end_time || '',
+        days: String(targetReq.days_count || 1),
+        hours: String(targetReq.hours_count || 1),
+        manager_note: manager_note || 'بررسی شد',
+        reviewed_by: userName || 'مدیریت'
+      };
+
+      if (applicantPhone) {
+        sendIppanelSmsPattern(applicantPhone, patternToUse, statusVars)
+          .catch(e => console.warn('Leave request status SMS error:', e.message));
       }
+      sendTenantAdminsSmsPattern(targetReq.tenant_id || 'default', patternToUse, statusVars)
+        .catch(e => console.warn('Leave status SMS to admin warning:', e.message));
     }
   }
 
@@ -6115,14 +6345,33 @@ app.post('/api/advance-requests', async (req: Request, res: Response) => {
   // Trigger SMS Pattern for Advance Request Creation
   if (projectSettingsData.addvance_request_pattern) {
     const applicantP = personnelData.find(p => p.id === newRequest.personnel_id || p.user_id === newRequest.personnel_id);
-    if (applicantP?.phone) {
-      sendIppanelSmsPattern(applicantP.phone, projectSettingsData.addvance_request_pattern, {
-        name: newRequest.personnel_name,
-        amount: String(newRequest.amount),
-        month: newRequest.target_month || '',
-        reason: newRequest.reason || '-'
-      }).catch(e => console.warn('Advance request SMS error:', e.message));
+    const applicantPhone = applicantP?.phone;
+    const nameParts = (newRequest.personnel_name || '').trim().split(' ');
+    const fName = nameParts[0] || 'همکار';
+    const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'گرامی';
+    const now = new Date();
+    const jalaliDate = now.toLocaleDateString('fa-IR');
+    const amountStr = String(newRequest.amount || 0);
+
+    const advVars = {
+      name: fName,
+      family: lName,
+      fullName: newRequest.personnel_name,
+      mobile: applicantPhone || 'نامشخص',
+      phone: applicantPhone || 'نامشخص',
+      amount: amountStr,
+      requested_amount: amountStr,
+      request_date: jalaliDate,
+      month: newRequest.target_month || '',
+      reason: newRequest.reason || '-'
+    };
+
+    if (applicantPhone) {
+      sendIppanelSmsPattern(applicantPhone, projectSettingsData.addvance_request_pattern, advVars)
+        .catch(e => console.warn('Advance request SMS error:', e.message));
     }
+    sendTenantAdminsSmsPattern(targetTenantId, projectSettingsData.addvance_request_pattern, advVars)
+      .catch(e => console.warn('Advance request SMS to admin error:', e.message));
   }
 
   if (directusUrl && directusAdminToken) {
@@ -6167,27 +6416,51 @@ app.patch('/api/advance-requests/:id', async (req: Request, res: Response) => {
   const targetAdv = advanceRequestsData.find(r => r.id === id);
   if (targetAdv) {
     const applicantP = personnelData.find(p => p.id === targetAdv.personnel_id || p.user_id === targetAdv.personnel_id);
-    if (applicantP?.phone) {
-      let patternToUse = '';
-      if (status === 'approved') {
-        const approvedNum = approved_amount !== undefined ? Number(approved_amount) : Number(targetAdv.amount);
-        if (approvedNum < Number(targetAdv.amount) && projectSettingsData.lower_addvance_accept_pattern) {
-          patternToUse = projectSettingsData.lower_addvance_accept_pattern;
-        } else {
-          patternToUse = projectSettingsData.addvance_accept_pattern || '';
-        }
-      } else if (status === 'rejected') {
-        patternToUse = projectSettingsData.addvance_reject_pattern || '';
-      }
+    const applicantPhone = applicantP?.phone;
 
-      if (patternToUse) {
-        sendIppanelSmsPattern(applicantP.phone, patternToUse, {
-          name: targetAdv.personnel_name,
-          amount: String(approved_amount !== undefined ? approved_amount : targetAdv.amount),
-          manager_note: manager_note || 'بررسی شد',
-          reviewed_by: userName || 'مدیریت'
-        }).catch(e => console.warn('Advance request status SMS error:', e.message));
+    let patternToUse = '';
+    if (status === 'approved') {
+      const approvedNum = approved_amount !== undefined ? Number(approved_amount) : Number(targetAdv.amount);
+      if (approvedNum < Number(targetAdv.amount) && projectSettingsData.lower_addvance_accept_pattern) {
+        patternToUse = projectSettingsData.lower_addvance_accept_pattern;
+      } else {
+        patternToUse = projectSettingsData.addvance_accept_pattern || '';
       }
+    } else if (status === 'rejected') {
+      patternToUse = projectSettingsData.addvance_reject_pattern || '';
+    }
+
+    if (patternToUse) {
+      const nameParts = (targetAdv.personnel_name || '').trim().split(' ');
+      const fName = nameParts[0] || 'همکار';
+      const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'گرامی';
+      const now = new Date();
+      const jalaliDate = now.toLocaleDateString('fa-IR');
+      const reqAmountStr = String(targetAdv.amount || 0);
+      const appAmountStr = String(approved_amount !== undefined ? approved_amount : targetAdv.amount || 0);
+
+      const advStatusVars = {
+        name: fName,
+        family: lName,
+        fullName: targetAdv.personnel_name,
+        mobile: applicantPhone || 'نامشخص',
+        phone: applicantPhone || 'نامشخص',
+        amount: appAmountStr,
+        requested_amount: reqAmountStr,
+        approved_amount: appAmountStr,
+        request_date: targetAdv.date_created ? new Date(targetAdv.date_created).toLocaleDateString('fa-IR') : jalaliDate,
+        approval_date: jalaliDate,
+        month: targetAdv.target_month || '',
+        manager_note: manager_note || 'بررسی شد',
+        reviewed_by: userName || 'مدیریت'
+      };
+
+      if (applicantPhone) {
+        sendIppanelSmsPattern(applicantPhone, patternToUse, advStatusVars)
+          .catch(e => console.warn('Advance request status SMS error:', e.message));
+      }
+      sendTenantAdminsSmsPattern(targetAdv.tenant_id || 'default', patternToUse, advStatusVars)
+        .catch(e => console.warn('Advance status SMS to admin warning:', e.message));
     }
   }
 
