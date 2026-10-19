@@ -26,6 +26,14 @@ import { Personnel } from '../types.ts';
 
 const router = Router();
 
+// GET /api/health & /health for Docker container healthchecks
+router.get('/api/health', (req: Request, res: Response) => {
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+router.get('/health', (req: Request, res: Response) => {
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
 // GET /api/project-settings
 router.get('/api/project-settings', async (req: Request, res: Response) => {
   if (directusUrl && directusAdminToken) {

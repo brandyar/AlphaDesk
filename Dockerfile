@@ -40,6 +40,7 @@ RUN npm install --omit=dev --no-audit --no-fund --legacy-peer-deps
 # Copy compiled frontend assets & backend server files
 COPY --from=builder /app/dist ./dist
 COPY server.ts ./server.ts
+COPY server ./server
 COPY directus-schema.json ./directus-schema.json
 COPY tsconfig.json ./tsconfig.json
 
