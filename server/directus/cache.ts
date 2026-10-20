@@ -55,13 +55,13 @@ export async function ensureReportsCache(forceRefresh = false): Promise<any[]> {
     return reportsCache.data;
   }
 
-  const res = await directusFetch('/items/customer_reports?limit=100&sort=-date_created').catch(() => null);
+  const res = await directusFetchAllPages('/items/customer_reports?sort=-date_created').catch(() => null);
   const items = res?.data || [];
   if (items && items.length > 0) {
     reportsCache = {
       timestamp: Date.now(),
       data: items,
-      meta: res.meta || { total_count: items.length },
+      meta: res?.meta || { total_count: items.length },
     };
     return items;
   }

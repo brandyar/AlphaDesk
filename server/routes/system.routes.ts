@@ -49,9 +49,27 @@ router.get('/api/bff-status', (req: Request, res: Response) => {
   });
 });
 
+// In-memory cache for dashboard summary to prevent repeated heavy queries and 429/503 pressure
+interface DashboardSummaryCacheItem {
+  data: any;
+  timestamp: number;
+}
+const dashboardSummaryCacheMap = new Map<string, DashboardSummaryCacheItem>();
+const DASHBOARD_CACHE_TTL_MS = 30000; // 30 seconds
+
+export function invalidateDashboardSummaryCache() {
+  dashboardSummaryCacheMap.clear();
+}
+
 // GET /api/dashboard-summary & /api/dashboard/summary
 const handleDashboardSummary = async (req: Request, res: Response) => {
   const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+  const cacheKey = `${tenantId || 'all'}_${isAdmin ? 'admin' : userId || userName || 'staff'}`;
+  const now = Date.now();
+  const cached = dashboardSummaryCacheMap.get(cacheKey);
+  if (cached && now - cached.timestamp < DASHBOARD_CACHE_TTL_MS) {
+    return res.json(cached.data);
+  }
 
   if (directusUrl && directusAdminToken) {
     try {
@@ -63,14 +81,25 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
         }
       }
 
+      // Batch 1: Core counts (lightweight meta=filter_count)
       const [
         totalCustomersRes,
         freeCustomersRes,
         expiredCustomersRes,
         contractsWonCustomersRes,
         totalReportsRes,
-        contractsWonReportsRes,
         totalColdLeadsRes,
+      ] = await Promise.all([
+        directusFetch(`/items/customers?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customer_reports?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/cold_leads?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
+      ]);
+
+      // Batch 2: Secondary counts, aggregates & recent items
+      const [
         adminReportsRes,
         pendingLeavesRes,
         pendingAdvancesRes,
@@ -79,17 +108,10 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
         upcomingFollowupsRes,
         urgentExpiringRes,
       ] = await Promise.all([
-        directusFetch(`/items/customers?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customer_reports?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customer_reports?limit=1&meta=filter_count&filter[negotiation_status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/cold_leads?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/administrative_reports?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/leave_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/advance_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customer_reports?aggregate[sum]=contract_amount&filter[negotiation_status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customer_reports?aggregate[sum]=contract_amount&filter[negotiation_status][_in]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%20%2F%20%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%2F%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/customer_reports?aggregate[avg]=negotiation_score${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/customers?limit=5&sort=next_followup_date&fields=id,company_name,manager_name,phone,next_followup_date,status,assigned_marketer_name&filter[next_followup_date][_nnull]=true${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/customers?limit=5&sort=assignment_deadline&fields=id,company_name,manager_name,phone,assignment_deadline,status,assigned_marketer_name&filter[is_expired][_eq]=false&filter[assignment_deadline][_nnull]=true${tenantFilterStr}`).catch(() => null),
@@ -98,7 +120,7 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
       const totalCustomers = totalCustomersRes?.meta?.filter_count ?? totalCustomersRes?.meta?.total_count ?? 0;
       const freeCustomers = freeCustomersRes?.meta?.filter_count ?? 0;
       const expiredCustomers = expiredCustomersRes?.meta?.filter_count ?? 0;
-      const contractsWon = contractsWonCustomersRes?.meta?.filter_count ?? contractsWonReportsRes?.meta?.filter_count ?? 0;
+      const contractsWon = contractsWonCustomersRes?.meta?.filter_count ?? 0;
       const totalReports = totalReportsRes?.meta?.filter_count ?? totalReportsRes?.meta?.total_count ?? 0;
       const totalColdLeads = totalColdLeadsRes?.meta?.filter_count ?? totalColdLeadsRes?.meta?.total_count ?? 0;
       const adminReportsCount = adminReportsRes?.meta?.filter_count ?? adminReportsRes?.meta?.total_count ?? 0;
@@ -127,7 +149,7 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
 
       const inNegotiationCount = Math.max(0, totalCustomers - contractsWon);
 
-      return res.json({
+      const resultPayload = {
         total_customers: totalCustomers,
         contracts_won_count: contractsWon,
         in_negotiation_count: inNegotiationCount,
@@ -142,7 +164,10 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
         avg_negotiation_score: avgScore,
         upcoming_followups: upcomingFollowups,
         urgent_expiring_customers: urgentExpiringCustomers,
-      });
+      };
+
+      dashboardSummaryCacheMap.set(cacheKey, { data: resultPayload, timestamp: Date.now() });
+      return res.json(resultPayload);
     } catch (err: any) {
       console.warn('Dashboard summary error:', err.message);
     }

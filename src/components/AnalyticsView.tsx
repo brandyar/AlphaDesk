@@ -13,7 +13,7 @@ import {
   formatStatusLabel,
   gregorianIsoToJalali,
 } from '../utils';
-import { fetchCustomerReports, fetchCustomers } from '../api';
+import { fetchCustomerReports, fetchCustomers, fetchAnalyticsStats, AnalyticsStatsResponse } from '../api';
 import { DailyReportsTab } from './analytics/DailyReportsTab';
 import { CustomerCoverageTab } from './analytics/CustomerCoverageTab';
 import { TrendsLeaderboardTab } from './analytics/TrendsLeaderboardTab';
@@ -79,6 +79,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [allReportsData, setAllReportsData] = useState<CustomerReport[]>(reports);
   const [allCustomersData] = useState<Customer[]>(customers);
   const [, setIsLoadingAnalytics] = useState<boolean>(false);
+  const [serverPeriodicStats, setServerPeriodicStats] = useState<AnalyticsStatsResponse | null>(null);
 
   // Calculate Date Boundaries for Periodic View
   const periodDateRange = useMemo(() => {
@@ -139,27 +140,46 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       ? personnelList.find((p) => p.id === selectedPersonnelId)?.name
       : undefined;
 
-    fetchCustomerReports(undefined, {
-      startDate: queryStartDate,
-      endDate: queryEndDate,
-      negotiator: targetPersonnel,
-      limit: 5000,
-      fields: 'id,customer_id,negotiator_name,created_by,negotiation_status,negotiation_score,contract_amount,contract_number,date_created,negotiation_phone,report_text',
-    })
-      .then((reps) => {
-        if (isMounted && Array.isArray(reps)) {
-          setAllReportsData(reps);
-        }
+    const promises: Promise<any>[] = [
+      fetchCustomerReports(undefined, {
+        startDate: queryStartDate,
+        endDate: queryEndDate,
+        negotiator: targetPersonnel,
+        limit: 5000,
+        fields: 'id,customer_id,negotiator_name,created_by,negotiation_status,negotiation_score,contract_amount,contract_number,date_created,negotiation_phone,report_text',
       })
-      .catch((err) => console.warn('Failed to load scoped reports for analytics:', err))
-      .finally(() => {
-        if (isMounted) setIsLoadingAnalytics(false);
-      });
+        .then((reps) => {
+          if (isMounted && Array.isArray(reps)) {
+            setAllReportsData(reps);
+          }
+        })
+        .catch((err) => console.warn('Failed to load scoped reports for analytics:', err)),
+    ];
+
+    if (activeTab === 'periodic') {
+      promises.push(
+        fetchAnalyticsStats({
+          startDate: queryStartDate,
+          endDate: queryEndDate,
+          negotiator: targetPersonnel,
+        })
+          .then((res) => {
+            if (isMounted && res) {
+              setServerPeriodicStats(res);
+            }
+          })
+          .catch((err) => console.warn('Failed to load analytics stats:', err))
+      );
+    }
+
+    Promise.allSettled(promises).finally(() => {
+      if (isMounted) setIsLoadingAnalytics(false);
+    });
 
     return () => {
       isMounted = false;
     };
-  }, [queryStartDate, queryEndDate, selectedPersonnelId, personnelList]);
+  }, [activeTab, queryStartDate, queryEndDate, selectedPersonnelId, personnelList]);
 
   // Filtered personnel list for search
   const filteredPersonnelOptions = useMemo(() => {
@@ -522,6 +542,34 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       }))
       .sort((a, b) => b.contractsCount - a.contractsCount || b.reportsCount - a.reportsCount);
 
+    if (serverPeriodicStats && serverPeriodicStats.totalReports > 0) {
+      return {
+        totalReports: serverPeriodicStats.totalReports,
+        totalUniqueCustomers: totalUniqueCustomers || serverPeriodicStats.totalReports,
+        totalContracts: serverPeriodicStats.totalContracts,
+        totalContractAmount: serverPeriodicStats.totalContractAmount,
+        avgScore: serverPeriodicStats.avgScore || avgScore,
+        conversionRate:
+          serverPeriodicStats.totalReports > 0
+            ? ((serverPeriodicStats.totalContracts / serverPeriodicStats.totalReports) * 100).toFixed(1)
+            : '0',
+        statusBreakdown:
+          serverPeriodicStats.statusBreakdown && Object.keys(serverPeriodicStats.statusBreakdown).length > 0
+            ? serverPeriodicStats.statusBreakdown
+            : statusBreakdown,
+        personnelRanking:
+          serverPeriodicStats.personnelRanking && serverPeriodicStats.personnelRanking.length > 0
+            ? serverPeriodicStats.personnelRanking.map((p) => ({
+                ...p,
+                uniqueCustomers: new Set<string>(),
+                uniqueCustomersCount: p.reportsCount,
+                scoresSum: 0,
+                scoresCount: 0,
+              }))
+            : personnelRanking,
+      };
+    }
+
     return {
       totalReports,
       totalUniqueCustomers,
@@ -532,7 +580,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       statusBreakdown,
       personnelRanking,
     };
-  }, [periodicReports]);
+  }, [periodicReports, serverPeriodicStats]);
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-200">

@@ -91,7 +91,17 @@ router.get('/', async (req: Request, res: Response) => {
 
       const resData = await directusFetch(directusPath, {}, 1).catch(() => null);
       if (resData && Array.isArray(resData.data)) {
-        const totalCount = resData.meta?.filter_count ?? resData.meta?.total_count ?? resData.data.length;
+        let items = resData.data;
+        const totalCount = resData.meta?.filter_count ?? resData.meta?.total_count ?? items.length;
+
+        // Directus caps single queries at 100 items. If client requested reqLimit > 100, fetch remaining pages.
+        if (reqLimit > 100 && totalCount > items.length && items.length >= 100) {
+          const allRes = await directusFetchAllPages(directusPath, {}).catch(() => null);
+          if (allRes && Array.isArray(allRes.data) && allRes.data.length > 0) {
+            items = allRes.data.slice(0, reqLimit);
+          }
+        }
+
         const totalPages = Math.max(1, Math.ceil(totalCount / reqLimit));
         res.setHeader('X-Total-Count', String(totalCount));
         res.setHeader('X-Filter-Count', String(totalCount));
@@ -99,7 +109,7 @@ router.get('/', async (req: Request, res: Response) => {
         res.setHeader('X-Limit', String(reqLimit));
 
         return res.json({
-          data: resData.data,
+          data: items,
           meta: {
             filter_count: totalCount,
             total_count: totalCount,

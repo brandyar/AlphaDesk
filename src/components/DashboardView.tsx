@@ -59,10 +59,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [summary, setSummary] = React.useState<DashboardSummary | null>(dashboardSummary || null);
 
   React.useEffect(() => {
+    if (dashboardSummary) {
+      setSummary(dashboardSummary);
+      return;
+    }
     fetchDashboardSummary()
       .then((s) => setSummary(s))
       .catch((err) => console.warn('Failed to load dashboard summary:', err));
-  }, []);
+  }, [dashboardSummary]);
 
   const expiredCustomers = customers.filter((c) => c.is_expired);
   const contractsWon = customers.filter((c) => c.status === 'قرارداد');
