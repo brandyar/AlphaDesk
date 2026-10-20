@@ -35,6 +35,7 @@ interface ReportsViewProps {
   isAdmin?: boolean;
   onOpenAddReportModal: (preselectedCustomerId?: string) => void;
   onSelectCustomer: (customer: Customer) => void;
+  activeTenantId?: string;
 }
 
 // Admin filter keys
@@ -65,14 +66,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   isAdmin,
   onOpenAddReportModal,
   onSelectCustomer,
+  activeTenantId,
 }) => {
   const userIsAdmin = Boolean(
     isAdmin ||
     currentUser?.is_admin ||
     currentUser?.app_role === 'admin' ||
-    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-    currentPersonnel?.role === 'admin'
+    currentUser?.app_role === 'sales_manager' ||
+    currentPersonnel?.role === 'admin' ||
+    currentPersonnel?.role === 'sales_manager'
   );
 
   // Active category filter
@@ -89,10 +91,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
 
-  // Reset page when any filter changes
+  // Sync initial items when reports prop updates
+  useEffect(() => {
+    if (reports && reports.length > 0 && items.length === 0) {
+      setItems(reports);
+      setTotalCount(reports.length);
+    }
+  }, [reports]);
+
+  // Reset page when any filter or tenant changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery]);
+  }, [adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery, activeTenantId]);
 
   // Fetch paginated reports from Directus / BFF
   useEffect(() => {
@@ -123,7 +133,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery]);
+  }, [currentPage, pageSize, adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery, activeTenantId]);
 
   // Helper to check if a customer belongs to the current user
   const isMyCustomer = (c: Customer): boolean => {

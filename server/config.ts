@@ -26,7 +26,6 @@ export function updateDirectusConfig(url?: string, token?: string) {
 
 export const DIRECTUS_ADMIN_ROLE_IDS = [
   '59e261e1-56f4-401e-9889-4971e2c3c4ce',
-  'a45beaec-0272-4c29-89ee-122dce37f565',
 ];
 export const DIRECTUS_ADMIN_ROLE_ID = '59e261e1-56f4-401e-9889-4971e2c3c4ce';
 export const DIRECTUS_STAFF_ROLE_ID = 'b9c11357-4926-47ad-b020-6080cb2a62df';

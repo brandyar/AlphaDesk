@@ -42,6 +42,7 @@ interface CustomersViewProps {
   onSelectStatusFilter: (status: string) => void;
   showExpiredOnly: boolean;
   onToggleExpiredOnly: (val: boolean) => void;
+  activeTenantId?: string;
 }
 
 export const CustomersView: React.FC<CustomersViewProps> = ({
@@ -59,6 +60,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   onSelectStatusFilter,
   showExpiredOnly,
   onToggleExpiredOnly,
+  activeTenantId,
 }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -70,12 +72,20 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
 
-  // Reset page to 1 when filters or search change
+  // Sync initial items when customers prop updates
+  useEffect(() => {
+    if (customers && customers.length > 0 && items.length === 0) {
+      setItems(customers);
+      setTotalCount(customers.length);
+    }
+  }, [customers]);
+
+  // Reset page to 1 when filters, search or tenant change
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, selectedMarketerId, showExpiredOnly, searchQuery]);
+  }, [statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId]);
 
-  // Fetch server-side paginated items on filter or page change
+  // Fetch server-side paginated items on filter, tenant or page change
   useEffect(() => {
     let isMounted = true;
     setIsLoadingPage(true);
@@ -103,15 +113,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery]);
+  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId]);
 
   const userIsAdmin = Boolean(
     isAdmin ||
     currentUser?.is_admin ||
     currentUser?.app_role === 'admin' ||
-    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-    currentPersonnel?.role === 'admin'
+    currentUser?.app_role === 'sales_manager' ||
+    currentPersonnel?.role === 'admin' ||
+    currentPersonnel?.role === 'sales_manager'
   );
 
   return (

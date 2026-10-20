@@ -33,6 +33,7 @@ interface AnalyticsViewProps {
   currentUser?: AuthUser | null;
   isAdmin?: boolean;
   onSelectCustomer?: (customer: Customer) => void;
+  activeTenantId?: string;
 }
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
@@ -43,14 +44,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   currentUser,
   isAdmin,
   onSelectCustomer,
+  activeTenantId,
 }) => {
   const userIsAdmin = Boolean(
     isAdmin ||
     currentUser?.is_admin ||
     currentUser?.app_role === 'admin' ||
-    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-    currentPersonnel?.role === 'admin'
+    currentUser?.app_role === 'sales_manager' ||
+    currentPersonnel?.role === 'admin' ||
+    currentPersonnel?.role === 'sales_manager'
   );
 
   // Main Sub-Tab
@@ -77,7 +79,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
   // Full analytics datasets
   const [allReportsData, setAllReportsData] = useState<CustomerReport[]>(reports);
-  const [allCustomersData] = useState<Customer[]>(customers);
+  const allCustomersData = customers;
   const [, setIsLoadingAnalytics] = useState<boolean>(false);
   const [serverPeriodicStats, setServerPeriodicStats] = useState<AnalyticsStatsResponse | null>(null);
 
@@ -179,7 +181,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [activeTab, queryStartDate, queryEndDate, selectedPersonnelId, personnelList]);
+  }, [activeTab, queryStartDate, queryEndDate, selectedPersonnelId, personnelList, activeTenantId]);
 
   // Filtered personnel list for search
   const filteredPersonnelOptions = useMemo(() => {

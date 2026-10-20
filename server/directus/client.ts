@@ -1,7 +1,7 @@
 import { directusUrl, directusAdminToken } from '../config.ts';
 
 // Directus API Request Forwarder with retry, backoff and rate-limit/pressure resilience
-export async function directusFetch(path: string, options: RequestInit = {}, retries = 3): Promise<any> {
+export async function directusFetch(path: string, options: RequestInit = {}, retries = 2): Promise<any> {
   if (!directusUrl) {
     throw new Error('DIRECTUS_URL_NOT_CONFIGURED');
   }
@@ -21,7 +21,7 @@ export async function directusFetch(path: string, options: RequestInit = {}, ret
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const timeoutId = setTimeout(() => controller.abort(), 7000);
 
       const res = await fetch(url, {
         ...options,

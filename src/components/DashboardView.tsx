@@ -40,6 +40,7 @@ interface DashboardViewProps {
   onOpenNewLead: () => void;
   onOpenAddReport?: () => void;
   onNavigateToTab: (tab: any, subTab?: any) => void;
+  activeTenantId?: string;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -55,6 +56,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenNewLead,
   onOpenAddReport,
   onNavigateToTab,
+  activeTenantId,
 }) => {
   const [summary, setSummary] = React.useState<DashboardSummary | null>(dashboardSummary || null);
 
@@ -66,7 +68,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     fetchDashboardSummary()
       .then((s) => setSummary(s))
       .catch((err) => console.warn('Failed to load dashboard summary:', err));
-  }, [dashboardSummary]);
+  }, [dashboardSummary, activeTenantId]);
 
   const expiredCustomers = customers.filter((c) => c.is_expired);
   const contractsWon = customers.filter((c) => c.status === 'قرارداد');

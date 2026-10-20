@@ -20,9 +20,11 @@ export function resolveDirectusTenantId(rawTenant: any): number | null {
     rawTenant === null ||
     rawTenant === undefined ||
     rawTenant === '' ||
-    rawTenant === 'all' ||
-    rawTenant === 'default'
+    rawTenant === 'all'
   ) {
+    return null;
+  }
+  if (rawTenant === 'default') {
     if (validIds.length > 0) return validIds[0];
     return 1;
   }

@@ -46,6 +46,7 @@ interface FreeCustomersViewProps {
   onClaimCustomer: (customerId: string, durationDays: number) => Promise<boolean>;
   onSelectCustomer: (customer: Customer) => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  activeTenantId?: string;
 }
 
 export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
@@ -58,6 +59,7 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
   onClaimCustomer,
   onSelectCustomer,
   showToast,
+  activeTenantId,
 }) => {
   // Configurable claim limit (default 20, synced with Directus project_settings)
   const [claimLimit, setClaimLimit] = useState<number>(() => {
@@ -105,8 +107,12 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
   };
 
   useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTenantId]);
+
+  useEffect(() => {
     loadPool();
-  }, [currentPage, searchQuery]);
+  }, [currentPage, searchQuery, activeTenantId]);
 
   useEffect(() => {
     fetchProjectSettings()

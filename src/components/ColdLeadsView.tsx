@@ -42,6 +42,7 @@ interface ColdLeadsViewProps {
   onDeleteLead?: (leadId: string) => Promise<void>;
   onConvertToCustomer: (lead: ColdLead) => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  activeTenantId?: string;
 }
 
 export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
@@ -57,14 +58,15 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
   onDeleteLead,
   onConvertToCustomer,
   showToast,
+  activeTenantId,
 }) => {
   const userIsAdmin = Boolean(
     isAdmin ||
     currentUser?.is_admin ||
     currentUser?.app_role === 'admin' ||
-    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-    currentPersonnel?.role === 'admin'
+    currentUser?.app_role === 'sales_manager' ||
+    currentPersonnel?.role === 'admin' ||
+    currentPersonnel?.role === 'sales_manager'
   );
 
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
@@ -91,10 +93,18 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
 
-  // Reset page when filters change
+  // Sync initial items when coldLeads prop updates
+  useEffect(() => {
+    if (coldLeads && coldLeads.length > 0 && items.length === 0) {
+      setItems(coldLeads);
+      setTotalCount(coldLeads.length);
+    }
+  }, [coldLeads]);
+
+  // Reset page when filters or tenant change
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, marketerFilter, searchQuery]);
+  }, [statusFilter, marketerFilter, searchQuery, activeTenantId]);
 
   // Fetch paginated cold leads from Directus
   useEffect(() => {
@@ -123,7 +133,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, statusFilter, marketerFilter, searchQuery]);
+  }, [currentPage, pageSize, statusFilter, marketerFilter, searchQuery, activeTenantId]);
 
   // Multi-selection state for Bulk Assignment
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);

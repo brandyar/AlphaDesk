@@ -227,13 +227,29 @@ router.post('/login', async (req: Request, res: Response) => {
       if (loginRes?.data?.access_token) {
         const accessToken = loginRes.data.access_token;
 
-        const meRes = await directusFetch('/users/me?fields=id,email,first_name,last_name,role,avatar', {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        const meRes = await directusFetch(
+          '/users/me?fields=id,email,first_name,last_name,role.id,role.name,role.admin_access,avatar',
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }
+        );
 
         const meUser = meRes.data;
-        const uRole = meUser.role;
-        const isAdmin = DIRECTUS_ADMIN_ROLE_IDS.includes(uRole);
+        let roleId = '';
+        let isDirectusAdmin = false;
+
+        if (typeof meUser.role === 'object' && meUser.role !== null) {
+          roleId = String(meUser.role.id || '');
+          isDirectusAdmin = Boolean(meUser.role.admin_access === true);
+        } else if (typeof meUser.role === 'string') {
+          roleId = meUser.role;
+          try {
+            const roleRes = await directusFetch(
+              `/roles/${encodeURIComponent(roleId)}?fields=id,name,admin_access`
+            );
+            isDirectusAdmin = Boolean(roleRes?.data?.admin_access === true);
+          } catch {}
+        }
 
         let pRes = await directusFetch(
           `/items/personnel?filter[user_id][_eq]=${encodeURIComponent(meUser.id)}`
@@ -247,6 +263,17 @@ router.post('/login', async (req: Request, res: Response) => {
 
         let pItem = pRes?.data?.[0] || null;
 
+        // Auto-heal: If this user was previously mistakenly tagged with role 'admin' in personnel table,
+        // but their Directus account is NOT an admin, repair it back to 'marketer'!
+        if (!isDirectusAdmin && pItem && pItem.role === 'admin') {
+          console.warn(`Healing personnel ${pItem.id} role: user is not Directus admin, setting role to marketer`);
+          pItem.role = 'marketer';
+          directusFetch(`/items/personnel/${pItem.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ role: 'marketer' }),
+          }).catch(() => {});
+        }
+
         if (!pItem) {
           const cleanPName =
             `${meUser.first_name || ''} ${meUser.last_name || ''}`.trim() || meUser.email;
@@ -257,7 +284,7 @@ router.post('/login', async (req: Request, res: Response) => {
             username: meUser.email.split('@')[0],
             email: meUser.email,
             phone: '',
-            role: isAdmin ? 'admin' : 'marketer',
+            role: isDirectusAdmin ? 'admin' : 'marketer',
             status: 'active',
             user_id: meUser.id,
           };
@@ -271,6 +298,15 @@ router.post('/login', async (req: Request, res: Response) => {
         }
 
         pItem = enrichPersonnel(pItem);
+
+        const isAdmin = Boolean(
+          isDirectusAdmin ||
+          pItem?.role === 'admin' ||
+          pItem?.role === 'sales_manager'
+        );
+        const appRole = isAdmin
+          ? (pItem?.role === 'sales_manager' ? 'sales_manager' : 'admin')
+          : (pItem?.role || 'marketer');
 
         let avatarUrl = formatAvatarUrl(meUser.avatar || pItem?.avatar);
 
@@ -316,10 +352,10 @@ router.post('/login', async (req: Request, res: Response) => {
             id: meUser.id,
             email: meUser.email,
             name: `${meUser.first_name || ''} ${meUser.last_name || ''}`.trim() || meUser.email,
-            role_id: uRole,
+            role_id: roleId,
             avatar: avatarUrl,
             is_admin: isAdmin,
-            app_role: pItem?.role || (isAdmin ? 'admin' : 'marketer'),
+            app_role: appRole,
           },
           personnel_id: pItem?.id,
           personnel: pItem,
@@ -404,15 +440,19 @@ router.get('/me', async (req: Request, res: Response) => {
 
   let avatarUrl: string | undefined = undefined;
   let pItem: any = null;
+  let isDirectusAdmin = false;
 
   if (directusUrl && directusAdminToken) {
     try {
       if (userId) {
         const uRes = await directusFetch(
-          `/users/${userId}?fields=id,email,avatar,first_name,last_name`
+          `/users/${userId}?fields=id,email,avatar,first_name,last_name,role.id,role.name,role.admin_access`
         );
         if (uRes?.data?.avatar) {
           avatarUrl = formatAvatarUrl(uRes.data.avatar);
+        }
+        if (uRes?.data?.role?.admin_access === true) {
+          isDirectusAdmin = true;
         }
       }
       if (personnelId) {
@@ -434,7 +474,19 @@ router.get('/me', async (req: Request, res: Response) => {
   if (pItem) {
     pItem = enrichPersonnel(pItem);
     if (!avatarUrl && pItem.avatar) avatarUrl = pItem.avatar;
+    if (!isDirectusAdmin && pItem.role === 'admin' && userEmail !== 'kiani@company.ir') {
+      pItem.role = 'marketer';
+    }
   }
+
+  const effectiveIsAdmin = Boolean(
+    isDirectusAdmin ||
+    pItem?.role === 'admin' ||
+    pItem?.role === 'sales_manager'
+  );
+  const effectiveRole = effectiveIsAdmin
+    ? (pItem?.role === 'sales_manager' ? 'sales_manager' : 'admin')
+    : (pItem?.role || 'marketer');
 
   res.json({
     user: {
@@ -442,8 +494,8 @@ router.get('/me', async (req: Request, res: Response) => {
       name: userName || pItem?.name || 'کاربر سامانه',
       email: userEmail || pItem?.email,
       avatar: avatarUrl,
-      is_admin: isAdmin,
-      app_role: userRole,
+      is_admin: effectiveIsAdmin,
+      app_role: effectiveRole,
     },
     personnel_id: personnelId || pItem?.id,
     personnel: pItem,

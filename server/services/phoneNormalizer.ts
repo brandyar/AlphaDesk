@@ -175,7 +175,7 @@ export function cleanCustomerPayloadForDirectus(
     claimed_from_pool:
       payload.claimed_from_pool !== undefined ? Boolean(payload.claimed_from_pool) : false,
     claimed_from_pool_at: payload.claimed_from_pool_at || null,
-    tenant_id: resolveDirectusTenantId(payload.tenant_id),
+    tenant_id: resolveDirectusTenantId(payload.tenant_id) || 1,
     date_created: payload.date_created || nowIso,
     date_updated: nowIso,
   };

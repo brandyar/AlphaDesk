@@ -23,6 +23,7 @@ import {
 import {
   resolvePersonnelId,
   getSafeDirectusPersonnelForeignKey,
+  resolveDirectusTenantId,
 } from '../directus/sync.ts';
 import {
   cleanCustomerPayloadForDirectus,
@@ -226,11 +227,39 @@ router.get('/', async (req: Request, res: Response) => {
       let directusPath = `/items/customers?page=${reqPage}&limit=${reqLimit}&meta=filter_count&sort=-date_created`;
       directusPath += `&fields=id,company_name,business_type,province,city,manager_name,negotiator_name,mobile_numbers,landline_numbers,next_followup_date,assigned_marketer_id,assigned_marketer_name,assignment_deadline,status,is_expired,claimed_from_pool,date_created,date_updated,tenant_id`;
 
+      if (tenantId && tenantId !== 'all') {
+        const tenantNum = resolveDirectusTenantId(tenantId);
+        if (tenantNum) {
+          directusPath += `&filter[tenant_id][_eq]=${tenantNum}`;
+        }
+      }
+
       if (status && status !== 'همه') {
         directusPath += `&filter[status][_eq]=${encodeURIComponent(String(status))}`;
       }
       if (marketer_id && marketer_id !== 'همه') {
         directusPath += `&filter[assigned_marketer_id][_eq]=${encodeURIComponent(String(marketer_id))}`;
+      }
+      if (!isAdmin && !isFreeOnly && (personnelId || userId || userName)) {
+        const orClauses: string[] = [];
+        if (personnelId) {
+          const cleanP = String(personnelId).trim();
+          orClauses.push(`filter[_or][0][assigned_marketer_id][_eq]=${encodeURIComponent(cleanP)}`);
+          if (cleanP.startsWith('p-')) {
+            orClauses.push(`filter[_or][1][assigned_marketer_id][_eq]=${encodeURIComponent(cleanP.replace(/^p-/, ''))}`);
+          } else {
+            orClauses.push(`filter[_or][1][assigned_marketer_id][_eq]=p-${encodeURIComponent(cleanP)}`);
+          }
+        }
+        if (userId) {
+          orClauses.push(`filter[_or][2][assigned_marketer_id][_eq]=${encodeURIComponent(String(userId))}`);
+        }
+        if (userName) {
+          orClauses.push(`filter[_or][3][assigned_marketer_name][_eq]=${encodeURIComponent(String(userName))}`);
+        }
+        if (orClauses.length > 0) {
+          directusPath += `&${orClauses.join('&')}`;
+        }
       }
       if (expired_only === 'true') {
         directusPath += `&filter[is_expired][_eq]=true`;
@@ -252,6 +281,10 @@ router.get('/', async (req: Request, res: Response) => {
       const resData = await directusFetch(directusPath, {}, 1).catch(() => null);
       if (resData && Array.isArray(resData.data)) {
         let items = resData.data.map((c: any) => computeCustomerExpiration(c));
+
+        if (tenantId && tenantId !== 'all') {
+          items = items.filter((c: any) => matchesTenant(c.tenant_id, tenantId));
+        }
 
         if (!isAdmin && (userId || personnelId || userName) && !isFreeOnly) {
           const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';

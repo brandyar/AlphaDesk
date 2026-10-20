@@ -81,72 +81,55 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
         }
       }
 
-      // Batch 1: Core counts (lightweight meta=filter_count)
+      // Fast, lightweight parallel queries
       const [
         totalCustomersRes,
         freeCustomersRes,
         expiredCustomersRes,
         contractsWonCustomersRes,
-        totalReportsRes,
+        reportsAggregateRes,
         totalColdLeadsRes,
+        adminReportsRes,
+        pendingLeavesRes,
+        pendingAdvancesRes,
       ] = await Promise.all([
         directusFetch(`/items/customers?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/customers?limit=1&meta=filter_count&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/customers?limit=1&meta=filter_count&filter[is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/customers?limit=1&meta=filter_count&filter[status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customer_reports?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customer_reports?aggregate[count]=*&aggregate[sum]=contract_amount&aggregate[avg]=negotiation_score${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/cold_leads?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
-      ]);
-
-      // Batch 2: Secondary counts, aggregates & recent items
-      const [
-        adminReportsRes,
-        pendingLeavesRes,
-        pendingAdvancesRes,
-        contractRevenueRes,
-        avgScoreRes,
-        upcomingFollowupsRes,
-        urgentExpiringRes,
-      ] = await Promise.all([
         directusFetch(`/items/administrative_reports?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/leave_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/advance_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customer_reports?aggregate[sum]=contract_amount&filter[negotiation_status][_in]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%20%2F%20%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%2F%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customer_reports?aggregate[avg]=negotiation_score${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customers?limit=5&sort=next_followup_date&fields=id,company_name,manager_name,phone,next_followup_date,status,assigned_marketer_name&filter[next_followup_date][_nnull]=true${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customers?limit=5&sort=assignment_deadline&fields=id,company_name,manager_name,phone,assignment_deadline,status,assigned_marketer_name&filter[is_expired][_eq]=false&filter[assignment_deadline][_nnull]=true${tenantFilterStr}`).catch(() => null),
       ]);
 
       const totalCustomers = totalCustomersRes?.meta?.filter_count ?? totalCustomersRes?.meta?.total_count ?? 0;
       const freeCustomers = freeCustomersRes?.meta?.filter_count ?? 0;
       const expiredCustomers = expiredCustomersRes?.meta?.filter_count ?? 0;
       const contractsWon = contractsWonCustomersRes?.meta?.filter_count ?? 0;
-      const totalReports = totalReportsRes?.meta?.filter_count ?? totalReportsRes?.meta?.total_count ?? 0;
+
+      let totalReports = 0;
+      let totalRevenue = 0;
+      let avgScore = 8.5;
+
+      if (reportsAggregateRes?.data && Array.isArray(reportsAggregateRes.data) && reportsAggregateRes.data.length > 0) {
+        const repItem = reportsAggregateRes.data[0];
+        totalReports = Number(repItem.count || 0);
+        totalRevenue = Number(repItem.sum?.contract_amount || 0);
+        const rawAvg = Number(repItem.avg?.negotiation_score);
+        if (!isNaN(rawAvg) && rawAvg > 0) {
+          avgScore = Math.round(rawAvg * 10) / 10;
+        }
+      }
+
       const totalColdLeads = totalColdLeadsRes?.meta?.filter_count ?? totalColdLeadsRes?.meta?.total_count ?? 0;
       const adminReportsCount = adminReportsRes?.meta?.filter_count ?? adminReportsRes?.meta?.total_count ?? 0;
       const pendingLeaves = pendingLeavesRes?.meta?.filter_count ?? 0;
       const pendingAdvances = pendingAdvancesRes?.meta?.filter_count ?? 0;
 
-      let totalRevenue = 0;
-      try {
-        if (contractRevenueRes?.data && Array.isArray(contractRevenueRes.data) && contractRevenueRes.data.length > 0) {
-          totalRevenue = Number(contractRevenueRes.data[0]?.sum?.contract_amount || 0);
-        }
-      } catch {}
-
-      let avgScore = 8.5;
-      try {
-        if (avgScoreRes?.data && Array.isArray(avgScoreRes.data) && avgScoreRes.data.length > 0) {
-          const rawAvg = Number(avgScoreRes.data[0]?.avg?.negotiation_score);
-          if (!isNaN(rawAvg) && rawAvg > 0) {
-            avgScore = Math.round(rawAvg * 10) / 10;
-          }
-        }
-      } catch {}
-
-      const upcomingFollowups = Array.isArray(upcomingFollowupsRes?.data) ? upcomingFollowupsRes.data : [];
-      const urgentExpiringCustomers = Array.isArray(urgentExpiringRes?.data) ? urgentExpiringRes.data : [];
-
+      const upcomingFollowups: any[] = [];
+      const urgentExpiringCustomers: any[] = [];
       const inNegotiationCount = Math.max(0, totalCustomers - contractsWon);
 
       const resultPayload = {

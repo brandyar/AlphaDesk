@@ -84,9 +84,9 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
     isAdmin ||
     currentUser?.is_admin ||
     currentUser?.app_role === 'admin' ||
-    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-    currentPersonnel?.role === 'admin'
+    currentUser?.app_role === 'sales_manager' ||
+    currentPersonnel?.role === 'admin' ||
+    currentPersonnel?.role === 'sales_manager'
   );
 
   // Form State

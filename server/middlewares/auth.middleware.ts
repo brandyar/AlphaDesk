@@ -132,7 +132,7 @@ export function getRequestUser(req: Request): RequestUserContext {
 
   const isAdmin = Boolean(
     hasUserContext &&
-      (userRole === 'admin' || userRole === 'sales_manager' || DIRECTUS_ADMIN_ROLE_IDS.includes(roleId))
+      (userRole === 'admin' || userRole === 'sales_manager')
   );
 
   return {

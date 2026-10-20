@@ -185,9 +185,9 @@ export default function App() {
   const isCurrentUserAdmin = Boolean(
     currentUser?.is_admin ||
     currentUser?.app_role === 'admin' ||
-    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-    currentPersonnel?.role === 'admin'
+    currentUser?.app_role === 'sales_manager' ||
+    currentPersonnel?.role === 'admin' ||
+    currentPersonnel?.role === 'sales_manager'
   );
 
   const canAccessTenantsTab =
@@ -205,48 +205,45 @@ export default function App() {
     const target = tenants.find((t) => String(t.id) === String(tenantId));
     const name = tenantId === 'all' ? 'همه سازمان‌ها (تجمیعی)' : target?.name || 'سازمان منتخب';
     showToast(`سازمان فعال: ${name}`, 'info');
-    loadAllData();
+    setDashboardSummary(null);
+    loadAllData(currentPersonnel, currentUser);
   };
 
-  // Initial Data Load
-  const isFetchingRef = useRef(false);
+  // Versioned fetch token to cancel stale concurrent requests cleanly
+  const fetchVersionRef = useRef(0);
 
-  // Initial Data Load with intelligent user-scoped querying and caching
+  // Initial & Reactive Data Load with intelligent user-scoped querying and caching
   const loadAllData = async (activeP?: Personnel | null, activeUser?: AuthUser | null) => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
+    const currentVersion = ++fetchVersionRef.current;
+    setLoading(true);
+
     try {
       const targetUser = activeUser !== undefined ? activeUser : currentUser;
       const targetPContext = activeP !== undefined ? activeP : currentPersonnel;
 
-      const isAdmin = Boolean(
-        targetUser?.is_admin ||
-        targetUser?.app_role === 'admin' ||
-        targetUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-        targetUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-        targetPContext?.role === 'admin'
-      );
-
-      // Fast responsive initial limits (views load their own paginated items)
+      // 1. Fetch Core Data first (fast rendering for dashboard & active view)
       const customerLimit = 100;
       const reportLimit = 100;
 
-      const [pData, cData, rData, lData, aData, bStatus, lrData, arData, tData, dSummary] = await Promise.all([
+      const [pData, cData, rData, tData, bStatus, dSummary] = await Promise.all([
         fetchPersonnel().catch(() => []),
         fetchCustomers({ limit: customerLimit }).catch(() => []),
         fetchCustomerReports(undefined, { limit: reportLimit }).catch(() => []),
-        fetchColdLeads().catch(() => []),
-        fetchAdminReports().catch(() => []),
-        fetchBffStatus().catch(() => null),
-        fetchLeaveRequests().catch(() => []),
-        fetchAdvanceRequests().catch(() => []),
         fetchTenants().catch(() => []),
+        fetchBffStatus().catch(() => null),
         fetchDashboardSummary().catch(() => null),
       ]);
 
+      // If a newer fetch was started (e.g. user switched tenant or logged in), discard stale results
+      if (currentVersion !== fetchVersionRef.current) return;
+
       setPersonnelList(pData);
       setTenants(tData);
-      
+      setCustomers(cData);
+      setReports(rData);
+      setBffStatus(bStatus);
+      if (dSummary) setDashboardSummary(dSummary);
+
       // Accurately match logged-in user to their specific personnel record
       let targetPersonnel = activeP !== undefined ? activeP : null;
       if (!targetPersonnel && targetUser) {
@@ -259,7 +256,6 @@ export default function App() {
       if (!targetPersonnel && currentPersonnel) {
         targetPersonnel = pData.find((p) => p.id === currentPersonnel.id) || currentPersonnel;
       }
-      // CRITICAL SECURITY: Never assign pData[0] if user is not logged in!
 
       if (targetPersonnel) {
         setCurrentPersonnel(targetPersonnel);
@@ -269,9 +265,9 @@ export default function App() {
         const isUserAdmin = Boolean(
           targetUser?.is_admin ||
           targetUser?.app_role === 'admin' ||
-          targetUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-          targetUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-          targetPersonnel.role === 'admin'
+          targetUser?.app_role === 'sales_manager' ||
+          targetPersonnel.role === 'admin' ||
+          targetPersonnel.role === 'sales_manager'
         );
 
         if (!isUserAdmin) {
@@ -296,23 +292,61 @@ export default function App() {
         }
       }
 
-      setCustomers(cData);
-      setReports(rData);
-      setColdLeads(lData);
-      setAdminReports(aData);
-      setBffStatus(bStatus);
-      setLeaveRequests(lrData);
-      setAdvanceRequests(arData);
-      if (dSummary) setDashboardSummary(dSummary);
+      // Core load finished: release loading spinner immediately for instant responsiveness!
+      setLoading(false);
+
+      // 2. Fetch secondary datasets in background without blocking the UI
+      Promise.all([
+        fetchColdLeads().catch(() => []),
+        fetchAdminReports().catch(() => []),
+        fetchLeaveRequests().catch(() => []),
+        fetchAdvanceRequests().catch(() => []),
+      ]).then(([lData, aData, lrData, arData]) => {
+        if (currentVersion !== fetchVersionRef.current) return;
+        setColdLeads(lData);
+        setAdminReports(aData);
+        setLeaveRequests(lrData);
+        setAdvanceRequests(arData);
+      });
     } catch (e) {
       console.error('Error loading data:', e);
     } finally {
-      setLoading(false);
-      isFetchingRef.current = false;
+      if (currentVersion === fetchVersionRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
+    // Verify & refresh user session and roles dynamically from server on mount
+    const stored = getStoredAuthSession();
+    if (stored.token || stored.user) {
+      fetch('/api/auth/me', {
+        headers: {
+          Authorization: stored.token ? `Bearer ${stored.token}` : '',
+          'X-User-Id': stored.user?.id || '',
+          'X-Personnel-Id': stored.personnel?.id || '',
+        },
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.user) {
+            setCurrentUser(data.user);
+            if (data.personnel) {
+              setCurrentPersonnel(data.personnel);
+              setApiPersonnelContext(data.personnel);
+            }
+            saveAuthSession({
+              success: true,
+              access_token: stored.token || 'verified',
+              user: data.user,
+              personnel: data.personnel || stored.personnel,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+
     loadAllData();
 
     // Lightweight status refresh every 45 seconds (does NOT spam large datasets)
@@ -338,6 +372,7 @@ export default function App() {
     setReports([]);
     setColdLeads([]);
     setAdminReports([]);
+    setDashboardSummary(null);
     setLoading(true);
 
     // 2. Set user and personnel context
@@ -367,6 +402,7 @@ export default function App() {
       setReports([]);
       setColdLeads([]);
       setAdminReports([]);
+      setDashboardSummary(null);
       setIsAuthModalOpen(true);
       showToast(msg, 'error');
     };
@@ -383,6 +419,7 @@ export default function App() {
     setReports([]);
     setColdLeads([]);
     setAdminReports([]);
+    setDashboardSummary(null);
     showToast('از حساب کاربری خود خارج شدید.', 'info');
     loadAllData(null, null);
   };
@@ -945,7 +982,7 @@ export default function App() {
             </div>
           ) : (
             <div className="w-full">
-              <ErrorBoundary key={activeTab} fallbackTitle="خطا در بارگذاری این صفحه" onReset={loadAllData}>
+              <ErrorBoundary key={`${activeTab}_${activeTenantId}_${currentUser?.id || 'guest'}`} fallbackTitle="خطا در بارگذاری این صفحه" onReset={loadAllData}>
                 {activeTab === 'dashboard' && (
                   <DashboardView
                     customers={userScopedCustomers}
@@ -955,6 +992,7 @@ export default function App() {
                     personnelList={personnelList}
                     bffStatus={bffStatus}
                     dashboardSummary={dashboardSummary}
+                    activeTenantId={activeTenantId}
                     onSelectCustomer={openCustomerDetail}
                     onOpenNewCustomer={() => {
                       setEditingCustomer(null);
@@ -978,13 +1016,8 @@ export default function App() {
                     personnelList={personnelList}
                     currentPersonnel={currentPersonnel}
                     currentUser={currentUser}
-                    isAdmin={Boolean(
-                      currentUser?.is_admin ||
-                      currentUser?.app_role === 'admin' ||
-                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                      currentPersonnel?.role === 'admin'
-                    )}
+                    isAdmin={isCurrentUserAdmin}
+                    activeTenantId={activeTenantId}
                     onSelectCustomer={openCustomerDetail}
                     onOpenNewCustomerModal={() => {
                       setEditingCustomer(null);
@@ -1013,13 +1046,8 @@ export default function App() {
                     personnelList={personnelList}
                     currentPersonnel={currentPersonnel}
                     currentUser={currentUser}
-                    isAdmin={Boolean(
-                      currentUser?.is_admin ||
-                      currentUser?.app_role === 'admin' ||
-                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                      currentPersonnel?.role === 'admin'
-                    )}
+                    isAdmin={isCurrentUserAdmin}
+                    activeTenantId={activeTenantId}
                     onClaimCustomer={handleClaimCustomer}
                     onSelectCustomer={openCustomerDetail}
                     showToast={showToast}
@@ -1033,13 +1061,8 @@ export default function App() {
                     personnelList={personnelList}
                     currentPersonnel={currentPersonnel}
                     currentUser={currentUser}
-                    isAdmin={Boolean(
-                      currentUser?.is_admin ||
-                      currentUser?.app_role === 'admin' ||
-                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                      currentPersonnel?.role === 'admin'
-                    )}
+                    isAdmin={isCurrentUserAdmin}
+                    activeTenantId={activeTenantId}
                     onOpenAddReportModal={(customerId?: string) => {
                       setReportPreselectedCustomerId(customerId);
                       setIsAddReportModalOpen(true);
@@ -1055,13 +1078,8 @@ export default function App() {
                     personnelList={personnelList}
                     currentPersonnel={currentPersonnel}
                     currentUser={currentUser}
-                    isAdmin={Boolean(
-                      currentUser?.is_admin ||
-                      currentUser?.app_role === 'admin' ||
-                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                      currentPersonnel?.role === 'admin'
-                    )}
+                    isAdmin={isCurrentUserAdmin}
+                    activeTenantId={activeTenantId}
                     onSelectCustomer={openCustomerDetail}
                   />
                 )}
@@ -1072,13 +1090,8 @@ export default function App() {
                     personnelList={personnelList}
                     currentPersonnel={currentPersonnel}
                     currentUser={currentUser}
-                    isAdmin={Boolean(
-                      currentUser?.is_admin ||
-                      currentUser?.app_role === 'admin' ||
-                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                      currentPersonnel?.role === 'admin'
-                    )}
+                    isAdmin={isCurrentUserAdmin}
+                    activeTenantId={activeTenantId}
                     onAddLead={handleAddColdLead}
                     onUpdateLeadStatus={handleUpdateLeadStatus}
                     onUpdateLeadAssignedTo={handleUpdateLeadAssignedTo}
