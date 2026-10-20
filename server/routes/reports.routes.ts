@@ -14,7 +14,7 @@ import {
   invalidateReportsCache,
 } from '../directus/cache.ts';
 import { getSafeDirectusPersonnelForeignKey, resolveDirectusTenantId } from '../directus/sync.ts';
-import { cleanCustomerPayloadForDirectus } from '../services/phoneNormalizer.ts';
+import { cleanCustomerPayloadForDirectus, normalizePersianString } from '../services/phoneNormalizer.ts';
 import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
 import { CustomerReport } from '../types.ts';
 
@@ -169,15 +169,27 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     if (customer_id) {
-      result = result.filter((r) => r.customer_id === customer_id);
+      result = result.filter(
+        (r) =>
+          String(r.customer_id) === String(customer_id) ||
+          (typeof r.customer_id === 'object' &&
+            r.customer_id !== null &&
+            String((r.customer_id as any).id) === String(customer_id))
+      );
     } else if (!isAdmin) {
       result = result.filter((r) => {
-        const matchNegotiator = userName && r.negotiator_name === userName;
+        const normUserName = normalizePersianString(userName);
+        const normNeg = normalizePersianString(r.negotiator_name);
+        const matchNegotiator = normUserName && normNeg && (normNeg === normUserName || normNeg.includes(normUserName));
         const matchCreatedBy =
-          (userId && r.created_by === userId) ||
-          (personnelId && r.created_by === personnelId) ||
+          (userId && String(r.created_by) === String(userId)) ||
+          (personnelId && String(r.created_by) === String(personnelId)) ||
           (userName && r.created_by === userName);
-        const customer = allCustomers.find((c) => c.id === r.customer_id);
+        const customer = allCustomers.find(
+          (c) =>
+            c.id === r.customer_id ||
+            (typeof r.customer_id === 'object' && r.customer_id !== null && (r.customer_id as any).id === c.id)
+        );
         const matchCustomer =
           customer &&
           (customer.assigned_marketer_id === personnelId ||

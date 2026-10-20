@@ -106,6 +106,7 @@ import {
   setActiveTenantId,
   fetchDashboardSummary,
   DashboardSummary,
+  getMe,
 } from './api';
 import { matchPersonnelToCustomer, matchPersonnelToReport } from './utils';
 
@@ -321,16 +322,9 @@ export default function App() {
     // Verify & refresh user session and roles dynamically from server on mount
     const stored = getStoredAuthSession();
     if (stored.token || stored.user) {
-      fetch('/api/auth/me', {
-        headers: {
-          Authorization: stored.token ? `Bearer ${stored.token}` : '',
-          'X-User-Id': stored.user?.id || '',
-          'X-Personnel-Id': stored.personnel?.id || '',
-        },
-      })
-        .then((r) => r.json())
+      getMe()
         .then((data) => {
-          if (data.user) {
+          if (data && data.user) {
             setCurrentUser(data.user);
             if (data.personnel) {
               setCurrentPersonnel(data.personnel);
@@ -842,9 +836,29 @@ export default function App() {
   const openCustomerDetail = async (customer: Customer) => {
     try {
       const full = await fetchCustomerById(customer.id);
-      setSelectedCustomer(full);
+      const matchReports = reports.filter(
+        (r) =>
+          String(r.customer_id) === String(customer.id) ||
+          (typeof r.customer_id === 'object' && r.customer_id !== null && String((r.customer_id as any).id) === String(customer.id))
+      );
+      const combinedReports = (full.reports && full.reports.length > 0)
+        ? full.reports
+        : matchReports.length > 0 ? matchReports : (customer.reports || []);
+
+      setSelectedCustomer({
+        ...full,
+        reports: combinedReports,
+      });
     } catch {
-      setSelectedCustomer(customer);
+      const matchReports = reports.filter(
+        (r) =>
+          String(r.customer_id) === String(customer.id) ||
+          (typeof r.customer_id === 'object' && r.customer_id !== null && String((r.customer_id as any).id) === String(customer.id))
+      );
+      setSelectedCustomer({
+        ...customer,
+        reports: matchReports.length > 0 ? matchReports : (customer.reports || []),
+      });
     }
   };
 
@@ -1108,13 +1122,7 @@ export default function App() {
                     personnelList={personnelList}
                     currentPersonnel={currentPersonnel}
                     currentUser={currentUser}
-                    isAdmin={Boolean(
-                      currentUser?.is_admin ||
-                      currentUser?.app_role === 'admin' ||
-                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                      currentPersonnel?.role === 'admin'
-                    )}
+                    isAdmin={isCurrentUserAdmin}
                     onSubmitReport={handleSubmitAdminReport}
                   />
                 )}
@@ -1126,13 +1134,7 @@ export default function App() {
                     customers={customers}
                     leaveRequests={leaveRequests}
                     currentPersonnel={currentPersonnel}
-                    isAdmin={Boolean(
-                      currentUser?.is_admin ||
-                      currentUser?.app_role === 'admin' ||
-                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                      currentPersonnel?.role === 'admin'
-                    )}
+                    isAdmin={isCurrentUserAdmin}
                     tenants={tenants}
                     activeTenantId={activeTenantId}
                     onCreatePersonnel={handleCreatePersonnel}
@@ -1152,13 +1154,7 @@ export default function App() {
                   <PersonalPortalView
                     currentPersonnel={currentPersonnel}
                     currentUser={currentUser}
-                    isAdmin={Boolean(
-                      currentUser?.is_admin ||
-                      currentUser?.app_role === 'admin' ||
-                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                      currentPersonnel?.role === 'admin'
-                    )}
+                    isAdmin={isCurrentUserAdmin}
                     leaveRequests={leaveRequests}
                     advanceRequests={advanceRequests}
                     personnelList={personnelList}
@@ -1183,13 +1179,7 @@ export default function App() {
                     onSelectTenant={handleSelectTenant}
                     onRefreshTenants={loadTenants}
                     showToast={showToast}
-                    isAdmin={Boolean(
-                      currentUser?.is_admin ||
-                      currentUser?.app_role === 'admin' ||
-                      currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-                      currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-                      currentPersonnel?.role === 'admin'
-                    )}
+                    isAdmin={isCurrentUserAdmin}
                     customers={customers}
                     personnelList={personnelList}
                   />
@@ -1312,13 +1302,7 @@ export default function App() {
         personnelList={personnelList}
         currentPersonnel={currentPersonnel}
         currentUser={currentUser}
-        isAdmin={Boolean(
-          currentUser?.is_admin ||
-          currentUser?.app_role === 'admin' ||
-          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-          currentPersonnel?.role === 'admin'
-        )}
+        isAdmin={isCurrentUserAdmin}
         prefilledPhone={prefilledLeadPhone}
         prefilledName={prefilledLeadName}
         prefilledNotes={prefilledLeadNotes}
@@ -1345,13 +1329,7 @@ export default function App() {
         personnelList={personnelList}
         currentPersonnel={currentPersonnel}
         currentUser={currentUser}
-        isAdmin={Boolean(
-          currentUser?.is_admin ||
-          currentUser?.app_role === 'admin' ||
-          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
-          currentPersonnel?.role === 'admin'
-        )}
+        isAdmin={isCurrentUserAdmin}
       />
 
       {/* Standalone Add Report Modal */}

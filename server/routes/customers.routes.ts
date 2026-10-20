@@ -240,10 +240,6 @@ router.get('/', async (req: Request, res: Response) => {
       if (marketer_id && marketer_id !== 'همه') {
         directusPath += `&filter[assigned_marketer_id][_eq]=${encodeURIComponent(String(marketer_id))}`;
       }
-      if (!isAdmin && !isFreeOnly && personnelId && (!marketer_id || marketer_id === 'همه')) {
-        const cleanP = String(personnelId).trim();
-        directusPath += `&filter[assigned_marketer_id][_eq]=${encodeURIComponent(cleanP)}`;
-      }
       if (expired_only === 'true') {
         directusPath += `&filter[is_expired][_eq]=true`;
       }
@@ -277,8 +273,8 @@ router.get('/', async (req: Request, res: Response) => {
 
           items = items.filter((c: any) => {
             const cId = c.assigned_marketer_id ? String(c.assigned_marketer_id).trim().toLowerCase() : '';
-            if (cleanPId && (cId === cleanPId || cId === rawUid)) return true;
-            if (cleanUId && (cId === cleanUId || cId === rawUid)) return true;
+            if (cleanPId && (cId === cleanPId || cId === rawUid || cId === `p-${rawUid}`)) return true;
+            if (cleanUId && (cId === cleanUId || cId === rawUid || cId === `p-${rawUid}`)) return true;
             const cNameNorm = normalizePersianString(c.assigned_marketer_name);
             if (normUserName && cNameNorm && (cNameNorm === normUserName || cNameNorm.includes(normUserName)))
               return true;
@@ -380,6 +376,57 @@ router.get('/', async (req: Request, res: Response) => {
       total_pages: totalPages,
     },
   });
+});
+
+// GET /api/customers/:id - Fetch single customer with full details, reports and contacts
+router.get('/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const [custRes, reportsRes, contactsRes] = await Promise.all([
+        directusFetch(`/items/customers/${encodeURIComponent(id)}`).catch(() => null),
+        directusFetch(`/items/customer_reports?filter[customer_id][_eq]=${encodeURIComponent(id)}&sort=-date_created`).catch(() => null),
+        directusFetch(`/items/customer_contacts?filter[customer_id][_eq]=${encodeURIComponent(id)}`).catch(() => null),
+      ]);
+
+      if (custRes?.data) {
+        let cust = computeCustomerExpiration(custRes.data);
+        let customerReports = reportsRes?.data && Array.isArray(reportsRes.data) ? reportsRes.data : [];
+        const customerContacts = contactsRes?.data && Array.isArray(contactsRes.data) ? contactsRes.data : [];
+
+        if (customerReports.length === 0) {
+          const cachedReports = reportsData.filter(
+            (r) =>
+              String(r.customer_id) === String(id) ||
+              (typeof r.customer_id === 'object' && r.customer_id !== null && String((r.customer_id as any).id) === String(id))
+          );
+          if (cachedReports.length > 0) {
+            customerReports = cachedReports;
+          }
+        }
+
+        cust.reports = customerReports;
+        cust.contacts = customerContacts;
+
+        return res.json(cust);
+      }
+    } catch (e: any) {
+      console.warn(`Error fetching customer ${id} from Directus:`, e.message);
+    }
+  }
+
+  updateExpirationFlags();
+  const found = customersData.find((c) => c.id === id);
+  if (!found) {
+    return res.status(404).json({ error: 'Customer not found' });
+  }
+
+  const cust = computeCustomerExpiration(found);
+  cust.reports = reportsData.filter((r) => String(r.customer_id) === String(id));
+  cust.contacts = contactsData.filter((ct) => String(ct.customer_id) === String(id));
+
+  res.json(cust);
 });
 
 router.post('/', async (req: Request, res: Response) => {
