@@ -95,6 +95,7 @@ export interface AdministrativeReport {
   challenges: string;
   tomorrow_plan: string;
   hourly_logs?: any;
+  status?: 'draft' | 'submitted';
   date_created: string;
 }
 

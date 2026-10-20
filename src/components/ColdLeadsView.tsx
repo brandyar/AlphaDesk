@@ -133,7 +133,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, statusFilter, marketerFilter, searchQuery, activeTenantId]);
+  }, [currentPage, pageSize, statusFilter, marketerFilter, searchQuery, activeTenantId, coldLeads.length, coldLeads[0]?.id]);
 
   // Multi-selection state for Bulk Assignment
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);

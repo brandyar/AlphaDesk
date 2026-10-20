@@ -113,7 +113,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId]);
+  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId, customers.length, customers[0]?.id]);
 
   const userIsAdmin = Boolean(
     isAdmin ||

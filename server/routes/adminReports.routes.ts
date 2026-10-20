@@ -95,6 +95,7 @@ const postHandler = async (req: Request, res: Response) => {
     challenges: payload.challenges || '',
     tomorrow_plan: payload.tomorrow_plan || '',
     hourly_logs: payload.hourly_logs || null,
+    status: payload.status === 'submitted' ? 'submitted' : 'draft',
     date_created: nowIso
   };
 
@@ -108,7 +109,7 @@ const postHandler = async (req: Request, res: Response) => {
         method: 'POST',
         body: JSON.stringify(directusReportPayload)
       });
-      return res.status(201).json(created.data || newReport);
+      return res.status(201).json(normalizeReport(created.data || newReport));
     } catch (err: any) {
       if (err.message && err.message.toLowerCase().includes('hourly_logs')) {
         try {
@@ -120,7 +121,7 @@ const postHandler = async (req: Request, res: Response) => {
               tenant_id: resolveDirectusTenantId(targetTenantId)
             })
           });
-          return res.status(201).json({ ...(created.data || fallbackReport), hourly_logs: newReport.hourly_logs });
+          return res.status(201).json(normalizeReport({ ...(created.data || fallbackReport), hourly_logs: newReport.hourly_logs }));
         } catch {}
       }
       console.error('Admin report create error:', err.message);
@@ -136,5 +137,51 @@ const postHandler = async (req: Request, res: Response) => {
 
 router.post('/api/administrative-reports', postHandler);
 router.post('/api/admin-reports', postHandler);
+
+// PATCH /api/administrative-reports/:id and alias /api/admin-reports/:id
+const patchHandler = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const payload = req.body;
+  const { isAdmin } = getRequestUser(req);
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const existingRes = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`).catch(() => null);
+      if (existingRes?.data) {
+        if (existingRes.data.status === 'submitted' && !isAdmin) {
+          return res.status(403).json({ error: 'این گزارش ثبت نهایی شده است و امکان ویرایش آن وجود ندارد.' });
+        }
+      }
+
+      const updateData: any = {
+        report_date: payload.report_date || undefined,
+        calls_count: payload.calls_count !== undefined ? Number(payload.calls_count) : undefined,
+        successful_contacts: payload.successful_contacts !== undefined ? Number(payload.successful_contacts) : undefined,
+        leads_converted: payload.leads_converted !== undefined ? Number(payload.leads_converted) : undefined,
+        tasks_summary: payload.tasks_summary !== undefined ? payload.tasks_summary : undefined,
+        challenges: payload.challenges !== undefined ? payload.challenges : undefined,
+        tomorrow_plan: payload.tomorrow_plan !== undefined ? payload.tomorrow_plan : undefined,
+        hourly_logs: payload.hourly_logs !== undefined ? payload.hourly_logs : undefined,
+        status: payload.status || undefined,
+        date_updated: new Date().toISOString()
+      };
+
+      Object.keys(updateData).forEach(k => updateData[k] === undefined && delete updateData[k]);
+
+      const updated = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updateData)
+      });
+      return res.json(normalizeReport(updated.data || { id, ...updateData }));
+    } catch (err: any) {
+      return res.status(500).json({ error: `خطا در ویرایش گزارش اداری: ${err.message}` });
+    }
+  }
+
+  res.json(normalizeReport({ id, ...payload }));
+};
+
+router.patch('/api/administrative-reports/:id', patchHandler);
+router.patch('/api/admin-reports/:id', patchHandler);
 
 export default router;

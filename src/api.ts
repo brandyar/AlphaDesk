@@ -796,6 +796,15 @@ export async function createAdminReport(payload: Partial<AdministrativeReport>):
   return handleResponse<AdministrativeReport>(res, 'خطا در ثبت گزارش عملکرد اداری در پایگاه داده');
 }
 
+export async function updateAdminReport(id: string, payload: Partial<AdministrativeReport>): Promise<AdministrativeReport> {
+  const res = await fetch(`${BASE_URL}/administrative-reports/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<AdministrativeReport>(res, 'خطا در ویرایش گزارش عملکرد اداری');
+}
+
 // -------------------------------------------------------------
 // LEAVE REQUESTS API (درخواست‌های مرخصی)
 // -------------------------------------------------------------

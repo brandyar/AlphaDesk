@@ -426,24 +426,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>{item.label}</span>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  {item.count !== undefined && (
-                    <span
-                      className={`text-[11px] px-1.5 py-0.2 rounded font-mono ${
-                        isActive
-                          ? 'bg-[#1DB954] text-black font-bold'
-                          : 'bg-[#181818] text-[#B3B3B3]'
-                      }`}
-                    >
-                      {item.count}
-                    </span>
-                  )}
-                  {item.badgeText && (
+                {item.badgeText && (
+                  <div className="flex items-center gap-1.5">
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#282828] text-[#A7A7A7] font-normal border border-[#3e3e3e]">
                       {item.badgeText}
                     </span>
-                  )}
-                </div>
+                  </div>
+                )}
               </button>
             );
           })}
@@ -475,18 +464,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>همکاران</span>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  {counts.pendingLeaves !== undefined && counts.pendingLeaves > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500 text-black font-mono font-bold">
-                      {counts.pendingLeaves}
-                    </span>
-                  )}
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 text-[#888] transition-transform duration-200 ${
-                      isTeamExpanded ? 'rotate-180 text-white' : ''
-                    }`}
-                  />
-                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-[#888] transition-transform duration-200 ${
+                    isTeamExpanded ? 'rotate-180 text-white' : ''
+                  }`}
+                />
               </button>
 
               {/* Team Sub-menu Items */}
@@ -580,11 +562,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <CalendarCheck className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'leave_approvals' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
                       <span>درخواست‌های مرخصی</span>
                     </div>
-                    {counts.pendingLeaves !== undefined && counts.pendingLeaves > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 font-mono font-bold">
-                        {counts.pendingLeaves}
-                      </span>
-                    )}
                   </button>
 
                   {/* 6. Data Migration Hub */}
@@ -739,18 +716,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>پنل شخصی</span>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  {totalPortalPending > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500 text-black font-mono font-bold">
-                      {totalPortalPending}
-                    </span>
-                  )}
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 text-[#888] transition-transform duration-200 ${
-                      isPortalExpanded ? 'rotate-180 text-white' : ''
-                    }`}
-                  />
-                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-[#888] transition-transform duration-200 ${
+                    isPortalExpanded ? 'rotate-180 text-white' : ''
+                  }`}
+                />
               </button>
 
             {/* Sub-menu Items (Dropdown) */}
@@ -790,11 +760,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <CalendarDays className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'leave' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
                     <span>درخواست مرخصی</span>
                   </div>
-                  {counts.pendingLeaves !== undefined && counts.pendingLeaves > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 font-mono font-bold">
-                      {counts.pendingLeaves}
-                    </span>
-                  )}
                 </button>
 
                 {/* 3. Salary Advance Sub-item */}
@@ -813,11 +778,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <Wallet className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'advance' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
                     <span>درخواست مساعده</span>
                   </div>
-                  {counts.pendingAdvances !== undefined && counts.pendingAdvances > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 font-mono font-bold">
-                      {counts.pendingAdvances}
-                    </span>
-                  )}
                 </button>
 
                 {/* 4. Logout Sub-item */}

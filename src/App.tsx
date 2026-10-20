@@ -78,6 +78,7 @@ import {
   convertColdLead,
   fetchAdminReports,
   createAdminReport,
+  updateAdminReport,
   fetchPersonnel,
   createPersonnel,
   updatePersonnel,
@@ -719,15 +720,22 @@ export default function App() {
     setIsCustomerModalOpen(true);
   };
 
-  // Handler for Daily Admin Reports
+  // Handler for Daily Admin Reports (Create or Edit)
   const handleSubmitAdminReport = async (reportData: Partial<AdministrativeReport>) => {
     try {
-      const created = await createAdminReport(reportData);
-      setAdminReports((prev) => [created, ...prev]);
+      if (reportData.id) {
+        const updated = await updateAdminReport(reportData.id, reportData);
+        setAdminReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+        showToast('گزارش عملکرد اداری با موفقیت بروزرسانی شد.', 'success');
+      } else {
+        const created = await createAdminReport(reportData);
+        setAdminReports((prev) => [created, ...prev]);
+        showToast('گزارش عملکرد اداری با موفقیت ثبت شد.', 'success');
+      }
       fetchBffStatus().then(setBffStatus).catch(() => {});
-      showToast('گزارش عملکرد اداری با موفقیت ثبت شد.', 'success');
     } catch (err: any) {
-      showToast('خطا در ثبت گزارش اداری: ' + (err.message || 'خطای نامشخص'), 'error');
+      showToast('خطا در ثبت/ویرایش گزارش اداری: ' + (err.message || 'خطای نامشخص'), 'error');
+      throw err;
     }
   };
 

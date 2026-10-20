@@ -133,7 +133,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery, activeTenantId]);
+  }, [currentPage, pageSize, adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery, activeTenantId, reports.length, reports[0]?.id]);
 
   // Helper to check if a customer belongs to the current user
   const isMyCustomer = (c: Customer): boolean => {

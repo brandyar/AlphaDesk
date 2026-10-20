@@ -150,6 +150,7 @@ export interface AdministrativeReport {
   challenges: string;
   tomorrow_plan: string;
   hourly_logs?: HourlyWorkLog[] | string | null;
+  status?: 'draft' | 'submitted';
   date_created: string;
 }
 

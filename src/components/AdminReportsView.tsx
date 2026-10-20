@@ -16,6 +16,9 @@ import {
   ListTodo,
   Layers,
   Loader2,
+  Edit2,
+  Save,
+  FileEdit,
 } from 'lucide-react';
 import { AdministrativeReport, Personnel, AuthUser, HourlyWorkLog } from '../types';
 import { formatPersianDate, formatPersianDateTime, toPersianDigits } from '../utils';
@@ -55,6 +58,8 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
   onSubmitReport,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingReport, setEditingReport] = useState<AdministrativeReport | null>(null);
+
   const [personnelId, setPersonnelId] = useState(currentPersonnel?.id || personnelList[0]?.id || '');
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
   const [callsCount, setCallsCount] = useState<number>(15);
@@ -73,31 +78,35 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
 
-  // Fetch paginated admin reports from Directus
-  useEffect(() => {
-    let isMounted = true;
+  // Load / Reload paginated admin reports
+  const reloadAdminReports = (page = currentPage) => {
     setIsLoadingPage(true);
-
     fetchAdminReportsPaginated({
-      page: currentPage,
+      page,
       limit: pageSize,
     })
       .then((res) => {
-        if (isMounted) {
-          setItems(res.data);
-          setTotalCount(res.meta.filter_count);
-          setTotalPages(res.meta.total_pages);
-        }
+        setItems(res.data);
+        setTotalCount(res.meta.filter_count);
+        setTotalPages(res.meta.total_pages);
       })
       .catch((err) => console.warn('Failed to load paginated admin reports:', err))
       .finally(() => {
-        if (isMounted) setIsLoadingPage(false);
+        setIsLoadingPage(false);
       });
+  };
 
-    return () => {
-      isMounted = false;
-    };
+  // Fetch paginated admin reports from Directus on page change
+  useEffect(() => {
+    reloadAdminReports(currentPage);
   }, [currentPage, pageSize]);
+
+  // Also sync when adminReports prop changes
+  useEffect(() => {
+    if (adminReports && adminReports.length > 0) {
+      reloadAdminReports(currentPage);
+    }
+  }, [adminReports.length]);
 
   // Hourly logs state: keyed by slot
   const [hourlyLogs, setHourlyLogs] = useState<{ [slot: string]: string }>(() => {
@@ -162,9 +171,54 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleOpenAddModal = () => {
+    setEditingReport(null);
+    setPersonnelId(currentPersonnel?.id || personnelList[0]?.id || '');
+    setReportDate(new Date().toISOString().split('T')[0]);
+    setCallsCount(15);
+    setSuccessfulContacts(8);
+    setLeadsConverted(1);
+    setTasksSummary('');
+    setChallenges('');
+    setTomorrowPlan('');
+    const resetLogs: { [slot: string]: string } = {};
+    DEFAULT_HOURLY_SLOTS.forEach((slot) => {
+      resetLogs[slot] = '';
+    });
+    setHourlyLogs(resetLogs);
+    setShowAddModal(true);
+  };
 
+  const handleOpenEditModal = (report: AdministrativeReport) => {
+    setEditingReport(report);
+    setPersonnelId(report.personnel_id);
+    setReportDate(report.report_date ? report.report_date.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setCallsCount(report.calls_count || 0);
+    setSuccessfulContacts(report.successful_contacts || 0);
+    setLeadsConverted(report.leads_converted || 0);
+    setTasksSummary(report.tasks_summary || '');
+    setChallenges(report.challenges || '');
+    setTomorrowPlan(report.tomorrow_plan || '');
+
+    // Populate hourly logs
+    const initialLogs: { [slot: string]: string } = {};
+    DEFAULT_HOURLY_SLOTS.forEach((slot) => {
+      initialLogs[slot] = '';
+    });
+
+    const parsedLogs = parseReportHourlyLogs(report);
+    if (parsedLogs && parsedLogs.length > 0) {
+      parsedLogs.forEach((item) => {
+        if (item.slot) {
+          initialLogs[item.slot] = item.activity || '';
+        }
+      });
+    }
+    setHourlyLogs(initialLogs);
+    setShowAddModal(true);
+  };
+
+  const handleSubmit = async (targetStatus: 'draft' | 'submitted') => {
     // Compile hourly logs into list
     const activeHourlyList: HourlyWorkLog[] = Object.entries(hourlyLogs)
       .filter(([_, act]) => act.trim().length > 0)
@@ -193,6 +247,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
         : (currentPersonnel?.name || currentUser?.name || selectedPerson?.name || 'کارشناس');
 
       await onSubmitReport({
+        id: editingReport ? editingReport.id : undefined,
         personnel_id: targetPId,
         personnel_name: targetPName,
         report_date: reportDate,
@@ -203,20 +258,17 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
         challenges: challenges.trim(),
         tomorrow_plan: tomorrowPlan.trim(),
         hourly_logs: activeHourlyList.length > 0 ? activeHourlyList : undefined,
+        status: targetStatus,
       });
 
-      // Reset
-      setTasksSummary('');
-      setChallenges('');
-      setTomorrowPlan('');
-      const resetLogs: { [slot: string]: string } = {};
-      DEFAULT_HOURLY_SLOTS.forEach((slot) => {
-        resetLogs[slot] = '';
-      });
-      setHourlyLogs(resetLogs);
+      // Instantly reload paginated list to show the new/updated report
+      reloadAdminReports(1);
+      setCurrentPage(1);
+
       setShowAddModal(false);
+      setEditingReport(null);
     } catch (err: any) {
-      alert('خطا در ثبت گزارش: ' + err.message);
+      alert('خطا در ثبت/ویرایش گزارش: ' + (err.message || 'خطایی رخ داد'));
     } finally {
       setSubmitting(false);
     }
@@ -264,8 +316,8 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
         </div>
 
         <button
-          onClick={() => setShowAddModal(true)}
-          className="h-10 px-5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex items-center gap-1.5"
+          onClick={handleOpenAddModal}
+          className="h-10 px-5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex items-center gap-1.5 cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
           <span>ثبت گزارش عملکرد امروز</span>
@@ -327,6 +379,8 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
           items.map((report) => {
             const hourlyItems = parseReportHourlyLogs(report);
             const isExpanded = expandedIds.has(report.id);
+            const isDraft = report.status === 'draft';
+            const canEdit = isDraft || userIsAdmin;
 
             return (
               <div
@@ -338,16 +392,26 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                   onClick={() => toggleExpand(report.id)}
                   className="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 cursor-pointer select-none"
                 >
-                  {/* Right side: Personnel avatar + Name + Date */}
+                  {/* Right side: Personnel avatar + Name + Date + Status Badge */}
                   <div className="flex items-center gap-3 min-w-[200px]">
                     <div className="w-9 h-9 rounded-full bg-[#242424] border border-[#333] flex items-center justify-center text-[#1DB954] font-bold text-xs shrink-0">
                       {report.personnel_name.charAt(0)}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-sm text-white">{report.personnel_name}</span>
                         <span className="text-[11px] font-mono text-[#1DB954] bg-[#1DB954]/10 px-2 py-0.5 rounded-full">
                           {formatPersianDate(report.report_date)}
+                        </span>
+                        {/* Status Badge: draft vs submitted */}
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            isDraft
+                              ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                              : 'bg-[#1DB954]/15 text-[#1DB954] border-[#1DB954]/30'
+                          }`}
+                        >
+                          {isDraft ? 'پیش‌نویس' : 'ثبت نهایی'}
                         </span>
                       </div>
                       <div className="text-xs text-[#888] mt-0.5 flex items-center gap-2">
@@ -373,6 +437,22 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                         جذب: {toPersianDigits(report.leads_converted)}
                       </span>
                     </div>
+
+                    {/* Edit Button (allowed if draft or admin) */}
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEditModal(report);
+                        }}
+                        className="h-8 px-3 rounded-full text-xs font-bold bg-[#242424] text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 flex items-center gap-1 transition-colors cursor-pointer"
+                        title="ویرایش گزارش"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>ویرایش</span>
+                      </button>
+                    )}
 
                     {/* Expand/Collapse Trigger */}
                     <button
@@ -493,7 +573,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
         label="گزارش اداری"
       />
 
-      {/* Add Admin Report Modal */}
+      {/* Add / Edit Admin Report Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
           <div className="bg-[#181818] border border-[#282828] w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-6 max-h-[95vh] flex flex-col">
@@ -503,21 +583,26 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                   <ClipboardCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">ثبت گزارش عملکرد روزانه پرسنل</h3>
+                  <h3 className="text-sm font-bold text-white">
+                    {editingReport ? 'ویرایش گزارش عملکرد روزانه' : 'ثبت گزارش عملکرد روزانه پرسنل'}
+                  </h3>
                   <p className="text-[11px] text-[#A7A7A7]">
                     ثبت کارکرد ساعت به ساعت (۹ الی ۲۰)، آمار تماس‌ها و وظایف روزانه
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => setShowAddModal(false)}
-                className="w-8 h-8 rounded-full bg-[#282828] hover:bg-[#333333] flex items-center justify-center text-[#A7A7A7] hover:text-white"
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingReport(null);
+                }}
+                className="w-8 h-8 rounded-full bg-[#282828] hover:bg-[#333333] flex items-center justify-center text-[#A7A7A7] hover:text-white cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
+            <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
               <div className={`grid gap-4 ${userIsAdmin ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
                 {userIsAdmin && (
                   <div>
@@ -667,23 +752,52 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                 />
               </div>
 
-              <div className="pt-4 border-t border-[#282828] flex justify-end gap-3">
+              {/* Submit Buttons (Draft vs Submitted) */}
+              <div className="pt-4 border-t border-[#282828] flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="h-9 px-4 rounded-full border border-[#535353] text-xs text-[#B3B3B3] hover:text-white"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditingReport(null);
+                  }}
+                  className="h-9 px-4 rounded-full border border-[#535353] text-xs text-[#B3B3B3] hover:text-white cursor-pointer"
                 >
                   انصراف
                 </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="h-9 px-6 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs"
-                >
-                  {submitting ? 'در حال ثبت...' : 'ثبت گزارش عملکرد'}
-                </button>
+
+                <div className="flex items-center gap-2">
+                  {/* Button 1: Save as Draft */}
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => handleSubmit('draft')}
+                    className="h-9 px-4 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    {submitting ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5" />
+                    )}
+                    <span>ذخیره به عنوان پیش‌نویس</span>
+                  </button>
+
+                  {/* Button 2: Final Submit */}
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => handleSubmit('submitted')}
+                    className="h-9 px-5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    {submitting ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5 stroke-[2.5]" />
+                    )}
+                    <span>{editingReport ? 'بروزرسانی و ثبت نهایی' : 'ثبت و ارسال نهایی'}</span>
+                  </button>
+                </div>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
