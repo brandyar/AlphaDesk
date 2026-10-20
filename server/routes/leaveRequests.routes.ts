@@ -35,16 +35,9 @@ const getLeaveRequestsHandler = async (req: Request, res: Response) => {
     } catch (err: any) {
       console.warn('Directus leave_requests fetch warning:', err.message);
     }
-  }
-
-  // Merge in-memory leaveRequestsData if any records exist
-  if (leaveRequestsData.length > 0) {
-    const existingIds = new Set(list.map((r) => String(r.id)));
-    for (const memReq of leaveRequestsData) {
-      if (!existingIds.has(String(memReq.id))) {
-        list.unshift(memReq);
-      }
-    }
+  } else {
+    // In offline mode without Directus connection, use in-memory store
+    list = [...leaveRequestsData];
   }
 
   // Check if current user has permission to view/approve all leaves

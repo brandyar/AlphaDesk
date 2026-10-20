@@ -192,56 +192,19 @@ export const initialContacts: CustomerContact[] = [
   },
 ];
 
-export const initialLeaveRequests: LeaveRequest[] = [
-  {
-    id: 'lr-1',
-    personnel_id: 'p-2',
-    personnel_name: 'سارا احمدی',
-    leave_type: 'hourly',
-    start_date: new Date().toISOString().split('T')[0],
-    end_date: null,
-    start_time: '10:00',
-    end_time: '12:30',
-    hours_count: 2.5,
-    days_count: null,
-    reason: 'مراجعه به پزشک و درمانگاه',
-    status: 'pending',
-    manager_note: null,
-    reviewed_by: null,
-    reviewed_at: null,
-    date_created: new Date().toISOString(),
-  },
-];
+export const initialLeaveRequests: LeaveRequest[] = [];
 
-export const initialAdvanceRequests: SalaryAdvanceRequest[] = [
-  {
-    id: 'ar-1',
-    personnel_id: 'p-2',
-    personnel_name: 'سارا احمدی',
-    amount: 5000000,
-    target_month: 'مهر ۱۴۰۵',
-    needed_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    reason: 'پرداخت قسط شهریه دانشگاه',
-    bank_card_number: '6037-9975-1234-5678',
-    iban: 'IR120170000000123456789012',
-    status: 'pending',
-    approved_amount: null,
-    manager_note: null,
-    reviewed_by: null,
-    reviewed_at: null,
-    date_created: new Date().toISOString(),
-  },
-];
+export const initialAdvanceRequests: SalaryAdvanceRequest[] = [];
 
 // Mutable state arrays
 export let personnelData = [...initialPersonnel];
 export let customersData: Customer[] = [];
 export let reportsData: CustomerReport[] = [];
-export let coldLeadsData: ColdLead[] = [...initialColdLeads];
+export let coldLeadsData: ColdLead[] = [];
 export let adminReportsData: AdministrativeReport[] = [];
-export let contactsData: CustomerContact[] = [...initialContacts];
-export let leaveRequestsData: LeaveRequest[] = [...initialLeaveRequests];
-export let advanceRequestsData: SalaryAdvanceRequest[] = [...initialAdvanceRequests];
+export let contactsData: CustomerContact[] = [];
+export let leaveRequestsData: LeaveRequest[] = [];
+export let advanceRequestsData: SalaryAdvanceRequest[] = [];
 
 export function setPersonnelData(data: Personnel[]) {
   personnelData = data;

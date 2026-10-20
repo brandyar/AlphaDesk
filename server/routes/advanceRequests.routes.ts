@@ -35,16 +35,9 @@ const getAdvanceRequestsHandler = async (req: Request, res: Response) => {
     } catch (err: any) {
       console.warn('Directus advance_requests fetch warning:', err.message);
     }
-  }
-
-  // Merge in-memory advanceRequestsData if any records exist
-  if (advanceRequestsData.length > 0) {
-    const existingIds = new Set(list.map((r) => String(r.id)));
-    for (const memReq of advanceRequestsData) {
-      if (!existingIds.has(String(memReq.id))) {
-        list.unshift(memReq);
-      }
-    }
+  } else {
+    // In offline mode without Directus connection, use in-memory store
+    list = [...advanceRequestsData];
   }
 
   if (tenantId && tenantId !== 'all') {
