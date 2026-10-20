@@ -100,7 +100,9 @@ export async function directusFetchAllPages(
   const PAGE_SIZE = 250;
   const [pathOnly, queryString] = basePath.split('?');
   const params = new URLSearchParams(queryString || '');
-  if (!params.has('limit')) params.set('limit', String(PAGE_SIZE));
+  const existingLimit = params.get('limit');
+  const maxLimit = existingLimit && existingLimit !== 'all' ? parseInt(existingLimit, 10) : 5000;
+  params.set('limit', String(Math.min(maxLimit, PAGE_SIZE)));
   if (!params.has('page')) params.set('page', '1');
   if (!params.has('meta')) params.set('meta', 'filter_count');
 
@@ -115,7 +117,7 @@ export async function directusFetchAllPages(
   const totalCount =
     page1Res.meta?.filter_count ?? page1Res.meta?.total_count ?? page1Res.data.length;
 
-  if (totalCount > PAGE_SIZE) {
+  if (totalCount > page1Res.data.length && page1Res.data.length > 0) {
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
     const pagePromises = [];
     for (let p = 2; p <= totalPages; p++) {

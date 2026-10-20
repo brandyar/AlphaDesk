@@ -178,7 +178,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Unlock,
       count: counts.freeCustomers,
       highlight: Boolean(counts.freeCustomers && counts.freeCustomers > 0),
-      badgeText: counts.freeCustomers && counts.freeCustomers > 0 ? 'آزاد' : undefined,
     },
     {
       id: 'reports',
