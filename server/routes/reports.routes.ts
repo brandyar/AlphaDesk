@@ -21,7 +21,7 @@ import { CustomerReport } from '../types.ts';
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
-  const { customer_id, page, limit, all, status, negotiator } = req.query;
+  const { customer_id, page, limit, all, status, negotiator, search, admin_filter, staff_filter } = req.query;
   const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
 
   const isUnlimited = all === 'true' || limit === 'all' || limit === '50000';
@@ -40,7 +40,43 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   const allCustomers = await ensureCustomersCache().catch(() => customersData);
-  const allReports = await ensureReportsCache().catch(() => reportsData);
+  const rawReports = await ensureReportsCache().catch(() => reportsData);
+
+  // Sort by date_created descending (newest first)
+  const allReports = [...rawReports].sort((a, b) => {
+    const tA = new Date(a.date_created || 0).getTime();
+    const tB = new Date(b.date_created || 0).getTime();
+    return tB - tA;
+  });
+
+  const getDaysUntil = (dateIso?: string | null): number | null => {
+    if (!dateIso) return null;
+    try {
+      const target = new Date(dateIso).getTime();
+      const now = new Date().getTime();
+      const diffMs = target - now;
+      return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    } catch {
+      return null;
+    }
+  };
+
+  const isActiveDate = (dateIso?: string | null): boolean => {
+    if (!dateIso) return false;
+    const days = getDaysUntil(dateIso);
+    return days !== null && days >= 0;
+  };
+
+  const isExpiredCustomer = (c?: any): boolean => {
+    if (!c) return false;
+    if (c.is_expired) return true;
+    if (c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
+    if (c.assignment_deadline) {
+      const days = getDaysUntil(c.assignment_deadline);
+      if (days !== null && days < 0) return true;
+    }
+    return false;
+  };
 
   const applyFilters = (list: any[]) => {
     let result = list;
@@ -85,6 +121,105 @@ router.get('/', async (req: Request, res: Response) => {
 
     if (negotiator && negotiator !== 'همه') {
       result = result.filter((r) => r.negotiator_name === negotiator);
+    }
+
+    if (search && typeof search === 'string' && search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter((rep) => {
+        const customer = allCustomers.find((c) => c.id === rep.customer_id);
+        const matchCompany = customer?.company_name?.toLowerCase().includes(q);
+        const matchReport = rep.report_text?.toLowerCase().includes(q);
+        const matchPhone = rep.negotiation_phone?.includes(q);
+        const matchNegotiator = rep.negotiator_name?.toLowerCase().includes(q);
+        return Boolean(matchCompany || matchReport || matchPhone || matchNegotiator);
+      });
+    }
+
+    if (isAdmin && admin_filter && admin_filter !== 'all') {
+      switch (admin_filter) {
+        case 'active_followups':
+          result = result.filter((r) => {
+            const customer = allCustomers.find((c) => c.id === r.customer_id);
+            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            return isActiveDate(followupDate);
+          });
+          break;
+        case 'no_followup':
+          result = result.filter((r) => {
+            const customer = allCustomers.find((c) => c.id === r.customer_id);
+            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            return !followupDate;
+          });
+          break;
+        case 'latest_reports': {
+          const latestMap = new Map<string, any>();
+          for (const rep of result) {
+            if (!latestMap.has(rep.customer_id)) {
+              latestMap.set(rep.customer_id, rep);
+            }
+          }
+          result = Array.from(latestMap.values());
+          break;
+        }
+        case 'expired_customers':
+          result = result.filter((r) => {
+            const customer = allCustomers.find((c) => c.id === r.customer_id);
+            return isExpiredCustomer(customer);
+          });
+          break;
+        case 'near_expiry_customers':
+          result = result.filter((r) => {
+            const customer = allCustomers.find((c) => c.id === r.customer_id);
+            if (!customer) return false;
+            if (customer.status === 'پیگیری قبل از انقضا') return true;
+            if (customer.assignment_deadline) {
+              const days = getDaysUntil(customer.assignment_deadline);
+              return days !== null && days >= 0 && days <= 3;
+            }
+            return false;
+          });
+          break;
+      }
+    } else if (!isAdmin && staff_filter) {
+      switch (staff_filter) {
+        case 'active_followups':
+          result = result.filter((r) => {
+            const customer = allCustomers.find((c) => c.id === r.customer_id);
+            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            return isActiveDate(followupDate);
+          });
+          break;
+        case 'no_followup':
+          result = result.filter((r) => {
+            const customer = allCustomers.find((c) => c.id === r.customer_id);
+            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            return !followupDate;
+          });
+          break;
+        case 'due_less_3_days':
+        case 'due_less_7_days':
+        case 'due_less_10_days': {
+          const maxDays = staff_filter === 'due_less_3_days' ? 3 : staff_filter === 'due_less_7_days' ? 7 : 10;
+          result = result.filter((r) => {
+            const customer = allCustomers.find((c) => c.id === r.customer_id);
+            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            const deadline = customer?.assignment_deadline;
+            const daysF = getDaysUntil(followupDate);
+            const daysD = getDaysUntil(deadline);
+            return (
+              (daysF !== null && daysF >= 0 && daysF <= maxDays) ||
+              (daysD !== null && daysD >= 0 && daysD <= maxDays)
+            );
+          });
+          break;
+        }
+        case 'expired':
+          result = result.filter((r) => {
+            const customer = allCustomers.find((c) => c.id === r.customer_id);
+            return isExpiredCustomer(customer);
+          });
+          break;
+      }
     }
 
     return result;
