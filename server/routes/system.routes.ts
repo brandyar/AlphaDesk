@@ -34,6 +34,21 @@ router.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
+router.get('/bff-status', (req: Request, res: Response) => {
+  res.json({
+    online: Boolean(directusUrl && directusAdminToken),
+    url: directusUrl || '',
+    database: 'Directus',
+  });
+});
+router.get('/api/bff-status', (req: Request, res: Response) => {
+  res.json({
+    online: Boolean(directusUrl && directusAdminToken),
+    url: directusUrl || '',
+    database: 'Directus',
+  });
+});
+
 // GET /api/dashboard-summary & /api/dashboard/summary
 const handleDashboardSummary = async (req: Request, res: Response) => {
   const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);

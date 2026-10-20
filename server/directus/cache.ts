@@ -6,7 +6,7 @@ import {
   reportsData,
   tenantsData,
 } from '../config.ts';
-import { fetchAllDirectusItems } from './client.ts';
+import { fetchAllDirectusItems, directusFetchAllPages } from './client.ts';
 
 interface DataCache<T> {
   timestamp: number;
@@ -55,12 +55,13 @@ export async function ensureReportsCache(forceRefresh = false): Promise<any[]> {
     return reportsCache.data;
   }
 
-  const items = await fetchAllDirectusItems('/items/customer_reports?sort=-id', 100, 300, 2);
+  const res = await directusFetchAllPages('/items/customer_reports?sort=-date_created');
+  const items = res?.data || [];
   if (items && items.length > 0) {
     reportsCache = {
       timestamp: Date.now(),
       data: items,
-      meta: { total_count: items.length },
+      meta: res.meta || { total_count: items.length },
     };
     return items;
   }
