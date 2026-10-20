@@ -13,7 +13,7 @@ import {
   invalidateCustomersCache,
   invalidateReportsCache,
 } from '../directus/cache.ts';
-import { getSafeDirectusPersonnelForeignKey } from '../directus/sync.ts';
+import { getSafeDirectusPersonnelForeignKey, resolveDirectusTenantId } from '../directus/sync.ts';
 import { cleanCustomerPayloadForDirectus } from '../services/phoneNormalizer.ts';
 import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
 import { CustomerReport } from '../types.ts';
@@ -37,6 +37,71 @@ router.get('/', async (req: Request, res: Response) => {
       data: [],
       meta: { filter_count: 0, total_count: 0, page: reqPage, limit: reqLimit, total_pages: 1 },
     });
+  }
+
+  if (directusUrl && directusAdminToken && !isUnlimited && (!admin_filter || admin_filter === 'all') && (!staff_filter || staff_filter === 'all')) {
+    try {
+      let directusPath = `/items/customer_reports?page=${reqPage}&limit=${reqLimit}&meta=filter_count&sort=-date_created`;
+
+      if (tenantId && tenantId !== 'all') {
+        const tenantNum = resolveDirectusTenantId(tenantId);
+        if (tenantNum) {
+          directusPath += `&filter[tenant_id][_eq]=${tenantNum}`;
+        }
+      }
+
+      if (customer_id) {
+        directusPath += `&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}`;
+      } else if (!isAdmin && (userId || personnelId || userName)) {
+        const orClauses: string[] = [];
+        if (userId) orClauses.push(`filter[_or][0][created_by][_eq]=${encodeURIComponent(String(userId))}`);
+        if (personnelId) orClauses.push(`filter[_or][1][created_by][_eq]=${encodeURIComponent(String(personnelId))}`);
+        if (userName) orClauses.push(`filter[_or][2][negotiator_name][_eq]=${encodeURIComponent(String(userName))}`);
+        if (orClauses.length > 0) {
+          directusPath += `&${orClauses.join('&')}`;
+        }
+      }
+
+      if (status && status !== 'همه') {
+        if (String(status) === 'قرارداد' || String(status) === 'قرارداد / فاکتور') {
+          directusPath += `&filter[negotiation_status][_in]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%20%2F%20%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%2F%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1`;
+        } else {
+          directusPath += `&filter[negotiation_status][_eq]=${encodeURIComponent(String(status))}`;
+        }
+      }
+
+      if (negotiator && negotiator !== 'همه') {
+        directusPath += `&filter[negotiator_name][_eq]=${encodeURIComponent(String(negotiator))}`;
+      }
+
+      if (search && typeof search === 'string' && search.trim()) {
+        const s = search.trim();
+        directusPath += `&filter[_or][0][report_text][_icontains]=${encodeURIComponent(s)}&filter[_or][1][negotiator_name][_icontains]=${encodeURIComponent(s)}&filter[_or][2][negotiation_phone][_icontains]=${encodeURIComponent(s)}`;
+      }
+
+      const resData = await directusFetch(directusPath, {}, 1).catch(() => null);
+      if (resData && Array.isArray(resData.data)) {
+        const totalCount = resData.meta?.filter_count ?? resData.meta?.total_count ?? resData.data.length;
+        const totalPages = Math.max(1, Math.ceil(totalCount / reqLimit));
+        res.setHeader('X-Total-Count', String(totalCount));
+        res.setHeader('X-Filter-Count', String(totalCount));
+        res.setHeader('X-Page', String(reqPage));
+        res.setHeader('X-Limit', String(reqLimit));
+
+        return res.json({
+          data: resData.data,
+          meta: {
+            filter_count: totalCount,
+            total_count: totalCount,
+            page: reqPage,
+            limit: reqLimit,
+            total_pages: totalPages,
+          },
+        });
+      }
+    } catch (err: any) {
+      console.warn('Directus paginated reports query error, falling back to local filter:', err.message);
+    }
   }
 
   const allCustomers = await ensureCustomersCache().catch(() => customersData);

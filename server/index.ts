@@ -33,6 +33,8 @@ app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(rateLimiter);
 
 // Mount all modular API routers
+app.use('/api/auth', authRoutes);
+app.use('/api', authRoutes);
 app.use(authRoutes);
 app.use('/api/personnel', personnelRoutes);
 app.use('/api/customers', customerRoutes);
