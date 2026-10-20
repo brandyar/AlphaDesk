@@ -1054,5 +1054,19 @@ export async function resetMigrationCache(): Promise<{ success: boolean; message
   return handleResponse(res, 'خطا در پاکسازی حافظه کش درون‌ریزی');
 }
 
+export async function autoAssignFreeCustomersWithReports(tenant_id?: string): Promise<{
+  success: boolean;
+  reassignedCount: number;
+  details?: Array<{ customerId: string; companyName: string; marketerName: string }>;
+  message: string;
+}> {
+  const res = await fetch(`${BASE_URL}/migration/auto-assign-free-with-reports`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ tenant_id }),
+  });
+  return handleResponse(res, 'خطا در اتصال خودکار مشتریان آزاد به بازاریابان');
+}
+
 
 

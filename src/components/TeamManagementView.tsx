@@ -844,7 +844,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   // -------------------------------------------------------------
   // TAB 5: Leave Approvals State (تایید مرخصی‌ها)
   // -------------------------------------------------------------
-  const [leaveStatusFilter, setLeaveStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [leaveSearch, setLeaveSearch] = useState('');
   const [reviewingLeave, setReviewingLeave] = useState<LeaveRequest | null>(null);
   const [reviewAction, setReviewAction] = useState<RequestStatus>('approved');

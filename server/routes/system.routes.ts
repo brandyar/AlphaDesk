@@ -17,11 +17,11 @@ import {
   setContactsData,
   initialPersonnel,
 } from '../config.ts';
-import { directusFetch, directusSafeBatchInsert, directusSafeBatchPatch } from '../directus/client.ts';
+import { directusFetch, directusFetchAllPages, directusSafeBatchInsert, directusSafeBatchPatch } from '../directus/client.ts';
 import { getRequestUser, getRequestTenantId } from '../middlewares/auth.middleware.ts';
 import { invalidateCustomersCache, invalidateReportsCache } from '../directus/cache.ts';
 import { resolveDirectusTenantId } from '../directus/sync.ts';
-import { normalizeContactValue } from '../services/phoneNormalizer.ts';
+import { normalizeContactValue, normalizePersianString } from '../services/phoneNormalizer.ts';
 import { Personnel } from '../types.ts';
 
 const router = Router();
@@ -859,6 +859,15 @@ router.post('/api/migration/import', async (req: Request, res: Response) => {
     }
   }
 
+  // 4. Auto-connect free customers with reports to the last marketer who wrote a report for them
+  let autoAssignedCount = 0;
+  try {
+    const autoRes = await autoAssignFreeCustomersWithReports(targetTenantId);
+    autoAssignedCount = autoRes.reassignedCount;
+  } catch (autoErr: any) {
+    console.warn('Auto-assign free customers post-import warning:', autoErr.message);
+  }
+
   invalidateCustomersCache();
   invalidateReportsCache();
 
@@ -871,11 +880,147 @@ router.post('/api/migration/import', async (req: Request, res: Response) => {
     importedPersonnelCount,
     importedCustomersCount,
     importedReportsCount,
+    autoAssignedCount,
     skippedCount,
     skippedDetails,
     errors,
-    message: `درون‌ریزی با موفقیت انجام شد: ${importedPersonnelCount} کارشناس، ${importedCustomersCount} مشتری، و ${importedReportsCount} گزارش ثبت شدند.`,
+    message: `درون‌ریزی با موفقیت انجام شد: ${importedPersonnelCount} کارشناس، ${importedCustomersCount} مشتری، و ${importedReportsCount} گزارش ثبت شدند. ${autoAssignedCount > 0 ? `تعداد ${autoAssignedCount} مشتری آزاد گزارش‌دار به آخرین بازاریاب مربوطه متصل گردیدند.` : ''}`,
   });
 });
+
+// Helper function to connect free customers with reports to their latest report's negotiator
+export async function autoAssignFreeCustomersWithReports(targetTenantId?: string) {
+  let reassignedCount = 0;
+  const reassignedDetails: Array<{ customerId: string; companyName: string; marketerName: string }> = [];
+
+  let allCustomersList = [...customersData];
+  let allReportsList = [...reportsData];
+  let allPersonnelList = [...personnelData];
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const [cRes, rRes, pRes] = await Promise.all([
+        directusFetchAllPages('/items/customers?limit=10000').catch(() => null),
+        directusFetchAllPages('/items/customer_reports?limit=50000&sort=-date_created').catch(() => null),
+        directusFetchAllPages('/items/personnel?limit=1000').catch(() => null),
+      ]);
+      if (cRes?.data && Array.isArray(cRes.data)) allCustomersList = cRes.data;
+      if (rRes?.data && Array.isArray(rRes.data)) allReportsList = rRes.data;
+      if (pRes?.data && Array.isArray(pRes.data)) allPersonnelList = pRes.data;
+    } catch (e: any) {
+      console.warn('Error fetching data for auto-assignment:', e.message);
+    }
+  }
+
+  const freeCustomers = allCustomersList.filter((c: any) => {
+    if (c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
+    const isUnassigned = !c.assigned_marketer_id || c.assigned_marketer_name === 'تخصیص نیافته' || !c.assigned_marketer_name;
+    const isExpired = Boolean(c.is_expired);
+    return isUnassigned || isExpired;
+  });
+
+  const nowMs = Date.now();
+  const defaultDeadlineIso = new Date(nowMs + 10 * 86400 * 1000).toISOString();
+
+  for (const cust of freeCustomers) {
+    const custId = String(cust.id);
+    const custMobiles = Array.isArray(cust.mobile_numbers) ? cust.mobile_numbers : [];
+    const custLandlines = Array.isArray(cust.landline_numbers) ? cust.landline_numbers : [];
+
+    const custReports = allReportsList.filter((r: any) => {
+      if (String(r.customer_id) === custId || (typeof r.customer_id === 'object' && r.customer_id !== null && String(r.customer_id.id) === custId)) {
+        return true;
+      }
+      if (r.negotiation_phone) {
+        const normPhone = normalizeContactValue(r.negotiation_phone);
+        if (normPhone && (custMobiles.includes(normPhone) || custLandlines.includes(normPhone))) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (custReports.length === 0) continue;
+
+    custReports.sort((a: any, b: any) => {
+      const tA = new Date(a.date_created || 0).getTime();
+      const tB = new Date(b.date_created || 0).getTime();
+      return tB - tA;
+    });
+
+    const lastReport: any = custReports[0];
+    const negotiatorName = String(lastReport?.negotiator_name || lastReport?.negotiator || '').trim();
+    if (!negotiatorName || negotiatorName === 'کارشناس') continue;
+
+    const normNegotiator = normalizePersianString(negotiatorName);
+
+    const matchedP = allPersonnelList.find((p: any) => {
+      const normPName = normalizePersianString(p.name);
+      if (normPName && normNegotiator && (normPName === normNegotiator || normPName.includes(normNegotiator) || normNegotiator.includes(normPName))) {
+        return true;
+      }
+      if (p.username && normalizePersianString(p.username) === normNegotiator) return true;
+      if (String(p.id) === String(lastReport.created_by) || String(p.user_id) === String(lastReport.created_by)) return true;
+      return false;
+    });
+
+    const targetMarketerId = matchedP ? String(matchedP.id) : (lastReport.created_by ? String(lastReport.created_by) : `p-${negotiatorName}`);
+    const targetMarketerName = matchedP ? String(matchedP.name) : negotiatorName;
+
+    const custPatch: Record<string, any> = {
+      assigned_marketer_id: targetMarketerId,
+      assigned_marketer_name: targetMarketerName,
+      assignment_deadline: defaultDeadlineIso,
+      is_expired: false,
+      claimed_from_pool: false,
+      date_updated: new Date().toISOString(),
+    };
+
+    if (directusUrl && directusAdminToken) {
+      try {
+        await directusFetch(`/items/customers/${encodeURIComponent(custId)}`, {
+          method: 'PATCH',
+          body: JSON.stringify(custPatch),
+        });
+      } catch (err: any) {
+        console.warn(`Failed to auto-reassign customer ${custId} in Directus:`, err.message);
+      }
+    }
+
+    const localIdx = customersData.findIndex((c) => String(c.id) === custId);
+    if (localIdx >= 0) {
+      customersData[localIdx] = {
+        ...customersData[localIdx],
+        ...custPatch,
+      };
+    }
+
+    reassignedCount++;
+    reassignedDetails.push({
+      customerId: custId,
+      companyName: cust.company_name || 'بدون نام',
+      marketerName: targetMarketerName,
+    });
+  }
+
+  invalidateCustomersCache();
+  invalidateReportsCache();
+
+  return {
+    success: true,
+    reassignedCount,
+    details: reassignedDetails,
+    message: `عملیات خودکار تکمیل شد: ${reassignedCount} مشتری آزاد گزارش‌دار با موفقیت به آخرین بازاریاب گزارش‌دهنده متصل گردیدند.`,
+  };
+}
+
+const handleAutoAssignFreeWithReports = async (req: Request, res: Response) => {
+  const { tenant_id } = req.body;
+  const result = await autoAssignFreeCustomersWithReports(tenant_id);
+  res.json(result);
+};
+
+router.post('/api/migration/auto-assign-free-with-reports', handleAutoAssignFreeWithReports);
+router.post('/migration/auto-assign-free-with-reports', handleAutoAssignFreeWithReports);
 
 export default router;

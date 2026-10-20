@@ -27,7 +27,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Tenant, Personnel } from '../types';
-import { importLegacyMigrationData, resetMigrationCache } from '../api';
+import { importLegacyMigrationData, resetMigrationCache, autoAssignFreeCustomersWithReports } from '../api';
 import { toPersianDigits, normalizeLegacyStatus } from '../utils';
 
 interface DataMigrationViewProps {
@@ -185,11 +185,30 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
   // وضعیت پردازش و پیشرفت زنده
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAutoAssigning, setIsAutoAssigning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [currentPhaseText, setCurrentPhaseText] = useState('');
   const [progressLogs, setProgressLogs] = useState<string[]>([]);
   const [importResult, setImportResult] = useState<any | null>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleAutoAssignFreeCustomers = async () => {
+    try {
+      setIsAutoAssigning(true);
+      showToast('در حال تحلیل و اتصال مشتریان آزاد به آخرین بازاریاب ثبت‌کننده گزارش...', 'info');
+      const res = await autoAssignFreeCustomersWithReports(selectedTenantId);
+      if (res.success) {
+        showToast(res.message, 'success');
+        await onRefreshData();
+      } else {
+        showToast(res.message || 'خطا در اتصال خودکار مشتریان', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'خطا در اجرای اتصال خودکار مشتریان آزاد', 'error');
+    } finally {
+      setIsAutoAssigning(false);
+    }
+  };
 
   // حرکت خودکار لاگ به انتهای لیست
   useEffect(() => {
@@ -484,31 +503,41 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         </div>
       </div>
 
-      {/* انتخاب سازمان مقصد */}
-      <div className="bg-[#181818] border border-[#282828] rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      {/* کارت ابزار هوشمند ساماندهی مشتریان آزاد گزارش‌دار */}
+      <div className="bg-[#181818] border border-[#1DB954]/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl shadow-[#1DB954]/5">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-            <Building2 className="w-4 h-4" />
+          <div className="w-10 h-10 rounded-xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954] flex-shrink-0">
+            <UserCheck className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs font-bold text-white">سازمان مقصد برای الحاق اطلاعات</div>
-            <div className="text-[11px] text-[#888]">تمامی پرونده‌ها و کارمندان به این سازمان تخصیص خواهند یافت.</div>
+            <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+              <span>اتصال و ساماندهی خودکار مشتریان آزاد گزارش‌دار به آخرین بازاریاب</span>
+              <span className="text-[10px] bg-[#1DB954]/20 text-[#1DB954] px-2 py-0.5 rounded-full font-bold">هوشمند</span>
+            </div>
+            <div className="text-[11px] text-[#A7A7A7] mt-0.5">
+              شماره‌ها و پرونده‌هایی که آزاد ثبت شده‌اند اما دارای گزارش مذاکره هستند، به صورت خودکار به آخرین بازاریابی که برایشان گزارش نوشته وصل و فعال می‌گردند.
+            </div>
           </div>
         </div>
 
-        <div className="w-full sm:w-auto min-w-[240px]">
-          <select
-            value={selectedTenantId}
-            onChange={(e) => setSelectedTenantId(e.target.value)}
-            className="w-full bg-[#121212] border border-[#333] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#1DB954]"
-          >
-            {tenants.map(t => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <button
+          type="button"
+          onClick={handleAutoAssignFreeCustomers}
+          disabled={isAutoAssigning || isSubmitting}
+          className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] disabled:opacity-50 text-black font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-[#1DB954]/20 cursor-pointer flex-shrink-0"
+        >
+          {isAutoAssigning ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>در حال اتصال هوشمند...</span>
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-4 h-4 stroke-[2.5]" />
+              <span>اتصال آنی به آخرین بازاریاب</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* گام ۱: پرسنل */}

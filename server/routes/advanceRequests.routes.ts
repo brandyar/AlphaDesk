@@ -11,54 +11,71 @@ import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
 import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
 import { sendIppanelSmsPattern, sendTenantAdminsSmsPattern } from '../services/sms.service.ts';
 import { resolvePersonnelId, getSafeDirectusPersonnelForeignKey, resolveDirectusTenantId } from '../directus/sync.ts';
+import { normalizePersianString } from '../services/phoneNormalizer.ts';
 import { SalaryAdvanceRequest } from '../types.ts';
 
 const router = Router();
 
-// GET /api/advance-requests
-router.get('/api/advance-requests', async (req: Request, res: Response) => {
+// GET /api/advance-requests & /advance-requests
+const getAdvanceRequestsHandler = async (req: Request, res: Response) => {
   const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+  let list: SalaryAdvanceRequest[] = [];
+
   if (directusUrl && directusAdminToken) {
     try {
       const resp = await directusFetchAllPages('/items/advance_requests?sort=-date_created');
       if (resp && Array.isArray(resp.data)) {
-        let list: SalaryAdvanceRequest[] = resp.data.map((r: any) => ({
+        list = resp.data.map((r: any) => ({
           ...r,
-          personnel_id: typeof r.personnel_id === 'object' && r.personnel_id !== null ? r.personnel_id.id : String(r.personnel_id || ''),
+          id: String(r.id),
+          personnel_id: typeof r.personnel_id === 'object' && r.personnel_id !== null ? String(r.personnel_id.id) : String(r.personnel_id || ''),
           personnel_name: r.personnel_name || (typeof r.personnel_id === 'object' && r.personnel_id !== null ? (r.personnel_id.name || r.personnel_id.first_name) : 'کارشناس شرکت')
         }));
-
-        if (tenantId && tenantId !== 'all') {
-          list = list.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
-        }
-
-        if (!isAdmin) {
-          list = list.filter(
-            (r) =>
-              r.personnel_id === personnelId ||
-              r.personnel_id === userId ||
-              (userName && r.personnel_name === userName)
-          );
-        }
-        return res.json(list);
       }
-    } catch (err: any) {}
+    } catch (err: any) {
+      console.warn('Directus advance_requests fetch warning:', err.message);
+    }
   }
 
-  let list = [...advanceRequestsData];
+  // Merge in-memory advanceRequestsData if any records exist
+  if (advanceRequestsData.length > 0) {
+    const existingIds = new Set(list.map((r) => String(r.id)));
+    for (const memReq of advanceRequestsData) {
+      if (!existingIds.has(String(memReq.id))) {
+        list.unshift(memReq);
+      }
+    }
+  }
+
   if (tenantId && tenantId !== 'all') {
     list = list.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
   }
+
   if (!isAdmin) {
-    list = list.filter(
-      (r) =>
-        r.personnel_id === personnelId ||
-        r.personnel_id === userId ||
-        (userName && r.personnel_name === userName)
-    );
+    const normUser = normalizePersianString(userName);
+    const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
+    const rawUid = cleanPId.replace(/^p-/, '');
+    const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
+
+    list = list.filter((r) => {
+      const rPId = String(r.personnel_id || '').trim().toLowerCase();
+      const rawRPId = rPId.replace(/^p-/, '');
+      const normPName = normalizePersianString(r.personnel_name);
+      const matchName = normUser && normPName && (normPName === normUser || normPName.includes(normUser));
+
+      return (
+        (cleanPId && (rPId === cleanPId || rawRPId === rawUid)) ||
+        (cleanUId && (rPId === cleanUId || rawRPId === rawUid)) ||
+        Boolean(matchName)
+      );
+    });
   }
+
   res.json(list);
-});
+};
+
+router.get('/api/advance-requests', getAdvanceRequestsHandler);
+router.get('/advance-requests', getAdvanceRequestsHandler);
 
 // POST /api/advance-requests
 router.post('/api/advance-requests', async (req: Request, res: Response) => {
