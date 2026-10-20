@@ -106,23 +106,22 @@ export function getRequestUser(req: Request): RequestUserContext {
       (!sessionIat || sessionIat < globalSessionRevocationTimestamp)
   );
 
-  if (!userName && (personnelId || userId || userEmail)) {
-    const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
-    const rawUid = cleanPId.replace(/^p-/, '');
-    const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
-    const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : '';
+  const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
+  const rawUid = cleanPId.replace(/^p-/, '');
+  const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
+  const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : '';
 
-    const pMatch = personnelData.find(
-      (p) =>
-        (cleanPId &&
-          (p.id?.toLowerCase() === cleanPId || p.id?.toLowerCase() === `p-${rawUid}`)) ||
-        (cleanUId &&
-          (p.user_id?.toLowerCase() === cleanUId || p.id?.toLowerCase() === cleanUId)) ||
-        (cleanEmail && p.email?.toLowerCase() === cleanEmail)
-    );
-    if (pMatch?.name) {
-      userName = pMatch.name;
-    }
+  const pMatch = personnelData.find(
+    (p) =>
+      (cleanPId &&
+        (p.id?.toLowerCase() === cleanPId || p.id?.toLowerCase() === `p-${rawUid}`)) ||
+      (cleanUId &&
+        (p.user_id?.toLowerCase() === cleanUId || p.id?.toLowerCase() === cleanUId)) ||
+      (cleanEmail && p.email?.toLowerCase() === cleanEmail)
+  );
+
+  if (!userName && pMatch?.name) {
+    userName = pMatch.name;
   }
 
   const hasUserContext = Boolean(
@@ -130,15 +129,22 @@ export function getRequestUser(req: Request): RequestUserContext {
       !isSessionRevoked
   );
 
+  const resolvedRole = userRole || pMatch?.role || '';
   const isAdmin = Boolean(
     hasUserContext &&
-      (userRole === 'admin' || userRole === 'sales_manager')
+      (resolvedRole === 'admin' ||
+       resolvedRole === 'sales_manager' ||
+       userRole === 'admin' ||
+       userRole === 'sales_manager' ||
+       pMatch?.role === 'admin' ||
+       pMatch?.role === 'sales_manager' ||
+       DIRECTUS_ADMIN_ROLE_IDS.includes(roleId))
   );
 
   return {
     userId: isSessionRevoked ? '' : userId,
     personnelId: isSessionRevoked ? '' : personnelId,
-    userRole: isAdmin ? 'admin' : userRole || 'marketer',
+    userRole: isAdmin ? (pMatch?.role === 'sales_manager' ? 'sales_manager' : 'admin') : resolvedRole || 'marketer',
     roleId,
     isAdmin,
     userName: isSessionRevoked ? '' : userName,

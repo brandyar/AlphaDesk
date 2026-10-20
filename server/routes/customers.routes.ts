@@ -240,26 +240,9 @@ router.get('/', async (req: Request, res: Response) => {
       if (marketer_id && marketer_id !== 'همه') {
         directusPath += `&filter[assigned_marketer_id][_eq]=${encodeURIComponent(String(marketer_id))}`;
       }
-      if (!isAdmin && !isFreeOnly && (personnelId || userId || userName)) {
-        const orClauses: string[] = [];
-        if (personnelId) {
-          const cleanP = String(personnelId).trim();
-          orClauses.push(`filter[_or][0][assigned_marketer_id][_eq]=${encodeURIComponent(cleanP)}`);
-          if (cleanP.startsWith('p-')) {
-            orClauses.push(`filter[_or][1][assigned_marketer_id][_eq]=${encodeURIComponent(cleanP.replace(/^p-/, ''))}`);
-          } else {
-            orClauses.push(`filter[_or][1][assigned_marketer_id][_eq]=p-${encodeURIComponent(cleanP)}`);
-          }
-        }
-        if (userId) {
-          orClauses.push(`filter[_or][2][assigned_marketer_id][_eq]=${encodeURIComponent(String(userId))}`);
-        }
-        if (userName) {
-          orClauses.push(`filter[_or][3][assigned_marketer_name][_eq]=${encodeURIComponent(String(userName))}`);
-        }
-        if (orClauses.length > 0) {
-          directusPath += `&${orClauses.join('&')}`;
-        }
+      if (!isAdmin && !isFreeOnly && personnelId && (!marketer_id || marketer_id === 'همه')) {
+        const cleanP = String(personnelId).trim();
+        directusPath += `&filter[assigned_marketer_id][_eq]=${encodeURIComponent(cleanP)}`;
       }
       if (expired_only === 'true') {
         directusPath += `&filter[is_expired][_eq]=true`;

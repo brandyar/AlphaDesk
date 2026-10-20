@@ -52,13 +52,11 @@ router.get('/', async (req: Request, res: Response) => {
 
       if (customer_id) {
         directusPath += `&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}`;
-      } else if (!isAdmin && (userId || personnelId || userName)) {
-        const orClauses: string[] = [];
-        if (userId) orClauses.push(`filter[_or][0][created_by][_eq]=${encodeURIComponent(String(userId))}`);
-        if (personnelId) orClauses.push(`filter[_or][1][created_by][_eq]=${encodeURIComponent(String(personnelId))}`);
-        if (userName) orClauses.push(`filter[_or][2][negotiator_name][_eq]=${encodeURIComponent(String(userName))}`);
-        if (orClauses.length > 0) {
-          directusPath += `&${orClauses.join('&')}`;
+      } else if (!isAdmin && (userName || personnelId)) {
+        if (userName) {
+          directusPath += `&filter[negotiator_name][_eq]=${encodeURIComponent(String(userName))}`;
+        } else if (personnelId) {
+          directusPath += `&filter[created_by][_eq]=${encodeURIComponent(String(personnelId))}`;
         }
       }
 

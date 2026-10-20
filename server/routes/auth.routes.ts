@@ -263,16 +263,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
         let pItem = pRes?.data?.[0] || null;
 
-        // Auto-heal: If this user was previously mistakenly tagged with role 'admin' in personnel table,
-        // but their Directus account is NOT an admin, repair it back to 'marketer'!
-        if (!isDirectusAdmin && pItem && pItem.role === 'admin') {
-          console.warn(`Healing personnel ${pItem.id} role: user is not Directus admin, setting role to marketer`);
-          pItem.role = 'marketer';
-          directusFetch(`/items/personnel/${pItem.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ role: 'marketer' }),
-          }).catch(() => {});
-        }
+
 
         if (!pItem) {
           const cleanPName =
@@ -474,9 +465,6 @@ router.get('/me', async (req: Request, res: Response) => {
   if (pItem) {
     pItem = enrichPersonnel(pItem);
     if (!avatarUrl && pItem.avatar) avatarUrl = pItem.avatar;
-    if (!isDirectusAdmin && pItem.role === 'admin' && userEmail !== 'kiani@company.ir') {
-      pItem.role = 'marketer';
-    }
   }
 
   const effectiveIsAdmin = Boolean(
