@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { Tenant, Personnel } from '../types';
 import { importLegacyMigrationData, resetMigrationCache } from '../api';
-import { toPersianDigits } from '../utils';
+import { toPersianDigits, normalizeLegacyStatus } from '../utils';
 
 interface DataMigrationViewProps {
   tenants: Tenant[];
@@ -311,7 +311,12 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         for (let i = 0; i < totalCustChunks; i++) {
           const start = i * CUSTOMER_CHUNK_SIZE;
           const end = Math.min(start + CUSTOMER_CHUNK_SIZE, totalContacts);
-          const chunk = parsedContacts.slice(start, end);
+          const rawChunk = parsedContacts.slice(start, end);
+          const chunk = rawChunk.map((c) => ({
+            ...c,
+            lastStat: normalizeLegacyStatus(c.lastStat),
+            status: normalizeLegacyStatus(c.status || c.lastStat),
+          }));
 
           const pct = Math.round(10 + ((i + 1) / totalCustChunks) * 30);
           setProgressPercent(pct);
@@ -344,7 +349,11 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         for (let i = 0; i < totalRepChunks; i++) {
           const start = i * REPORT_CHUNK_SIZE;
           const end = Math.min(start + REPORT_CHUNK_SIZE, totalHistory);
-          const chunk = parsedHistory.slice(start, end);
+          const rawChunk = parsedHistory.slice(start, end);
+          const chunk = rawChunk.map((h) => ({
+            ...h,
+            status: normalizeLegacyStatus(h.status),
+          }));
 
           const pct = Math.round(40 + ((i + 1) / totalRepChunks) * 58);
           setProgressPercent(pct);
@@ -660,7 +669,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                         <td className="p-2.5 text-[#AAA]">{row.job || '-'}</td>
                         <td className="p-2.5 font-mono text-[#AAA]">{row.mobiles || '-'}</td>
                         <td className="p-2.5 text-[#CCC]">{row.managerName || '-'}</td>
-                        <td className="p-2.5 text-[#F59B23]">{row.lastStat || 'تماس برقرار نشده'}</td>
+                        <td className="p-2.5 text-[#F59B23]">{normalizeLegacyStatus(row.lastStat || row.status)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -762,7 +771,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                         <td className="p-2.5 text-[#AAA] max-w-[200px] truncate">{row.report || '-'}</td>
                         <td className="p-2.5 font-mono text-amber-400">{row.rating || '-'}</td>
                         <td className="p-2.5 font-mono text-[#888]">{row.nextFollow || '-'}</td>
-                        <td className="p-2.5 text-[#1ED760]">{row.status || '-'}</td>
+                        <td className="p-2.5 text-[#1ED760]">{normalizeLegacyStatus(row.status)}</td>
                       </tr>
                     ))}
                   </tbody>

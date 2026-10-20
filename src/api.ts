@@ -573,9 +573,50 @@ export async function deleteCustomerContact(id: string): Promise<void> {
   }
 }
 
+export interface AnalyticsStatsResponse {
+  totalReports: number;
+  totalContracts: number;
+  totalContractAmount: number;
+  avgScore: string;
+  statusBreakdown: Record<string, number>;
+  personnelRanking: {
+    personnelName: string;
+    reportsCount: number;
+    contractsCount: number;
+    totalAmount: number;
+    avgScore: string;
+  }[];
+}
+
+export async function fetchAnalyticsStats(params: {
+  startDate?: string;
+  endDate?: string;
+  negotiator?: string;
+}): Promise<AnalyticsStatsResponse> {
+  const qParams = new URLSearchParams();
+  if (params.startDate) qParams.append('start_date', params.startDate);
+  if (params.endDate) qParams.append('end_date', params.endDate);
+  if (params.negotiator && params.negotiator !== 'all' && params.negotiator !== 'همه') {
+    qParams.append('negotiator', params.negotiator);
+  }
+
+  const res = await fetch(`${BASE_URL}/analytics/stats?${qParams.toString()}`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse<AnalyticsStatsResponse>(res, 'خطا در دریافت آمار تحلیلی');
+}
+
 export async function fetchCustomerReports(
   customerId?: string,
-  options?: { page?: number; limit?: number; all?: boolean }
+  options?: {
+    page?: number;
+    limit?: number;
+    all?: boolean;
+    startDate?: string;
+    endDate?: string;
+    negotiator?: string;
+    fields?: string;
+  }
 ): Promise<CustomerReport[]> {
   const params = new URLSearchParams();
   if (customerId) params.append('customer_id', customerId);
@@ -583,6 +624,10 @@ export async function fetchCustomerReports(
   if (options?.limit !== undefined) params.append('limit', String(options.limit));
   else params.append('limit', '25');
   if (options?.all) params.append('all', 'true');
+  if (options?.startDate) params.append('start_date', options.startDate);
+  if (options?.endDate) params.append('end_date', options.endDate);
+  if (options?.negotiator) params.append('negotiator', options.negotiator);
+  if (options?.fields) params.append('fields', options.fields);
 
   const q = params.toString() ? `?${params.toString()}` : '';
   const res = await fetch(`${BASE_URL}/customer-reports${q}`, {

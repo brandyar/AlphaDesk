@@ -21,7 +21,7 @@ import { CustomerReport } from '../types.ts';
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
-  const { customer_id, page, limit, all, status, negotiator, search, admin_filter, staff_filter } = req.query;
+  const { customer_id, page, limit, all, status, negotiator, search, admin_filter, staff_filter, start_date, end_date, fields } = req.query;
   const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
 
   const isUnlimited = all === 'true' || limit === 'all' || limit === '50000';
@@ -77,6 +77,16 @@ router.get('/', async (req: Request, res: Response) => {
       if (search && typeof search === 'string' && search.trim()) {
         const s = search.trim();
         directusPath += `&filter[_or][0][report_text][_icontains]=${encodeURIComponent(s)}&filter[_or][1][negotiator_name][_icontains]=${encodeURIComponent(s)}&filter[_or][2][negotiation_phone][_icontains]=${encodeURIComponent(s)}`;
+      }
+
+      if (start_date) {
+        directusPath += `&filter[date_created][_gte]=${encodeURIComponent(String(start_date))}`;
+      }
+      if (end_date) {
+        directusPath += `&filter[date_created][_lte]=${encodeURIComponent(String(end_date))}`;
+      }
+      if (fields) {
+        directusPath += `&fields=${encodeURIComponent(String(fields))}`;
       }
 
       const resData = await directusFetch(directusPath, {}, 1).catch(() => null);
@@ -198,6 +208,15 @@ router.get('/', async (req: Request, res: Response) => {
         const matchNegotiator = rep.negotiator_name?.toLowerCase().includes(q);
         return Boolean(matchCompany || matchReport || matchPhone || matchNegotiator);
       });
+    }
+
+    if (start_date) {
+      const sMs = new Date(String(start_date)).getTime();
+      result = result.filter((r) => r.date_created && new Date(r.date_created).getTime() >= sMs);
+    }
+    if (end_date) {
+      const eMs = new Date(String(end_date)).getTime();
+      result = result.filter((r) => r.date_created && new Date(r.date_created).getTime() <= eMs);
     }
 
     if (isAdmin && admin_filter && admin_filter !== 'all') {

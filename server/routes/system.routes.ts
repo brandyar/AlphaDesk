@@ -440,4 +440,434 @@ router.post('/api/migration/reset-cache', (req: Request, res: Response) => {
   return res.json({ success: true, message: 'حافظه موقت کش درون‌ریزی با موفقیت پاکسازی شد.' });
 });
 
+// Helper to convert Jalali to Gregorian date
+function jalaliToGregorian(jy: number, jm: number, jd: number): Date {
+  let gy = jy <= 979 ? 621 : 1600;
+  jy -= jy <= 979 ? 0 : 979;
+  let days =
+    365 * jy +
+    Math.floor(jy / 33) * 8 +
+    Math.floor(((jy % 33) + 3) / 4) +
+    78 +
+    jd +
+    (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
+  gy += 400 * Math.floor(days / 146097);
+  days %= 146097;
+  if (days > 36524) {
+    gy += 100 * Math.floor(--days / 36524);
+    days %= 36524;
+    if (days >= 365) days++;
+  }
+  gy += 4 * Math.floor(days / 1461);
+  days %= 1461;
+  if (days > 365) {
+    gy += Math.floor((days - 1) / 365);
+    days = (days - 1) % 365;
+  }
+  const gd = days + 1;
+  const sal_a = [
+    0,
+    31,
+    (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0 ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ];
+  let gm = 0;
+  for (gm = 0; gm < 13; gm++) {
+    const v = sal_a[gm];
+    if (days < v) break;
+    days -= v;
+  }
+  return new Date(Date.UTC(gy, gm - 1, gd));
+}
+
+function parseLegacyDate(dateVal?: any): string | null {
+  if (!dateVal) return null;
+  const str = String(dateVal).trim();
+  if (!str || str === 'NULL' || str === 'null') return null;
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+
+  if (/^\d{8}$/.test(str)) {
+    const jy = parseInt(str.substring(0, 4), 10);
+    const jm = parseInt(str.substring(4, 6), 10);
+    const jd = parseInt(str.substring(6, 8), 10);
+    try {
+      return jalaliToGregorian(jy, jm, jd).toISOString();
+    } catch {}
+  }
+
+  const slashMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2}))?/);
+  if (slashMatch) {
+    const jy = parseInt(slashMatch[1], 10);
+    const jm = parseInt(slashMatch[2], 10);
+    const jd = parseInt(slashMatch[3], 10);
+    const hour = slashMatch[4] ? parseInt(slashMatch[4], 10) : 12;
+    const min = slashMatch[5] ? parseInt(slashMatch[5], 10) : 0;
+    try {
+      const gDate = jalaliToGregorian(jy, jm, jd);
+      gDate.setUTCHours(hour, min, 0, 0);
+      return gDate.toISOString();
+    } catch {}
+  }
+
+  const dashTimeMatch = str.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/);
+  if (dashTimeMatch) {
+    const jy = parseInt(dashTimeMatch[1], 10);
+    const jm = parseInt(dashTimeMatch[2], 10);
+    const jd = parseInt(dashTimeMatch[3], 10);
+    const hour = parseInt(dashTimeMatch[4], 10);
+    const min = parseInt(dashTimeMatch[5], 10);
+    try {
+      const gDate = jalaliToGregorian(jy, jm, jd);
+      gDate.setUTCHours(hour, min, 0, 0);
+      return gDate.toISOString();
+    } catch {}
+  }
+
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  } catch {}
+
+  return null;
+}
+
+function normalizeLegacyStatus(rawStatus?: string | null): string {
+  if (!rawStatus) return 'تماس برقرار نشده';
+  const s = String(rawStatus).trim();
+  if (
+    s === 'اصلا تماس برقرار نشده' ||
+    s === 'تماس نگرفته' ||
+    s === 'تماس برقرار نشده' ||
+    s === 'بدون تماس' ||
+    s === 'اصلاً تماس برقرار نشده'
+  ) {
+    return 'تماس برقرار نشده';
+  }
+  if (s === 'پاسخ نمیدهد' || s === 'پاسخ نمی‌دهد' || s === 'پاسخ نداد' || s === 'جواب نمیدهد') {
+    return 'پاسخ نمیدهد';
+  }
+  if (s === 'نمیخواد' || s === 'نمی‌خواهد' || s === 'عدم تمایل' || s === 'نمی خواهد') {
+    return 'نمیخواد';
+  }
+  if (s === 'پیگیری قبل از انقضا' || s === 'پیگیری قبل از انقضاء') {
+    return 'پیگیری قبل از انقضا';
+  }
+  if (s === 'پیگیری بلند مدت' || s === 'پیگیری بلندمدت') {
+    return 'پیگیری بلند مدت';
+  }
+  if (s === 'پیگیری قرارداد') {
+    return 'پیگیری قرارداد';
+  }
+  if (s === 'پیش نویس قرارداد' || s === 'پیش‌نویس قرارداد') {
+    return 'پیش نویس قرارداد';
+  }
+  if (s === 'قرارداد' || s === 'قرارداد / فاکتور' || s === 'قرارداد/فاکتور' || s === 'فاکتور') {
+    return 'قرارداد';
+  }
+  if (s === 'لیست سیاه') {
+    return 'لیست سیاه';
+  }
+  if (s === 'ثبت شماره') {
+    return 'ثبت شماره';
+  }
+  return s;
+}
+
+// POST /api/migration/import
+router.post('/api/migration/import', async (req: Request, res: Response) => {
+  const { tenant_id, personnelRows, customerRows, reportRows } = req.body;
+  const { tenantId: authTenantId } = getRequestUser(req);
+  const targetTenantId = tenant_id || authTenantId || 'default';
+  const targetTenantNum = resolveDirectusTenantId(targetTenantId);
+
+  let importedPersonnelCount = 0;
+  let importedCustomersCount = 0;
+  let importedReportsCount = 0;
+  let skippedCount = 0;
+  const skippedDetails: Array<{ companyName: string; phone: string; reason: string }> = [];
+  const errors: string[] = [];
+
+  // 1. Process personnelRows
+  if (Array.isArray(personnelRows) && personnelRows.length > 0) {
+    const personnelToInsert: any[] = [];
+    for (const r of personnelRows) {
+      const rawUid = String(r.uid || r.id || '').trim();
+      if (!rawUid) continue;
+      const pId = rawUid.startsWith('p-') ? rawUid : `p-${rawUid}`;
+      const cleanUsername = String(r.username || `user_${rawUid}`).trim();
+      const fullName = String(
+        r.fname ? `${r.fname} ${r.lname || ''}` : r.name || cleanUsername || `کارشناس ${rawUid}`
+      ).trim();
+      const cleanEmail = String(r.email || `${cleanUsername}@alphadesk.ir`).trim().toLowerCase();
+      const rawPhones = String(r.contacts || r.phone || '').split(/[,\s]+/);
+      const normPhone = normalizeContactValue(rawPhones[0] || '');
+
+      const pObj: any = {
+        id: pId,
+        name: fullName,
+        username: cleanUsername,
+        email: cleanEmail,
+        phone: normPhone,
+        role: r.userlevel === '0' || r.userlevel === 0 || r.role === 'admin' ? 'admin' : 'marketer',
+        status: r.active === '0' || r.active === 0 || r.status === 'inactive' ? 'inactive' : 'active',
+        active: !(r.active === '0' || r.active === 0),
+        tenant_id: targetTenantNum || 1,
+        national_id: String(r.code || r.shenasname || '').trim() || null,
+      };
+
+      const existIdx = personnelData.findIndex(
+        (p) => p.id === pId || p.username === cleanUsername || p.email === cleanEmail
+      );
+      if (existIdx >= 0) {
+        personnelData[existIdx] = { ...personnelData[existIdx], ...pObj };
+      } else {
+        personnelData.push(pObj);
+        personnelToInsert.push(pObj);
+        importedPersonnelCount++;
+      }
+    }
+
+    if (directusUrl && directusAdminToken && personnelToInsert.length > 0) {
+      await directusSafeBatchInsert('personnel', personnelToInsert, 25).catch((err) => {
+        errors.push(`خطا در ثبت پرسنل در دایرکتوس: ${err.message}`);
+      });
+    }
+  }
+
+  // 2. Process customerRows
+  if (Array.isArray(customerRows) && customerRows.length > 0) {
+    const customersToInsert: any[] = [];
+    const contactsToInsert: any[] = [];
+
+    for (const r of customerRows) {
+      const callId = String(r.CallID || r.callid || r.id || '').trim();
+      const companyName = String(r.CompanyName || r.marketName || r.company_name || 'بدون نام').trim();
+      const managerName = String(r.managerName || r.manager_name || '').trim();
+      const businessType = String(r.job || r.business_type || '').trim();
+      const province = String(r.province || '').trim();
+      const city = String(r.city || '').trim();
+
+      // Phones
+      const rawMobiles = String(r.mobiles || r.mobile_numbers || r.managerPhone || r.phone || '').split(
+        /[,;\n]+/
+      );
+      const mobileNumbers: string[] = [];
+      for (const m of rawMobiles) {
+        const norm = normalizeContactValue(m);
+        if (norm && norm.length >= 8 && !mobileNumbers.includes(norm)) {
+          mobileNumbers.push(norm);
+        }
+      }
+
+      const rawLandlines = String(r.phonelines || r.landline_numbers || '').split(/[,;\n]+/);
+      const landlineNumbers: string[] = [];
+      for (const l of rawLandlines) {
+        const norm = normalizeContactValue(l);
+        if (norm && norm.length >= 4 && !landlineNumbers.includes(norm)) {
+          landlineNumbers.push(norm);
+        }
+      }
+
+      // Status: mapped and normalized!
+      const rawStatus = r.lastStat || r.status || r.ClosedContact || '';
+      const status = normalizeLegacyStatus(rawStatus);
+
+      // Marketer:
+      const marketerRef = String(r.Referrals || r.lockOwner || r.uid || r.assigned_marketer_id || '').trim();
+      let assignedMarketerId: string | null = null;
+      let assignedMarketerName: string | null = null;
+
+      if (marketerRef) {
+        const matchedP = personnelData.find(
+          (p) =>
+            p.id === marketerRef ||
+            p.id === `p-${marketerRef}` ||
+            p.username === marketerRef ||
+            p.name === marketerRef
+        );
+        if (matchedP) {
+          assignedMarketerId = matchedP.id;
+          assignedMarketerName = matchedP.name;
+        } else {
+          assignedMarketerId = marketerRef.startsWith('p-') ? marketerRef : `p-${marketerRef}`;
+          assignedMarketerName = `کارشناس ${marketerRef}`;
+        }
+      }
+
+      const deadlineIso = parseLegacyDate(r.expire || r.assignment_deadline);
+      const isExpired = Boolean(
+        status !== 'قرارداد' &&
+          status !== 'لیست سیاه' &&
+          deadlineIso &&
+          new Date().getTime() > new Date(deadlineIso).getTime()
+      );
+
+      const custId = callId ? `c-${callId}` : crypto.randomUUID();
+
+      const custObj: any = {
+        id: custId,
+        company_name: companyName,
+        business_type: businessType,
+        province,
+        city,
+        manager_name: managerName,
+        mobile_numbers: mobileNumbers,
+        landline_numbers: landlineNumbers,
+        assigned_marketer_id: assignedMarketerId,
+        assigned_marketer_name: assignedMarketerName,
+        assignment_deadline: deadlineIso,
+        status,
+        is_expired: isExpired,
+        tenant_id: targetTenantNum || 1,
+        date_created: parseLegacyDate(r.created || r.InsertRecDate) || new Date().toISOString(),
+      };
+
+      const existIdx = customersData.findIndex(
+        (c) =>
+          (callId && c.id === custId) ||
+          (mobileNumbers.length > 0 && mobileNumbers.some((m) => c.mobile_numbers?.includes(m)))
+      );
+      if (existIdx >= 0) {
+        customersData[existIdx] = {
+          ...customersData[existIdx],
+          assigned_marketer_id: assignedMarketerId || customersData[existIdx].assigned_marketer_id,
+          assigned_marketer_name: assignedMarketerName || customersData[existIdx].assigned_marketer_name,
+          status: status || customersData[existIdx].status,
+        };
+        skippedCount++;
+      } else {
+        customersData.push(custObj);
+        customersToInsert.push(custObj);
+        importedCustomersCount++;
+
+        for (const m of mobileNumbers) {
+          contactsToInsert.push({
+            id: crypto.randomUUID(),
+            customer_id: custId,
+            channel_type: 'mobile',
+            value: m,
+            normalized_value: m,
+            contact_name: managerName || companyName,
+            is_primary: true,
+          });
+        }
+        for (const l of landlineNumbers) {
+          contactsToInsert.push({
+            id: crypto.randomUUID(),
+            customer_id: custId,
+            channel_type: 'landline',
+            value: l,
+            normalized_value: l,
+            contact_name: managerName || companyName,
+            is_primary: false,
+          });
+        }
+      }
+    }
+
+    if (directusUrl && directusAdminToken) {
+      if (customersToInsert.length > 0) {
+        await directusSafeBatchInsert('customers', customersToInsert, 50).catch((err) => {
+          errors.push(`خطا در ثبت مشتریان در دایرکتوس: ${err.message}`);
+        });
+      }
+      if (contactsToInsert.length > 0) {
+        await directusSafeBatchInsert('customer_contacts', contactsToInsert, 50).catch(() => {});
+      }
+    }
+  }
+
+  // 3. Process reportRows
+  if (Array.isArray(reportRows) && reportRows.length > 0) {
+    const reportsToInsert: any[] = [];
+
+    for (const r of reportRows) {
+      const callId = String(r.CallID || r.callid || '').trim();
+      const repText = String(r.report || r.report_text || 'ثبت پیگیری').trim();
+      const negotiator = String(r.negotiator || r.negotiator_name || 'کارشناس').trim();
+      const callNum = normalizeContactValue(r.callNum || r.negotiation_phone || '');
+      const status = normalizeLegacyStatus(r.status || r.negotiation_status);
+      const rawRating = parseFloat(r.rating || '8');
+      const score = isNaN(rawRating)
+        ? 8
+        : rawRating > 10
+        ? Math.round(rawRating / 2)
+        : Math.round(rawRating);
+      const nextFollow = parseLegacyDate(r.nextFollow || r.next_followup_date);
+      const dateCreated =
+        parseLegacyDate(r.insertDate || r.dateTime || r.date_created) || new Date().toISOString();
+
+      let matchedCustomerId: string | null = null;
+      if (callId) {
+        const byCallId = customersData.find((c) => c.id === `c-${callId}` || c.id === callId);
+        if (byCallId) matchedCustomerId = byCallId.id;
+      }
+      if (!matchedCustomerId && callNum) {
+        const byPhone = customersData.find(
+          (c) => c.mobile_numbers?.includes(callNum) || c.landline_numbers?.includes(callNum)
+        );
+        if (byPhone) matchedCustomerId = byPhone.id;
+      }
+
+      if (!matchedCustomerId) {
+        matchedCustomerId = callId ? `c-${callId}` : crypto.randomUUID();
+      }
+
+      const repObj: any = {
+        id: r.ID ? `rep-${r.ID}` : crypto.randomUUID(),
+        customer_id: matchedCustomerId,
+        report_text: repText,
+        negotiator_name: negotiator,
+        negotiation_phone: callNum,
+        negotiation_status: status,
+        negotiation_score: score,
+        next_followup_date: nextFollow,
+        tenant_id: targetTenantNum || 1,
+        date_created: dateCreated,
+      };
+
+      reportsData.push(repObj);
+      reportsToInsert.push(repObj);
+      importedReportsCount++;
+    }
+
+    if (directusUrl && directusAdminToken && reportsToInsert.length > 0) {
+      await directusSafeBatchInsert('customer_reports', reportsToInsert, 50).catch((err) => {
+        errors.push(`خطا در ثبت گزارش‌ها در دایرکتوس: ${err.message}`);
+      });
+    }
+  }
+
+  invalidateCustomersCache();
+  invalidateReportsCache();
+
+  return res.json({
+    success:
+      errors.length === 0 ||
+      importedCustomersCount > 0 ||
+      importedReportsCount > 0 ||
+      importedPersonnelCount > 0,
+    importedPersonnelCount,
+    importedCustomersCount,
+    importedReportsCount,
+    skippedCount,
+    skippedDetails,
+    errors,
+    message: `درون‌ریزی با موفقیت انجام شد: ${importedPersonnelCount} کارشناس، ${importedCustomersCount} مشتری، و ${importedReportsCount} گزارش ثبت شدند.`,
+  });
+});
+
 export default router;

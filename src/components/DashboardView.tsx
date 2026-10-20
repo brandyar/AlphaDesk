@@ -305,7 +305,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-xs text-[#888] font-normal">از ۱۰</span>
           </div>
           <div className="text-[11px] text-[#A7A7A7] mt-2">
-            بر اساس {toPersianDigits(reports.length)} گزارش مذاکره و تماس
+            بر اساس {toPersianDigits(summary?.total_reports_count ?? reports.length)} گزارش مذاکره و تماس
           </div>
         </div>
       </div>
@@ -434,7 +434,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 onClick={() => onNavigateToTab('reports')}
                 className="text-xs text-[#1DB954] hover:underline"
               >
-                مشاهده همه ({toPersianDigits(reports.length)})
+                مشاهده همه ({toPersianDigits(summary?.total_reports_count ?? reports.length)})
               </button>
             </div>
 

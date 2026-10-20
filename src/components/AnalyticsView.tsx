@@ -77,27 +77,89 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
   // Full analytics datasets
   const [allReportsData, setAllReportsData] = useState<CustomerReport[]>(reports);
-  const [allCustomersData, setAllCustomersData] = useState<Customer[]>(customers);
+  const [allCustomersData] = useState<Customer[]>(customers);
   const [, setIsLoadingAnalytics] = useState<boolean>(false);
+
+  // Calculate Date Boundaries for Periodic View
+  const periodDateRange = useMemo(() => {
+    const now = new Date();
+    let start = new Date();
+    let end = new Date();
+
+    switch (periodPreset) {
+      case 'today':
+        start.setHours(0, 0, 0, 0);
+        end.setHours(23, 59, 59, 999);
+        break;
+      case 'last_7_days':
+        start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case 'last_30_days':
+        start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case 'last_90_days':
+        start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      case 'this_year':
+        start = new Date(now.getFullYear(), 0, 1);
+        break;
+      case 'custom':
+        if (customStartDate) start = new Date(customStartDate);
+        if (customEndDate) {
+          end = new Date(customEndDate);
+          end.setHours(23, 59, 59, 999);
+        }
+        break;
+    }
+
+    return { start, end };
+  }, [periodPreset, customStartDate, customEndDate]);
+
+  // Reactive, lightweight, date-scoped query bounds
+  const queryStartDate = useMemo(() => {
+    if (activeTab === 'periodic') {
+      return periodDateRange.start.toISOString();
+    }
+    // Daily views: bounded to requested days window (7, 14, 30 days)
+    return new Date(Date.now() - (dailyDaysCount + 1) * 24 * 60 * 60 * 1000).toISOString();
+  }, [activeTab, periodDateRange, dailyDaysCount]);
+
+  const queryEndDate = useMemo(() => {
+    if (activeTab === 'periodic') {
+      return periodDateRange.end.toISOString();
+    }
+    return undefined;
+  }, [activeTab, periodDateRange]);
 
   React.useEffect(() => {
     let isMounted = true;
     setIsLoadingAnalytics(true);
-    Promise.all([
-      fetchCustomerReports(undefined, { limit: 500 }).catch(() => []),
-      fetchCustomers({ limit: 500 }).catch(() => []),
-    ]).then(([reps, custs]) => {
-      if (isMounted) {
-        if (Array.isArray(reps) && reps.length > 0) setAllReportsData(reps);
-        if (Array.isArray(custs) && custs.length > 0) setAllCustomersData(custs);
-      }
-    }).finally(() => {
-      if (isMounted) setIsLoadingAnalytics(false);
-    });
+
+    const targetPersonnel = selectedPersonnelId !== 'all'
+      ? personnelList.find((p) => p.id === selectedPersonnelId)?.name
+      : undefined;
+
+    fetchCustomerReports(undefined, {
+      startDate: queryStartDate,
+      endDate: queryEndDate,
+      negotiator: targetPersonnel,
+      limit: 5000,
+      fields: 'id,customer_id,negotiator_name,created_by,negotiation_status,negotiation_score,contract_amount,contract_number,date_created,negotiation_phone,report_text',
+    })
+      .then((reps) => {
+        if (isMounted && Array.isArray(reps)) {
+          setAllReportsData(reps);
+        }
+      })
+      .catch((err) => console.warn('Failed to load scoped reports for analytics:', err))
+      .finally(() => {
+        if (isMounted) setIsLoadingAnalytics(false);
+      });
+
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [queryStartDate, queryEndDate, selectedPersonnelId, personnelList]);
 
   // Filtered personnel list for search
   const filteredPersonnelOptions = useMemo(() => {
@@ -160,41 +222,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         c.assigned_marketer_id === p.id
     );
   }, [allCustomersData, customers, userIsAdmin, currentPersonnel, currentUser, selectedPersonnelId, personnelList]);
-
-  // Calculate Date Boundaries for Periodic View
-  const periodDateRange = useMemo(() => {
-    const now = new Date();
-    let start = new Date();
-    let end = new Date();
-
-    switch (periodPreset) {
-      case 'today':
-        start.setHours(0, 0, 0, 0);
-        end.setHours(23, 59, 59, 999);
-        break;
-      case 'last_7_days':
-        start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case 'last_30_days':
-        start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        break;
-      case 'last_90_days':
-        start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        break;
-      case 'this_year':
-        start = new Date(now.getFullYear(), 0, 1);
-        break;
-      case 'custom':
-        if (customStartDate) start = new Date(customStartDate);
-        if (customEndDate) {
-          end = new Date(customEndDate);
-          end.setHours(23, 59, 59, 999);
-        }
-        break;
-    }
-
-    return { start, end };
-  }, [periodPreset, customStartDate, customEndDate]);
 
   // Periodic reports slice
   const periodicReports = useMemo(() => {

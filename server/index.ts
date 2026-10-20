@@ -21,6 +21,7 @@ import leaveRequestRoutes from './routes/leaveRequests.routes.ts';
 import advanceRequestRoutes from './routes/advanceRequests.routes.ts';
 import tenantRoutes from './routes/tenants.routes.ts';
 import adminReportRoutes from './routes/adminReports.routes.ts';
+import analyticsRoutes from './routes/analytics.routes.ts';
 import systemRoutes from './routes/system.routes.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -40,6 +41,8 @@ app.use('/api/personnel', personnelRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/customer-reports', reportRoutes);
 app.use('/api/tenants', tenantRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use(analyticsRoutes);
 app.use(coldLeadRoutes);
 app.use(leaveRequestRoutes);
 app.use(advanceRequestRoutes);
