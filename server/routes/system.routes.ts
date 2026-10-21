@@ -658,6 +658,12 @@ const handleMigrationImport = async (req: Request, res: Response) => {
   const existingPersonnel: any[] = migrationPersonnelCache;
   const existingCustomers: any[] = migrationCustomersCache;
 
+  // Build O(1) set of existing customer IDs
+  const existingCustomerIdsSet = new Set<string>();
+  for (const c of existingCustomers) {
+    if (c.id) existingCustomerIdsSet.add(c.id);
+  }
+
   // Populate global callIdToUUIDMap from existing customers
   for (const c of existingCustomers) {
     if (c.id) {
@@ -680,13 +686,16 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       const rawPhones = String(r.contacts || r.phone || '').split(/[,\s]+/);
       const normPhone = normalizeContactValue(rawPhones[0] || '');
 
+      const normFullName = normalizePersianString(fullName);
       const existIdx = existingPersonnel.findIndex(
         (p) =>
           p.id === rawUid ||
           p.id === `p-${rawUid}` ||
+          (p.id && String(p.id).replace(/^p-/, '') === rawUid.replace(/^p-/, '')) ||
           (cleanUsername && p.username && p.username.toLowerCase() === cleanUsername.toLowerCase()) ||
+          (p.username && p.username.toLowerCase() === rawUid.toLowerCase()) ||
           (cleanEmail && p.email && p.email.toLowerCase() === cleanEmail.toLowerCase()) ||
-          (fullName && p.name && (p.name.trim().toLowerCase() === fullName.trim().toLowerCase() || p.name.includes(fullName)))
+          (normFullName && p.name && normalizePersianString(p.name) === normFullName)
       );
 
       const targetPId = existIdx >= 0 ? existingPersonnel[existIdx].id : (rawUid.startsWith('p-') ? rawUid : `p-${rawUid}`);
@@ -723,10 +732,9 @@ const handleMigrationImport = async (req: Request, res: Response) => {
     }
   }
 
-  // 2. Process customerRows
+  // 2. Process customerRows (Import 100% of customer records 1:1)
   const customersToInsert: any[] = [];
   const contactsToInsert: any[] = [];
-  const customersToPatchMap = new Map<string, any>();
 
   if (Array.isArray(customerRows) && customerRows.length > 0) {
     for (const r of customerRows) {
@@ -758,7 +766,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         }
       }
 
-      // Status: mapped and normalized!
+      // Status: mapped and normalized
       const rawStatus = r.lastStat || r.status || r.ClosedContact || '';
       const status = normalizeLegacyStatus(rawStatus);
 
@@ -772,6 +780,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
           (p) =>
             p.id === marketerRef ||
             p.id === `p-${marketerRef}` ||
+            (p.id && String(p.id).replace(/^p-/, '') === marketerRef.replace(/^p-/, '')) ||
             (p.username && p.username.toLowerCase() === marketerRef.toLowerCase()) ||
             (p.name && (p.name === marketerRef || p.name.includes(marketerRef) || marketerRef.includes(p.name)))
         );
@@ -800,58 +809,42 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       } else {
         custId = crypto.randomUUID();
       }
+
       if (callId) {
         globalCallIdToUUIDMap.set(callId, custId);
       }
+      if (companyName && companyName !== 'بدون نام') {
+        globalCallIdToUUIDMap.set(companyName, custId);
+      }
+      if (mobileNumbers.length > 0) {
+        globalCallIdToUUIDMap.set(mobileNumbers[0], custId);
+      }
 
-      const custObj: any = {
-        id: custId,
-        company_name: companyName,
-        business_type: businessType,
-        province,
-        city,
-        manager_name: managerName,
-        mobile_numbers: mobileNumbers,
-        landline_numbers: landlineNumbers,
-        assigned_marketer_id: assignedMarketerId,
-        assigned_marketer_name: assignedMarketerName,
-        assignment_deadline: deadlineIso,
-        status,
-        is_expired: isExpired,
-        tenant_id: targetTenantNum || 1,
-        date_created: parseLegacyDate(r.created || r.InsertRecDate) || new Date().toISOString(),
-      };
+      // Check O(1) set to prevent duplicate inserts of identical customer IDs in same batch
+      if (existingCustomerIdsSet.has(custId)) {
+        skippedCount++;
+      } else {
+        existingCustomerIdsSet.add(custId);
 
-      const existIdx = existingCustomers.findIndex(
-        (c) =>
-          (callId && (c.id === custId || c.id === callId || (c as any).legacyCallId === callId || (globalCallIdToUUIDMap.has(callId) && c.id === globalCallIdToUUIDMap.get(callId)))) ||
-          (mobileNumbers.length > 0 && mobileNumbers.some((m) => c.mobile_numbers?.includes(m)))
-      );
-
-      if (existIdx >= 0) {
-        const matchedCust = existingCustomers[existIdx];
-        if (callId) globalCallIdToUUIDMap.set(callId, matchedCust.id);
-
-        const patchData: any = {
-          id: matchedCust.id,
-          assigned_marketer_id: assignedMarketerId || matchedCust.assigned_marketer_id,
-          assigned_marketer_name: assignedMarketerName || matchedCust.assigned_marketer_name,
-          status: status || matchedCust.status,
-          date_updated: new Date().toISOString(),
+        const custObj: any = {
+          id: custId,
+          company_name: companyName,
+          business_type: businessType,
+          province,
+          city,
+          manager_name: managerName,
+          mobile_numbers: mobileNumbers,
+          landline_numbers: landlineNumbers,
+          assigned_marketer_id: assignedMarketerId,
+          assigned_marketer_name: assignedMarketerName,
+          assignment_deadline: deadlineIso,
+          status,
+          is_expired: isExpired,
+          tenant_id: targetTenantNum || 1,
+          legacyCallId: callId || null,
+          date_created: parseLegacyDate(r.created || r.InsertRecDate) || new Date().toISOString(),
         };
 
-        existingCustomers[existIdx] = { ...matchedCust, ...patchData };
-        const localIdx = customersData.findIndex((c) => c.id === matchedCust.id);
-        if (localIdx >= 0) customersData[localIdx] = { ...customersData[localIdx], ...patchData };
-
-        customersToPatchMap.set(matchedCust.id, patchData);
-        skippedCount++;
-        skippedDetails.push({
-          companyName: companyName || matchedCust.company_name || 'بدون نام',
-          phone: mobileNumbers[0] || 'بدون شماره',
-          reason: 'پرونده تکراری (اطلاعات و مالکان در سیستم به‌روزرسانی شد)'
-        });
-      } else {
         existingCustomers.push(custObj);
         customersData.push(custObj);
         customersToInsert.push(custObj);
@@ -911,6 +904,9 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         const byCallId = existingCustomers.find((c) => c.id === callId || (c as any).legacyCallId === callId || c.id === `c-${callId}`);
         if (byCallId) matchedCustomerId = byCallId.id;
       }
+      if (!matchedCustomerId && callNum && globalCallIdToUUIDMap.has(callNum)) {
+        matchedCustomerId = globalCallIdToUUIDMap.get(callNum)!;
+      }
       if (!matchedCustomerId && callNum) {
         const byPhone = existingCustomers.find(
           (c) => c.mobile_numbers?.includes(callNum) || c.landline_numbers?.includes(callNum)
@@ -935,6 +931,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         existingCustomers.push(orphanCust);
         customersData.push(orphanCust);
         customersToInsert.push(orphanCust);
+        existingCustomerIdsSet.add(matchedCustomerId);
         importedCustomersCount++;
       }
 
@@ -981,9 +978,6 @@ const handleMigrationImport = async (req: Request, res: Response) => {
     if (contactsToInsert.length > 0) {
       directusSafeBatchInsert('customer_contacts', contactsToInsert, 50).catch(() => {});
     }
-    if (customersToPatchMap.size > 0) {
-      await directusSafeBatchPatch('customers', customersToPatchMap, 50).catch(() => {});
-    }
   }
 
   // 4. Auto-connect free customers with reports (only when explicitly requested)
@@ -1013,12 +1007,14 @@ const handleMigrationImport = async (req: Request, res: Response) => {
     skippedCount,
     skippedDetails,
     errors,
-    message: `درون‌ریزی با موفقیت انجام شد: ${importedPersonnelCount} کارشناس جدید، ${importedCustomersCount} مشتری جدید، و ${importedReportsCount} گزارش ثبت شدند. (${skippedCount} رکورد موجود نادیده گرفته یا به‌روزرسانی شدند) ${autoAssignedCount > 0 ? `تعداد ${autoAssignedCount} مشتری آزاد گزارش‌دار به آخرین بازاریاب مربوطه متصل گردیدند.` : ''}`,
+    message: `درون‌ریزی با موفقیت انجام شد: ${importedPersonnelCount} کارشناس جدید، ${importedCustomersCount} مشتری جدید، و ${importedReportsCount} گزارش ثبت شدند. (${skippedCount} رکورد موجود نادیده گرفته شد) ${autoAssignedCount > 0 ? `تعداد ${autoAssignedCount} مشتری آزاد گزارش‌دار به آخرین بازاریاب مربوطه متصل گردیدند.` : ''}`,
   });
 };
 
 router.post('/api/migration/import', handleMigrationImport);
 router.post('/migration/import', handleMigrationImport);
+router.post('/api/migration/reset-cache', handleResetMigrationCache);
+router.post('/migration/reset-cache', handleResetMigrationCache);
 
 // Helper function to connect free customers with reports to their latest report's negotiator
 export async function autoAssignFreeCustomersWithReports(targetTenantId?: string) {
