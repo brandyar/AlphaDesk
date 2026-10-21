@@ -72,6 +72,24 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
 
+  // Listen to customer save/update events to immediately show changes without page reload
+  useEffect(() => {
+    const handleSaved = (e: any) => {
+      const saved: Customer = e.detail;
+      if (!saved || !saved.id) return;
+      setItems((prev) => {
+        const exists = prev.some((c) => c.id === saved.id);
+        if (exists) {
+          return prev.map((c) => (c.id === saved.id ? saved : c));
+        }
+        return [saved, ...prev];
+      });
+      setTotalCount((prev) => prev + 1);
+    };
+    window.addEventListener('crm_customer_saved', handleSaved);
+    return () => window.removeEventListener('crm_customer_saved', handleSaved);
+  }, []);
+
   // Sync initial items when customers prop updates
   useEffect(() => {
     if (customers && customers.length > 0 && items.length === 0) {
@@ -113,7 +131,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId, customers.length, customers[0]?.id]);
+  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId]);
 
   const userIsAdmin = Boolean(
     isAdmin ||

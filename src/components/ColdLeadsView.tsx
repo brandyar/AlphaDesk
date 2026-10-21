@@ -93,6 +93,24 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
 
+  // Listen to lead save/update events to immediately show newly added or edited leads without page reload
+  useEffect(() => {
+    const handleSaved = (e: any) => {
+      const saved: ColdLead = e.detail;
+      if (!saved || !saved.id) return;
+      setItems((prev) => {
+        const exists = prev.some((l) => l.id === saved.id);
+        if (exists) {
+          return prev.map((l) => (l.id === saved.id ? saved : l));
+        }
+        return [saved, ...prev];
+      });
+      setTotalCount((prev) => prev + 1);
+    };
+    window.addEventListener('crm_lead_saved', handleSaved);
+    return () => window.removeEventListener('crm_lead_saved', handleSaved);
+  }, []);
+
   // Sync initial items when coldLeads prop updates
   useEffect(() => {
     if (coldLeads && coldLeads.length > 0 && items.length === 0) {
@@ -133,7 +151,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, statusFilter, marketerFilter, searchQuery, activeTenantId, coldLeads.length, coldLeads[0]?.id]);
+  }, [currentPage, pageSize, statusFilter, marketerFilter, searchQuery, activeTenantId]);
 
   // Multi-selection state for Bulk Assignment
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);

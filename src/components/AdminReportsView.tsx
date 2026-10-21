@@ -132,6 +132,24 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
     });
   };
 
+  // Listen to admin report save events to immediately show newly created or updated reports
+  useEffect(() => {
+    const handleSaved = (e: any) => {
+      const saved: AdministrativeReport = e.detail;
+      if (!saved || !saved.id) return;
+      setItems((prev) => {
+        const exists = prev.some((r) => r.id === saved.id);
+        if (exists) {
+          return prev.map((r) => (r.id === saved.id ? saved : r));
+        }
+        return [saved, ...prev];
+      });
+      setTotalCount((prev) => prev + 1);
+    };
+    window.addEventListener('crm_admin_report_saved', handleSaved);
+    return () => window.removeEventListener('crm_admin_report_saved', handleSaved);
+  }, []);
+
   const userIsAdmin = Boolean(
     isAdmin ||
     currentUser?.is_admin ||
@@ -141,7 +159,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
     currentPersonnel?.role === 'sales_manager'
   );
 
-  const visibleReports = adminReports.filter((r) => {
+  const visibleReports = items.filter((r) => {
     if (userIsAdmin) return true;
     const isSelf =
       r.personnel_id === currentPersonnel?.id ||

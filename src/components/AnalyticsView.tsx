@@ -13,7 +13,14 @@ import {
   formatStatusLabel,
   gregorianIsoToJalali,
 } from '../utils';
-import { fetchCustomerReports, fetchCustomers, fetchAnalyticsStats, AnalyticsStatsResponse } from '../api';
+import {
+  fetchCustomerReports,
+  fetchCustomers,
+  fetchAnalyticsStats,
+  fetchAnalyticsDaily,
+  AnalyticsStatsResponse,
+  DailyAnalyticsResponse,
+} from '../api';
 import { DailyReportsTab } from './analytics/DailyReportsTab';
 import { CustomerCoverageTab } from './analytics/CustomerCoverageTab';
 import { TrendsLeaderboardTab } from './analytics/TrendsLeaderboardTab';
@@ -76,12 +83,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
   // Selected single day filter in daily views
   const [selectedDayDetail, setSelectedDayDetail] = useState<string | null>(null);
+  const [selectedDayReports, setSelectedDayReports] = useState<CustomerReport[]>([]);
+  const [, setIsLoadingDayReports] = useState<boolean>(false);
 
   // Full analytics datasets
   const [allReportsData, setAllReportsData] = useState<CustomerReport[]>(reports);
   const allCustomersData = customers;
   const [, setIsLoadingAnalytics] = useState<boolean>(false);
   const [serverPeriodicStats, setServerPeriodicStats] = useState<AnalyticsStatsResponse | null>(null);
+  const [serverDailyStats, setServerDailyStats] = useState<DailyAnalyticsResponse | null>(null);
 
   // Calculate Date Boundaries for Periodic View
   const periodDateRange = useMemo(() => {
@@ -134,6 +144,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     return undefined;
   }, [activeTab, periodDateRange]);
 
+  // Primary fast server aggregates loader
   React.useEffect(() => {
     let isMounted = true;
     setIsLoadingAnalytics(true);
@@ -143,36 +154,31 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       : undefined;
 
     const promises: Promise<any>[] = [
-      fetchCustomerReports(undefined, {
+      fetchAnalyticsDaily({
+        days: dailyDaysCount,
+        startDate: activeTab === 'periodic' ? queryStartDate : undefined,
+        endDate: activeTab === 'periodic' ? queryEndDate : undefined,
+        negotiator: targetPersonnel,
+      })
+        .then((res) => {
+          if (isMounted && res) {
+            setServerDailyStats(res);
+          }
+        })
+        .catch((err) => console.warn('Failed to load daily analytics stats:', err)),
+
+      fetchAnalyticsStats({
         startDate: queryStartDate,
         endDate: queryEndDate,
         negotiator: targetPersonnel,
-        limit: 5000,
-        fields: 'id,customer_id,negotiator_name,created_by,negotiation_status,negotiation_score,contract_amount,contract_number,date_created,negotiation_phone,report_text',
       })
-        .then((reps) => {
-          if (isMounted && Array.isArray(reps)) {
-            setAllReportsData(reps);
+        .then((res) => {
+          if (isMounted && res) {
+            setServerPeriodicStats(res);
           }
         })
-        .catch((err) => console.warn('Failed to load scoped reports for analytics:', err)),
+        .catch((err) => console.warn('Failed to load periodic analytics stats:', err)),
     ];
-
-    if (activeTab === 'periodic') {
-      promises.push(
-        fetchAnalyticsStats({
-          startDate: queryStartDate,
-          endDate: queryEndDate,
-          negotiator: targetPersonnel,
-        })
-          .then((res) => {
-            if (isMounted && res) {
-              setServerPeriodicStats(res);
-            }
-          })
-          .catch((err) => console.warn('Failed to load analytics stats:', err))
-      );
-    }
 
     Promise.allSettled(promises).finally(() => {
       if (isMounted) setIsLoadingAnalytics(false);
@@ -181,7 +187,42 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [activeTab, queryStartDate, queryEndDate, selectedPersonnelId, personnelList, activeTenantId]);
+  }, [activeTab, queryStartDate, queryEndDate, dailyDaysCount, selectedPersonnelId, personnelList, activeTenantId]);
+
+  // On-demand fetch for single day report details when clicked by user
+  React.useEffect(() => {
+    if (!selectedDayDetail) {
+      setSelectedDayReports([]);
+      return;
+    }
+    let isMounted = true;
+    setIsLoadingDayReports(true);
+    const dayStart = `${selectedDayDetail}T00:00:00.000Z`;
+    const dayEnd = `${selectedDayDetail}T23:59:59.999Z`;
+    const targetPersonnel = selectedPersonnelId !== 'all'
+      ? personnelList.find((p) => p.id === selectedPersonnelId)?.name
+      : undefined;
+
+    fetchCustomerReports(undefined, {
+      startDate: dayStart,
+      endDate: dayEnd,
+      negotiator: targetPersonnel,
+      limit: 50,
+    })
+      .then((reps) => {
+        if (isMounted && Array.isArray(reps)) {
+          setSelectedDayReports(reps);
+        }
+      })
+      .catch((err) => console.warn('Failed to load day reports:', err))
+      .finally(() => {
+        if (isMounted) setIsLoadingDayReports(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedDayDetail, selectedPersonnelId, personnelList]);
 
   // Filtered personnel list for search
   const filteredPersonnelOptions = useMemo(() => {
@@ -260,6 +301,22 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
   // 1. DATA COMPUTATION FOR DAILY REPORT-CENTRIC PERFORMANCE
   const dailyReportStats = useMemo<DailyReportStats>(() => {
+    if (serverDailyStats && serverDailyStats.daysList && serverDailyStats.daysList.length > 0) {
+      return {
+        daysList: serverDailyStats.daysList.map((d) => ({
+          ...d,
+          reports: d.dateIso === selectedDayDetail ? selectedDayReports : [],
+        })),
+        totalReports: serverDailyStats.totalReports,
+        totalContracts: serverDailyStats.totalContracts,
+        totalAmount: serverDailyStats.totalAmount,
+        avgScore: serverDailyStats.avgScore,
+        activeDaysCount: serverDailyStats.activeDaysCount,
+        avgPerActiveDay: serverDailyStats.avgPerActiveDay,
+        peakDay: serverDailyStats.peakDay as any,
+      };
+    }
+
     const daysMap = new Map<
       string,
       {
@@ -348,10 +405,43 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       avgPerActiveDay,
       peakDay,
     };
-  }, [scopedReports, dailyDaysCount]);
+  }, [serverDailyStats, selectedDayDetail, selectedDayReports, scopedReports, dailyDaysCount]);
 
   // 2. DATA COMPUTATION FOR DAILY CUSTOMER-CENTRIC PERFORMANCE
   const dailyCustomerStats = useMemo<DailyCustomerStats>(() => {
+    if (serverDailyStats && serverDailyStats.daysList && serverDailyStats.daysList.length > 0) {
+      const daysList = serverDailyStats.daysList.map((d) => ({
+        dateIso: d.dateIso,
+        dateJalali: d.dateJalali,
+        dayName: d.dayName,
+        uniqueCount: d.uniqueCount || d.reportsCount,
+        uniqueCustomerIds: new Set<string>(),
+        contractCustomerIds: new Set<string>(),
+        newContactCount: 0,
+        followupCount: 0,
+        contractCount: d.contractsCount || 0,
+        customersList: d.dateIso === selectedDayDetail
+          ? selectedDayReports.map((rep) => ({
+              customer: customers.find((c) => c.id === rep.customer_id) || null,
+              latestReport: rep,
+            }))
+          : [],
+      }));
+      const totalUniqueCustomersTouched = serverDailyStats.totalUniqueCustomersTouched || serverDailyStats.totalReports;
+      const totalAssignedCustomers = serverDailyStats.totalAssignedCustomers || scopedCustomers.length;
+      const avgCustomersPerDay =
+        daysList.length > 0
+          ? (daysList.reduce((acc, d) => acc + d.uniqueCount, 0) / daysList.length).toFixed(1)
+          : '0';
+
+      return {
+        daysList,
+        totalUniqueCustomersTouched,
+        avgCustomersPerDay,
+        totalAssignedCustomers,
+      };
+    }
+
     const daysMap = new Map<
       string,
       {
@@ -442,7 +532,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       avgCustomersPerDay,
       totalAssignedCustomers: scopedCustomers.length,
     };
-  }, [scopedReports, customers, scopedCustomers, dailyDaysCount]);
+  }, [serverDailyStats, scopedReports, customers, scopedCustomers, dailyDaysCount]);
 
   // 3. DATA COMPUTATION FOR PERIODIC REPORTS & TRENDS
   const periodicStats = useMemo<PeriodicStats>(() => {
@@ -545,15 +635,16 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       .sort((a, b) => b.contractsCount - a.contractsCount || b.reportsCount - a.reportsCount);
 
     if (serverPeriodicStats && serverPeriodicStats.totalReports > 0) {
+      const uCust = serverPeriodicStats.totalUniqueCustomers || totalUniqueCustomers || serverPeriodicStats.totalReports;
       return {
         totalReports: serverPeriodicStats.totalReports,
-        totalUniqueCustomers: totalUniqueCustomers || serverPeriodicStats.totalReports,
+        totalUniqueCustomers: uCust,
         totalContracts: serverPeriodicStats.totalContracts,
         totalContractAmount: serverPeriodicStats.totalContractAmount,
         avgScore: serverPeriodicStats.avgScore || avgScore,
         conversionRate:
-          serverPeriodicStats.totalReports > 0
-            ? ((serverPeriodicStats.totalContracts / serverPeriodicStats.totalReports) * 100).toFixed(1)
+          uCust > 0
+            ? ((serverPeriodicStats.totalContracts / uCust) * 100).toFixed(1)
             : '0',
         statusBreakdown:
           serverPeriodicStats.statusBreakdown && Object.keys(serverPeriodicStats.statusBreakdown).length > 0
@@ -564,7 +655,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             ? serverPeriodicStats.personnelRanking.map((p) => ({
                 ...p,
                 uniqueCustomers: new Set<string>(),
-                uniqueCustomersCount: p.reportsCount,
+                uniqueCustomersCount: p.uniqueCustomersCount || p.reportsCount,
                 scoresSum: 0,
                 scoresCount: 0,
               }))

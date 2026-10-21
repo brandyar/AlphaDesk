@@ -575,6 +575,7 @@ export async function deleteCustomerContact(id: string): Promise<void> {
 
 export interface AnalyticsStatsResponse {
   totalReports: number;
+  totalUniqueCustomers?: number;
   totalContracts: number;
   totalContractAmount: number;
   avgScore: string;
@@ -582,6 +583,7 @@ export interface AnalyticsStatsResponse {
   personnelRanking: {
     personnelName: string;
     reportsCount: number;
+    uniqueCustomersCount?: number;
     contractsCount: number;
     totalAmount: number;
     avgScore: string;
@@ -604,6 +606,53 @@ export async function fetchAnalyticsStats(params: {
     headers: getBffHeaders(),
   });
   return handleResponse<AnalyticsStatsResponse>(res, 'خطا در دریافت آمار تحلیلی');
+}
+
+export interface DailyReportStatItem {
+  dateIso: string;
+  dateJalali: string;
+  dayName: string;
+  reportsCount: number;
+  scoresSum: number;
+  scoresCount: number;
+  contractsCount: number;
+  contractsAmount: number;
+  avgScore: string;
+  statusCounts: Record<string, number>;
+  uniqueCount?: number;
+}
+
+export interface DailyAnalyticsResponse {
+  daysList: DailyReportStatItem[];
+  totalReports: number;
+  totalContracts: number;
+  totalAmount: number;
+  avgScore: string;
+  activeDaysCount: number;
+  avgPerActiveDay: string;
+  peakDay?: DailyReportStatItem;
+  totalAssignedCustomers?: number;
+  totalUniqueCustomersTouched?: number;
+}
+
+export async function fetchAnalyticsDaily(params: {
+  days?: number;
+  startDate?: string;
+  endDate?: string;
+  negotiator?: string;
+}): Promise<DailyAnalyticsResponse> {
+  const qParams = new URLSearchParams();
+  if (params.days) qParams.append('days', String(params.days));
+  if (params.startDate) qParams.append('start_date', params.startDate);
+  if (params.endDate) qParams.append('end_date', params.endDate);
+  if (params.negotiator && params.negotiator !== 'all' && params.negotiator !== 'همه') {
+    qParams.append('negotiator', params.negotiator);
+  }
+
+  const res = await fetch(`${BASE_URL}/analytics/daily?${qParams.toString()}`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse<DailyAnalyticsResponse>(res, 'خطا در دریافت آمار روزانه تحلیلی');
 }
 
 export async function fetchCustomerReports(

@@ -53,42 +53,23 @@ export async function computePersonnelFreeQuota(
       let activeUnclosedCount = 0;
       let successfulCount = 0;
 
+      const contractStatusIn = `%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%20%2F%20%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%2F%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1`;
       const pFilter = `&filter[assigned_marketer_id][_eq]=${encodeURIComponent(targetPersonnelId)}`;
-      const allAssignedRes = await directusFetch(
-        `/items/customers?limit=5000&fields=id,company_name,status,assignment_deadline,is_expired,assigned_marketer_name${pFilter}`
-      ).catch(() => null);
 
-      if (allAssignedRes?.data && Array.isArray(allAssignedRes.data)) {
-        allAssignedRes.data.forEach((c: any) => {
-          const expCust = computeCustomerExpiration(c);
-          if (expCust.status === 'قرارداد') {
-            successfulCount++;
-          } else if (!expCust.is_expired && expCust.status !== 'لیست سیاه') {
-            activeUnclosedCount++;
-          }
-        });
+      const [contractsRes, activeRes] = await Promise.all([
+        directusFetch(
+          `/items/customers?aggregate[count]=*&filter[status][_in]=${contractStatusIn}${pFilter}`
+        ).catch(() => null),
+        directusFetch(
+          `/items/customers?aggregate[count]=*&filter[is_expired][_eq]=false&filter[status][_nin]=${contractStatusIn},%D9%84%DB%8C%D8%B3%D8%AA%20%D8%B3%DB%8C%D8%A7%D9%87${pFilter}`
+        ).catch(() => null),
+      ]);
+
+      if (contractsRes?.data?.[0]?.count !== undefined) {
+        successfulCount = Number(contractsRes.data[0].count || 0);
       }
-
-      if (normTargetName && normTargetName.length > 2) {
-        const nameFilter = `&filter[assigned_marketer_name][_icontains]=${encodeURIComponent(targetPersonnelName || '')}`;
-        const nameAssignedRes = await directusFetch(
-          `/items/customers?limit=5000&fields=id,company_name,status,assignment_deadline,is_expired,assigned_marketer_id,assigned_marketer_name${nameFilter}`
-        ).catch(() => null);
-
-        if (nameAssignedRes?.data && Array.isArray(nameAssignedRes.data)) {
-          const countedIds = new Set(
-            allAssignedRes?.data ? allAssignedRes.data.map((c: any) => c.id) : []
-          );
-          nameAssignedRes.data.forEach((c: any) => {
-            if (countedIds.has(c.id)) return;
-            const expCust = computeCustomerExpiration(c);
-            if (expCust.status === 'قرارداد') {
-              successfulCount++;
-            } else if (!expCust.is_expired && expCust.status !== 'لیست سیاه') {
-              activeUnclosedCount++;
-            }
-          });
-        }
+      if (activeRes?.data?.[0]?.count !== undefined) {
+        activeUnclosedCount = Number(activeRes.data[0].count || 0);
       }
 
       const remainingQuota = Math.max(0, claimLimit - activeUnclosedCount);

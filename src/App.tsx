@@ -223,14 +223,10 @@ export default function App() {
       const targetUser = activeUser !== undefined ? activeUser : currentUser;
       const targetPContext = activeP !== undefined ? activeP : currentPersonnel;
 
-      // 1. Fetch Core Data first (fast rendering for dashboard & active view)
-      const customerLimit = 100;
-      const reportLimit = 100;
-
-      const [pData, cData, rData, tData, bStatus, dSummary] = await Promise.all([
+      // 1. Fetch Core Metadata only (personnel, tenants, status, summary)
+      // Each page/tab loads its own paginated datasets on demand for blazing-fast performance!
+      const [pData, tData, bStatus, dSummary] = await Promise.all([
         fetchPersonnel().catch(() => []),
-        fetchCustomers({ limit: customerLimit }).catch(() => []),
-        fetchCustomerReports(undefined, { limit: reportLimit }).catch(() => []),
         fetchTenants().catch(() => []),
         fetchBffStatus().catch(() => null),
         fetchDashboardSummary().catch(() => null),
@@ -241,8 +237,6 @@ export default function App() {
 
       setPersonnelList(pData);
       setTenants(tData);
-      setCustomers(cData);
-      setReports(rData);
       setBffStatus(bStatus);
       if (dSummary) setDashboardSummary(dSummary);
 
@@ -296,20 +290,6 @@ export default function App() {
 
       // Core load finished: release loading spinner immediately for instant responsiveness!
       setLoading(false);
-
-      // 2. Fetch secondary datasets in background without blocking the UI
-      Promise.all([
-        fetchColdLeads().catch(() => []),
-        fetchAdminReports().catch(() => []),
-        fetchLeaveRequests().catch(() => []),
-        fetchAdvanceRequests().catch(() => []),
-      ]).then(([lData, aData, lrData, arData]) => {
-        if (currentVersion !== fetchVersionRef.current) return;
-        setColdLeads(lData);
-        setAdminReports(aData);
-        setLeaveRequests(lrData);
-        setAdvanceRequests(arData);
-      });
     } catch (e) {
       console.error('Error loading data:', e);
     } finally {
@@ -346,10 +326,22 @@ export default function App() {
 
     // Lightweight status refresh every 45 seconds (does NOT spam large datasets)
     const interval = setInterval(() => {
-      fetchBffStatus().then(setBffStatus).catch(() => {});
+      if (document.visibilityState === 'visible') {
+        fetchBffStatus().then(setBffStatus).catch(() => {});
+      }
     }, 45000);
 
-    return () => clearInterval(interval);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBffStatus().then(setBffStatus).catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const handleSelectPersonnel = (p: Personnel | null) => {
@@ -537,8 +529,9 @@ export default function App() {
       setPrefilledLeadNotes('');
 
       // Synchronize latest state
-      fetchCustomers({ limit: 10000 }).then(setCustomers).catch(() => {});
-      fetchCustomerReports(undefined, { limit: 10000 }).then(setReports).catch(() => {});
+      const savedCustomer = editingCustomer ? (editingCustomer.id ? { ...editingCustomer, ...customerData } : null) : null;
+      window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: savedCustomer || customerData }));
+      fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
       fetchBffStatus().then(setBffStatus).catch(() => {});
     } catch (err: any) {
       showToast(err.message || 'خطا در ذخیره‌سازی اطلاعات مشتری', 'error');
@@ -588,7 +581,8 @@ export default function App() {
       const updated = await reassignCustomer(customerId, marketerId, marketerName, days);
       setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
       setSelectedCustomer(updated);
-      fetchCustomerReports(undefined, { limit: 10000 }).then(setReports).catch(() => {});
+      window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: updated }));
+      fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
       fetchBffStatus().then(setBffStatus).catch(() => {});
       showToast('مشتری با موفقیت به بازاریاب جدید واگذار شد.', 'success');
     } catch (err: any) {
@@ -606,8 +600,8 @@ export default function App() {
 
       if (res && res.customer) {
         setCustomers((prev) => prev.map((c) => (c.id === res.customer.id ? res.customer : c)));
-        const refreshedReports = await fetchCustomerReports().catch(() => null);
-        if (refreshedReports) setReports(refreshedReports);
+        window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: res.customer }));
+        fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
         fetchBffStatus().then(setBffStatus).catch(() => {});
         showToast(res.message || 'پرونده با موفقیت به شما اختصاص یافت.', 'success');
         return true;
@@ -654,11 +648,16 @@ export default function App() {
       setReports((prev) => [created, ...prev]);
 
       // Refresh customer list to get updated status and followup date
-      const updatedCustomer = await fetchCustomerById(reportData.customer_id!);
-      setCustomers((prev) => prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)));
-      if (selectedCustomer?.id === updatedCustomer.id) {
-        setSelectedCustomer(updatedCustomer);
+      const updatedCustomer = await fetchCustomerById(reportData.customer_id!).catch(() => null);
+      if (updatedCustomer) {
+        setCustomers((prev) => prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)));
+        if (selectedCustomer?.id === updatedCustomer.id) {
+          setSelectedCustomer(updatedCustomer);
+        }
+        window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: updatedCustomer }));
       }
+      window.dispatchEvent(new CustomEvent('crm_report_saved', { detail: created }));
+      fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
       fetchBffStatus().then(setBffStatus).catch(() => {});
       showToast('گزارش پیگیری با موفقیت در سامانه ثبت شد.', 'success');
     } catch (err: any) {

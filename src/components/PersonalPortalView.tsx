@@ -57,7 +57,7 @@ import {
   getAvatarUrl,
 } from '../utils';
 import { PersianDatePicker } from './PersianDatePicker';
-import { uploadAvatar } from '../api';
+import { uploadAvatar, fetchLeaveRequests, fetchAdvanceRequests } from '../api';
 import { ProfileTab } from './personal-portal/ProfileTab';
 import { PasswordTab } from './personal-portal/PasswordTab';
 import { LeaveRequestsTab } from './personal-portal/LeaveRequestsTab';
@@ -105,6 +105,43 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
   showToast,
 }) => {
   const [activeTab, setActiveTab] = useState<PortalTab>(initialTab);
+
+  // Dedicated on-demand state for leave & advance requests
+  const [localLeaveRequests, setLocalLeaveRequests] = useState<LeaveRequest[]>(leaveRequests);
+  const [localAdvanceRequests, setLocalAdvanceRequests] = useState<SalaryAdvanceRequest[]>(advanceRequests);
+  const [isLoadingRequests, setIsLoadingRequests] = useState<boolean>(false);
+
+  const reloadRequests = async () => {
+    setIsLoadingRequests(true);
+    try {
+      const [lData, aData] = await Promise.all([
+        fetchLeaveRequests().catch(() => []),
+        fetchAdvanceRequests().catch(() => []),
+      ]);
+      setLocalLeaveRequests(lData);
+      setLocalAdvanceRequests(aData);
+    } catch (err) {
+      console.warn('Failed to load portal requests:', err);
+    } finally {
+      setIsLoadingRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    reloadRequests();
+  }, []);
+
+  useEffect(() => {
+    if (leaveRequests && leaveRequests.length > 0 && localLeaveRequests.length === 0) {
+      setLocalLeaveRequests(leaveRequests);
+    }
+  }, [leaveRequests]);
+
+  useEffect(() => {
+    if (advanceRequests && advanceRequests.length > 0 && localAdvanceRequests.length === 0) {
+      setLocalAdvanceRequests(advanceRequests);
+    }
+  }, [advanceRequests]);
 
   useEffect(() => {
     if (initialTab === 'logout') {
@@ -296,6 +333,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       });
       showToast('درخواست مرخصی شما با موفقیت ثبت شد و برای مدیریت ارسال گردید.', 'success');
       setLeaveReason('');
+      reloadRequests();
     } catch (err: any) {
       showToast(err.message || 'خطا در ثبت درخواست مرخصی', 'error');
     } finally {
@@ -329,6 +367,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       });
       showToast('درخواست مساعده با موفقیت ثبت شد و در صف بررسی مدیریت قرار گرفت.', 'success');
       setAdvanceReason('');
+      reloadRequests();
     } catch (err: any) {
       showToast(err.message || 'خطا در ثبت درخواست مساعده', 'error');
     } finally {
@@ -371,6 +410,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       setReviewModalItem(null);
       setReviewManagerNote('');
       setReviewApprovedAmount('');
+      reloadRequests();
     } catch (err: any) {
       showToast(err.message || 'خطا در اعمال وضعیت درخواست', 'error');
     } finally {
@@ -380,7 +420,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
 
   // Filtered Leave Requests
   const filteredLeaveRequests = useMemo(() => {
-    return leaveRequests.filter((r) => {
+    return localLeaveRequests.filter((r) => {
       if (leaveStatusFilter !== 'all' && r.status !== leaveStatusFilter) return false;
       if (leaveSearch.trim()) {
         const q = leaveSearch.toLowerCase();
@@ -390,11 +430,11 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       }
       return true;
     });
-  }, [leaveRequests, leaveStatusFilter, leaveSearch]);
+  }, [localLeaveRequests, leaveStatusFilter, leaveSearch]);
 
   // Filtered Advance Requests
   const filteredAdvanceRequests = useMemo(() => {
-    return advanceRequests.filter((r) => {
+    return localAdvanceRequests.filter((r) => {
       if (advanceStatusFilter !== 'all' && r.status !== advanceStatusFilter) return false;
       if (advanceSearch.trim()) {
         const q = advanceSearch.toLowerCase();
@@ -404,7 +444,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       }
       return true;
     });
-  }, [advanceRequests, advanceStatusFilter, advanceSearch]);
+  }, [localAdvanceRequests, advanceStatusFilter, advanceSearch]);
 
   // Status Theme Helper
   const getRequestStatusBadge = (status: RequestStatus) => {
@@ -430,8 +470,8 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
     }
   };
 
-  const pendingLeavesCount = leaveRequests.filter((r) => r.status === 'pending').length;
-  const pendingAdvancesCount = advanceRequests.filter((r) => r.status === 'pending').length;
+  const pendingLeavesCount = localLeaveRequests.filter((r) => r.status === 'pending').length;
+  const pendingAdvancesCount = localAdvanceRequests.filter((r) => r.status === 'pending').length;
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-200">

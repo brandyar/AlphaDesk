@@ -32,12 +32,8 @@ export async function ensureCustomersCache(forceRefresh = false): Promise<any[]>
     return customersCache.data;
   }
 
-  const items = await fetchAllDirectusItems(
-    '/items/customers?sort=-date_created&fields=*',
-    100,
-    300,
-    2
-  );
+  const res = await directusFetch('/items/customers?limit=50&sort=-date_created').catch(() => null);
+  const items = res?.data || [];
   if (items && items.length > 0) {
     customersCache = {
       timestamp: Date.now(),
@@ -55,13 +51,13 @@ export async function ensureReportsCache(forceRefresh = false): Promise<any[]> {
     return reportsCache.data;
   }
 
-  const res = await directusFetchAllPages('/items/customer_reports?sort=-date_created').catch(() => null);
+  const res = await directusFetch('/items/customer_reports?limit=50&sort=-date_created').catch(() => null);
   const items = res?.data || [];
   if (items && items.length > 0) {
     reportsCache = {
       timestamp: Date.now(),
       data: items,
-      meta: res?.meta || { total_count: items.length },
+      meta: { total_count: items.length },
     };
     return items;
   }

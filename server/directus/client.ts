@@ -21,7 +21,7 @@ export async function directusFetch(path: string, options: RequestInit = {}, ret
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 7000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
 
       const res = await fetch(url, {
         ...options,
@@ -92,19 +92,18 @@ export async function directusFetch(path: string, options: RequestInit = {}, ret
   }
 }
 
-// Fast Paginated Directus fetcher
+// Fast & Safe Paginated Directus fetcher (Capped to prevent overwhelming Directus)
 export async function directusFetchAllPages(
   basePath: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  maxTotal = 250
 ): Promise<{ data: any[]; meta?: any }> {
-  const PAGE_SIZE = 250;
+  const PAGE_SIZE = 50;
   const [pathOnly, queryString] = basePath.split('?');
   const params = new URLSearchParams(queryString || '');
-  const existingLimit = params.get('limit');
-  const maxLimit = existingLimit && existingLimit !== 'all' ? parseInt(existingLimit, 10) : 5000;
-  params.set('limit', String(Math.min(maxLimit, PAGE_SIZE)));
+  params.set('limit', String(PAGE_SIZE));
   if (!params.has('page')) params.set('page', '1');
-  if (!params.has('meta')) params.set('meta', 'filter_count');
+  if (!params.has('meta')) params.set('meta', '*');
 
   const page1Url = `${pathOnly}?${params.toString()}`;
   const page1Res = await directusFetch(page1Url, options).catch(() => null);
@@ -117,23 +116,20 @@ export async function directusFetchAllPages(
   const totalCount =
     page1Res.meta?.filter_count ?? page1Res.meta?.total_count ?? page1Res.data.length;
 
-  if (totalCount > page1Res.data.length && page1Res.data.length > 0) {
-    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
-    const pagePromises = [];
+  const targetCount = Math.min(totalCount, maxTotal);
+  if (targetCount > page1Res.data.length && page1Res.data.length > 0) {
+    const totalPages = Math.min(Math.ceil(targetCount / PAGE_SIZE), 5);
     for (let p = 2; p <= totalPages; p++) {
       const pParams = new URLSearchParams(queryString || '');
       pParams.set('limit', String(PAGE_SIZE));
       pParams.set('page', String(p));
       if (!pParams.has('meta')) pParams.set('meta', '*');
       const pUrl = `${pathOnly}?${pParams.toString()}`;
-      pagePromises.push(directusFetch(pUrl, options).catch(() => ({ data: [] })));
-    }
-
-    const remainingPages = await Promise.all(pagePromises);
-    for (const res of remainingPages) {
+      const res = await directusFetch(pUrl, options, 1).catch(() => null);
       if (res && Array.isArray(res.data)) {
         allItems.push(...res.data);
       }
+      if (allItems.length >= maxTotal) break;
     }
   }
 

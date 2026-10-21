@@ -91,6 +91,24 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
 
+  // Listen to report save events to immediately show newly added reports without page reload
+  useEffect(() => {
+    const handleSaved = (e: any) => {
+      const saved: CustomerReport = e.detail;
+      if (!saved || !saved.id) return;
+      setItems((prev) => {
+        const exists = prev.some((r) => r.id === saved.id);
+        if (exists) {
+          return prev.map((r) => (r.id === saved.id ? saved : r));
+        }
+        return [saved, ...prev];
+      });
+      setTotalCount((prev) => prev + 1);
+    };
+    window.addEventListener('crm_report_saved', handleSaved);
+    return () => window.removeEventListener('crm_report_saved', handleSaved);
+  }, []);
+
   // Sync initial items when reports prop updates
   useEffect(() => {
     if (reports && reports.length > 0 && items.length === 0) {
@@ -133,7 +151,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery, activeTenantId, reports.length, reports[0]?.id]);
+  }, [currentPage, pageSize, adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery, activeTenantId]);
 
   // Helper to check if a customer belongs to the current user
   const isMyCustomer = (c: Customer): boolean => {

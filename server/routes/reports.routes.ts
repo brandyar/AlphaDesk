@@ -26,9 +26,9 @@ router.get('/', async (req: Request, res: Response) => {
 
   const isUnlimited = all === 'true' || limit === 'all' || limit === '50000';
   const reqLimit = isUnlimited
-    ? 5000
+    ? 50
     : limit
-    ? Math.min(Math.max(1, parseInt(String(limit), 10)), 5000)
+    ? Math.min(Math.max(1, parseInt(String(limit), 10)), 100)
     : 25;
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
 
@@ -41,7 +41,8 @@ router.get('/', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken && !isUnlimited && (!admin_filter || admin_filter === 'all') && (!staff_filter || staff_filter === 'all')) {
     try {
-      let directusPath = `/items/customer_reports?page=${reqPage}&limit=${reqLimit}&meta=filter_count&sort=-date_created`;
+      const directusPageLimit = Math.min(reqLimit, 50);
+      let directusPath = `/items/customer_reports?page=${reqPage}&limit=${directusPageLimit}&meta=*&sort=-date_created`;
 
       if (tenantId && tenantId !== 'all') {
         const tenantNum = resolveDirectusTenantId(tenantId);
