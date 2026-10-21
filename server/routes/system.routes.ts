@@ -611,6 +611,35 @@ const handleMigrationImport = async (req: Request, res: Response) => {
   const skippedDetails: Array<{ companyName: string; phone: string; reason: string }> = [];
   const errors: string[] = [];
 
+  // Pre-fetch all existing personnel and customers from Directus & memory
+  const existingPersonnel = [...personnelData];
+  const existingCustomers = [...customersData];
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const [pRes, cRes] = await Promise.all([
+        directusFetchAllPages('/items/personnel?fields=id,username,email,name,phone&limit=2000').catch(() => null),
+        directusFetchAllPages('/items/customers?fields=id,mobile_numbers,company_name,assigned_marketer_id,assigned_marketer_name,status&limit=10000').catch(() => null),
+      ]);
+      if (pRes && Array.isArray(pRes)) {
+        for (const p of pRes) {
+          if (!existingPersonnel.some((ep) => ep.id === p.id || (p.username && ep.username === p.username))) {
+            existingPersonnel.push(p);
+          }
+        }
+      }
+      if (cRes && Array.isArray(cRes)) {
+        for (const c of cRes) {
+          if (!existingCustomers.some((ec) => ec.id === c.id)) {
+            existingCustomers.push(c);
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn('Warning pre-fetching Directus records for migration:', e.message);
+    }
+  }
+
   // 1. Process personnelRows
   if (Array.isArray(personnelRows) && personnelRows.length > 0) {
     const personnelToInsert: any[] = [];
@@ -634,17 +663,20 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         phone: normPhone,
         role: r.userlevel === '0' || r.userlevel === 0 || r.role === 'admin' ? 'admin' : 'marketer',
         status: r.active === '0' || r.active === 0 || r.status === 'inactive' ? 'inactive' : 'active',
-        active: !(r.active === '0' || r.active === 0),
         tenant_id: targetTenantNum || 1,
         national_id: String(r.code || r.shenasname || '').trim() || null,
       };
 
-      const existIdx = personnelData.findIndex(
-        (p) => p.id === pId || p.username === cleanUsername || p.email === cleanEmail
+      const existIdx = existingPersonnel.findIndex(
+        (p) => p.id === pId || p.id === rawUid || (cleanUsername && p.username === cleanUsername) || (cleanEmail && p.email === cleanEmail)
       );
       if (existIdx >= 0) {
-        personnelData[existIdx] = { ...personnelData[existIdx], ...pObj };
+        existingPersonnel[existIdx] = { ...existingPersonnel[existIdx], ...pObj };
+        const localIdx = personnelData.findIndex((p) => p.id === pId || p.username === cleanUsername);
+        if (localIdx >= 0) personnelData[localIdx] = { ...personnelData[localIdx], ...pObj };
+        skippedCount++;
       } else {
+        existingPersonnel.push(pObj);
         personnelData.push(pObj);
         personnelToInsert.push(pObj);
         importedPersonnelCount++;
@@ -662,6 +694,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
   if (Array.isArray(customerRows) && customerRows.length > 0) {
     const customersToInsert: any[] = [];
     const contactsToInsert: any[] = [];
+    const customersToPatchMap = new Map<string, any>();
 
     for (const r of customerRows) {
       const callId = String(r.CallID || r.callid || r.id || '').trim();
@@ -702,7 +735,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       let assignedMarketerName: string | null = null;
 
       if (marketerRef) {
-        const matchedP = personnelData.find(
+        const matchedP = existingPersonnel.find(
           (p) =>
             p.id === marketerRef ||
             p.id === `p-${marketerRef}` ||
@@ -746,25 +779,35 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         date_created: parseLegacyDate(r.created || r.InsertRecDate) || new Date().toISOString(),
       };
 
-      const existIdx = customersData.findIndex(
+      const existIdx = existingCustomers.findIndex(
         (c) =>
-          (callId && c.id === custId) ||
+          (callId && (c.id === custId || c.id === callId || c.id === `c-${callId}`)) ||
           (mobileNumbers.length > 0 && mobileNumbers.some((m) => c.mobile_numbers?.includes(m)))
       );
+
       if (existIdx >= 0) {
-        customersData[existIdx] = {
-          ...customersData[existIdx],
-          assigned_marketer_id: assignedMarketerId || customersData[existIdx].assigned_marketer_id,
-          assigned_marketer_name: assignedMarketerName || customersData[existIdx].assigned_marketer_name,
-          status: status || customersData[existIdx].status,
+        const matchedCust = existingCustomers[existIdx];
+        const patchData: any = {
+          id: matchedCust.id,
+          assigned_marketer_id: assignedMarketerId || matchedCust.assigned_marketer_id,
+          assigned_marketer_name: assignedMarketerName || matchedCust.assigned_marketer_name,
+          status: status || matchedCust.status,
+          date_updated: new Date().toISOString(),
         };
+
+        existingCustomers[existIdx] = { ...matchedCust, ...patchData };
+        const localIdx = customersData.findIndex((c) => c.id === matchedCust.id);
+        if (localIdx >= 0) customersData[localIdx] = { ...customersData[localIdx], ...patchData };
+
+        customersToPatchMap.set(matchedCust.id, patchData);
         skippedCount++;
         skippedDetails.push({
-          companyName: companyName || customersData[existIdx].company_name || 'بدون نام',
+          companyName: companyName || matchedCust.company_name || 'بدون نام',
           phone: mobileNumbers[0] || 'بدون شماره',
-          reason: 'پرونده تکراری (شناسه یا شماره تماس موجود در سیستم)'
+          reason: 'پرونده تکراری (اطلاعات و مالکان در سیستم به‌روزرسانی شد)'
         });
       } else {
+        existingCustomers.push(custObj);
         customersData.push(custObj);
         customersToInsert.push(custObj);
         importedCustomersCount++;
@@ -803,6 +846,9 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       if (contactsToInsert.length > 0) {
         await directusSafeBatchInsert('customer_contacts', contactsToInsert, 50).catch(() => {});
       }
+      if (customersToPatchMap.size > 0) {
+        await directusSafeBatchPatch('customers', customersToPatchMap, 50).catch(() => {});
+      }
     }
   }
 
@@ -828,11 +874,11 @@ const handleMigrationImport = async (req: Request, res: Response) => {
 
       let matchedCustomerId: string | null = null;
       if (callId) {
-        const byCallId = customersData.find((c) => c.id === `c-${callId}` || c.id === callId);
+        const byCallId = existingCustomers.find((c) => c.id === `c-${callId}` || c.id === callId);
         if (byCallId) matchedCustomerId = byCallId.id;
       }
       if (!matchedCustomerId && callNum) {
-        const byPhone = customersData.find(
+        const byPhone = existingCustomers.find(
           (c) => c.mobile_numbers?.includes(callNum) || c.landline_numbers?.includes(callNum)
         );
         if (byPhone) matchedCustomerId = byPhone.id;
@@ -892,7 +938,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
     skippedCount,
     skippedDetails,
     errors,
-    message: `درون‌ریزی با موفقیت انجام شد: ${importedPersonnelCount} کارشناس، ${importedCustomersCount} مشتری، و ${importedReportsCount} گزارش ثبت شدند. ${autoAssignedCount > 0 ? `تعداد ${autoAssignedCount} مشتری آزاد گزارش‌دار به آخرین بازاریاب مربوطه متصل گردیدند.` : ''}`,
+    message: `درون‌ریزی با موفقیت انجام شد: ${importedPersonnelCount} کارشناس جدید، ${importedCustomersCount} مشتری جدید، و ${importedReportsCount} گزارش ثبت شدند. (${skippedCount} رکورد موجود نادیده گرفته یا به‌روزرسانی شدند) ${autoAssignedCount > 0 ? `تعداد ${autoAssignedCount} مشتری آزاد گزارش‌دار به آخرین بازاریاب مربوطه متصل گردیدند.` : ''}`,
   });
 };
 
