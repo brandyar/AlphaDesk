@@ -84,6 +84,7 @@ import {
   toPersianDigits,
   getAvatarUrl,
 } from '../utils';
+import { fetchLeaveRequests } from '../api';
 
 export const FAMILY_RELATION_OPTIONS = [
   'پدر',
@@ -844,6 +845,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   // -------------------------------------------------------------
   // TAB 5: Leave Approvals State (تایید مرخصی‌ها)
   // -------------------------------------------------------------
+  const [localLeaveRequests, setLocalLeaveRequests] = useState<LeaveRequest[]>(leaveRequests);
   const [leaveStatusFilter, setLeaveStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [leaveSearch, setLeaveSearch] = useState('');
   const [reviewingLeave, setReviewingLeave] = useState<LeaveRequest | null>(null);
@@ -851,8 +853,29 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   const [reviewManagerNote, setReviewManagerNote] = useState('');
   const [isProcessingLeaveReview, setIsProcessingLeaveReview] = useState(false);
 
+  const reloadLeaveRequests = async () => {
+    try {
+      const data = await fetchLeaveRequests();
+      if (Array.isArray(data)) {
+        setLocalLeaveRequests(data);
+      }
+    } catch (err) {
+      console.warn('Failed to load leave requests in team view:', err);
+    }
+  };
+
+  useEffect(() => {
+    reloadLeaveRequests();
+  }, [activeTenantId, activeSubTab]);
+
+  useEffect(() => {
+    if (leaveRequests && leaveRequests.length > 0) {
+      setLocalLeaveRequests(leaveRequests);
+    }
+  }, [leaveRequests]);
+
   const filteredLeaves = useMemo(() => {
-    return leaveRequests.filter((l) => {
+    return localLeaveRequests.filter((l) => {
       if (leaveStatusFilter !== 'all' && l.status !== leaveStatusFilter) return false;
       if (leaveSearch.trim()) {
         const q = leaveSearch.toLowerCase();
@@ -862,13 +885,20 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       }
       return true;
     });
-  }, [leaveRequests, leaveStatusFilter, leaveSearch]);
+  }, [localLeaveRequests, leaveStatusFilter, leaveSearch]);
 
   const handleConfirmLeaveReview = async () => {
     if (!reviewingLeave) return;
     setIsProcessingLeaveReview(true);
     try {
       await onUpdateLeaveStatus(reviewingLeave.id, reviewAction, reviewManagerNote);
+      setLocalLeaveRequests((prev) =>
+        prev.map((r) =>
+          r.id === reviewingLeave.id
+            ? { ...r, status: reviewAction, manager_note: reviewManagerNote }
+            : r
+        )
+      );
       showToast(
         `درخواست مرخصی با موفقیت ${reviewAction === 'approved' ? 'تایید' : 'رد'} شد.`,
         'success'
@@ -1061,7 +1091,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
     }
   };
 
-  const pendingLeavesCount = leaveRequests.filter((r) => r.status === 'pending').length;
+  const pendingLeavesCount = localLeaveRequests.filter((r) => r.status === 'pending').length;
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-200">

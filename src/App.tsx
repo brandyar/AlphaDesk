@@ -223,13 +223,14 @@ export default function App() {
       const targetUser = activeUser !== undefined ? activeUser : currentUser;
       const targetPContext = activeP !== undefined ? activeP : currentPersonnel;
 
-      // 1. Fetch Core Metadata only (personnel, tenants, status, summary)
-      // Each page/tab loads its own paginated datasets on demand for blazing-fast performance!
-      const [pData, tData, bStatus, dSummary] = await Promise.all([
+      // 1. Fetch Core Metadata (personnel, tenants, status, summary, leave & advance requests)
+      const [pData, tData, bStatus, dSummary, lData, aData] = await Promise.all([
         fetchPersonnel().catch(() => []),
         fetchTenants().catch(() => []),
         fetchBffStatus().catch(() => null),
         fetchDashboardSummary().catch(() => null),
+        fetchLeaveRequests().catch(() => []),
+        fetchAdvanceRequests().catch(() => []),
       ]);
 
       // If a newer fetch was started (e.g. user switched tenant or logged in), discard stale results
@@ -239,6 +240,8 @@ export default function App() {
       setTenants(tData);
       setBffStatus(bStatus);
       if (dSummary) setDashboardSummary(dSummary);
+      if (Array.isArray(lData)) setLeaveRequests(lData);
+      if (Array.isArray(aData)) setAdvanceRequests(aData);
 
       // Accurately match logged-in user to their specific personnel record
       let targetPersonnel = activeP !== undefined ? activeP : null;

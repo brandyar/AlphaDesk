@@ -41,7 +41,10 @@ const getAdvanceRequestsHandler = async (req: Request, res: Response) => {
   }
 
   if (tenantId && tenantId !== 'all') {
-    list = list.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
+    list = list.filter((r: any) => {
+      if (!r.tenant_id) return true;
+      return matchesTenant(r.tenant_id, tenantId) || matchesTenant(r.tenant_id, '1') || matchesTenant(r.tenant_id, 'default');
+    });
   }
 
   if (!isAdmin) {
@@ -54,7 +57,7 @@ const getAdvanceRequestsHandler = async (req: Request, res: Response) => {
       const rPId = String(r.personnel_id || '').trim().toLowerCase();
       const rawRPId = rPId.replace(/^p-/, '');
       const normPName = normalizePersianString(r.personnel_name);
-      const matchName = normUser && normPName && (normPName === normUser || normPName.includes(normUser));
+      const matchName = normUser && normPName && (normPName === normUser || normPName.includes(normUser) || normUser.includes(normPName));
 
       return (
         (cleanPId && (rPId === cleanPId || rawRPId === rawUid)) ||
