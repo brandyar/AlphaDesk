@@ -56,6 +56,9 @@ interface DashboardSummaryCacheItem {
 }
 const dashboardSummaryCacheMap = new Map<string, DashboardSummaryCacheItem>();
 const globalCallIdToUUIDMap = new Map<string, string>();
+let migrationPersonnelCache: any[] | null = null;
+let migrationCustomersCache: any[] | null = null;
+let migrationCacheLastFetch = 0;
 const DASHBOARD_CACHE_TTL_MS = 30000; // 30 seconds
 
 export function invalidateDashboardSummaryCache() {
@@ -444,6 +447,10 @@ const handleResetMigrationCache = (req: Request, res: Response) => {
   setReportsData([]);
   setContactsData([]);
   setPersonnelData([...initialPersonnel]);
+  migrationPersonnelCache = null;
+  migrationCustomersCache = null;
+  migrationCacheLastFetch = 0;
+  globalCallIdToUUIDMap.clear();
   invalidateCustomersCache();
   invalidateReportsCache();
   return res.json({ success: true, message: 'حافظه موقت کش درون‌ریزی با موفقیت پاکسازی شد.' });
@@ -617,37 +624,39 @@ const handleMigrationImport = async (req: Request, res: Response) => {
   const skippedDetails: Array<{ companyName: string; phone: string; reason: string }> = [];
   const errors: string[] = [];
 
-  // Pre-fetch all existing personnel and customers from Directus & memory
-  const existingPersonnel: any[] = [...personnelData];
-  const existingCustomers: any[] = [...customersData];
+  // Pre-fetch all existing personnel and customers from Directus & memory into session cache
+  if (!migrationPersonnelCache || !migrationCustomersCache || Date.now() - migrationCacheLastFetch > 120000) {
+    migrationPersonnelCache = [...personnelData];
+    migrationCustomersCache = [...customersData];
 
-  if (directusUrl && directusAdminToken) {
-    try {
-      const [pRes, cRes] = await Promise.all([
-        directusFetchAllPages('/items/personnel?fields=id,username,email,name,phone&limit=2000').catch(() => null),
-        directusFetchAllPages('/items/customers?fields=id,mobile_numbers,landline_numbers,company_name,assigned_marketer_id,assigned_marketer_name,status&limit=10000').catch(() => null),
-      ]);
-      const pList = Array.isArray(pRes) ? pRes : (pRes?.data || []);
-      const cList = Array.isArray(cRes) ? cRes : (cRes?.data || []);
+    if (directusUrl && directusAdminToken) {
+      try {
+        const [pRes, cRes] = await Promise.all([
+          directusFetchAllPages('/items/personnel?fields=id,username,email,name,phone&limit=2000').catch(() => null),
+          directusFetchAllPages('/items/customers?fields=id,mobile_numbers,landline_numbers,company_name,assigned_marketer_id,assigned_marketer_name,status&limit=50000').catch(() => null),
+        ]);
+        const pList = Array.isArray(pRes) ? pRes : (pRes?.data || []);
+        const cList = Array.isArray(cRes) ? cRes : (cRes?.data || []);
 
-      if (pList.length > 0) {
         for (const p of pList) {
-          if (!existingPersonnel.some((ep) => ep.id === p.id || (p.username && ep.username === p.username))) {
-            existingPersonnel.push(p);
+          if (!migrationPersonnelCache.some((ep) => ep.id === p.id || (p.username && ep.username === p.username))) {
+            migrationPersonnelCache.push(p);
           }
         }
-      }
-      if (cList.length > 0) {
         for (const c of cList) {
-          if (!existingCustomers.some((ec) => ec.id === c.id)) {
-            existingCustomers.push(c);
+          if (!migrationCustomersCache.some((ec) => ec.id === c.id)) {
+            migrationCustomersCache.push(c);
           }
         }
+        migrationCacheLastFetch = Date.now();
+      } catch (e: any) {
+        console.warn('Warning pre-fetching Directus records for migration:', e.message);
       }
-    } catch (e: any) {
-      console.warn('Warning pre-fetching Directus records for migration:', e.message);
     }
   }
+
+  const existingPersonnel: any[] = migrationPersonnelCache;
+  const existingCustomers: any[] = migrationCustomersCache;
 
   // Populate global callIdToUUIDMap from existing customers
   for (const c of existingCustomers) {
@@ -970,20 +979,22 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       });
     }
     if (contactsToInsert.length > 0) {
-      await directusSafeBatchInsert('customer_contacts', contactsToInsert, 50).catch(() => {});
+      directusSafeBatchInsert('customer_contacts', contactsToInsert, 50).catch(() => {});
     }
     if (customersToPatchMap.size > 0) {
       await directusSafeBatchPatch('customers', customersToPatchMap, 50).catch(() => {});
     }
   }
 
-  // 4. Auto-connect free customers with reports to the last marketer who wrote a report for them
+  // 4. Auto-connect free customers with reports (only when explicitly requested)
   let autoAssignedCount = 0;
-  try {
-    const autoRes = await autoAssignFreeCustomersWithReports(targetTenantId);
-    autoAssignedCount = autoRes.reassignedCount;
-  } catch (autoErr: any) {
-    console.warn('Auto-assign free customers post-import warning:', autoErr.message);
+  if (req.body.autoAssign === true) {
+    try {
+      const autoRes = await autoAssignFreeCustomersWithReports(targetTenantId);
+      autoAssignedCount = autoRes.reassignedCount;
+    } catch (autoErr: any) {
+      console.warn('Auto-assign free customers post-import warning:', autoErr.message);
+    }
   }
 
   invalidateCustomersCache();

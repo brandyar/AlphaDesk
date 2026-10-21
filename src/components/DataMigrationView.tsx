@@ -323,8 +323,8 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         addLog(`ثبت پرسنل تکمیل شد: ${resP.importedPersonnelCount} کارشناس جدید ثبت گردید.`);
       }
 
-      // ۲. درون‌ریزی مشتریان در دسته‌های ۲۰۰۰ تایی
-      const CUSTOMER_CHUNK_SIZE = 2000;
+      // ۲. درون‌ریزی مشتریان در دسته‌های ۲۵۰ تایی (پاسخ سریع و بدون تایم‌اوت مرورگر)
+      const CUSTOMER_CHUNK_SIZE = 250;
       if (totalContacts > 0) {
         const totalCustChunks = Math.ceil(totalContacts / CUSTOMER_CHUNK_SIZE);
         for (let i = 0; i < totalCustChunks; i++) {
@@ -361,8 +361,8 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         setProgressPercent(40);
       }
 
-      // ۳. درون‌ریزی گزارش‌های مذاکره در دسته‌های ۲۰۰۰ تایی (پشتیبانی تا ۳۵,۰۰۰+ رکورد بدون قطعی یا تایم‌اوت)
-      const REPORT_CHUNK_SIZE = 2000;
+      // ۳. درون‌ریزی گزارش‌های مذاکره در دسته‌های ۵۰۰ تایی (پشتیبانی تا ۳۵,۰۰۰+ رکورد بدون قطعی یا تایم‌اوت)
+      const REPORT_CHUNK_SIZE = 500;
       if (totalHistory > 0) {
         const totalRepChunks = Math.ceil(totalHistory / REPORT_CHUNK_SIZE);
         for (let i = 0; i < totalRepChunks; i++) {

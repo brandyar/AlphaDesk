@@ -92,13 +92,13 @@ export async function directusFetch(path: string, options: RequestInit = {}, ret
   }
 }
 
-// Fast & Safe Paginated Directus fetcher (Capped to prevent overwhelming Directus)
+// Fast & Safe Paginated Directus fetcher
 export async function directusFetchAllPages(
   basePath: string,
   options: RequestInit = {},
-  maxTotal = 250
+  maxTotal = 50000
 ): Promise<{ data: any[]; meta?: any }> {
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 500;
   const [pathOnly, queryString] = basePath.split('?');
   const params = new URLSearchParams(queryString || '');
   params.set('limit', String(PAGE_SIZE));
@@ -118,18 +118,22 @@ export async function directusFetchAllPages(
 
   const targetCount = Math.min(totalCount, maxTotal);
   if (targetCount > page1Res.data.length && page1Res.data.length > 0) {
-    const totalPages = Math.min(Math.ceil(targetCount / PAGE_SIZE), 5);
+    const totalPages = Math.ceil(targetCount / PAGE_SIZE);
+    const pagePromises = [];
     for (let p = 2; p <= totalPages; p++) {
       const pParams = new URLSearchParams(queryString || '');
       pParams.set('limit', String(PAGE_SIZE));
       pParams.set('page', String(p));
       if (!pParams.has('meta')) pParams.set('meta', '*');
       const pUrl = `${pathOnly}?${pParams.toString()}`;
-      const res = await directusFetch(pUrl, options, 1).catch(() => null);
+      pagePromises.push(directusFetch(pUrl, options, 2).catch(() => null));
+    }
+
+    const pagesRes = await Promise.all(pagePromises);
+    for (const res of pagesRes) {
       if (res && Array.isArray(res.data)) {
         allItems.push(...res.data);
       }
-      if (allItems.length >= maxTotal) break;
     }
   }
 
@@ -155,7 +159,7 @@ export function chunkArray<T>(items: T[], size: number): T[][] {
 export async function directusSafeBatchInsert(
   collection: string,
   items: any[],
-  chunkSize = 25
+  chunkSize = 50
 ): Promise<any[]> {
   if (!items || items.length === 0) return [];
   const inserted: any[] = [];
@@ -163,7 +167,7 @@ export async function directusSafeBatchInsert(
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    if (i > 0) await new Promise((r) => setTimeout(r, 120));
+    if (i > 0) await new Promise((r) => setTimeout(r, 15));
 
     try {
       const res = await directusFetch(
@@ -172,7 +176,7 @@ export async function directusSafeBatchInsert(
           method: 'POST',
           body: JSON.stringify(chunk),
         },
-        4
+        3
       );
 
       if (res && Array.isArray(res.data)) {
@@ -182,19 +186,18 @@ export async function directusSafeBatchInsert(
       }
     } catch (err: any) {
       console.warn(
-        `Chunk insert failed for ${collection} (size ${chunk.length}): ${err.message}. Retrying in smaller micro-chunks...`
+        `Chunk insert failed for ${collection} (size ${chunk.length}): ${err.message}. Retrying in sub-chunks...`
       );
-      const subChunks = chunkArray(chunk, 5);
+      const subChunks = chunkArray(chunk, 10);
       for (const sub of subChunks) {
         try {
-          await new Promise((r) => setTimeout(r, 150));
           const subRes = await directusFetch(
             `/items/${collection}`,
             {
               method: 'POST',
               body: JSON.stringify(sub),
             },
-            4
+            2
           );
           if (subRes && Array.isArray(subRes.data)) {
             inserted.push(...subRes.data);
