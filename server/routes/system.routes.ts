@@ -438,7 +438,7 @@ router.post('/api/check-expirations', (req: Request, res: Response) => {
 });
 
 // POST /api/migration/reset-cache
-router.post('/api/migration/reset-cache', (req: Request, res: Response) => {
+const handleResetMigrationCache = (req: Request, res: Response) => {
   setCustomersData([]);
   setReportsData([]);
   setContactsData([]);
@@ -446,7 +446,10 @@ router.post('/api/migration/reset-cache', (req: Request, res: Response) => {
   invalidateCustomersCache();
   invalidateReportsCache();
   return res.json({ success: true, message: 'حافظه موقت کش درون‌ریزی با موفقیت پاکسازی شد.' });
-});
+};
+
+router.post('/api/migration/reset-cache', handleResetMigrationCache);
+router.post('/migration/reset-cache', handleResetMigrationCache);
 
 // Helper to convert Jalali to Gregorian date
 function jalaliToGregorian(jy: number, jm: number, jd: number): Date {
@@ -595,7 +598,7 @@ function normalizeLegacyStatus(rawStatus?: string | null): string {
 }
 
 // POST /api/migration/import
-router.post('/api/migration/import', async (req: Request, res: Response) => {
+const handleMigrationImport = async (req: Request, res: Response) => {
   const { tenant_id, personnelRows, customerRows, reportRows } = req.body;
   const { tenantId: authTenantId } = getRequestUser(req);
   const targetTenantId = tenant_id || authTenantId || 'default';
@@ -756,6 +759,11 @@ router.post('/api/migration/import', async (req: Request, res: Response) => {
           status: status || customersData[existIdx].status,
         };
         skippedCount++;
+        skippedDetails.push({
+          companyName: companyName || customersData[existIdx].company_name || 'بدون نام',
+          phone: mobileNumbers[0] || 'بدون شماره',
+          reason: 'پرونده تکراری (شناسه یا شماره تماس موجود در سیستم)'
+        });
       } else {
         customersData.push(custObj);
         customersToInsert.push(custObj);
@@ -886,7 +894,10 @@ router.post('/api/migration/import', async (req: Request, res: Response) => {
     errors,
     message: `درون‌ریزی با موفقیت انجام شد: ${importedPersonnelCount} کارشناس، ${importedCustomersCount} مشتری، و ${importedReportsCount} گزارش ثبت شدند. ${autoAssignedCount > 0 ? `تعداد ${autoAssignedCount} مشتری آزاد گزارش‌دار به آخرین بازاریاب مربوطه متصل گردیدند.` : ''}`,
   });
-});
+};
+
+router.post('/api/migration/import', handleMigrationImport);
+router.post('/migration/import', handleMigrationImport);
 
 // Helper function to connect free customers with reports to their latest report's negotiator
 export async function autoAssignFreeCustomersWithReports(targetTenantId?: string) {
@@ -921,6 +932,7 @@ export async function autoAssignFreeCustomersWithReports(targetTenantId?: string
 
   const nowMs = Date.now();
   const defaultDeadlineIso = new Date(nowMs + 10 * 86400 * 1000).toISOString();
+  const patchesMap = new Map<string, any>();
 
   for (const cust of freeCustomers) {
     const custId = String(cust.id);
@@ -968,6 +980,7 @@ export async function autoAssignFreeCustomersWithReports(targetTenantId?: string
     const targetMarketerName = matchedP ? String(matchedP.name) : negotiatorName;
 
     const custPatch: Record<string, any> = {
+      id: custId,
       assigned_marketer_id: targetMarketerId,
       assigned_marketer_name: targetMarketerName,
       assignment_deadline: defaultDeadlineIso,
@@ -976,16 +989,7 @@ export async function autoAssignFreeCustomersWithReports(targetTenantId?: string
       date_updated: new Date().toISOString(),
     };
 
-    if (directusUrl && directusAdminToken) {
-      try {
-        await directusFetch(`/items/customers/${encodeURIComponent(custId)}`, {
-          method: 'PATCH',
-          body: JSON.stringify(custPatch),
-        });
-      } catch (err: any) {
-        console.warn(`Failed to auto-reassign customer ${custId} in Directus:`, err.message);
-      }
-    }
+    patchesMap.set(custId, custPatch);
 
     const localIdx = customersData.findIndex((c) => String(c.id) === custId);
     if (localIdx >= 0) {
@@ -1001,6 +1005,14 @@ export async function autoAssignFreeCustomersWithReports(targetTenantId?: string
       companyName: cust.company_name || 'بدون نام',
       marketerName: targetMarketerName,
     });
+  }
+
+  if (directusUrl && directusAdminToken && patchesMap.size > 0) {
+    try {
+      await directusSafeBatchPatch('customers', patchesMap, 50);
+    } catch (err: any) {
+      console.warn(`Failed to auto-reassign free customers batch in Directus:`, err.message);
+    }
   }
 
   invalidateCustomersCache();

@@ -344,7 +344,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
           const resC = await importLegacyMigrationData({
             tenant_id: selectedTenantId,
-            personnelRows: parsedAccounts,
+            personnelRows: [],
             customerRows: chunk,
             reportRows: [],
           });
@@ -381,7 +381,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
           const resR = await importLegacyMigrationData({
             tenant_id: selectedTenantId,
-            personnelRows: parsedAccounts,
+            personnelRows: [],
             customerRows: [],
             reportRows: chunk,
           });
