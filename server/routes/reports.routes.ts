@@ -15,7 +15,7 @@ import {
 } from '../directus/cache.ts';
 import { getSafeDirectusPersonnelForeignKey, resolveDirectusTenantId } from '../directus/sync.ts';
 import { cleanCustomerPayloadForDirectus, normalizePersianString } from '../services/phoneNormalizer.ts';
-import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
+import { getRequestUser, getRequestTenantId, matchesTenant } from '../middlewares/auth.middleware.ts';
 import { CustomerReport } from '../types.ts';
 
 const router = Router();
@@ -439,9 +439,12 @@ router.post('/', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
+      const targetTenantId = payload.tenant_id || getRequestTenantId(req) || 'default';
+      const tenantNum = resolveDirectusTenantId(targetTenantId) || 1;
       const directusReportPayload: Record<string, any> = {
         ...newReport,
         created_by: safeCreatedByFk,
+        tenant_id: tenantNum,
       };
 
       const created = await directusFetch('/items/customer_reports', {

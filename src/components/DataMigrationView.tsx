@@ -27,7 +27,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Tenant, Personnel } from '../types';
-import { importLegacyMigrationData, resetMigrationCache, autoAssignFreeCustomersWithReports } from '../api';
+import { importLegacyMigrationData, resetMigrationCache, autoAssignFreeCustomersWithReports, backfillTenantsData } from '../api';
 import { toPersianDigits, normalizeLegacyStatus } from '../utils';
 
 interface DataMigrationViewProps {
@@ -274,6 +274,22 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
     }
   };
 
+  const [isBackfilling, setIsBackfilling] = useState(false);
+
+  const handleBackfillTenants = async () => {
+    try {
+      setIsBackfilling(true);
+      const res = await backfillTenantsData();
+      showToast(res.message, 'success');
+      addLog(`اصلاح خودکار شناسه سازمان: ${res.updatedCustomers} پرونده مشتری و ${res.updatedReports} گزارش مذاکره بروزرسانی گردید.`);
+      await onRefreshData();
+    } catch (err: any) {
+      showToast(err.message || 'خطا در اصلاح شناسه سازمان', 'error');
+    } finally {
+      setIsBackfilling(false);
+    }
+  };
+
   // اجرای فرآیند درون‌ریزی با دسته‌بندی خودکار و پردازش تدریجی برای حجم‌های بالا (حتی ۳۵,۰۰۰+ رکورد)
   const handleExecuteImport = async () => {
     if (parsedAccounts.length === 0 && parsedContacts.length === 0 && parsedHistory.length === 0) {
@@ -450,6 +466,15 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
             >
               <RefreshCw className="w-4 h-4 text-amber-400" />
               <span>پاکسازی حافظه موقت درون‌ریزی</span>
+            </button>
+            <button
+              onClick={handleBackfillTenants}
+              disabled={isBackfilling || isSubmitting}
+              className="px-3.5 py-2 rounded-xl bg-[#252525] hover:bg-[#303030] border border-[#3e3e3e] text-xs font-bold text-[#CCC] hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+              title="اصلاح و درج شناسه سازمان برای پرونده‌ها و گزارش‌هایی که قبلاً بدون شناسه سازمان ثبت شده‌اند"
+            >
+              <Layers className={`w-4 h-4 text-[#1DB954] ${isBackfilling ? 'animate-spin' : ''}`} />
+              <span>{isBackfilling ? 'در حال اصلاح شناسه‌ها...' : 'اصلاح شناسه سازمان رکوردهای قبلی'}</span>
             </button>
             <button
               onClick={handleLoadSampleData}

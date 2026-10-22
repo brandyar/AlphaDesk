@@ -1140,5 +1140,19 @@ export async function autoAssignFreeCustomersWithReports(tenant_id?: string): Pr
   return handleResponse(res, 'خطا در اتصال خودکار مشتریان آزاد به بازاریابان');
 }
 
+export async function backfillTenantsData(): Promise<{
+  success: boolean;
+  updatedCustomers: number;
+  updatedReports: number;
+  updatedPersonnel: number;
+  message: string;
+}> {
+  const res = await fetch(`${BASE_URL}/migration/backfill-tenants`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+  });
+  return handleResponse(res, 'خطا در اصلاح خودکار شناسه‌های سازمان');
+}
+
 
 

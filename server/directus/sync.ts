@@ -92,9 +92,79 @@ export async function ensureDirectusTenants() {
         console.log('Directus default tenant created with ID:', created.data.id);
       }
     }
+
+    // Automatically repair any legacy or newly imported records missing tenant_id
+    backfillNullTenantsDirectus().catch(() => {});
   } catch (err: any) {
     console.warn('Could not sync/seed tenants in Directus:', err.message);
   }
+}
+
+// Automatically repair records where tenant_id is null in Directus
+export async function backfillNullTenantsDirectus(): Promise<{ updatedCustomers: number; updatedReports: number; updatedPersonnel: number }> {
+  let updatedCustomers = 0;
+  let updatedReports = 0;
+  let updatedPersonnel = 0;
+
+  if (!directusUrl || !directusAdminToken) return { updatedCustomers, updatedReports, updatedPersonnel };
+
+  try {
+    const defaultTenantId = resolveDirectusTenantId('default') || 1;
+
+    // 1. Backfill customers where tenant_id is null
+    const custNullRes = await directusFetch('/items/customers?filter[tenant_id][_null]=true&fields=id&limit=5000').catch(() => null);
+    if (custNullRes?.data && Array.isArray(custNullRes.data) && custNullRes.data.length > 0) {
+      const ids = custNullRes.data.map((c: any) => c.id);
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        await directusFetch('/items/customers', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            keys: chunk,
+            data: { tenant_id: defaultTenantId },
+          }),
+        }).catch((e) => console.warn('Could not backfill customers tenant_id chunk:', e.message));
+        updatedCustomers += chunk.length;
+      }
+      console.log(`Successfully backfilled ${updatedCustomers} customers with tenant_id: ${defaultTenantId}`);
+    }
+
+    // 2. Backfill customer_reports where tenant_id is null
+    const repNullRes = await directusFetch('/items/customer_reports?filter[tenant_id][_null]=true&fields=id&limit=5000').catch(() => null);
+    if (repNullRes?.data && Array.isArray(repNullRes.data) && repNullRes.data.length > 0) {
+      const ids = repNullRes.data.map((r: any) => r.id);
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        await directusFetch('/items/customer_reports', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            keys: chunk,
+            data: { tenant_id: defaultTenantId },
+          }),
+        }).catch((e) => console.warn('Could not backfill reports tenant_id chunk:', e.message));
+        updatedReports += chunk.length;
+      }
+      console.log(`Successfully backfilled ${updatedReports} reports with tenant_id: ${defaultTenantId}`);
+    }
+
+    // 3. Backfill personnel where tenant_id is null
+    const pNullRes = await directusFetch('/items/personnel?filter[tenant_id][_null]=true&fields=id&limit=1000').catch(() => null);
+    if (pNullRes?.data && Array.isArray(pNullRes.data) && pNullRes.data.length > 0) {
+      const ids = pNullRes.data.map((p: any) => p.id);
+      await directusFetch('/items/personnel', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          keys: ids,
+          data: { tenant_id: defaultTenantId },
+        }),
+      }).catch((e) => console.warn('Could not backfill personnel tenant_id:', e.message));
+      updatedPersonnel = ids.length;
+    }
+  } catch (err: any) {
+    console.warn('backfillNullTenantsDirectus error:', err.message);
+  }
+
+  return { updatedCustomers, updatedReports, updatedPersonnel };
 }
 
 // Auto-seed and synchronize personnel with Directus

@@ -20,7 +20,7 @@ import {
 import { directusFetch, directusFetchAllPages, directusSafeBatchInsert, directusSafeBatchPatch } from '../directus/client.ts';
 import { getRequestUser, getRequestTenantId } from '../middlewares/auth.middleware.ts';
 import { invalidateCustomersCache, invalidateReportsCache } from '../directus/cache.ts';
-import { resolveDirectusTenantId } from '../directus/sync.ts';
+import { resolveDirectusTenantId, backfillNullTenantsDirectus } from '../directus/sync.ts';
 import { normalizeContactValue, normalizePersianString } from '../services/phoneNormalizer.ts';
 import { Personnel } from '../types.ts';
 
@@ -647,6 +647,8 @@ function isValidUUID(str: any): boolean {
 }
 
 function sanitizeCustomerForDirectus(cust: any): any {
+  const tNum = cust.tenant_id !== undefined && cust.tenant_id !== null ? Number(cust.tenant_id) : 1;
+  const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
   return {
     id: cust.id,
     company_name: cust.company_name || 'بدون نام',
@@ -661,11 +663,14 @@ function sanitizeCustomerForDirectus(cust: any): any {
     assignment_deadline: cust.assignment_deadline || null,
     status: cust.status || 'تماس برقرار نشده',
     is_expired: Boolean(cust.is_expired),
+    tenant_id: tenantNum,
     date_created: cust.date_created || new Date().toISOString(),
   };
 }
 
 function sanitizeReportForDirectus(rep: any): any {
+  const tNum = rep.tenant_id !== undefined && rep.tenant_id !== null ? Number(rep.tenant_id) : 1;
+  const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
   return {
     id: rep.id,
     customer_id: rep.customer_id,
@@ -675,11 +680,14 @@ function sanitizeReportForDirectus(rep: any): any {
     negotiation_status: rep.negotiation_status || 'پیگیری قبل از انقضا',
     negotiation_score: typeof rep.negotiation_score === 'number' ? rep.negotiation_score : 8,
     next_followup_date: rep.next_followup_date || null,
+    tenant_id: tenantNum,
     date_created: rep.date_created || new Date().toISOString(),
   };
 }
 
 function sanitizePersonnelForDirectus(p: any): any {
+  const tNum = p.tenant_id !== undefined && p.tenant_id !== null ? Number(p.tenant_id) : 1;
+  const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
   return {
     id: p.id,
     name: p.name || 'کارشناس',
@@ -688,6 +696,7 @@ function sanitizePersonnelForDirectus(p: any): any {
     phone: p.phone || '',
     role: p.role || 'marketer',
     status: p.status || 'active',
+    tenant_id: tenantNum,
     national_id: p.national_id || null,
   };
 }
@@ -982,6 +991,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
             normalized_value: m,
             contact_name: managerName || companyName,
             is_primary: true,
+            tenant_id: targetTenantNum || 1,
           });
         }
         for (const l of landlineNumbers) {
@@ -993,6 +1003,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
             normalized_value: l,
             contact_name: managerName || companyName,
             is_primary: false,
+            tenant_id: targetTenantNum || 1,
           });
         }
       }
@@ -1312,5 +1323,19 @@ const handleAutoAssignFreeWithReports = async (req: Request, res: Response) => {
 
 router.post('/api/migration/auto-assign-free-with-reports', handleAutoAssignFreeWithReports);
 router.post('/migration/auto-assign-free-with-reports', handleAutoAssignFreeWithReports);
+
+const handleBackfillTenants = async (req: Request, res: Response) => {
+  const result = await backfillNullTenantsDirectus();
+  invalidateCustomersCache();
+  invalidateReportsCache();
+  res.json({
+    success: true,
+    ...result,
+    message: `اصلاح شناسه سازمان با موفقیت انجام شد: ${result.updatedCustomers} مشتری و ${result.updatedReports} گزارش بروزرسانی شدند.`,
+  });
+};
+
+router.post('/api/migration/backfill-tenants', handleBackfillTenants);
+router.post('/migration/backfill-tenants', handleBackfillTenants);
 
 export default router;
