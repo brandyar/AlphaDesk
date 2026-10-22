@@ -243,6 +243,7 @@ export interface RequestUserContext {
   userRole: string;
   roleId: string;
   isAdmin: boolean;
+  canViewAllCustomers?: boolean;
   userName: string;
   userEmail: string;
   tenantId: string;

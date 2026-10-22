@@ -290,14 +290,15 @@ router.post('/login', async (req: Request, res: Response) => {
 
         pItem = enrichPersonnel(pItem);
 
+        // Strict personnel-based role determination: the role defined in the personnel collection is the single source of truth
         const isAdmin = Boolean(
-          isDirectusAdmin ||
-          pItem?.role === 'admin' ||
-          pItem?.role === 'sales_manager'
+          pItem
+            ? (pItem.role === 'admin' || pItem.role === 'sales_manager')
+            : isDirectusAdmin
         );
-        const appRole = isAdmin
-          ? (pItem?.role === 'sales_manager' ? 'sales_manager' : 'admin')
-          : (pItem?.role || 'marketer');
+        const appRole = pItem
+          ? pItem.role
+          : (isAdmin ? 'admin' : 'marketer');
 
         let avatarUrl = formatAvatarUrl(meUser.avatar || pItem?.avatar);
 
@@ -468,13 +469,13 @@ router.get('/me', async (req: Request, res: Response) => {
   }
 
   const effectiveIsAdmin = Boolean(
-    isDirectusAdmin ||
-    pItem?.role === 'admin' ||
-    pItem?.role === 'sales_manager'
+    pItem
+      ? (pItem.role === 'admin' || pItem.role === 'sales_manager')
+      : isDirectusAdmin
   );
-  const effectiveRole = effectiveIsAdmin
-    ? (pItem?.role === 'sales_manager' ? 'sales_manager' : 'admin')
-    : (pItem?.role || 'marketer');
+  const effectiveRole = pItem
+    ? pItem.role
+    : (effectiveIsAdmin ? 'admin' : 'marketer');
 
   res.json({
     user: {

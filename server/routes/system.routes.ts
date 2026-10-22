@@ -81,8 +81,42 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
       let tenantFilterStr = '';
       if (tenantId && tenantId !== 'all') {
         const tenantNum = resolveDirectusTenantId(tenantId);
-        if (tenantNum) {
+        if (tenantNum && tenantNum > 1) {
           tenantFilterStr = `&filter[tenant_id][_eq]=${tenantNum}`;
+        }
+      }
+
+      const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
+      const rawUid = cleanPId.replace(/^p-/, '');
+      const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
+      const normUserName = userName ? userName.trim() : '';
+
+      let marketerCustFilter = '';
+      let marketerRepFilter = '';
+      let marketerLeadFilter = '';
+
+      if (!isAdmin) {
+        if (cleanPId) {
+          marketerCustFilter = `&filter[_or][0][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`;
+          if (rawUid && rawUid !== cleanPId) {
+            marketerCustFilter += `&filter[_or][1][assigned_marketer_id][_eq]=${encodeURIComponent(rawUid)}`;
+            marketerCustFilter += `&filter[_or][2][assigned_marketer_id][_eq]=${encodeURIComponent('p-' + rawUid)}`;
+          }
+          if (normUserName) {
+            marketerCustFilter += `&filter[_or][3][assigned_marketer_name][_icontains]=${encodeURIComponent(normUserName)}`;
+          }
+        } else if (normUserName) {
+          marketerCustFilter = `&filter[assigned_marketer_name][_icontains]=${encodeURIComponent(normUserName)}`;
+        }
+
+        if (normUserName) {
+          marketerRepFilter = `&filter[negotiator_name][_icontains]=${encodeURIComponent(normUserName)}`;
+        } else if (cleanPId) {
+          marketerRepFilter = `&filter[created_by][_eq]=${encodeURIComponent(cleanPId)}`;
+        }
+
+        if (cleanPId) {
+          marketerLeadFilter = `&filter[assigned_to][_eq]=${encodeURIComponent(cleanPId)}`;
         }
       }
 
@@ -98,12 +132,12 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
         pendingLeavesRes,
         pendingAdvancesRes,
       ] = await Promise.all([
-        directusFetch(`/items/customers?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count${tenantFilterStr}${marketerCustFilter}`).catch(() => null),
         directusFetch(`/items/customers?limit=1&meta=filter_count&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customer_reports?aggregate[count]=*&aggregate[sum]=contract_amount&aggregate[avg]=negotiation_score${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/cold_leads?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[is_expired][_eq]=true${tenantFilterStr}${marketerCustFilter}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}${marketerCustFilter}`).catch(() => null),
+        directusFetch(`/items/customer_reports?aggregate[count]=*&aggregate[sum]=contract_amount&aggregate[avg]=negotiation_score${tenantFilterStr}${marketerRepFilter}`).catch(() => null),
+        directusFetch(`/items/cold_leads?limit=1&meta=filter_count${tenantFilterStr}${marketerLeadFilter}`).catch(() => null),
         directusFetch(`/items/administrative_reports?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/leave_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/advance_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),

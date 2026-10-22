@@ -129,16 +129,18 @@ export function getRequestUser(req: Request): RequestUserContext {
       !isSessionRevoked
   );
 
-  const resolvedRole = userRole || pMatch?.role || '';
+  const resolvedRole = pMatch?.role || userRole || '';
+  const isDirectusSystemAdmin = Boolean(
+    !pMatch && (DIRECTUS_ADMIN_ROLE_IDS.includes(roleId) || userRole === 'admin')
+  );
   const isAdmin = Boolean(
     hasUserContext &&
-      (resolvedRole === 'admin' ||
-       resolvedRole === 'sales_manager' ||
-       userRole === 'admin' ||
-       userRole === 'sales_manager' ||
-       pMatch?.role === 'admin' ||
-       pMatch?.role === 'sales_manager' ||
-       DIRECTUS_ADMIN_ROLE_IDS.includes(roleId))
+      (pMatch
+        ? (pMatch.role === 'admin' || pMatch.role === 'sales_manager')
+        : isDirectusSystemAdmin)
+  );
+  const canViewAllCustomers = Boolean(
+    isAdmin || (pMatch?.permissions as any)?.can_view_all_customers === true
   );
 
   return {
@@ -147,6 +149,7 @@ export function getRequestUser(req: Request): RequestUserContext {
     userRole: isAdmin ? (pMatch?.role === 'sales_manager' ? 'sales_manager' : 'admin') : resolvedRole || 'marketer',
     roleId,
     isAdmin,
+    canViewAllCustomers,
     userName: isSessionRevoked ? '' : userName,
     userEmail: isSessionRevoked ? '' : userEmail,
     tenantId,

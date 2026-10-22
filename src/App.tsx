@@ -185,11 +185,11 @@ export default function App() {
   };
 
   const isCurrentUserAdmin = Boolean(
-    currentUser?.is_admin ||
-    currentUser?.app_role === 'admin' ||
-    currentUser?.app_role === 'sales_manager' ||
-    currentPersonnel?.role === 'admin' ||
-    currentPersonnel?.role === 'sales_manager'
+    currentPersonnel
+      ? currentPersonnel.role === 'admin' || currentPersonnel.role === 'sales_manager'
+      : currentUser?.is_admin ||
+        currentUser?.app_role === 'admin' ||
+        currentUser?.app_role === 'sales_manager'
   );
 
   const canAccessTenantsTab =
@@ -262,11 +262,11 @@ export default function App() {
 
         // For non-admin, auto-correct active tenant if they don't have access to 'all' or selected tenant
         const isUserAdmin = Boolean(
-          targetUser?.is_admin ||
-          targetUser?.app_role === 'admin' ||
-          targetUser?.app_role === 'sales_manager' ||
-          targetPersonnel.role === 'admin' ||
-          targetPersonnel.role === 'sales_manager'
+          targetPersonnel
+            ? targetPersonnel.role === 'admin' || targetPersonnel.role === 'sales_manager'
+            : targetUser?.is_admin ||
+              targetUser?.app_role === 'admin' ||
+              targetUser?.app_role === 'sales_manager'
         );
 
         if (!isUserAdmin) {
@@ -967,7 +967,6 @@ export default function App() {
           personnelList={personnelList}
           currentPersonnel={currentPersonnel}
           currentUser={currentUser}
-          onSelectPersonnel={handleSelectPersonnel}
           onOpenAuthModal={() => setIsAuthModalOpen(true)}
           onLogout={handleLogout}
           expiredCount={expiredCount}

@@ -134,12 +134,12 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId]);
 
   const userIsAdmin = Boolean(
-    isAdmin ||
-    currentUser?.is_admin ||
-    currentUser?.app_role === 'admin' ||
-    currentUser?.app_role === 'sales_manager' ||
-    currentPersonnel?.role === 'admin' ||
-    currentPersonnel?.role === 'sales_manager'
+    currentPersonnel
+      ? currentPersonnel.role === 'admin' || currentPersonnel.role === 'sales_manager'
+      : isAdmin ||
+        currentUser?.is_admin ||
+        currentUser?.app_role === 'admin' ||
+        currentUser?.app_role === 'sales_manager'
   );
 
   return (

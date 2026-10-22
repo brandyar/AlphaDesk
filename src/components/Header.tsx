@@ -26,7 +26,7 @@ interface HeaderProps {
   personnelList: Personnel[];
   currentPersonnel: Personnel | null;
   currentUser: AuthUser | null;
-  onSelectPersonnel: (p: Personnel) => void;
+  onSelectPersonnel?: (p: Personnel) => void;
   onOpenAuthModal: () => void;
   onLogout: () => void;
   expiredCount: number;
@@ -324,32 +324,6 @@ export const Header: React.FC<HeaderProps> = ({
                     )}
                   </div>
 
-                  {/* Switch Active User / Switch personnel (if Admin) */}
-                  {isAdmin && personnelList.length > 0 && (
-                    <div className="px-3.5 py-2 border-b border-[#282828]">
-                      <label className="block text-[10px] text-[#777777] mb-1 font-medium">
-                        مشاهده به عنوان کارشناس:
-                      </label>
-                      <select
-                        aria-label="سوئیچ سریع به عنوان کارشناس"
-                        value={currentPersonnel?.id || ''}
-                        onChange={(e) => {
-                          const selected = personnelList.find((p) => p.id === e.target.value);
-                          if (selected) {
-                            onSelectPersonnel(selected);
-                            setIsProfileMenuOpen(false);
-                          }
-                        }}
-                        className="w-full bg-[#121212] border border-[#282828] rounded-lg px-2 py-1 text-xs text-white focus:outline-none cursor-pointer"
-                      >
-                        {personnelList.map((p) => (
-                          <option key={p.id} value={p.id} className="bg-[#181818] text-white">
-                            {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
 
                   <div className="px-1 pt-1 space-y-0.5">
                     {onNavigateToPortal && (

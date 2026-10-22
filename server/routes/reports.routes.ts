@@ -39,50 +39,74 @@ router.get('/', async (req: Request, res: Response) => {
     });
   }
 
-  if (directusUrl && directusAdminToken && !isUnlimited && (!admin_filter || admin_filter === 'all') && (!staff_filter || staff_filter === 'all')) {
+  if (directusUrl && directusAdminToken && !isUnlimited) {
     try {
-      const directusPageLimit = Math.min(reqLimit, 50);
+      const directusPageLimit = Math.min(reqLimit, 100);
       let directusPath = `/items/customer_reports?page=${reqPage}&limit=${directusPageLimit}&meta=*&sort=-date_created`;
 
+      let andIdx = 0;
+
+      // Tenant filter: Only apply if a specific secondary branch (tenantNum > 1) is active
       if (tenantId && tenantId !== 'all') {
         const tenantNum = resolveDirectusTenantId(tenantId);
-        if (tenantNum) {
-          directusPath += `&filter[tenant_id][_eq]=${tenantNum}`;
+        if (tenantNum && tenantNum > 1) {
+          directusPath += `&filter[_and][${andIdx++}][tenant_id][_eq]=${tenantNum}`;
         }
       }
 
       if (customer_id) {
-        directusPath += `&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}`;
-      } else if (!isAdmin && (userName || personnelId)) {
+        directusPath += `&filter[_and][${andIdx++}][customer_id][_eq]=${encodeURIComponent(String(customer_id))}`;
+      } else if (!isAdmin && (userName || personnelId || userId)) {
+        let repOr = 0;
         if (userName) {
-          directusPath += `&filter[negotiator_name][_eq]=${encodeURIComponent(String(userName))}`;
-        } else if (personnelId) {
-          directusPath += `&filter[created_by][_eq]=${encodeURIComponent(String(personnelId))}`;
+          directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][negotiator_name][_icontains]=${encodeURIComponent(userName)}`;
         }
+        if (personnelId) {
+          directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][created_by][_eq]=${encodeURIComponent(String(personnelId))}`;
+          const rawP = String(personnelId).replace(/^p-/, '');
+          if (rawP !== String(personnelId)) {
+            directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][created_by][_eq]=${encodeURIComponent(rawP)}`;
+          }
+        }
+        if (userId) {
+          directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][created_by][_eq]=${encodeURIComponent(String(userId))}`;
+        }
+        andIdx++;
+      }
+
+      // Handle follow-up filter shortcuts in Directus
+      const activeFilter = isAdmin ? admin_filter : staff_filter;
+      if (activeFilter === 'active_followups') {
+        directusPath += `&filter[_and][${andIdx++}][next_followup_date][_nnull]=true`;
+      } else if (activeFilter === 'no_followup') {
+        directusPath += `&filter[_and][${andIdx++}][next_followup_date][_null]=true`;
       }
 
       if (status && status !== 'همه') {
         if (String(status) === 'قرارداد' || String(status) === 'قرارداد / فاکتور') {
-          directusPath += `&filter[negotiation_status][_in]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%20%2F%20%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%2F%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1`;
+          directusPath += `&filter[_and][${andIdx++}][negotiation_status][_in]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%20%2F%20%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%2F%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1`;
         } else {
-          directusPath += `&filter[negotiation_status][_eq]=${encodeURIComponent(String(status))}`;
+          directusPath += `&filter[_and][${andIdx++}][negotiation_status][_eq]=${encodeURIComponent(String(status))}`;
         }
       }
 
       if (negotiator && negotiator !== 'همه') {
-        directusPath += `&filter[negotiator_name][_eq]=${encodeURIComponent(String(negotiator))}`;
+        directusPath += `&filter[_and][${andIdx++}][negotiator_name][_eq]=${encodeURIComponent(String(negotiator))}`;
       }
 
       if (search && typeof search === 'string' && search.trim()) {
         const s = search.trim();
-        directusPath += `&filter[_or][0][report_text][_icontains]=${encodeURIComponent(s)}&filter[_or][1][negotiator_name][_icontains]=${encodeURIComponent(s)}&filter[_or][2][negotiation_phone][_icontains]=${encodeURIComponent(s)}`;
+        directusPath += `&filter[_and][${andIdx}][_or][0][report_text][_icontains]=${encodeURIComponent(s)}` +
+          `&filter[_and][${andIdx}][_or][1][negotiator_name][_icontains]=${encodeURIComponent(s)}` +
+          `&filter[_and][${andIdx}][_or][2][negotiation_phone][_icontains]=${encodeURIComponent(s)}`;
+        andIdx++;
       }
 
       if (start_date) {
-        directusPath += `&filter[date_created][_gte]=${encodeURIComponent(String(start_date))}`;
+        directusPath += `&filter[_and][${andIdx++}][date_created][_gte]=${encodeURIComponent(String(start_date))}`;
       }
       if (end_date) {
-        directusPath += `&filter[date_created][_lte]=${encodeURIComponent(String(end_date))}`;
+        directusPath += `&filter[_and][${andIdx++}][date_created][_lte]=${encodeURIComponent(String(end_date))}`;
       }
       if (fields) {
         directusPath += `&fields=${encodeURIComponent(String(fields))}`;

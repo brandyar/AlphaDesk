@@ -149,14 +149,14 @@ router.post('/check-duplicate', async (req: Request, res: Response) => {
 
 router.get('/', async (req: Request, res: Response) => {
   const { search, status, marketer_id, expired_only, page, limit, free_only, all } = req.query;
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+  const { userId, personnelId, isAdmin, userName, tenantId, canViewAllCustomers } = getRequestUser(req);
 
   const isUnlimited = all === 'true' || limit === 'all' || limit === '20000';
   const reqLimit = isUnlimited ? 500 : limit ? Math.min(Math.max(1, parseInt(String(limit), 10)), 500) : 25;
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
   const isFreeOnly = free_only === 'true';
 
-  if (!isAdmin && !userId && !personnelId && !isFreeOnly) {
+  if (!isAdmin && !canViewAllCustomers && !userId && !personnelId && !isFreeOnly) {
     return res.json({
       data: [],
       meta: { filter_count: 0, total_count: 0, page: reqPage, limit: reqLimit, total_pages: 1 },
@@ -205,37 +205,66 @@ router.get('/', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      let directusPath = `/items/customers?page=${reqPage}&limit=${reqLimit}&meta=filter_count&sort=-date_created`;
+      let directusPath = `/items/customers?page=${reqPage}&limit=${reqLimit}&meta=*&sort=-date_created`;
       directusPath += `&fields=id,company_name,business_type,province,city,manager_name,negotiator_name,mobile_numbers,landline_numbers,next_followup_date,assigned_marketer_id,assigned_marketer_name,assignment_deadline,status,is_expired,claimed_from_pool,date_created,date_updated,tenant_id`;
 
+      let andIdx = 0;
+
+      // Tenant filter: Only filter by tenant if tenantNum > 1 (a specific secondary organization)
       if (tenantId && tenantId !== 'all') {
         const tenantNum = resolveDirectusTenantId(tenantId);
-        if (tenantNum) {
-          directusPath += `&filter[tenant_id][_eq]=${tenantNum}`;
+        if (tenantNum && tenantNum > 1) {
+          directusPath += `&filter[_and][${andIdx++}][tenant_id][_eq]=${tenantNum}`;
         }
       }
 
+      // Marketer scoping for non-admins (marketers must only see their own assigned customers)
+      if (!isAdmin && !canViewAllCustomers && !isFreeOnly) {
+        const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
+        const rawUid = cleanPId.replace(/^p-/, '');
+        const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
+        const normUserName = userName ? userName.trim() : '';
+
+        let mOrIdx = 0;
+        if (cleanPId) {
+          directusPath += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`;
+          if (rawUid && rawUid !== cleanPId) {
+            directusPath += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(rawUid)}`;
+            directusPath += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent('p-' + rawUid)}`;
+          }
+        }
+        if (cleanUId && cleanUId !== cleanPId && cleanUId !== rawUid) {
+          directusPath += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(cleanUId)}`;
+        }
+        if (normUserName) {
+          directusPath += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_name][_icontains]=${encodeURIComponent(normUserName)}`;
+        }
+        andIdx++;
+      }
+
       if (status && status !== 'همه') {
-        directusPath += `&filter[status][_eq]=${encodeURIComponent(String(status))}`;
+        directusPath += `&filter[_and][${andIdx++}][status][_eq]=${encodeURIComponent(String(status))}`;
       }
       if (marketer_id && marketer_id !== 'همه') {
-        directusPath += `&filter[assigned_marketer_id][_eq]=${encodeURIComponent(String(marketer_id))}`;
+        directusPath += `&filter[_and][${andIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(String(marketer_id))}`;
       }
       if (expired_only === 'true') {
-        directusPath += `&filter[is_expired][_eq]=true`;
+        directusPath += `&filter[_and][${andIdx++}][is_expired][_eq]=true`;
       }
       if (isFreeOnly) {
-        directusPath += `&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true`;
+        directusPath += `&filter[_and][${andIdx}][_or][0][assigned_marketer_id][_null]=true&filter[_and][${andIdx}][_or][1][is_expired][_eq]=true`;
+        andIdx++;
       }
       if (search && typeof search === 'string' && search.trim()) {
         const s = search.trim();
-        directusPath += `&filter[_or][0][company_name][_icontains]=${encodeURIComponent(
+        directusPath += `&filter[_and][${andIdx}][_or][0][company_name][_icontains]=${encodeURIComponent(
           s
-        )}&filter[_or][1][manager_name][_icontains]=${encodeURIComponent(
+        )}&filter[_and][${andIdx}][_or][1][manager_name][_icontains]=${encodeURIComponent(
           s
-        )}&filter[_or][2][city][_icontains]=${encodeURIComponent(
+        )}&filter[_and][${andIdx}][_or][2][city][_icontains]=${encodeURIComponent(
           s
-        )}&filter[_or][3][business_type][_icontains]=${encodeURIComponent(s)}`;
+        )}&filter[_and][${andIdx}][_or][3][business_type][_icontains]=${encodeURIComponent(s)}`;
+        andIdx++;
       }
 
       const resData = await directusFetch(directusPath, {}, 1).catch(() => null);
@@ -246,7 +275,7 @@ router.get('/', async (req: Request, res: Response) => {
           items = items.filter((c: any) => matchesTenant(c.tenant_id, tenantId));
         }
 
-        if (!isAdmin && (userId || personnelId || userName) && !isFreeOnly) {
+        if (!isAdmin && !canViewAllCustomers && (userId || personnelId || userName) && !isFreeOnly) {
           const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
           const rawUid = cleanPId.replace(/^p-/, '');
           const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
