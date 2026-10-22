@@ -925,7 +925,26 @@ const handleMigrationImport = async (req: Request, res: Response) => {
     for (const r of reportRows) {
       const callId = String(r.CallID || r.callid || '').trim();
       const repText = String(r.report || r.report_text || 'ثبت پیگیری').trim();
-      const negotiator = String(r.negotiator || r.negotiator_name || 'کارشناس').trim();
+      
+      const uidRef = String(r.uid || r.negotiator || r.negotiator_name || r.user_id || '').trim();
+      let negotiator = String(r.negotiator || r.negotiator_name || '').trim();
+
+      if (uidRef) {
+        const matchedP = existingPersonnel.find(
+          (p) =>
+            p.id === uidRef ||
+            p.id === `p-${uidRef}` ||
+            (p.id && String(p.id).replace(/^p-/, '') === uidRef.replace(/^p-/, '')) ||
+            (p.username && p.username.toLowerCase() === uidRef.toLowerCase()) ||
+            (p.name && (p.name === uidRef || p.name.includes(uidRef)))
+        );
+        if (matchedP) {
+          negotiator = matchedP.name;
+        } else if (!negotiator) {
+          negotiator = `کارشناس ${uidRef}`;
+        }
+      }
+      if (!negotiator) negotiator = 'کارشناس';
       const callNum = normalizeContactValue(r.callNum || r.negotiation_phone || '');
       const status = normalizeLegacyStatus(r.status || r.negotiation_status);
       const rawRating = parseFloat(r.rating || '8');
