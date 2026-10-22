@@ -718,9 +718,10 @@ const handleMigrationImport = async (req: Request, res: Response) => {
     }
   }
 
+  const personnelToInsert: any[] = [];
+
   // 1. Process personnelRows
   if (Array.isArray(personnelRows) && personnelRows.length > 0) {
-    const personnelToInsert: any[] = [];
     for (const r of personnelRows) {
       const rawUid = String(r.uid || r.id || '').trim();
       if (!rawUid) continue;
@@ -837,6 +838,20 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         } else {
           assignedMarketerId = marketerRef.startsWith('p-') ? marketerRef : `p-${marketerRef}`;
           assignedMarketerName = `کارشناس ${marketerRef}`;
+
+          const newPlaceholderP: any = {
+            id: assignedMarketerId,
+            name: assignedMarketerName,
+            username: `user_${marketerRef}`,
+            email: `user_${marketerRef}@alphadesk.ir`,
+            phone: '',
+            role: 'marketer',
+            status: 'active',
+            tenant_id: targetTenantNum || 1,
+          };
+          existingPersonnel.push(newPlaceholderP);
+          personnelData.push(newPlaceholderP);
+          personnelToInsert.push(newPlaceholderP);
         }
       }
 
@@ -1016,8 +1031,14 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       importedReportsCount++;
     }
 
-    if (directusUrl && directusAdminToken && reportsToInsert.length > 0) {
-      // Ensure customers are created BEFORE reports to fulfill Foreign Key
+    if (directusUrl && directusAdminToken) {
+      if (personnelToInsert.length > 0) {
+        const sanitizedPersonnel = personnelToInsert.map(sanitizePersonnelForDirectus);
+        await directusSafeBatchInsert('personnel', sanitizedPersonnel, 25).catch((err) => {
+          errors.push(`خطا در ثبت پرسنل در دایرکتوس: ${err.message}`);
+        });
+        personnelToInsert.length = 0;
+      }
       if (customersToInsert.length > 0) {
         const sanitizedCusts = customersToInsert.map(sanitizeCustomerForDirectus);
         await directusSafeBatchInsert('customers', sanitizedCusts, 50).catch((err) => {
@@ -1025,14 +1046,22 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         });
         customersToInsert.length = 0; // cleared after insert
       }
-      const sanitizedReps = reportsToInsert.map(sanitizeReportForDirectus);
-      await directusSafeBatchInsert('customer_reports', sanitizedReps, 50).catch((err) => {
-        errors.push(`خطا در ثبت گزارش‌ها در دایرکتوس: ${err.message}`);
-      });
+      if (reportsToInsert.length > 0) {
+        const sanitizedReps = reportsToInsert.map(sanitizeReportForDirectus);
+        await directusSafeBatchInsert('customer_reports', sanitizedReps, 50).catch((err) => {
+          errors.push(`خطا در ثبت گزارش‌ها در دایرکتوس: ${err.message}`);
+        });
+      }
     }
   }
 
   if (directusUrl && directusAdminToken) {
+    if (personnelToInsert.length > 0) {
+      const sanitizedPersonnel = personnelToInsert.map(sanitizePersonnelForDirectus);
+      await directusSafeBatchInsert('personnel', sanitizedPersonnel, 25).catch((err) => {
+        errors.push(`خطا در ثبت پرسنل در دایرکتوس: ${err.message}`);
+      });
+    }
     if (customersToInsert.length > 0) {
       const sanitizedCusts = customersToInsert.map(sanitizeCustomerForDirectus);
       await directusSafeBatchInsert('customers', sanitizedCusts, 50).catch((err) => {
