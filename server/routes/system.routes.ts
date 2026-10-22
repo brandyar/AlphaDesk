@@ -610,6 +610,52 @@ function isValidUUID(str: any): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str.trim());
 }
 
+function sanitizeCustomerForDirectus(cust: any): any {
+  return {
+    id: cust.id,
+    company_name: cust.company_name || 'بدون نام',
+    business_type: cust.business_type || '',
+    province: cust.province || '',
+    city: cust.city || '',
+    manager_name: cust.manager_name || '',
+    mobile_numbers: Array.isArray(cust.mobile_numbers) ? cust.mobile_numbers : [],
+    landline_numbers: Array.isArray(cust.landline_numbers) ? cust.landline_numbers : [],
+    assigned_marketer_id: cust.assigned_marketer_id || null,
+    assigned_marketer_name: cust.assigned_marketer_name || null,
+    assignment_deadline: cust.assignment_deadline || null,
+    status: cust.status || 'تماس برقرار نشده',
+    is_expired: Boolean(cust.is_expired),
+    date_created: cust.date_created || new Date().toISOString(),
+  };
+}
+
+function sanitizeReportForDirectus(rep: any): any {
+  return {
+    id: rep.id,
+    customer_id: rep.customer_id,
+    report_text: rep.report_text || '',
+    negotiator_name: rep.negotiator_name || '',
+    negotiation_phone: rep.negotiation_phone || '',
+    negotiation_status: rep.negotiation_status || 'پیگیری قبل از انقضا',
+    negotiation_score: typeof rep.negotiation_score === 'number' ? rep.negotiation_score : 8,
+    next_followup_date: rep.next_followup_date || null,
+    date_created: rep.date_created || new Date().toISOString(),
+  };
+}
+
+function sanitizePersonnelForDirectus(p: any): any {
+  return {
+    id: p.id,
+    name: p.name || 'کارشناس',
+    username: p.username || '',
+    email: p.email || '',
+    phone: p.phone || '',
+    role: p.role || 'marketer',
+    status: p.status || 'active',
+    national_id: p.national_id || null,
+  };
+}
+
 // POST /api/migration/import
 const handleMigrationImport = async (req: Request, res: Response) => {
   const { tenant_id, personnelRows, customerRows, reportRows } = req.body;
@@ -668,7 +714,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
   for (const c of existingCustomers) {
     if (c.id) {
       if ((c as any).legacyCallId) globalCallIdToUUIDMap.set((c as any).legacyCallId, c.id);
-      if (c.company_name) globalCallIdToUUIDMap.set(c.company_name, c.id);
+      globalCallIdToUUIDMap.set(c.id, c.id);
     }
   }
 
@@ -726,7 +772,8 @@ const handleMigrationImport = async (req: Request, res: Response) => {
     }
 
     if (directusUrl && directusAdminToken && personnelToInsert.length > 0) {
-      await directusSafeBatchInsert('personnel', personnelToInsert, 25).catch((err) => {
+      const sanitizedPersonnel = personnelToInsert.map(sanitizePersonnelForDirectus);
+      await directusSafeBatchInsert('personnel', sanitizedPersonnel, 25).catch((err) => {
         errors.push(`خطا در ثبت پرسنل در دایرکتوس: ${err.message}`);
       });
     }
@@ -813,12 +860,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       if (callId) {
         globalCallIdToUUIDMap.set(callId, custId);
       }
-      if (companyName && companyName !== 'بدون نام') {
-        globalCallIdToUUIDMap.set(companyName, custId);
-      }
-      if (mobileNumbers.length > 0) {
-        globalCallIdToUUIDMap.set(mobileNumbers[0], custId);
-      }
+      globalCallIdToUUIDMap.set(custId, custId);
 
       // Check O(1) set to prevent duplicate inserts of identical customer IDs in same batch
       if (existingCustomerIdsSet.has(custId)) {
@@ -958,12 +1000,14 @@ const handleMigrationImport = async (req: Request, res: Response) => {
     if (directusUrl && directusAdminToken && reportsToInsert.length > 0) {
       // Ensure customers are created BEFORE reports to fulfill Foreign Key
       if (customersToInsert.length > 0) {
-        await directusSafeBatchInsert('customers', customersToInsert, 50).catch((err) => {
+        const sanitizedCusts = customersToInsert.map(sanitizeCustomerForDirectus);
+        await directusSafeBatchInsert('customers', sanitizedCusts, 50).catch((err) => {
           errors.push(`خطا در ثبت مشتریان در دایرکتوس: ${err.message}`);
         });
         customersToInsert.length = 0; // cleared after insert
       }
-      await directusSafeBatchInsert('customer_reports', reportsToInsert, 50).catch((err) => {
+      const sanitizedReps = reportsToInsert.map(sanitizeReportForDirectus);
+      await directusSafeBatchInsert('customer_reports', sanitizedReps, 50).catch((err) => {
         errors.push(`خطا در ثبت گزارش‌ها در دایرکتوس: ${err.message}`);
       });
     }
@@ -971,7 +1015,8 @@ const handleMigrationImport = async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     if (customersToInsert.length > 0) {
-      await directusSafeBatchInsert('customers', customersToInsert, 50).catch((err) => {
+      const sanitizedCusts = customersToInsert.map(sanitizeCustomerForDirectus);
+      await directusSafeBatchInsert('customers', sanitizedCusts, 50).catch((err) => {
         errors.push(`خطا در ثبت مشتریان در دایرکتوس: ${err.message}`);
       });
     }
