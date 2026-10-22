@@ -1012,6 +1012,20 @@ export async function bulkExtendOwnership(
   return handleResponse(res, 'خطا در تمدید مالکیت مشتریان');
 }
 
+export async function bulkSetOwnershipDeadline(params: {
+  target: 'all' | 'marketer' | 'selected';
+  marketer_id?: string;
+  customer_ids?: string[];
+  days: number;
+}): Promise<{ success: boolean; updatedCount: number; message: string }> {
+  const res = await fetch(`${BASE_URL}/customers/bulk-set-deadline`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(params),
+  });
+  return handleResponse(res, 'خطا در تنظیم سراسری مهلت مالکیت پرونده‌ها');
+}
+
 export async function bulkSwitchOwnership(
   customer_ids: string[],
   new_marketer_id: string,

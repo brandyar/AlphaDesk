@@ -84,7 +84,7 @@ import {
   toPersianDigits,
   getAvatarUrl,
 } from '../utils';
-import { fetchLeaveRequests } from '../api';
+import { fetchLeaveRequests, bulkSetOwnershipDeadline } from '../api';
 
 export const FAMILY_RELATION_OPTIONS = [
   'پدر',
@@ -721,6 +721,45 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   const [selectedExtendCustomerIds, setSelectedExtendCustomerIds] = useState<string[]>([]);
   const [extendDaysCount, setExtendDaysCount] = useState<number>(7);
   const [isSubmittingExtend, setIsSubmittingExtend] = useState(false);
+
+  // Global Ownership Reset state (تنظیم سراسری روزهای باقیمانده به عدد دلخواه)
+  const [globalExtendScope, setGlobalExtendScope] = useState<'all' | 'marketer' | 'selected'>('all');
+  const [globalExtendMarketerId, setGlobalExtendMarketerId] = useState<string>('');
+  const [customExtendDays, setCustomExtendDays] = useState<number>(30);
+  const [isSubmittingGlobalExtend, setIsSubmittingGlobalExtend] = useState(false);
+
+  const handleApplyGlobalExtend = async () => {
+    if (customExtendDays <= 0) {
+      showToast('لطفاً تعداد روز معتبری وارد کنید.', 'error');
+      return;
+    }
+    if (globalExtendScope === 'marketer' && !globalExtendMarketerId) {
+      showToast('لطفاً بازاریاب مورد نظر را انتخاب کنید.', 'error');
+      return;
+    }
+    if (globalExtendScope === 'selected' && selectedExtendCustomerIds.length === 0) {
+      showToast('هیچ پرونده‌ای از لیست پایین انتخاب نشده است.', 'error');
+      return;
+    }
+
+    setIsSubmittingGlobalExtend(true);
+    try {
+      const res = await bulkSetOwnershipDeadline({
+        target: globalExtendScope,
+        marketer_id: globalExtendScope === 'marketer' ? globalExtendMarketerId : undefined,
+        customer_ids: globalExtendScope === 'selected' ? selectedExtendCustomerIds : undefined,
+        days: customExtendDays,
+      });
+      showToast(res.message, 'success');
+      if (onRefreshData) {
+        await onRefreshData();
+      }
+    } catch (err: any) {
+      showToast(err.message || 'خطا در تنظیم سراسری مهلت مالکیت', 'error');
+    } finally {
+      setIsSubmittingGlobalExtend(false);
+    }
+  };
 
   const extendEligibleCustomers = useMemo(() => {
     return customers.filter((c) => {
@@ -2185,6 +2224,175 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {/* ------------------------------------------------------------- */}
       {activeSubTab === 'extend_ownership' && (
         <div className="bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-6 space-y-6">
+          {/* Quick Global Reset Banner / Tool */}
+          <div className="bg-gradient-to-r from-[#1c2e22] via-[#16221a] to-[#181818] border border-[#1DB954]/40 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#1DB954]/20 border border-[#1DB954]/30 flex items-center justify-center shrink-0">
+                  <CalendarDays className="w-5 h-5 text-[#1DB954]" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>تنظیم سراسری مهلت مالکیت (ریست روزهای باقیمانده به عدد دلخواه)</span>
+                    <span className="text-[10px] bg-[#1DB954]/20 text-[#1DB954] px-2 py-0.5 rounded-full font-mono border border-[#1DB954]/30">
+                      اقدام دسته‌جمعی
+                    </span>
+                  </h4>
+                  <p className="text-xs text-[#a0a0a0] mt-0.5">
+                    تغییر یکپارچه روزهای باقیمانده مالکیت به عدد دلخواه شما (مثلاً ۳۰ روز یا هر مقدار دیگر) از تاریخ امروز
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <button
+                type="button"
+                onClick={handleApplyGlobalExtend}
+                disabled={isSubmittingGlobalExtend}
+                className="self-stretch sm:self-auto px-5 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] disabled:opacity-50 text-black font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+              >
+                {isSubmittingGlobalExtend ? (
+                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 fill-black stroke-black" />
+                )}
+                <span>
+                  {isSubmittingGlobalExtend
+                    ? 'در حال اعمال...'
+                    : `اعمال ${toPersianDigits(customExtendDays)} روز مهلت به ${
+                        globalExtendScope === 'all'
+                          ? `همه مشتریان (${toPersianDigits(customers.length)})`
+                          : globalExtendScope === 'marketer'
+                          ? 'مشتریان بازاریاب انتخابی'
+                          : `${toPersianDigits(selectedExtendCustomerIds.length)} پرونده انتخابی`
+                      }`}
+                </span>
+              </button>
+            </div>
+
+            {/* Scope Selection & Days Input Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-2 border-t border-[#1DB954]/20">
+              {/* Scope Selector (7 cols) */}
+              <div className="md:col-span-7 space-y-2">
+                <span className="text-[11px] font-semibold text-[#B3B3B3] block">
+                  دامنه اعمال تغییرات:
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setGlobalExtendScope('all')}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium border text-center transition-all ${
+                      globalExtendScope === 'all'
+                        ? 'bg-[#1DB954]/20 border-[#1DB954] text-white shadow-sm'
+                        : 'bg-[#121212] border-[#2c2c2c] text-[#888] hover:text-white'
+                    }`}
+                  >
+                    <div>همه مشتریان</div>
+                    <div className="text-[10px] text-[#777] mt-0.5 font-mono">
+                      {toPersianDigits(customers.length)} پرونده
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setGlobalExtendScope('marketer')}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium border text-center transition-all ${
+                      globalExtendScope === 'marketer'
+                        ? 'bg-[#1DB954]/20 border-[#1DB954] text-white shadow-sm'
+                        : 'bg-[#121212] border-[#2c2c2c] text-[#888] hover:text-white'
+                    }`}
+                  >
+                    <div>مشتریان یک بازاریاب</div>
+                    <div className="text-[10px] text-[#777] mt-0.5">تفکیک بازاریاب</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setGlobalExtendScope('selected')}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium border text-center transition-all ${
+                      globalExtendScope === 'selected'
+                        ? 'bg-[#1DB954]/20 border-[#1DB954] text-white shadow-sm'
+                        : 'bg-[#121212] border-[#2c2c2c] text-[#888] hover:text-white'
+                    }`}
+                  >
+                    <div>انتخاب‌شده‌های لیست</div>
+                    <div className="text-[10px] text-[#777] mt-0.5 font-mono">
+                      {toPersianDigits(selectedExtendCustomerIds.length)} پرونده
+                    </div>
+                  </button>
+                </div>
+
+                {/* Sub-selector if marketer is chosen */}
+                {globalExtendScope === 'marketer' && (
+                  <div className="pt-1">
+                    <select
+                      value={globalExtendMarketerId}
+                      onChange={(e) => setGlobalExtendMarketerId(e.target.value)}
+                      className="w-full h-9 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#1DB954]/50 focus:outline-none"
+                    >
+                      <option value="">-- انتخاب بازاریاب مسئول --</option>
+                      {personnelList.map((p) => {
+                        const cnt = customers.filter((c) => c.assigned_marketer_id === p.id).length;
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({toPersianDigits(cnt)} مشتری)
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Number of Days Input (5 cols) */}
+              <div className="md:col-span-5 space-y-2">
+                <span className="text-[11px] font-semibold text-[#B3B3B3] block">
+                  تعداد روزهای مهلت از امروز (عدد دلخواه):
+                </span>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      min={1}
+                      max={3650}
+                      value={customExtendDays}
+                      onChange={(e) => setCustomExtendDays(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full h-10 px-3 pr-4 pl-12 bg-[#121212] rounded-xl text-sm font-bold text-white border border-[#333] focus:border-[#1DB954] focus:outline-none"
+                    />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#888]">
+                      روز
+                    </span>
+                  </div>
+                </div>
+
+                {/* Quick select presets */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-[#666]">پیش‌فرض‌ها:</span>
+                  {[
+                    { days: 15, label: '۱۵ روز' },
+                    { days: 30, label: '۳۰ روز (۱ ماه)' },
+                    { days: 45, label: '۴۵ روز' },
+                    { days: 60, label: '۶۰ روز (۲ ماه)' },
+                    { days: 90, label: '۹۰ روز (۳ ماه)' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.days}
+                      type="button"
+                      onClick={() => setCustomExtendDays(preset.days)}
+                      className={`text-[11px] px-2 py-0.5 rounded-lg border transition-all ${
+                        customExtendDays === preset.days
+                          ? 'bg-[#1DB954] text-black font-bold border-[#1DB954]'
+                          : 'bg-[#121212] text-[#888] hover:text-white border-[#2b2b2b]'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#282828] pb-4">
             <div className="flex items-center gap-2">
               <Clock className="w-5 h-5 text-[#1DB954]" />

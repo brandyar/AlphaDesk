@@ -10,7 +10,7 @@ import {
   personnelData,
   addDays,
 } from '../config.ts';
-import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
+import { directusFetch, directusFetchAllPages, directusSafeBatchPatch } from '../directus/client.ts';
 import {
   ensureCustomersCache,
   invalidateCustomersCache,
@@ -408,6 +408,170 @@ router.get('/:id', async (req: Request, res: Response) => {
   cust.contacts = contactsData.filter((ct) => String(ct.customer_id) === String(id));
 
   res.json(cust);
+});
+
+// POST /api/customers/bulk-set-deadline
+router.post('/bulk-set-deadline', async (req: Request, res: Response) => {
+  const { target = 'all', marketer_id, customer_ids, days = 30 } = req.body;
+  const daysCount = parseInt(String(days), 10) || 30;
+  const nowMs = Date.now();
+  const deadlineIso = new Date(nowMs + daysCount * 86400 * 1000).toISOString();
+
+  let targetCustomerIds: string[] = [];
+
+  if (target === 'selected' && Array.isArray(customer_ids) && customer_ids.length > 0) {
+    targetCustomerIds = customer_ids.map(String);
+  } else if (target === 'marketer' && marketer_id) {
+    targetCustomerIds = customersData
+      .filter((c) => String(c.assigned_marketer_id) === String(marketer_id))
+      .map((c) => c.id);
+  } else {
+    // 'all'
+    targetCustomerIds = customersData.map((c) => c.id);
+  }
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      if (target === 'all' || target === 'marketer') {
+        const queryFilter = target === 'marketer' && marketer_id
+          ? `?filter[assigned_marketer_id][_eq]=${encodeURIComponent(marketer_id)}&limit=50000&fields=id`
+          : '?limit=50000&fields=id';
+        const dRes = await directusFetchAllPages(`/items/customers${queryFilter}`).catch(() => null);
+        const dItems = Array.isArray(dRes) ? dRes : (dRes?.data || []);
+        if (dItems.length > 0) {
+          targetCustomerIds = Array.from(new Set([...targetCustomerIds, ...dItems.map((item: any) => String(item.id))]));
+        }
+      }
+
+      const patchMap = new Map<string, any>();
+      for (const cid of targetCustomerIds) {
+        patchMap.set(cid, {
+          id: cid,
+          assignment_deadline: deadlineIso,
+          is_expired: false,
+        });
+      }
+
+      await directusSafeBatchPatch('customers', patchMap, 50);
+    } catch (e: any) {
+      console.warn('Error patching customers deadline in Directus:', e.message);
+    }
+  }
+
+  // Update in-memory customersData
+  let updatedCount = 0;
+  for (const c of customersData) {
+    if (targetCustomerIds.length === 0 || targetCustomerIds.includes(c.id)) {
+      c.assignment_deadline = deadlineIso;
+      c.is_expired = false;
+      updatedCount++;
+    }
+  }
+
+  invalidateCustomersCache();
+
+  return res.json({
+    success: true,
+    updatedCount: targetCustomerIds.length || updatedCount,
+    deadline: deadlineIso,
+    message: `مهلت مالکیت ${targetCustomerIds.length || updatedCount} پرونده با موفقیت به ${daysCount} روز (تا تاریخ سررسید جدید) تنظیم گردید.`,
+  });
+});
+
+// POST /api/customers/bulk-extend
+router.post('/bulk-extend', async (req: Request, res: Response) => {
+  const { customer_ids, extend_days = 7 } = req.body;
+  const daysCount = parseInt(String(extend_days), 10) || 7;
+  const nowMs = Date.now();
+  const deadlineIso = new Date(nowMs + daysCount * 86400 * 1000).toISOString();
+
+  const targetIds: string[] = Array.isArray(customer_ids) ? customer_ids.map(String) : [];
+  if (targetIds.length === 0) {
+    return res.status(400).json({ error: 'NO_CUSTOMERS', message: 'هیچ پرونده‌ای انتخاب نشده است.' });
+  }
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const patchMap = new Map<string, any>();
+      for (const cid of targetIds) {
+        patchMap.set(cid, {
+          id: cid,
+          assignment_deadline: deadlineIso,
+          is_expired: false,
+        });
+      }
+      await directusSafeBatchPatch('customers', patchMap, 50);
+    } catch (e: any) {
+      console.warn('Directus bulk-extend error:', e.message);
+    }
+  }
+
+  for (const c of customersData) {
+    if (targetIds.includes(c.id)) {
+      c.assignment_deadline = deadlineIso;
+      c.is_expired = false;
+    }
+  }
+
+  invalidateCustomersCache();
+
+  return res.json({
+    success: true,
+    updatedCount: targetIds.length,
+    message: `مهلت مالکیت ${targetIds.length} پرونده با موفقیت به مدت ${daysCount} روز تمدید گردید.`,
+  });
+});
+
+// POST /api/customers/bulk-switch
+router.post('/bulk-switch', async (req: Request, res: Response) => {
+  const { customer_ids, new_marketer_id, new_marketer_name, duration_days = 7 } = req.body;
+  const daysCount = parseInt(String(duration_days), 10) || 7;
+  const nowTime = new Date();
+  const deadlineIso = new Date(nowTime.getTime() + daysCount * 86400 * 1000).toISOString();
+
+  const targetIds: string[] = Array.isArray(customer_ids) ? customer_ids.map(String) : [];
+  if (targetIds.length === 0) {
+    return res.status(400).json({ error: 'NO_CUSTOMERS', message: 'هیچ پرونده‌ای انتخاب نشده است.' });
+  }
+
+  const resolved = await resolvePersonnelId(new_marketer_id, new_marketer_name);
+  const targetPId = resolved.personnelId;
+  const targetPName = resolved.personnelName || new_marketer_name || 'کارشناس فروش';
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const patchMap = new Map<string, any>();
+      for (const cid of targetIds) {
+        patchMap.set(cid, {
+          id: cid,
+          assigned_marketer_id: targetPId,
+          assigned_marketer_name: targetPName,
+          assignment_deadline: deadlineIso,
+          is_expired: false,
+        });
+      }
+      await directusSafeBatchPatch('customers', patchMap, 50);
+    } catch (e: any) {
+      console.warn('Directus bulk-switch error:', e.message);
+    }
+  }
+
+  for (const c of customersData) {
+    if (targetIds.includes(c.id)) {
+      c.assigned_marketer_id = targetPId;
+      c.assigned_marketer_name = targetPName;
+      c.assignment_deadline = deadlineIso;
+      c.is_expired = false;
+    }
+  }
+
+  invalidateCustomersCache();
+
+  return res.json({
+    success: true,
+    updatedCount: targetIds.length,
+    message: `تعداد ${targetIds.length} پرونده با موفقیت به «${targetPName}» واگذار شد.`,
+  });
 });
 
 router.post('/', async (req: Request, res: Response) => {
