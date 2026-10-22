@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Users,
   Users2,
@@ -56,12 +56,14 @@ import {
   EyeOff,
   Save,
   AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { DataMigrationView } from './DataMigrationView';
 import { SmsSettingsTab } from './team/SmsSettingsTab';
 import { LeaveApprovalsTab } from './team/LeaveApprovalsTab';
 import { ReviewRequestModal } from './team/ReviewRequestModal';
 import { PermissionsMatrix } from './team/PermissionsMatrix';
+import { PaginationControl } from './PaginationControl';
 import {
   Personnel,
   Customer,
@@ -84,7 +86,7 @@ import {
   toPersianDigits,
   getAvatarUrl,
 } from '../utils';
-import { fetchLeaveRequests, bulkSetOwnershipDeadline } from '../api';
+import { fetchLeaveRequests, bulkSetOwnershipDeadline, fetchCustomersPaginated, DashboardSummary } from '../api';
 
 export const FAMILY_RELATION_OPTIONS = [
   'پدر',
@@ -242,6 +244,7 @@ interface TeamManagementViewProps {
   initialSubTab?: TeamSubTab;
   personnelList: Personnel[];
   customers: Customer[];
+  dashboardSummary?: DashboardSummary | null;
   leaveRequests: LeaveRequest[];
   currentPersonnel: Personnel | null;
   isAdmin: boolean;
@@ -264,6 +267,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   initialSubTab = 'colleagues_list',
   personnelList,
   customers,
+  dashboardSummary,
   leaveRequests,
   currentPersonnel,
   isAdmin,
@@ -714,13 +718,90 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   };
 
   // -------------------------------------------------------------
-  // TAB 3: Extend Ownership State (تمدید مالکیت)
+  // TAB 3: Extend Ownership State (تمدید مالکیت با لود مستقیم از سرور)
   // -------------------------------------------------------------
   const [extendMarketerFilter, setExtendMarketerFilter] = useState<string>('all');
   const [extendSearch, setExtendSearch] = useState('');
   const [selectedExtendCustomerIds, setSelectedExtendCustomerIds] = useState<string[]>([]);
   const [extendDaysCount, setExtendDaysCount] = useState<number>(7);
   const [isSubmittingExtend, setIsSubmittingExtend] = useState(false);
+
+  // Live Server Paginated state for Extend Tab
+  const [extendCustomers, setExtendCustomers] = useState<Customer[]>([]);
+  const [extendCurrentPage, setExtendCurrentPage] = useState<number>(1);
+  const [extendPageSize, setExtendPageSize] = useState<number>(25);
+  const [extendTotalCount, setExtendTotalCount] = useState<number>(0);
+  const [extendTotalPages, setExtendTotalPages] = useState<number>(1);
+  const [isLoadingExtend, setIsLoadingExtend] = useState<boolean>(false);
+
+  const loadExtendCustomers = useCallback(async () => {
+    setIsLoadingExtend(true);
+    try {
+      const res = await fetchCustomersPaginated({
+        page: extendCurrentPage,
+        limit: extendPageSize,
+        search: extendSearch.trim() || undefined,
+        marketer_id: extendMarketerFilter !== 'all' ? extendMarketerFilter : undefined,
+      });
+      setExtendCustomers(res.data);
+      setExtendTotalCount(res.meta.filter_count);
+      setExtendTotalPages(res.meta.total_pages);
+    } catch (err: any) {
+      console.warn('Failed to load extend customers:', err);
+    } finally {
+      setIsLoadingExtend(false);
+    }
+  }, [extendCurrentPage, extendPageSize, extendSearch, extendMarketerFilter]);
+
+  // Reset to page 1 on search or filter change
+  useEffect(() => {
+    setExtendCurrentPage(1);
+  }, [extendSearch, extendMarketerFilter]);
+
+  // Load when tab active or params change
+  useEffect(() => {
+    if (activeSubTab === 'extend_ownership') {
+      loadExtendCustomers();
+    }
+  }, [activeSubTab, loadExtendCustomers]);
+
+  const handleToggleSelectExtend = (id: string) => {
+    setSelectedExtendCustomerIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllExtend = () => {
+    if (selectedExtendCustomerIds.length === extendCustomers.length && extendCustomers.length > 0) {
+      setSelectedExtendCustomerIds([]);
+    } else {
+      setSelectedExtendCustomerIds(extendCustomers.map((c) => c.id));
+    }
+  };
+
+  const handleConfirmExtendOwnership = async () => {
+    if (selectedExtendCustomerIds.length === 0) {
+      showToast('لطفاً حداقل یک مشتری را انتخاب کنید.', 'error');
+      return;
+    }
+    setIsSubmittingExtend(true);
+    try {
+      await onBulkExtendOwnership(selectedExtendCustomerIds, extendDaysCount);
+      showToast(
+        `مهلت مالکیت ${toPersianDigits(selectedExtendCustomerIds.length)} پرونده با موفقیت ${toPersianDigits(extendDaysCount)} روز تمدید شد.`,
+        'success'
+      );
+      setSelectedExtendCustomerIds([]);
+      await loadExtendCustomers();
+      if (onRefreshData) {
+        await onRefreshData();
+      }
+    } catch (err: any) {
+      showToast(err.message || 'خطا در تمدید مهلت پرونده‌ها', 'error');
+    } finally {
+      setIsSubmittingExtend(false);
+    }
+  };
 
   // Global Ownership Reset state (تنظیم سراسری روزهای باقیمانده به عدد دلخواه)
   const [globalExtendScope, setGlobalExtendScope] = useState<'all' | 'marketer' | 'selected'>('all');
@@ -751,6 +832,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
         days: customExtendDays,
       });
       showToast(res.message, 'success');
+      setSelectedExtendCustomerIds([]);
+      await loadExtendCustomers();
       if (onRefreshData) {
         await onRefreshData();
       }
@@ -761,57 +844,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
     }
   };
 
-  const extendEligibleCustomers = useMemo(() => {
-    return customers.filter((c) => {
-      if (extendMarketerFilter !== 'all' && c.assigned_marketer_id !== extendMarketerFilter) {
-        return false;
-      }
-      if (extendSearch.trim()) {
-        const q = extendSearch.toLowerCase();
-        const matchName = c.company_name?.toLowerCase().includes(q);
-        const matchManager = c.manager_name?.toLowerCase().includes(q);
-        if (!matchName && !matchManager) return false;
-      }
-      return true;
-    });
-  }, [customers, extendMarketerFilter, extendSearch]);
-
-  const handleToggleSelectExtend = (id: string) => {
-    setSelectedExtendCustomerIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  const handleSelectAllExtend = () => {
-    if (selectedExtendCustomerIds.length === extendEligibleCustomers.length) {
-      setSelectedExtendCustomerIds([]);
-    } else {
-      setSelectedExtendCustomerIds(extendEligibleCustomers.map((c) => c.id));
-    }
-  };
-
-  const handleConfirmExtendOwnership = async () => {
-    if (selectedExtendCustomerIds.length === 0) {
-      showToast('لطفاً حداقل یک مشتری را انتخاب کنید.', 'error');
-      return;
-    }
-    setIsSubmittingExtend(true);
-    try {
-      await onBulkExtendOwnership(selectedExtendCustomerIds, extendDaysCount);
-      showToast(
-        `مهلت مالکیت ${toPersianDigits(selectedExtendCustomerIds.length)} پرونده با موفقیت ${toPersianDigits(extendDaysCount)} روز تمدید شد.`,
-        'success'
-      );
-      setSelectedExtendCustomerIds([]);
-    } catch (err: any) {
-      showToast(err.message || 'خطا در تمدید مهلت پرونده‌ها', 'error');
-    } finally {
-      setIsSubmittingExtend(false);
-    }
-  };
-
   // -------------------------------------------------------------
-  // TAB 4: Switch Ownership State (سوئیچ مالکیت)
+  // TAB 4: Switch Ownership State (سوئیچ مالکیت با لود مستقیم از سرور)
   // -------------------------------------------------------------
   const [sourceMarketerId, setSourceMarketerId] = useState<string>('all');
   const [targetMarketerId, setTargetMarketerId] = useState<string>('');
@@ -820,20 +854,42 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   const [switchDurationDays, setSwitchDurationDays] = useState<number>(7);
   const [isSubmittingSwitch, setIsSubmittingSwitch] = useState(false);
 
-  const switchEligibleCustomers = useMemo(() => {
-    return customers.filter((c) => {
-      if (sourceMarketerId !== 'all' && c.assigned_marketer_id !== sourceMarketerId) {
-        return false;
-      }
-      if (switchSearch.trim()) {
-        const q = switchSearch.toLowerCase();
-        const matchName = c.company_name?.toLowerCase().includes(q);
-        const matchManager = c.manager_name?.toLowerCase().includes(q);
-        if (!matchName && !matchManager) return false;
-      }
-      return true;
-    });
-  }, [customers, sourceMarketerId, switchSearch]);
+  // Live Server Paginated state for Switch Tab
+  const [switchCustomers, setSwitchCustomers] = useState<Customer[]>([]);
+  const [switchCurrentPage, setSwitchCurrentPage] = useState<number>(1);
+  const [switchPageSize, setSwitchPageSize] = useState<number>(25);
+  const [switchTotalCount, setSwitchTotalCount] = useState<number>(0);
+  const [switchTotalPages, setSwitchTotalPages] = useState<number>(1);
+  const [isLoadingSwitch, setIsLoadingSwitch] = useState<boolean>(false);
+
+  const loadSwitchCustomers = useCallback(async () => {
+    setIsLoadingSwitch(true);
+    try {
+      const res = await fetchCustomersPaginated({
+        page: switchCurrentPage,
+        limit: switchPageSize,
+        search: switchSearch.trim() || undefined,
+        marketer_id: sourceMarketerId !== 'all' ? sourceMarketerId : undefined,
+      });
+      setSwitchCustomers(res.data);
+      setSwitchTotalCount(res.meta.filter_count);
+      setSwitchTotalPages(res.meta.total_pages);
+    } catch (err: any) {
+      console.warn('Failed to load switch customers:', err);
+    } finally {
+      setIsLoadingSwitch(false);
+    }
+  }, [switchCurrentPage, switchPageSize, switchSearch, sourceMarketerId]);
+
+  useEffect(() => {
+    setSwitchCurrentPage(1);
+  }, [switchSearch, sourceMarketerId]);
+
+  useEffect(() => {
+    if (activeSubTab === 'switch_ownership') {
+      loadSwitchCustomers();
+    }
+  }, [activeSubTab, loadSwitchCustomers]);
 
   const handleToggleSelectSwitch = (id: string) => {
     setSelectedSwitchCustomerIds((prev) =>
@@ -842,10 +898,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   };
 
   const handleSelectAllSwitch = () => {
-    if (selectedSwitchCustomerIds.length === switchEligibleCustomers.length) {
+    if (selectedSwitchCustomerIds.length === switchCustomers.length && switchCustomers.length > 0) {
       setSelectedSwitchCustomerIds([]);
     } else {
-      setSelectedSwitchCustomerIds(switchEligibleCustomers.map((c) => c.id));
+      setSelectedSwitchCustomerIds(switchCustomers.map((c) => c.id));
     }
   };
 
@@ -874,6 +930,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
         'success'
       );
       setSelectedSwitchCustomerIds([]);
+      await loadSwitchCustomers();
+      if (onRefreshData) {
+        await onRefreshData();
+      }
     } catch (err: any) {
       showToast(err.message || 'خطا در واگذاری پرونده‌ها', 'error');
     } finally {
@@ -2261,7 +2321,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     ? 'در حال اعمال...'
                     : `اعمال ${toPersianDigits(customExtendDays)} روز مهلت به ${
                         globalExtendScope === 'all'
-                          ? `همه مشتریان (${toPersianDigits(customers.length)})`
+                          ? `همه مشتریان (${toPersianDigits(dashboardSummary?.total_customers ?? (extendTotalCount || (customers?.length || 0)))})`
                           : globalExtendScope === 'marketer'
                           ? 'مشتریان بازاریاب انتخابی'
                           : `${toPersianDigits(selectedExtendCustomerIds.length)} پرونده انتخابی`
@@ -2289,7 +2349,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                   >
                     <div>همه مشتریان</div>
                     <div className="text-[10px] text-[#777] mt-0.5 font-mono">
-                      {toPersianDigits(customers.length)} پرونده
+                      {toPersianDigits(dashboardSummary?.total_customers ?? (extendTotalCount || (customers?.length || 0)))} پرونده
                     </div>
                   </button>
 
@@ -2331,14 +2391,11 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       className="w-full h-9 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#1DB954]/50 focus:outline-none"
                     >
                       <option value="">-- انتخاب بازاریاب مسئول --</option>
-                      {personnelList.map((p) => {
-                        const cnt = customers.filter((c) => c.assigned_marketer_id === p.id).length;
-                        return (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({toPersianDigits(cnt)} مشتری)
-                          </option>
-                        );
-                      })}
+                      {personnelList.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 )}
@@ -2465,20 +2522,25 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               onClick={handleSelectAllExtend}
               className="text-xs text-[#1DB954] hover:underline font-semibold"
             >
-              {selectedExtendCustomerIds.length === extendEligibleCustomers.length
+              {selectedExtendCustomerIds.length === extendCustomers.length && extendCustomers.length > 0
                 ? 'لغو انتخاب همه'
-                : 'انتخاب همه پرونده‌ها'}
+                : 'انتخاب همه پرونده‌های این صفحه'}
             </button>
           </div>
 
           {/* Customers Table */}
           <div className="space-y-2">
-            {extendEligibleCustomers.length === 0 ? (
+            {isLoadingExtend ? (
+              <div className="p-12 text-center text-xs text-[#888] flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-6 h-6 animate-spin text-[#1DB954]" />
+                <span>در حال دریافت لیست پرونده‌ها از پایگاه داده...</span>
+              </div>
+            ) : extendCustomers.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#888]">
                 هیچ پرونده‌ای منطبق با فیلتر یافت نشد.
               </div>
             ) : (
-              extendEligibleCustomers.map((c) => {
+              extendCustomers.map((c) => {
                 const isSelected = selectedExtendCustomerIds.includes(c.id);
                 const statusTheme = getStatusTheme(c.status);
                 const timeRem = formatTimeRemaining(c.assignment_deadline);
@@ -2525,6 +2587,18 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               })
             )}
           </div>
+
+          {/* Pagination Controls */}
+          <PaginationControl
+            currentPage={extendCurrentPage}
+            totalPages={extendTotalPages}
+            totalCount={extendTotalCount}
+            pageSize={extendPageSize}
+            displayedCount={extendCustomers.length}
+            isLoading={isLoadingExtend}
+            onPageChange={(p) => setExtendCurrentPage(p)}
+            label="پرونده مشتری"
+          />
         </div>
       )}
 
@@ -2618,20 +2692,25 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               onClick={handleSelectAllSwitch}
               className="text-xs text-blue-400 hover:underline font-semibold"
             >
-              {selectedSwitchCustomerIds.length === switchEligibleCustomers.length
+              {selectedSwitchCustomerIds.length === switchCustomers.length && switchCustomers.length > 0
                 ? 'لغو انتخاب همه'
-                : 'انتخاب همه پرونده‌ها'}
+                : 'انتخاب همه پرونده‌های این صفحه'}
             </button>
           </div>
 
           {/* Customers List */}
           <div className="space-y-2">
-            {switchEligibleCustomers.length === 0 ? (
+            {isLoadingSwitch ? (
+              <div className="p-12 text-center text-xs text-[#888] flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+                <span>در حال دریافت لیست پرونده‌ها از پایگاه داده...</span>
+              </div>
+            ) : switchCustomers.length === 0 ? (
               <div className="p-8 text-center text-xs text-[#888]">
                 هیچ پرونده‌ای برای واگذاری یافت نشد.
               </div>
             ) : (
-              switchEligibleCustomers.map((c) => {
+              switchCustomers.map((c) => {
                 const isSelected = selectedSwitchCustomerIds.includes(c.id);
                 const statusTheme = getStatusTheme(c.status);
                 const timeRem = formatTimeRemaining(c.assignment_deadline);
@@ -2678,6 +2757,18 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               })
             )}
           </div>
+
+          {/* Pagination Controls */}
+          <PaginationControl
+            currentPage={switchCurrentPage}
+            totalPages={switchTotalPages}
+            totalCount={switchTotalCount}
+            pageSize={switchPageSize}
+            displayedCount={switchCustomers.length}
+            isLoading={isLoadingSwitch}
+            onPageChange={(p) => setSwitchCurrentPage(p)}
+            label="پرونده مشتری"
+          />
         </div>
       )}
 

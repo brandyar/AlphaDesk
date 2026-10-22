@@ -1142,6 +1142,7 @@ export default function App() {
                     initialSubTab={teamSubTab}
                     personnelList={personnelList}
                     customers={customers}
+                    dashboardSummary={dashboardSummary}
                     leaveRequests={leaveRequests}
                     currentPersonnel={currentPersonnel}
                     isAdmin={isCurrentUserAdmin}
