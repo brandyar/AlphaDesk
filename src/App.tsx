@@ -223,14 +223,16 @@ export default function App() {
       const targetUser = activeUser !== undefined ? activeUser : currentUser;
       const targetPContext = activeP !== undefined ? activeP : currentPersonnel;
 
-      // 1. Fetch Core Metadata (personnel, tenants, status, summary, leave & advance requests)
-      const [pData, tData, bStatus, dSummary, lData, aData] = await Promise.all([
+      // 1. Fetch Core Metadata (personnel, tenants, status, summary, leave & advance requests, customers, reports)
+      const [pData, tData, bStatus, dSummary, lData, aData, cData, rData] = await Promise.all([
         fetchPersonnel().catch(() => []),
         fetchTenants().catch(() => []),
         fetchBffStatus().catch(() => null),
         fetchDashboardSummary().catch(() => null),
         fetchLeaveRequests().catch(() => []),
         fetchAdvanceRequests().catch(() => []),
+        fetchCustomers({ all: true }).catch(() => []),
+        fetchCustomerReports().catch(() => []),
       ]);
 
       // If a newer fetch was started (e.g. user switched tenant or logged in), discard stale results
@@ -242,6 +244,8 @@ export default function App() {
       if (dSummary) setDashboardSummary(dSummary);
       if (Array.isArray(lData)) setLeaveRequests(lData);
       if (Array.isArray(aData)) setAdvanceRequests(aData);
+      if (Array.isArray(cData)) setCustomers(cData);
+      if (Array.isArray(rData)) setReports(rData);
 
       // Accurately match logged-in user to their specific personnel record
       let targetPersonnel = activeP !== undefined ? activeP : null;

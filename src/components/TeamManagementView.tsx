@@ -85,6 +85,7 @@ import {
   getStatusTheme,
   toPersianDigits,
   getAvatarUrl,
+  matchPersonnelToCustomer,
 } from '../utils';
 import { fetchLeaveRequests, bulkSetOwnershipDeadline, fetchCustomersPaginated, DashboardSummary } from '../api';
 
@@ -1910,8 +1911,11 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 </thead>
                 <tbody className="divide-y divide-[#222222] text-xs text-[#CCCCCC]">
                   {filteredPersonnel.map((p) => {
-                    const assignedCusts = customers.filter((c) => c.assigned_marketer_id === p.id);
-                    const wonCusts = assignedCusts.filter((c) => c.status === 'قرارداد');
+                    const assignedCusts = customers.filter((c) => matchPersonnelToCustomer(c, p));
+                    const wonCusts = assignedCusts.filter((c) => {
+                      const st = String(c.status || '');
+                      return st === 'قرارداد' || st === 'قرارداد / فاکتور' || st === 'قرارداد/فاکتور' || st === 'فاکتور';
+                    });
                     const roleCfg = PERSONNEL_ROLE_CONFIG[p.role as PersonnelRole] || {
                       label: p.role,
                       badgeClass: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
@@ -2070,8 +2074,11 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           {/* CARD GRID VIEW (Visible on mobile, or when colleagueViewMode === 'grid' on desktop) */}
           <div className={`${colleagueViewMode === 'list' ? 'block md:hidden' : 'block'} grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4`}>
               {filteredPersonnel.map((p) => {
-                const assignedCusts = customers.filter((c) => c.assigned_marketer_id === p.id);
-                const wonCusts = assignedCusts.filter((c) => c.status === 'قرارداد');
+                const assignedCusts = customers.filter((c) => matchPersonnelToCustomer(c, p));
+                const wonCusts = assignedCusts.filter((c) => {
+                  const st = String(c.status || '');
+                  return st === 'قرارداد' || st === 'قرارداد / فاکتور' || st === 'قرارداد/فاکتور' || st === 'فاکتور';
+                });
                 const roleCfg = PERSONNEL_ROLE_CONFIG[p.role as PersonnelRole] || {
                   label: p.role,
                   badgeClass: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
