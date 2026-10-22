@@ -676,6 +676,7 @@ function sanitizeReportForDirectus(rep: any): any {
     customer_id: rep.customer_id,
     report_text: rep.report_text || '',
     negotiator_name: rep.negotiator_name || '',
+    created_by: rep.created_by || null,
     negotiation_phone: rep.negotiation_phone || '',
     negotiation_status: rep.negotiation_status || 'پیگیری قبل از انقضا',
     negotiation_score: typeof rep.negotiation_score === 'number' ? rep.negotiation_score : 8,
@@ -759,6 +760,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
   for (const c of existingCustomers) {
     if (c.id) {
       if ((c as any).legacyCallId) globalCallIdToUUIDMap.set((c as any).legacyCallId, c.id);
+      if (c.id.startsWith('c-')) globalCallIdToUUIDMap.set(c.id.substring(2), c.id);
       globalCallIdToUUIDMap.set(c.id, c.id);
     }
   }
@@ -766,14 +768,21 @@ const handleMigrationImport = async (req: Request, res: Response) => {
   // Populate initial uidToPersonnelMap from existingPersonnel
   for (const p of existingPersonnel) {
     if (p.id) {
-      uidToPersonnelMap.set(String(p.id), p);
-      uidToPersonnelMap.set(String(p.id).replace(/^p-/, ''), p);
+      const cleanId = String(p.id).trim();
+      uidToPersonnelMap.set(cleanId, p);
+      const rawNum = cleanId.replace(/^p-/, '');
+      uidToPersonnelMap.set(rawNum, p);
+      uidToPersonnelMap.set(`p-${rawNum}`, p);
     }
     if (p.username) {
-      uidToPersonnelMap.set(String(p.username).toLowerCase(), p);
+      uidToPersonnelMap.set(String(p.username).trim().toLowerCase(), p);
     }
     if (p.legacyUid) {
-      uidToPersonnelMap.set(String(p.legacyUid), p);
+      uidToPersonnelMap.set(String(p.legacyUid).trim(), p);
+    }
+    if (p.name) {
+      const normName = normalizePersianString(p.name);
+      if (normName) uidToPersonnelMap.set(normName, p);
     }
   }
 
@@ -824,14 +833,18 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         const localIdx = personnelData.findIndex((p) => p.id === targetPId || p.username === cleanUsername);
         if (localIdx >= 0) personnelData[localIdx] = { ...personnelData[localIdx], ...pObj };
         uidToPersonnelMap.set(rawUid, existingPersonnel[existIdx]);
+        uidToPersonnelMap.set(targetPId, existingPersonnel[existIdx]);
         if (cleanUsername) uidToPersonnelMap.set(cleanUsername.toLowerCase(), existingPersonnel[existIdx]);
+        if (fullName) uidToPersonnelMap.set(normalizePersianString(fullName), existingPersonnel[existIdx]);
         skippedCount++;
       } else {
         existingPersonnel.push(pObj);
         personnelData.push(pObj);
         personnelToInsert.push(pObj);
         uidToPersonnelMap.set(rawUid, pObj);
+        uidToPersonnelMap.set(targetPId, pObj);
         if (cleanUsername) uidToPersonnelMap.set(cleanUsername.toLowerCase(), pObj);
+        if (fullName) uidToPersonnelMap.set(normalizePersianString(fullName), pObj);
         importedPersonnelCount++;
       }
     }
@@ -884,13 +897,16 @@ const handleMigrationImport = async (req: Request, res: Response) => {
 
       // Marketer:
       // The marketer column in contacts TSV is strictly r.uid!
-      // (r.Referrals and r.lockOwner are boolean flags 0 or 1, NOT marketer IDs!)
       const rawMarketerUid = String(r.uid || r.assigned_marketer_id || '').trim();
       let assignedMarketerId: string | null = null;
       let assignedMarketerName: string | null = null;
 
       if (rawMarketerUid && rawMarketerUid !== '0' && rawMarketerUid !== 'NULL' && rawMarketerUid !== 'null') {
-        let matchedP = uidToPersonnelMap.get(rawMarketerUid);
+        let matchedP = uidToPersonnelMap.get(rawMarketerUid) ||
+                        uidToPersonnelMap.get(rawMarketerUid.replace(/^p-/, '')) ||
+                        uidToPersonnelMap.get(`p-${rawMarketerUid}`) ||
+                        uidToPersonnelMap.get(rawMarketerUid.toLowerCase());
+
         if (!matchedP) {
           matchedP = existingPersonnel.find(
             (p) =>
@@ -922,11 +938,13 @@ const handleMigrationImport = async (req: Request, res: Response) => {
             role: 'marketer',
             status: 'active',
             tenant_id: targetTenantNum || 1,
+            legacyUid: rawMarketerUid,
           };
           existingPersonnel.push(newPlaceholderP);
           personnelData.push(newPlaceholderP);
           personnelToInsert.push(newPlaceholderP);
           uidToPersonnelMap.set(rawMarketerUid, newPlaceholderP);
+          uidToPersonnelMap.set(assignedMarketerId, newPlaceholderP);
         }
       }
 
@@ -941,8 +959,8 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       let custId: string;
       if (isValidUUID(r.id)) {
         custId = String(r.id).trim();
-      } else if (callId && globalCallIdToUUIDMap.has(callId)) {
-        custId = globalCallIdToUUIDMap.get(callId)!;
+      } else if (callId) {
+        custId = callId.startsWith('c-') ? callId : `c-${callId}`;
       } else {
         custId = crypto.randomUUID();
       }
@@ -1019,30 +1037,8 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       const repText = String(r.report || r.report_text || 'ثبت پیگیری').trim();
       
       const uidRef = String(r.uid || r.user_id || '').trim();
-      let negotiator = String(r.negotiator || r.negotiator_name || '').trim();
+      const rawNegotiator = String(r.negotiator || r.negotiator_name || '').trim();
 
-      if (uidRef && uidRef !== '0' && uidRef !== 'NULL' && uidRef !== 'null') {
-        let matchedP = uidToPersonnelMap.get(uidRef);
-        if (!matchedP) {
-          matchedP = existingPersonnel.find(
-            (p) =>
-              p.legacyUid === uidRef ||
-              p.id === uidRef ||
-              p.id === `p-${uidRef}` ||
-              (p.id && String(p.id).replace(/^p-/, '') === uidRef.replace(/^p-/, '')) ||
-              (p.username && p.username.toLowerCase() === uidRef.toLowerCase())
-          );
-        }
-        if (!matchedP && uidRef === '1') {
-          matchedP = existingPersonnel.find((p) => p.role === 'admin' || p.username === 'admin');
-        }
-        if (matchedP) {
-          negotiator = matchedP.name;
-        } else if (!negotiator) {
-          negotiator = `کارشناس ${uidRef}`;
-        }
-      }
-      if (!negotiator) negotiator = 'کارشناس';
       const callNum = normalizeContactValue(r.callNum || r.negotiation_phone || '');
       const status = normalizeLegacyStatus(r.status || r.negotiation_status);
       const rawRating = parseFloat(String(r.rating ?? '').trim());
@@ -1052,12 +1048,16 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         parseLegacyDate(r.insertDate || r.dateTime || r.date_created) || new Date().toISOString();
 
       let matchedCustomerId: string | null = null;
-      if (callId && globalCallIdToUUIDMap.has(callId)) {
-        matchedCustomerId = globalCallIdToUUIDMap.get(callId)!;
-      }
-      if (!matchedCustomerId && callId) {
-        const byCallId = existingCustomers.find((c) => c.id === callId || (c as any).legacyCallId === callId || c.id === `c-${callId}`);
-        if (byCallId) matchedCustomerId = byCallId.id;
+      if (callId) {
+        const deterministicId = callId.startsWith('c-') ? callId : `c-${callId}`;
+        if (existingCustomerIdsSet.has(deterministicId) || existingCustomers.some((c) => c.id === deterministicId)) {
+          matchedCustomerId = deterministicId;
+        } else if (globalCallIdToUUIDMap.has(callId)) {
+          matchedCustomerId = globalCallIdToUUIDMap.get(callId)!;
+        } else {
+          const byCallId = existingCustomers.find((c) => c.id === callId || (c as any).legacyCallId === callId || c.id === `c-${callId}`);
+          if (byCallId) matchedCustomerId = byCallId.id;
+        }
       }
       if (!matchedCustomerId && callNum && globalCallIdToUUIDMap.has(callNum)) {
         matchedCustomerId = globalCallIdToUUIDMap.get(callNum)!;
@@ -1070,7 +1070,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       }
 
       if (!matchedCustomerId) {
-        matchedCustomerId = crypto.randomUUID();
+        matchedCustomerId = callId ? (callId.startsWith('c-') ? callId : `c-${callId}`) : crypto.randomUUID();
         if (callId) globalCallIdToUUIDMap.set(callId, matchedCustomerId);
 
         // Create orphan customer to satisfy Foreign Key constraint in Directus
@@ -1090,13 +1090,29 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         importedCustomersCount++;
       }
 
+      const targetCust = existingCustomers.find((c) => c.id === matchedCustomerId);
+
+      // Determine negotiator & creator for the report
+      let matchedP = uidRef ? uidToPersonnelMap.get(uidRef) : null;
+      if (!matchedP && rawNegotiator) {
+        matchedP = uidToPersonnelMap.get(rawNegotiator) || uidToPersonnelMap.get(normalizePersianString(rawNegotiator));
+      }
+      if (!matchedP && targetCust && targetCust.assigned_marketer_id) {
+        matchedP = uidToPersonnelMap.get(targetCust.assigned_marketer_id) ||
+                   existingPersonnel.find((p) => p.id === targetCust.assigned_marketer_id);
+      }
+
+      const createdBy = matchedP ? matchedP.id : (targetCust?.assigned_marketer_id || null);
+      const negotiatorName = matchedP ? matchedP.name : (targetCust?.assigned_marketer_name || rawNegotiator || 'کارشناس');
+
       const repId = isValidUUID(r.ID || r.id) ? String(r.ID || r.id).trim() : crypto.randomUUID();
 
       const repObj: any = {
         id: repId,
         customer_id: matchedCustomerId,
         report_text: repText,
-        negotiator_name: negotiator,
+        negotiator_name: negotiatorName,
+        created_by: createdBy,
         negotiation_phone: callNum,
         negotiation_status: status,
         negotiation_score: score,
