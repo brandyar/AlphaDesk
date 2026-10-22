@@ -713,7 +713,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       </span>
                     )}
                     <span className="px-2 py-0.5 rounded bg-[#282828] text-white font-mono font-bold">
-                      امتیاز: {rep.negotiation_score} / 10
+                      امتیاز: {rep.negotiation_score} {Number(rep.negotiation_score) > 10 ? 'از ۲۰' : 'از ۱۰'}
                     </span>
                     <span className="font-mono">{formatPersianDateTime(rep.date_created)}</span>
                   </div>

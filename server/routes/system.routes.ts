@@ -56,6 +56,7 @@ interface DashboardSummaryCacheItem {
 }
 const dashboardSummaryCacheMap = new Map<string, DashboardSummaryCacheItem>();
 const globalCallIdToUUIDMap = new Map<string, string>();
+const uidToPersonnelMap = new Map<string, any>();
 let migrationPersonnelCache: any[] | null = null;
 let migrationCustomersCache: any[] | null = null;
 let migrationCacheLastFetch = 0;
@@ -451,6 +452,7 @@ const handleResetMigrationCache = (req: Request, res: Response) => {
   migrationCustomersCache = null;
   migrationCacheLastFetch = 0;
   globalCallIdToUUIDMap.clear();
+  uidToPersonnelMap.clear();
   invalidateCustomersCache();
   invalidateReportsCache();
   return res.json({ success: true, message: 'حافظه موقت کش درون‌ریزی با موفقیت پاکسازی شد.' });
@@ -718,6 +720,20 @@ const handleMigrationImport = async (req: Request, res: Response) => {
     }
   }
 
+  // Populate initial uidToPersonnelMap from existingPersonnel
+  for (const p of existingPersonnel) {
+    if (p.id) {
+      uidToPersonnelMap.set(String(p.id), p);
+      uidToPersonnelMap.set(String(p.id).replace(/^p-/, ''), p);
+    }
+    if (p.username) {
+      uidToPersonnelMap.set(String(p.username).toLowerCase(), p);
+    }
+    if (p.legacyUid) {
+      uidToPersonnelMap.set(String(p.legacyUid), p);
+    }
+  }
+
   const personnelToInsert: any[] = [];
 
   // 1. Process personnelRows
@@ -736,13 +752,13 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       const normFullName = normalizePersianString(fullName);
       const existIdx = existingPersonnel.findIndex(
         (p) =>
+          (cleanUsername && p.username && p.username.toLowerCase() === cleanUsername.toLowerCase()) ||
+          (normFullName && p.name && normalizePersianString(p.name) === normFullName) ||
           p.id === rawUid ||
           p.id === `p-${rawUid}` ||
           (p.id && String(p.id).replace(/^p-/, '') === rawUid.replace(/^p-/, '')) ||
-          (cleanUsername && p.username && p.username.toLowerCase() === cleanUsername.toLowerCase()) ||
           (p.username && p.username.toLowerCase() === rawUid.toLowerCase()) ||
-          (cleanEmail && p.email && p.email.toLowerCase() === cleanEmail.toLowerCase()) ||
-          (normFullName && p.name && normalizePersianString(p.name) === normFullName)
+          (cleanEmail && p.email && p.email.toLowerCase() === cleanEmail.toLowerCase())
       );
 
       const targetPId = existIdx >= 0 ? existingPersonnel[existIdx].id : (rawUid.startsWith('p-') ? rawUid : `p-${rawUid}`);
@@ -757,17 +773,22 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         status: r.active === '0' || r.active === 0 || r.status === 'inactive' ? 'inactive' : 'active',
         tenant_id: targetTenantNum || 1,
         national_id: String(r.code || r.shenasname || '').trim() || null,
+        legacyUid: rawUid,
       };
 
       if (existIdx >= 0) {
         existingPersonnel[existIdx] = { ...existingPersonnel[existIdx], ...pObj };
         const localIdx = personnelData.findIndex((p) => p.id === targetPId || p.username === cleanUsername);
         if (localIdx >= 0) personnelData[localIdx] = { ...personnelData[localIdx], ...pObj };
+        uidToPersonnelMap.set(rawUid, existingPersonnel[existIdx]);
+        if (cleanUsername) uidToPersonnelMap.set(cleanUsername.toLowerCase(), existingPersonnel[existIdx]);
         skippedCount++;
       } else {
         existingPersonnel.push(pObj);
         personnelData.push(pObj);
         personnelToInsert.push(pObj);
+        uidToPersonnelMap.set(rawUid, pObj);
+        if (cleanUsername) uidToPersonnelMap.set(cleanUsername.toLowerCase(), pObj);
         importedPersonnelCount++;
       }
     }
@@ -819,31 +840,41 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       const status = normalizeLegacyStatus(rawStatus);
 
       // Marketer:
-      const marketerRef = String(r.Referrals || r.lockOwner || r.uid || r.assigned_marketer_id || '').trim();
+      // The marketer column in contacts TSV is strictly r.uid!
+      // (r.Referrals and r.lockOwner are boolean flags 0 or 1, NOT marketer IDs!)
+      const rawMarketerUid = String(r.uid || r.assigned_marketer_id || '').trim();
       let assignedMarketerId: string | null = null;
       let assignedMarketerName: string | null = null;
 
-      if (marketerRef) {
-        const matchedP = existingPersonnel.find(
-          (p) =>
-            p.id === marketerRef ||
-            p.id === `p-${marketerRef}` ||
-            (p.id && String(p.id).replace(/^p-/, '') === marketerRef.replace(/^p-/, '')) ||
-            (p.username && p.username.toLowerCase() === marketerRef.toLowerCase()) ||
-            (p.name && (p.name === marketerRef || p.name.includes(marketerRef) || marketerRef.includes(p.name)))
-        );
+      if (rawMarketerUid && rawMarketerUid !== '0' && rawMarketerUid !== 'NULL' && rawMarketerUid !== 'null') {
+        let matchedP = uidToPersonnelMap.get(rawMarketerUid);
+        if (!matchedP) {
+          matchedP = existingPersonnel.find(
+            (p) =>
+              p.legacyUid === rawMarketerUid ||
+              p.id === rawMarketerUid ||
+              p.id === `p-${rawMarketerUid}` ||
+              (p.id && String(p.id).replace(/^p-/, '') === rawMarketerUid.replace(/^p-/, '')) ||
+              (p.username && p.username.toLowerCase() === rawMarketerUid.toLowerCase()) ||
+              (p.name && (p.name === rawMarketerUid || p.name.includes(rawMarketerUid) || rawMarketerUid.includes(p.name)))
+          );
+        }
+        if (!matchedP && rawMarketerUid === '1') {
+          matchedP = existingPersonnel.find((p) => p.role === 'admin' || p.username === 'admin');
+        }
+
         if (matchedP) {
           assignedMarketerId = matchedP.id;
           assignedMarketerName = matchedP.name;
         } else {
-          assignedMarketerId = marketerRef.startsWith('p-') ? marketerRef : `p-${marketerRef}`;
-          assignedMarketerName = `کارشناس ${marketerRef}`;
+          assignedMarketerId = rawMarketerUid.startsWith('p-') ? rawMarketerUid : `p-${rawMarketerUid}`;
+          assignedMarketerName = `کارشناس ${rawMarketerUid}`;
 
           const newPlaceholderP: any = {
             id: assignedMarketerId,
             name: assignedMarketerName,
-            username: `user_${marketerRef}`,
-            email: `user_${marketerRef}@alphadesk.ir`,
+            username: `user_${rawMarketerUid}`,
+            email: `user_${rawMarketerUid}@alphadesk.ir`,
             phone: '',
             role: 'marketer',
             status: 'active',
@@ -852,6 +883,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
           existingPersonnel.push(newPlaceholderP);
           personnelData.push(newPlaceholderP);
           personnelToInsert.push(newPlaceholderP);
+          uidToPersonnelMap.set(rawMarketerUid, newPlaceholderP);
         }
       }
 
@@ -941,18 +973,24 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       const callId = String(r.CallID || r.callid || '').trim();
       const repText = String(r.report || r.report_text || 'ثبت پیگیری').trim();
       
-      const uidRef = String(r.uid || r.negotiator || r.negotiator_name || r.user_id || '').trim();
+      const uidRef = String(r.uid || r.user_id || '').trim();
       let negotiator = String(r.negotiator || r.negotiator_name || '').trim();
 
-      if (uidRef) {
-        const matchedP = existingPersonnel.find(
-          (p) =>
-            p.id === uidRef ||
-            p.id === `p-${uidRef}` ||
-            (p.id && String(p.id).replace(/^p-/, '') === uidRef.replace(/^p-/, '')) ||
-            (p.username && p.username.toLowerCase() === uidRef.toLowerCase()) ||
-            (p.name && (p.name === uidRef || p.name.includes(uidRef)))
-        );
+      if (uidRef && uidRef !== '0' && uidRef !== 'NULL' && uidRef !== 'null') {
+        let matchedP = uidToPersonnelMap.get(uidRef);
+        if (!matchedP) {
+          matchedP = existingPersonnel.find(
+            (p) =>
+              p.legacyUid === uidRef ||
+              p.id === uidRef ||
+              p.id === `p-${uidRef}` ||
+              (p.id && String(p.id).replace(/^p-/, '') === uidRef.replace(/^p-/, '')) ||
+              (p.username && p.username.toLowerCase() === uidRef.toLowerCase())
+          );
+        }
+        if (!matchedP && uidRef === '1') {
+          matchedP = existingPersonnel.find((p) => p.role === 'admin' || p.username === 'admin');
+        }
         if (matchedP) {
           negotiator = matchedP.name;
         } else if (!negotiator) {
@@ -962,12 +1000,8 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       if (!negotiator) negotiator = 'کارشناس';
       const callNum = normalizeContactValue(r.callNum || r.negotiation_phone || '');
       const status = normalizeLegacyStatus(r.status || r.negotiation_status);
-      const rawRating = parseFloat(r.rating || '8');
-      const score = isNaN(rawRating)
-        ? 8
-        : rawRating > 10
-        ? Math.round(rawRating / 2)
-        : Math.round(rawRating);
+      const rawRating = parseFloat(String(r.rating ?? '').trim());
+      const score = !isNaN(rawRating) ? Math.round(rawRating) : 8;
       const nextFollow = parseLegacyDate(r.nextFollow || r.next_followup_date);
       const dateCreated =
         parseLegacyDate(r.insertDate || r.dateTime || r.date_created) || new Date().toISOString();
