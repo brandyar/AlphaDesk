@@ -210,14 +210,14 @@ export async function directusSafeBatchInsert(
           );
           for (const item of sub) {
             try {
-              await new Promise((r) => setTimeout(r, 200));
+              await new Promise((r) => setTimeout(r, 10));
               const singleRes = await directusFetch(
                 `/items/${collection}`,
                 {
                   method: 'POST',
                   body: JSON.stringify(item),
                 },
-                4
+                1
               );
               if (singleRes && singleRes.data) {
                 inserted.push(singleRes.data);

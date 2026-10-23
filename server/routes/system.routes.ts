@@ -646,9 +646,21 @@ function isValidUUID(str: any): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str.trim());
 }
 
-function sanitizeCustomerForDirectus(cust: any): any {
+function deterministicUUID(input: string): string {
+  if (!input) return crypto.randomUUID();
+  const cleanInput = String(input).trim();
+  if (isValidUUID(cleanInput)) return cleanInput;
+  const hash = crypto.createHash('md5').update('alphadesk-crm:' + cleanInput).digest('hex');
+  return `${hash.substring(0, 8)}-${hash.substring(8, 12)}-4${hash.substring(13, 16)}-a${hash.substring(17, 20)}-${hash.substring(20, 32)}`;
+}
+
+function sanitizeCustomerForDirectus(cust: any, validPersonnelIds?: Set<string>): any {
   const tNum = cust.tenant_id !== undefined && cust.tenant_id !== null ? Number(cust.tenant_id) : 1;
   const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
+  let assignedMarketerId = cust.assigned_marketer_id || null;
+  if (assignedMarketerId && validPersonnelIds && validPersonnelIds.size > 0 && !validPersonnelIds.has(assignedMarketerId)) {
+    assignedMarketerId = null;
+  }
   return {
     id: cust.id,
     company_name: cust.company_name || 'بدون نام',
@@ -658,13 +670,29 @@ function sanitizeCustomerForDirectus(cust: any): any {
     manager_name: cust.manager_name || '',
     mobile_numbers: Array.isArray(cust.mobile_numbers) ? cust.mobile_numbers : [],
     landline_numbers: Array.isArray(cust.landline_numbers) ? cust.landline_numbers : [],
-    assigned_marketer_id: cust.assigned_marketer_id || null,
+    assigned_marketer_id: assignedMarketerId,
     assigned_marketer_name: cust.assigned_marketer_name || null,
     assignment_deadline: cust.assignment_deadline || null,
     status: cust.status || 'تماس برقرار نشده',
     is_expired: Boolean(cust.is_expired),
     tenant_id: tenantNum,
     date_created: cust.date_created || new Date().toISOString(),
+  };
+}
+
+function sanitizeContactForDirectus(c: any): any {
+  const tNum = c.tenant_id !== undefined && c.tenant_id !== null ? Number(c.tenant_id) : 1;
+  const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
+  return {
+    id: isValidUUID(c.id) ? c.id : deterministicUUID(`${c.customer_id}-${c.channel_type}-${c.value}`),
+    customer_id: c.customer_id,
+    channel_type: c.channel_type || 'mobile',
+    value: String(c.value || '').trim(),
+    normalized_value: c.normalized_value ? String(c.normalized_value).trim() : null,
+    contact_name: c.contact_name ? String(c.contact_name).trim() : null,
+    is_primary: Boolean(c.is_primary),
+    tenant_id: tenantNum,
+    date_created: c.date_created || new Date().toISOString(),
   };
 }
 
@@ -675,8 +703,7 @@ function sanitizeReportForDirectus(rep: any): any {
     id: rep.id,
     customer_id: rep.customer_id,
     report_text: rep.report_text || '',
-    negotiator_name: rep.negotiator_name || '',
-    created_by: rep.created_by || null,
+    negotiator_name: rep.negotiator_name || 'کارشناس',
     negotiation_phone: rep.negotiation_phone || '',
     negotiation_status: rep.negotiation_status || 'پیگیری قبل از انقضا',
     negotiation_score: typeof rep.negotiation_score === 'number' ? rep.negotiation_score : 8,
@@ -716,16 +743,16 @@ const handleMigrationImport = async (req: Request, res: Response) => {
   const skippedDetails: Array<{ companyName: string; phone: string; reason: string }> = [];
   const errors: string[] = [];
 
-  // Pre-fetch all existing personnel and customers from Directus & memory into session cache
-  if (!migrationPersonnelCache || !migrationCustomersCache || Date.now() - migrationCacheLastFetch > 120000) {
+  // Pre-fetch existing personnel and customers quickly (avoiding heavy 50k pagination)
+  if (!migrationPersonnelCache || !migrationCustomersCache || Date.now() - migrationCacheLastFetch > 300000) {
     migrationPersonnelCache = [...personnelData];
     migrationCustomersCache = [...customersData];
 
     if (directusUrl && directusAdminToken) {
       try {
         const [pRes, cRes] = await Promise.all([
-          directusFetchAllPages('/items/personnel?fields=id,username,email,name,phone&limit=2000').catch(() => null),
-          directusFetchAllPages('/items/customers?fields=id,mobile_numbers,landline_numbers,company_name,assigned_marketer_id,assigned_marketer_name,status&limit=50000').catch(() => null),
+          directusFetchAllPages('/items/personnel?fields=id,username,email,name,phone&limit=1000').catch(() => null),
+          directusFetch('/items/customers?fields=id,assigned_marketer_id,assigned_marketer_name&limit=5000').catch(() => null),
         ]);
         const pList = Array.isArray(pRes) ? pRes : (pRes?.data || []);
         const cList = Array.isArray(cRes) ? cRes : (cRes?.data || []);
@@ -750,10 +777,15 @@ const handleMigrationImport = async (req: Request, res: Response) => {
   const existingPersonnel: any[] = migrationPersonnelCache;
   const existingCustomers: any[] = migrationCustomersCache;
 
-  // Build O(1) set of existing customer IDs
+  // Build O(1) set of existing customer IDs and Directus personnel IDs
   const existingCustomerIdsSet = new Set<string>();
   for (const c of existingCustomers) {
     if (c.id) existingCustomerIdsSet.add(c.id);
+  }
+
+  const directusPersonnelIdsSet = new Set<string>();
+  for (const p of existingPersonnel) {
+    if (p.id) directusPersonnelIdsSet.add(String(p.id).trim());
   }
 
   // Populate global callIdToUUIDMap from existing customers
@@ -836,11 +868,17 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         uidToPersonnelMap.set(targetPId, existingPersonnel[existIdx]);
         if (cleanUsername) uidToPersonnelMap.set(cleanUsername.toLowerCase(), existingPersonnel[existIdx]);
         if (fullName) uidToPersonnelMap.set(normalizePersianString(fullName), existingPersonnel[existIdx]);
-        skippedCount++;
+        if (directusUrl && directusAdminToken && !directusPersonnelIdsSet.has(targetPId)) {
+          personnelToInsert.push(pObj);
+          directusPersonnelIdsSet.add(targetPId);
+        } else {
+          skippedCount++;
+        }
       } else {
         existingPersonnel.push(pObj);
         personnelData.push(pObj);
         personnelToInsert.push(pObj);
+        directusPersonnelIdsSet.add(targetPId);
         uidToPersonnelMap.set(rawUid, pObj);
         uidToPersonnelMap.set(targetPId, pObj);
         if (cleanUsername) uidToPersonnelMap.set(cleanUsername.toLowerCase(), pObj);
@@ -854,6 +892,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       await directusSafeBatchInsert('personnel', sanitizedPersonnel, 25).catch((err) => {
         errors.push(`خطا در ثبت پرسنل در دایرکتوس: ${err.message}`);
       });
+      personnelToInsert.length = 0;
     }
   }
 
@@ -960,7 +999,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       if (isValidUUID(r.id)) {
         custId = String(r.id).trim();
       } else if (callId) {
-        custId = callId.startsWith('c-') ? callId : `c-${callId}`;
+        custId = deterministicUUID(callId);
       } else {
         custId = crypto.randomUUID();
       }
@@ -1001,7 +1040,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         importedCustomersCount++;
 
         for (const m of mobileNumbers) {
-          contactsToInsert.push({
+          const cObj = {
             id: crypto.randomUUID(),
             customer_id: custId,
             channel_type: 'mobile',
@@ -1010,10 +1049,13 @@ const handleMigrationImport = async (req: Request, res: Response) => {
             contact_name: managerName || companyName,
             is_primary: true,
             tenant_id: targetTenantNum || 1,
-          });
+            date_created: custObj.date_created,
+          };
+          contactsToInsert.push(cObj);
+          contactsData.push(cObj as any);
         }
         for (const l of landlineNumbers) {
-          contactsToInsert.push({
+          const cObj = {
             id: crypto.randomUUID(),
             customer_id: custId,
             channel_type: 'landline',
@@ -1022,7 +1064,78 @@ const handleMigrationImport = async (req: Request, res: Response) => {
             contact_name: managerName || companyName,
             is_primary: false,
             tenant_id: targetTenantNum || 1,
-          });
+            date_created: custObj.date_created,
+          };
+          contactsToInsert.push(cObj);
+          contactsData.push(cObj as any);
+        }
+        const insta = String(r.instaID || r.instagram_ids || '').trim();
+        if (insta && insta !== 'NULL' && insta !== 'null') {
+          const cObj = {
+            id: crypto.randomUUID(),
+            customer_id: custId,
+            channel_type: 'instagram',
+            value: insta,
+            normalized_value: insta.replace(/^@/, ''),
+            contact_name: managerName || companyName,
+            is_primary: false,
+            tenant_id: targetTenantNum || 1,
+            date_created: custObj.date_created,
+          };
+          contactsToInsert.push(cObj);
+          contactsData.push(cObj as any);
+        }
+        const teleg = String(r.telegID || r.telegram_ids || r.tlgMobile || r.telegram_phone || '').trim();
+        if (teleg && teleg !== 'NULL' && teleg !== 'null') {
+          const cObj = {
+            id: crypto.randomUUID(),
+            customer_id: custId,
+            channel_type: 'telegram',
+            value: teleg,
+            normalized_value: teleg.replace(/^@/, ''),
+            contact_name: managerName || companyName,
+            is_primary: false,
+            tenant_id: targetTenantNum || 1,
+            date_created: custObj.date_created,
+          };
+          contactsToInsert.push(cObj);
+          contactsData.push(cObj as any);
+        }
+        const emails = String(r.emails || r.email || '').trim();
+        if (emails && emails !== 'NULL' && emails !== 'null') {
+          for (const em of emails.split(/[,;\s]+/)) {
+            if (em && em.includes('@')) {
+              const cObj = {
+                id: crypto.randomUUID(),
+                customer_id: custId,
+                channel_type: 'email',
+                value: em.toLowerCase(),
+                normalized_value: em.toLowerCase(),
+                contact_name: managerName || companyName,
+                is_primary: false,
+                tenant_id: targetTenantNum || 1,
+                date_created: custObj.date_created,
+              };
+              contactsToInsert.push(cObj);
+              contactsData.push(cObj as any);
+            }
+          }
+        }
+        const web = String(r.website || r.websites || r.marketingWebsite || '').trim();
+        if (web && web !== 'NULL' && web !== 'null') {
+          const cObj = {
+            id: crypto.randomUUID(),
+            customer_id: custId,
+            channel_type: 'website',
+            value: web,
+            normalized_value: web.replace(/^https?:\/\//i, ''),
+            contact_name: managerName || companyName,
+            is_primary: false,
+            tenant_id: targetTenantNum || 1,
+            date_created: custObj.date_created,
+          };
+          contactsToInsert.push(cObj);
+          contactsData.push(cObj as any);
         }
       }
     }
@@ -1049,13 +1162,13 @@ const handleMigrationImport = async (req: Request, res: Response) => {
 
       let matchedCustomerId: string | null = null;
       if (callId) {
-        const deterministicId = callId.startsWith('c-') ? callId : `c-${callId}`;
+        const deterministicId = deterministicUUID(callId);
         if (existingCustomerIdsSet.has(deterministicId) || existingCustomers.some((c) => c.id === deterministicId)) {
           matchedCustomerId = deterministicId;
         } else if (globalCallIdToUUIDMap.has(callId)) {
           matchedCustomerId = globalCallIdToUUIDMap.get(callId)!;
         } else {
-          const byCallId = existingCustomers.find((c) => c.id === callId || (c as any).legacyCallId === callId || c.id === `c-${callId}`);
+          const byCallId = existingCustomers.find((c) => c.id === callId || (c as any).legacyCallId === callId || c.id === deterministicId);
           if (byCallId) matchedCustomerId = byCallId.id;
         }
       }
@@ -1070,7 +1183,7 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       }
 
       if (!matchedCustomerId) {
-        matchedCustomerId = callId ? (callId.startsWith('c-') ? callId : `c-${callId}`) : crypto.randomUUID();
+        matchedCustomerId = callId ? deterministicUUID(callId) : crypto.randomUUID();
         if (callId) globalCallIdToUUIDMap.set(callId, matchedCustomerId);
 
         // Create orphan customer to satisfy Foreign Key constraint in Directus
@@ -1105,7 +1218,9 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       const createdBy = matchedP ? matchedP.id : (targetCust?.assigned_marketer_id || null);
       const negotiatorName = matchedP ? matchedP.name : (targetCust?.assigned_marketer_name || rawNegotiator || 'کارشناس');
 
-      const repId = isValidUUID(r.ID || r.id) ? String(r.ID || r.id).trim() : crypto.randomUUID();
+      const repId = isValidUUID(r.ID || r.id)
+        ? String(r.ID || r.id).trim()
+        : deterministicUUID(`${callId || ''}-${r.ID || r.id || ''}-${dateCreated}`);
 
       const repObj: any = {
         id: repId,
@@ -1135,17 +1250,25 @@ const handleMigrationImport = async (req: Request, res: Response) => {
         personnelToInsert.length = 0;
       }
       if (customersToInsert.length > 0) {
-        const sanitizedCusts = customersToInsert.map(sanitizeCustomerForDirectus);
+        const sanitizedCusts = customersToInsert.map((c) => sanitizeCustomerForDirectus(c, directusPersonnelIdsSet));
         await directusSafeBatchInsert('customers', sanitizedCusts, 50).catch((err) => {
           errors.push(`خطا در ثبت مشتریان در دایرکتوس: ${err.message}`);
         });
-        customersToInsert.length = 0; // cleared after insert
+        customersToInsert.length = 0;
+      }
+      if (contactsToInsert.length > 0) {
+        const sanitizedContacts = contactsToInsert.map(sanitizeContactForDirectus);
+        await directusSafeBatchInsert('customer_contacts', sanitizedContacts, 50).catch((err) => {
+          console.warn('Customer contacts insert warning:', err.message);
+        });
+        contactsToInsert.length = 0;
       }
       if (reportsToInsert.length > 0) {
         const sanitizedReps = reportsToInsert.map(sanitizeReportForDirectus);
         await directusSafeBatchInsert('customer_reports', sanitizedReps, 50).catch((err) => {
           errors.push(`خطا در ثبت گزارش‌ها در دایرکتوس: ${err.message}`);
         });
+        reportsToInsert.length = 0;
       }
     }
   }
@@ -1156,15 +1279,21 @@ const handleMigrationImport = async (req: Request, res: Response) => {
       await directusSafeBatchInsert('personnel', sanitizedPersonnel, 25).catch((err) => {
         errors.push(`خطا در ثبت پرسنل در دایرکتوس: ${err.message}`);
       });
+      personnelToInsert.length = 0;
     }
     if (customersToInsert.length > 0) {
-      const sanitizedCusts = customersToInsert.map(sanitizeCustomerForDirectus);
+      const sanitizedCusts = customersToInsert.map((c) => sanitizeCustomerForDirectus(c, directusPersonnelIdsSet));
       await directusSafeBatchInsert('customers', sanitizedCusts, 50).catch((err) => {
         errors.push(`خطا در ثبت مشتریان در دایرکتوس: ${err.message}`);
       });
+      customersToInsert.length = 0;
     }
     if (contactsToInsert.length > 0) {
-      directusSafeBatchInsert('customer_contacts', contactsToInsert, 50).catch(() => {});
+      const sanitizedContacts = contactsToInsert.map(sanitizeContactForDirectus);
+      await directusSafeBatchInsert('customer_contacts', sanitizedContacts, 50).catch((err) => {
+        console.warn('Customer contacts insert warning:', err.message);
+      });
+      contactsToInsert.length = 0;
     }
   }
 
