@@ -16,14 +16,21 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   FileCheck2,
   Loader2,
+  ArrowUpDown,
+  Sparkles,
 } from 'lucide-react';
 import { CustomerReport, Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
-import { formatPersianDate, formatPersianDateTime, getStatusTheme, toPersianDigits, formatToman, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS } from '../utils';
-import { fetchCustomerReportsPaginated } from '../api';
+import {
+  formatPersianDate,
+  formatPersianDateTime,
+  getStatusTheme,
+  toPersianDigits,
+  formatToman,
+  formatStatusLabel,
+  NEGOTIATION_STATUS_OPTIONS,
+} from '../utils';
 import { PaginationControl } from './PaginationControl';
 
 interface ReportsViewProps {
@@ -44,8 +51,8 @@ type AdminFilterType =
   | 'active_followups'
   | 'no_followup'
   | 'latest_reports'
-  | 'expired_customers'
-  | 'near_expiry_customers';
+  | 'near_expiry_customers'
+  | 'expired_customers';
 
 // Staff/Employee filter keys
 type StaffFilterType =
@@ -56,6 +63,8 @@ type StaffFilterType =
   | 'due_less_7_days'
   | 'due_less_10_days'
   | 'expired';
+
+type SortOption = 'newest' | 'oldest' | 'followup_soonest' | 'highest_score';
 
 export const ReportsView: React.FC<ReportsViewProps> = ({
   reports,
@@ -83,77 +92,52 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [selectedStatus, setSelectedStatus] = useState<string>('همه');
   const [selectedNegotiator, setSelectedNegotiator] = useState<string>('همه');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(25);
 
-  const [items, setItems] = useState<CustomerReport[]>(reports);
-  const [totalCount, setTotalCount] = useState<number>(reports.length);
-  const [totalPages, setTotalPages] = useState<number>(1);
-  const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
+  // Local state for reports list that syncs with props and custom real-time events
+  const [reportList, setReportList] = useState<CustomerReport[]>(reports);
 
-  // Listen to report save events to immediately show newly added reports without page reload
+  // Keep local report list in sync when parent reports prop updates
+  useEffect(() => {
+    setReportList(reports);
+  }, [reports]);
+
+  // Listen to report save events to immediately show newly added reports at the top
   useEffect(() => {
     const handleSaved = (e: any) => {
       const saved: CustomerReport = e.detail;
       if (!saved || !saved.id) return;
-      setItems((prev) => {
+      setReportList((prev) => {
         const exists = prev.some((r) => r.id === saved.id);
         if (exists) {
           return prev.map((r) => (r.id === saved.id ? saved : r));
         }
         return [saved, ...prev];
       });
-      setTotalCount((prev) => prev + 1);
     };
     window.addEventListener('crm_report_saved', handleSaved);
     return () => window.removeEventListener('crm_report_saved', handleSaved);
   }, []);
 
-  // Sync initial items when reports prop updates
-  useEffect(() => {
-    if (reports && reports.length > 0 && items.length === 0) {
-      setItems(reports);
-      setTotalCount(reports.length);
-    }
-  }, [reports]);
-
-  // Reset page when any filter or tenant changes
+  // Reset page to 1 when filters or search change
   useEffect(() => {
     setCurrentPage(1);
-  }, [adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery, activeTenantId]);
+  }, [adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery, activeTenantId, sortBy]);
 
-  // Fetch paginated reports from Directus / BFF
-  useEffect(() => {
-    let isMounted = true;
-    setIsLoadingPage(true);
+  // High-performance O(1) Customer Lookup Map
+  const customersMap = useMemo(() => {
+    const map = new Map<string, Customer>();
+    for (const c of customers) {
+      if (c?.id) {
+        map.set(String(c.id), c);
+      }
+    }
+    return map;
+  }, [customers]);
 
-    fetchCustomerReportsPaginated(undefined, {
-      page: currentPage,
-      limit: pageSize,
-      search: searchQuery.trim(),
-      status: selectedStatus !== 'همه' ? selectedStatus : undefined,
-      negotiator: selectedNegotiator !== 'همه' ? selectedNegotiator : undefined,
-      adminFilter: userIsAdmin ? adminFilter : undefined,
-      staffFilter: !userIsAdmin ? staffFilter : undefined,
-    })
-      .then((res) => {
-        if (isMounted) {
-          setItems(res.data);
-          setTotalCount(res.meta.filter_count);
-          setTotalPages(res.meta.total_pages);
-        }
-      })
-      .catch((err) => console.warn('Failed to load paginated reports:', err))
-      .finally(() => {
-        if (isMounted) setIsLoadingPage(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [currentPage, pageSize, adminFilter, staffFilter, selectedStatus, selectedNegotiator, searchQuery, activeTenantId]);
-
-  // Helper to check if a customer belongs to the current user
+  // Helper to check if a customer belongs to current user
   const isMyCustomer = (c: Customer): boolean => {
     if (userIsAdmin) return true;
     return Boolean(
@@ -164,10 +148,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     );
   };
 
-  // Helper to check if a report belongs to the current user
+  // Helper to check if a report belongs to current user
   const isMyReport = (rep: CustomerReport): boolean => {
     if (userIsAdmin) return true;
-    const customer = customers.find((c) => c.id === rep.customer_id);
+    const customer = customersMap.get(String(rep.customer_id));
     return Boolean(
       (currentPersonnel?.name && rep.negotiator_name === currentPersonnel.name) ||
       (currentUser?.name && rep.negotiator_name === currentUser.name) ||
@@ -182,6 +166,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     if (!dateIso) return null;
     try {
       const target = new Date(dateIso).getTime();
+      if (isNaN(target)) return null;
       const now = new Date().getTime();
       const diffMs = target - now;
       return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
@@ -197,7 +182,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     return days !== null && days >= 0;
   };
 
-  // Helper to check if expired
+  // Helper to check if customer is expired
   const isExpired = (c?: Customer | null): boolean => {
     if (!c) return false;
     if (c.is_expired) return true;
@@ -209,20 +194,21 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     return false;
   };
 
-  // Unfollowed referrals: customers assigned to current user with 0 reports
+  // High-performance Unfollowed referrals (customers assigned to user with 0 reports)
   const unfollowedReferralCustomers = useMemo(() => {
+    const customersWithReports = new Set<string>();
+    for (const r of reportList) {
+      if (r?.customer_id) customersWithReports.add(String(r.customer_id));
+    }
     const myCustomers = customers.filter(isMyCustomer);
-    return myCustomers.filter((c) => {
-      const customerReports = reports.filter((r) => r.customer_id === c.id);
-      return customerReports.length === 0;
-    });
-  }, [customers, reports, currentPersonnel, currentUser]);
+    return myCustomers.filter((c) => !customersWithReports.has(String(c.id)));
+  }, [customers, reportList, currentPersonnel, currentUser, userIsAdmin]);
 
-  // Main reports filtering
-  const filteredReports = useMemo(() => {
-    let result = reports.filter(isMyReport);
+  // Comprehensive client-side Filtering & Sorting
+  const filteredAndSortedReports = useMemo(() => {
+    let result = reportList.filter(isMyReport);
 
-    // Filter by Status dropdown
+    // 1. Status Dropdown Filter
     if (selectedStatus !== 'همه') {
       if (selectedStatus === 'قرارداد' || selectedStatus === 'قرارداد / فاکتور') {
         result = result.filter((r) => {
@@ -234,59 +220,60 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       }
     }
 
-    // Filter by Negotiator (Admin only)
+    // 2. Negotiator Filter (Admin only)
     if (userIsAdmin && selectedNegotiator !== 'همه') {
       result = result.filter((r) => r.negotiator_name === selectedNegotiator);
     }
 
-    // Filter by Search Query
+    // 3. Search Query (Multi-field instant search)
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
       result = result.filter((rep) => {
-        const customer = customers.find((c) => c.id === rep.customer_id);
+        const customer = customersMap.get(String(rep.customer_id));
         const matchCompany = customer?.company_name?.toLowerCase().includes(q);
+        const matchManager = customer?.manager_name?.toLowerCase().includes(q);
         const matchReport = rep.report_text?.toLowerCase().includes(q);
         const matchPhone = rep.negotiation_phone?.includes(q);
         const matchNegotiator = rep.negotiator_name?.toLowerCase().includes(q);
-        return Boolean(matchCompany || matchReport || matchPhone || matchNegotiator);
+        return Boolean(matchCompany || matchManager || matchReport || matchPhone || matchNegotiator);
       });
     }
 
-    // Apply Admin specific filter
+    // 4. Role-based Category Tab Filters
     if (userIsAdmin) {
       switch (adminFilter) {
         case 'all':
-          // All reports
           break;
 
         case 'active_followups':
-          // Has next follow-up date in future/today
           result = result.filter((r) => {
-            const customer = customers.find((c) => c.id === r.customer_id);
+            const customer = customersMap.get(String(r.customer_id));
             const followupDate = r.next_followup_date || customer?.next_followup_date;
             return isActiveDate(followupDate);
           });
           break;
 
         case 'no_followup':
-          // No next follow-up date
           result = result.filter((r) => {
-            const customer = customers.find((c) => c.id === r.customer_id);
+            const customer = customersMap.get(String(r.customer_id));
             const followupDate = r.next_followup_date || customer?.next_followup_date;
             return !followupDate;
           });
           break;
 
         case 'latest_reports': {
-          // Keep only the most recent report for each customer
+          // Exactly one latest report per unique customer
           const latestMap = new Map<string, CustomerReport>();
-          // Sort reports by date_created descending first
-          const sorted = [...result].sort(
-            (a, b) => new Date(b.date_created).getTime() - new Date(a.date_created).getTime()
-          );
-          for (const rep of sorted) {
-            if (!latestMap.has(rep.customer_id)) {
-              latestMap.set(rep.customer_id, rep);
+          // Sort reports descending by creation time first to guarantee picking the newest
+          const sortedByDate = [...result].sort((a, b) => {
+            const tA = new Date(a.date_created || 0).getTime();
+            const tB = new Date(b.date_created || 0).getTime();
+            return tB - tA;
+          });
+          for (const rep of sortedByDate) {
+            const cId = String(rep.customer_id);
+            if (!latestMap.has(cId)) {
+              latestMap.set(cId, rep);
             }
           }
           result = Array.from(latestMap.values());
@@ -294,17 +281,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         }
 
         case 'expired_customers':
-          // Customer is expired
           result = result.filter((r) => {
-            const customer = customers.find((c) => c.id === r.customer_id);
+            const customer = customersMap.get(String(r.customer_id));
             return isExpired(customer);
           });
           break;
 
         case 'near_expiry_customers':
-          // Customer is near expiry (within 3 days or status 'پیگیری قبل از انقضا')
           result = result.filter((r) => {
-            const customer = customers.find((c) => c.id === r.customer_id);
+            const customer = customersMap.get(String(r.customer_id));
             if (!customer) return false;
             if (customer.status === 'پیگیری قبل از انقضا') return true;
             if (customer.assignment_deadline) {
@@ -316,11 +301,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           break;
       }
     } else {
-      // Apply Staff/Employee specific filter
+      // Staff filter rules
       switch (staffFilter) {
         case 'active_followups':
           result = result.filter((r) => {
-            const customer = customers.find((c) => c.id === r.customer_id);
+            const customer = customersMap.get(String(r.customer_id));
             const followupDate = r.next_followup_date || customer?.next_followup_date;
             return isActiveDate(followupDate);
           });
@@ -328,83 +313,110 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
         case 'no_followup':
           result = result.filter((r) => {
-            const customer = customers.find((c) => c.id === r.customer_id);
+            const customer = customersMap.get(String(r.customer_id));
             const followupDate = r.next_followup_date || customer?.next_followup_date;
             return !followupDate;
           });
           break;
 
         case 'unfollowed_referrals':
-          // Handled separately in UI to show uncontacted customers
+          // Handled via separate UI component
           break;
 
         case 'due_less_3_days':
-          // Followup date or assignment deadline <= 3 days
-          result = result.filter((r) => {
-            const customer = customers.find((c) => c.id === r.customer_id);
-            const followupDate = r.next_followup_date || customer?.next_followup_date;
-            const deadline = customer?.assignment_deadline;
-            const daysFollowup = getDaysUntil(followupDate);
-            const daysDeadline = getDaysUntil(deadline);
-
-            const isFollowupNear = daysFollowup !== null && daysFollowup >= 0 && daysFollowup <= 3;
-            const isDeadlineNear = daysDeadline !== null && daysDeadline >= 0 && daysDeadline <= 3;
-            return isFollowupNear || isDeadlineNear;
-          });
-          break;
-
         case 'due_less_7_days':
-          // Followup date or assignment deadline <= 7 days
+        case 'due_less_10_days': {
+          const maxDays = staffFilter === 'due_less_3_days' ? 3 : staffFilter === 'due_less_7_days' ? 7 : 10;
           result = result.filter((r) => {
-            const customer = customers.find((c) => c.id === r.customer_id);
+            const customer = customersMap.get(String(r.customer_id));
             const followupDate = r.next_followup_date || customer?.next_followup_date;
             const deadline = customer?.assignment_deadline;
             const daysFollowup = getDaysUntil(followupDate);
             const daysDeadline = getDaysUntil(deadline);
 
-            const isFollowupNear = daysFollowup !== null && daysFollowup >= 0 && daysFollowup <= 7;
-            const isDeadlineNear = daysDeadline !== null && daysDeadline >= 0 && daysDeadline <= 7;
+            const isFollowupNear = daysFollowup !== null && daysFollowup >= 0 && daysFollowup <= maxDays;
+            const isDeadlineNear = daysDeadline !== null && daysDeadline >= 0 && daysDeadline <= maxDays;
             return isFollowupNear || isDeadlineNear;
           });
           break;
-
-        case 'due_less_10_days':
-          // Followup date or assignment deadline <= 10 days
-          result = result.filter((r) => {
-            const customer = customers.find((c) => c.id === r.customer_id);
-            const followupDate = r.next_followup_date || customer?.next_followup_date;
-            const deadline = customer?.assignment_deadline;
-            const daysFollowup = getDaysUntil(followupDate);
-            const daysDeadline = getDaysUntil(deadline);
-
-            const isFollowupNear = daysFollowup !== null && daysFollowup >= 0 && daysFollowup <= 10;
-            const isDeadlineNear = daysDeadline !== null && daysDeadline >= 0 && daysDeadline <= 10;
-            return isFollowupNear || isDeadlineNear;
-          });
-          break;
+        }
 
         case 'expired':
           result = result.filter((r) => {
-            const customer = customers.find((c) => c.id === r.customer_id);
+            const customer = customersMap.get(String(r.customer_id));
             return isExpired(customer);
           });
           break;
       }
     }
 
-    return result;
+    // 5. Explicit Sorting
+    return [...result].sort((a, b) => {
+      const timeA = new Date(a.date_created || 0).getTime() || 0;
+      const timeB = new Date(b.date_created || 0).getTime() || 0;
+
+      switch (sortBy) {
+        case 'newest':
+          // Newest creation timestamp first
+          return timeB - timeA;
+
+        case 'oldest':
+          // Oldest creation timestamp first
+          return timeA - timeB;
+
+        case 'followup_soonest': {
+          // Soonest upcoming follow-up date first
+          const customerA = customersMap.get(String(a.customer_id));
+          const customerB = customersMap.get(String(b.customer_id));
+          const fA = a.next_followup_date || customerA?.next_followup_date;
+          const fB = b.next_followup_date || customerB?.next_followup_date;
+
+          const daysA = getDaysUntil(fA);
+          const daysB = getDaysUntil(fB);
+
+          // Reports with upcoming followup date take top priority
+          if (daysA !== null && daysB !== null) {
+            if (daysA >= 0 && daysB < 0) return -1;
+            if (daysB >= 0 && daysA < 0) return 1;
+            return daysA - daysB;
+          }
+          if (daysA !== null) return -1;
+          if (daysB !== null) return 1;
+          return timeB - timeA;
+        }
+
+        case 'highest_score': {
+          const scoreA = Number(a.negotiation_score) || 0;
+          const scoreB = Number(b.negotiation_score) || 0;
+          if (scoreB !== scoreA) return scoreB - scoreA;
+          return timeB - timeA;
+        }
+
+        default:
+          return timeB - timeA;
+      }
+    });
   }, [
-    reports,
-    customers,
+    reportList,
+    customersMap,
     userIsAdmin,
     adminFilter,
     staffFilter,
     selectedStatus,
     selectedNegotiator,
     searchQuery,
+    sortBy,
     currentPersonnel,
     currentUser,
   ]);
+
+  // Pagination calculations
+  const totalCount = filteredAndSortedReports.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const displayedReports = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredAndSortedReports.slice(start, start + pageSize);
+  }, [filteredAndSortedReports, currentPage, pageSize]);
 
   // Admin filter items definition
   const adminFilterOptions = [
@@ -439,14 +451,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
             <span>گزارش‌های پیگیری و مذاکره با مشتریان</span>
             <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold">
-              {staffFilter === 'unfollowed_referrals' && !userIsAdmin
+              {!userIsAdmin && staffFilter === 'unfollowed_referrals'
                 ? `${toPersianDigits(unfollowedReferralCustomers.length)} مشتری ارجاعی`
-                : `${toPersianDigits(totalCount)} گزارش`}
+                : `${toPersianDigits(totalCount)} گزارش یافت شد`}
             </span>
           </h2>
           <p className="text-xs text-[#A7A7A7] mt-1">
             {userIsAdmin
-              ? 'ثبت، پایش و فیلتر لحظه‌ای گزارش‌های مذاکره و وضعیت پیگیری مشتریان تمامی کارشناسان'
+              ? 'پایش، ثبت و فیلتر دقیق گزارش‌های مذاکره و موعدهای پیگیری تمامی کارشناسان به ترتیب زمانی دقیق'
               : 'پایش موعدهای پیگیری، مشتریان ارجاعی، مهلت‌های سررسید و ثبت مذاکرات روزانه شما'}
           </p>
         </div>
@@ -508,20 +520,39 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             })}
       </div>
 
-      {/* Secondary Search & Status Filter Bar */}
+      {/* Secondary Search, Filter & Sort Toolbar */}
       <div className="p-3 sm:p-4 bg-[#181818] rounded-2xl border border-[#282828] flex flex-wrap items-center justify-between gap-3">
+        {/* Search Input */}
         <div className="flex-1 max-w-xs sm:max-w-sm relative min-w-[200px]">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="جستجو در متن گزارش، نام شرکت، تلفن..."
+            placeholder="جستجو در متن گزارش، نام شرکت، نام مدیر، تلفن..."
             className="w-full h-9 bg-[#282828] rounded-xl pl-3 pr-9 text-xs text-white placeholder-[#A7A7A7] focus:outline-none focus:border-[#1DB954] border border-[#3e3e3e]"
           />
           <Search className="w-3.5 h-3.5 text-[#A7A7A7] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
+          {/* Sort Selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#A7A7A7] flex items-center gap-1">
+              <ArrowUpDown className="w-3.5 h-3.5 text-[#1DB954]" />
+              <span>مرتب‌سازی:</span>
+            </span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+            >
+              <option value="newest" className="bg-[#181818] text-white">جدیدترین تاریخ ثبت (پیش‌فرض)</option>
+              <option value="oldest" className="bg-[#181818] text-white">قدیمی‌ترین تاریخ ثبت</option>
+              <option value="followup_soonest" className="bg-[#181818] text-white">نزدیک‌ترین موعد پیگیری</option>
+              <option value="highest_score" className="bg-[#181818] text-white">بیشترین امتیاز مذاکره</option>
+            </select>
+          </div>
+
           {/* Status Dropdown */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-[#A7A7A7]">وضعیت:</span>
@@ -548,7 +579,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 onChange={(e) => setSelectedNegotiator(e.target.value)}
                 className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
               >
-                <option value="همه">همه کارشناسان</option>
+                <option value="همه" className="bg-[#181818] text-white">همه کارشناسان</option>
                 {personnelList.map((p) => (
                   <option key={p.id} value={p.name} className="bg-[#181818] text-white">
                     {p.name}
@@ -636,21 +667,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </div>
           </div>
         )
-      ) : /* Standard Reports Feed */
-      isLoadingPage && items.length === 0 ? (
-        <div className="p-16 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
-          <Loader2 className="w-8 h-8 text-[#1DB954] animate-spin mx-auto" />
-          <p className="text-xs text-[#A7A7A7]">در حال بارگذاری گزارش‌های مذاکره...</p>
-        </div>
-      ) : items.length === 0 ? (
+      ) : displayedReports.length === 0 ? (
         <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
           <MessageSquareText className="w-10 h-10 text-[#535353] mx-auto" />
-          <p className="text-xs text-[#A7A7A7]">هیچ گزارشی مطابق با فیلترهای انتخابی یافت نشد.</p>
+          <p className="text-xs text-[#A7A7A7]">هیچ گزارشی مطابق با فیلترها و مرتب‌سازی انتخابی یافت نشد.</p>
         </div>
       ) : (
-        <div className={`space-y-4 ${isLoadingPage ? 'opacity-50 pointer-events-none transition-opacity' : ''}`}>
-          {items.map((rep) => {
-            const customer = customers.find((c) => c.id === rep.customer_id);
+        <div className="space-y-4">
+          {displayedReports.map((rep) => {
+            const customer = customersMap.get(String(rep.customer_id));
             const statusTheme = getStatusTheme(rep.negotiation_status);
             const daysToFollowup = getDaysUntil(rep.next_followup_date || customer?.next_followup_date);
             const customerIsExpired = isExpired(customer);
@@ -820,8 +845,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         totalPages={totalPages}
         totalCount={totalCount}
         pageSize={pageSize}
-        displayedCount={items.length}
-        isLoading={isLoadingPage}
+        displayedCount={displayedReports.length}
+        isLoading={false}
         onPageChange={(p) => setCurrentPage(p)}
         label="گزارش مذاکره"
       />

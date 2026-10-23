@@ -17,8 +17,16 @@ dotenv.config();
 
 export let directusUrl = (process.env.DIRECTUS_URL || '').trim();
 export let directusAdminToken = (process.env.DIRECTUS_ADMIN_TOKEN || '').trim();
-const parsedPort = process.env.PORT ? parseInt(process.env.PORT.trim(), 10) : 3000;
-export const PORT = !isNaN(parsedPort) && parsedPort > 0 ? parsedPort : 3000;
+function resolvePort(): number {
+  const portArgIndex = process.argv.indexOf('--port');
+  if (portArgIndex !== -1 && process.argv[portArgIndex + 1]) {
+    const val = parseInt(process.argv[portArgIndex + 1], 10);
+    if (!isNaN(val) && val > 0) return val;
+  }
+  const parsedPort = process.env.PORT ? parseInt(process.env.PORT.trim(), 10) : 3000;
+  return !isNaN(parsedPort) && parsedPort > 0 ? parsedPort : 3000;
+}
+export const PORT = resolvePort();
 
 export function updateDirectusConfig(url?: string, token?: string) {
   if (typeof url === 'string') directusUrl = url.trim();

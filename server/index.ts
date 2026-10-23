@@ -89,22 +89,28 @@ export async function startServer() {
   );
   const hasDist = Boolean(distPath);
 
-  if (hasDist && distPath) {
-    // Priority 1: If production dist exists, always serve static assets directly
-    console.log(`Serving pre-compiled frontend assets from ${distPath}`);
-    app.use(express.static(distPath));
-    app.get('*', (req, res, next) => {
-      if (
-        req.path.startsWith('/api') ||
-        req.path === '/health' ||
-        req.path === '/bff-status'
-      ) {
-        return next();
-      }
-      res.sendFile(path.resolve(distPath, 'index.html'));
-    });
-  } else if (process.env.NODE_ENV !== 'production') {
-    // Priority 2: In development environment without dist, start Vite middleware
+  if (process.env.NODE_ENV === 'production') {
+    if (hasDist && distPath) {
+      console.log(`[Production] Serving pre-compiled frontend assets from ${distPath}`);
+      app.use(express.static(distPath));
+      app.get('*', (req, res, next) => {
+        if (
+          req.path.startsWith('/api') ||
+          req.path === '/health' ||
+          req.path === '/bff-status'
+        ) {
+          return next();
+        }
+        res.sendFile(path.resolve(distPath, 'index.html'));
+      });
+    } else {
+      console.warn('Production build dist folder not found! Providing graceful fallback response.');
+      app.get('/', (req, res) => {
+        res.status(200).send('AlphaDesk CRM Server is operational. Building client bundle...');
+      });
+    }
+  } else {
+    // In development (AI Studio), mount Vite middleware for live development
     try {
       const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
@@ -116,12 +122,6 @@ export async function startServer() {
     } catch (viteErr: any) {
       console.warn('Vite development middleware could not be loaded:', viteErr?.message || viteErr);
     }
-  } else {
-    // Priority 3: In production without dist, provide graceful 200 fallback so probes pass
-    console.warn('Production build dist folder not found! Providing graceful fallback response.');
-    app.get('/', (req, res) => {
-      res.status(200).send('AlphaDesk CRM Server is operational. Building client bundle...');
-    });
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {

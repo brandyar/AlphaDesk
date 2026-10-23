@@ -9,8 +9,16 @@ import dotenv from "dotenv";
 dotenv.config();
 var directusUrl = (process.env.DIRECTUS_URL || "").trim();
 var directusAdminToken = (process.env.DIRECTUS_ADMIN_TOKEN || "").trim();
-var parsedPort = process.env.PORT ? parseInt(process.env.PORT.trim(), 10) : 3e3;
-var PORT = !isNaN(parsedPort) && parsedPort > 0 ? parsedPort : 3e3;
+function resolvePort() {
+  const portArgIndex = process.argv.indexOf("--port");
+  if (portArgIndex !== -1 && process.argv[portArgIndex + 1]) {
+    const val = parseInt(process.argv[portArgIndex + 1], 10);
+    if (!isNaN(val) && val > 0) return val;
+  }
+  const parsedPort = process.env.PORT ? parseInt(process.env.PORT.trim(), 10) : 3e3;
+  return !isNaN(parsedPort) && parsedPort > 0 ? parsedPort : 3e3;
+}
+var PORT = resolvePort();
 var DIRECTUS_ADMIN_ROLE_IDS = [
   "59e261e1-56f4-401e-9889-4971e2c3c4ce"
 ];
@@ -3466,13 +3474,11 @@ router4.get("/", async (req, res) => {
   const isUnlimited = all === "true" || limit === "all" || limit === "50000";
   const reqLimit = isUnlimited ? 50 : limit ? Math.min(Math.max(1, parseInt(String(limit), 10)), 100) : 25;
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
-  if (!isAdmin && !userId && !personnelId && !userName && !customer_id) {
-    return res.json({
-      data: [],
-      meta: { filter_count: 0, total_count: 0, page: reqPage, limit: reqLimit, total_pages: 1 }
-    });
-  }
-  if (directusUrl && directusAdminToken && !isUnlimited) {
+  const activeFilter = isAdmin ? admin_filter : staff_filter;
+  const requiresRelationalFilter = Boolean(
+    activeFilter && activeFilter !== "all" && activeFilter !== "active_followups" && activeFilter !== "no_followup"
+  );
+  if (directusUrl && directusAdminToken && !isUnlimited && !requiresRelationalFilter) {
     try {
       const directusPageLimit = Math.min(reqLimit, 100);
       let directusPath = `/items/customer_reports?page=${reqPage}&limit=${directusPageLimit}&meta=*&sort=-date_created`;
@@ -3502,10 +3508,10 @@ router4.get("/", async (req, res) => {
         }
         andIdx++;
       }
-      const activeFilter = isAdmin ? admin_filter : staff_filter;
-      if (activeFilter === "active_followups") {
+      const activeFilter2 = isAdmin ? admin_filter : staff_filter;
+      if (activeFilter2 === "active_followups") {
         directusPath += `&filter[_and][${andIdx++}][next_followup_date][_nnull]=true`;
-      } else if (activeFilter === "no_followup") {
+      } else if (activeFilter2 === "no_followup") {
         directusPath += `&filter[_and][${andIdx++}][next_followup_date][_null]=true`;
       }
       if (status && status !== "\u0647\u0645\u0647") {
@@ -6782,16 +6788,23 @@ async function startServer() {
     (p) => fs.existsSync(p) && fs.existsSync(path.resolve(p, "index.html"))
   );
   const hasDist = Boolean(distPath);
-  if (hasDist && distPath) {
-    console.log(`Serving pre-compiled frontend assets from ${distPath}`);
-    app.use(express.static(distPath));
-    app.get("*", (req, res, next) => {
-      if (req.path.startsWith("/api") || req.path === "/health" || req.path === "/bff-status") {
-        return next();
-      }
-      res.sendFile(path.resolve(distPath, "index.html"));
-    });
-  } else if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV === "production") {
+    if (hasDist && distPath) {
+      console.log(`[Production] Serving pre-compiled frontend assets from ${distPath}`);
+      app.use(express.static(distPath));
+      app.get("*", (req, res, next) => {
+        if (req.path.startsWith("/api") || req.path === "/health" || req.path === "/bff-status") {
+          return next();
+        }
+        res.sendFile(path.resolve(distPath, "index.html"));
+      });
+    } else {
+      console.warn("Production build dist folder not found! Providing graceful fallback response.");
+      app.get("/", (req, res) => {
+        res.status(200).send("AlphaDesk CRM Server is operational. Building client bundle...");
+      });
+    }
+  } else {
     try {
       const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
@@ -6803,11 +6816,6 @@ async function startServer() {
     } catch (viteErr) {
       console.warn("Vite development middleware could not be loaded:", viteErr?.message || viteErr);
     }
-  } else {
-    console.warn("Production build dist folder not found! Providing graceful fallback response.");
-    app.get("/", (req, res) => {
-      res.status(200).send("AlphaDesk CRM Server is operational. Building client bundle...");
-    });
   }
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server listening on port ${PORT} (0.0.0.0)`);

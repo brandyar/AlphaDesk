@@ -197,6 +197,21 @@ export default function App() {
     (currentPersonnel?.permissions?.can_manage_tenants ?? false) ||
     (currentPersonnel?.permissions?.allowed_menus?.includes('tenants') ?? false);
 
+  const [isTabPending, startTabTransition] = React.useTransition();
+
+  const handleNavigateToTab = (tab: NavTab, sub?: string) => {
+    if (tab === 'tenants' && !canAccessTenantsTab) {
+      showToast('دسترسی به بخش سازمان‌ها برای حساب کاربری شما فعال نیست.', 'error');
+      return;
+    }
+    startTabTransition(() => {
+      setActiveTab(tab);
+      if (tab === 'personal_portal' && sub) setPortalSubTab(sub as PortalTab);
+      if (tab === 'team' && sub) setTeamSubTab(sub as TeamSubTab);
+    });
+    setIsMobileMenuOpen(false);
+  };
+
   const handleSelectTenant = (tenantId: string) => {
     if (!isCurrentUserAdmin && tenantId === 'all') {
       showToast('مشاهده تجمیعی همه سازمان‌ها فقط برای مدیر سیستم مجاز است.', 'error');
@@ -917,22 +932,20 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-[#121212] text-white overflow-hidden font-sans">
+    <div className="flex h-screen bg-[#121212] text-white overflow-hidden font-sans relative">
+      {/* Top glowing progress bar during tab switching */}
+      {isTabPending && (
+        <div className="fixed top-0 left-0 right-0 h-1 z-50 overflow-hidden bg-black/40 pointer-events-none">
+          <div className="h-full bg-gradient-to-r from-[#1DB954] via-[#1ED760] to-[#1DB954] w-full animate-pulse shadow-[0_0_12px_#1DB954]" />
+        </div>
+      )}
+
       {/* Spotify-style AlphaDesk Sidebar */}
       <Sidebar
         activeTab={activeTab}
         portalSubTab={portalSubTab}
         teamSubTab={teamSubTab}
-        onSelectTab={(tab, sub) => {
-          if (tab === 'tenants' && !canAccessTenantsTab) {
-            showToast('دسترسی به بخش سازمان‌ها برای حساب کاربری شما فعال نیست.', 'error');
-            return;
-          }
-          setActiveTab(tab);
-          if (tab === 'personal_portal' && sub) setPortalSubTab(sub as PortalTab);
-          if (tab === 'team' && sub) setTeamSubTab(sub as TeamSubTab);
-          setIsMobileMenuOpen(false);
-        }}
+        onSelectTab={handleNavigateToTab}
         counts={{
           customers: dashboardSummary?.total_customers ?? userScopedCustomers.length,
           expiredCustomers: dashboardSummary?.expired_customers_count ?? expiredCount,
@@ -975,7 +988,7 @@ export default function App() {
           onLogout={handleLogout}
           expiredCount={expiredCount}
           onViewExpired={() => {
-            setActiveTab('customers');
+            handleNavigateToTab('customers');
             setShowExpiredOnly(true);
           }}
           onOpenNewCustomer={() => {
@@ -991,8 +1004,7 @@ export default function App() {
           isMobileMenuOpen={isMobileMenuOpen}
           onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           onNavigateToPortal={(sub) => {
-            setActiveTab('personal_portal');
-            setPortalSubTab(sub as PortalTab);
+            handleNavigateToTab('personal_portal', sub);
           }}
           tenants={tenants}
           activeTenantId={activeTenantId}
@@ -1002,6 +1014,16 @@ export default function App() {
 
         {/* Dynamic Main View */}
         <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 lg:p-8 pb-24 lg:pb-8 relative">
+          {/* Subtle graceful view transition overlay during heavy tab mounting */}
+          {isTabPending && (
+            <div className="fixed top-14 left-0 right-0 bottom-16 lg:bottom-0 lg:left-64 bg-[#121212]/30 backdrop-blur-[1px] z-20 flex flex-col items-center justify-center pointer-events-none transition-all">
+              <div className="bg-[#181818]/95 px-4 py-2 rounded-full border border-[#282828] shadow-2xl flex items-center gap-2.5 text-xs text-white">
+                <div className="w-3.5 h-3.5 rounded-full border-2 border-[#1DB954] border-t-transparent animate-spin" />
+                <span className="font-bold">در حال بارگذاری صفحه...</span>
+              </div>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex flex-col items-center justify-center h-64 space-y-3">
               <div className="w-8 h-8 rounded-full border-2 border-[#1DB954] border-t-transparent animate-spin" />
@@ -1031,8 +1053,7 @@ export default function App() {
                       setIsAddReportModalOpen(true);
                     }}
                     onNavigateToTab={(tab, sub) => {
-                      setActiveTab(tab);
-                      if (sub) setPortalSubTab(sub as PortalTab);
+                      handleNavigateToTab(tab, sub);
                     }}
                   />
                 )}
@@ -1206,7 +1227,7 @@ export default function App() {
         {/* Mobile Bottom Navigation Bar (Phone-friendly) */}
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 h-16 bg-[#0c0c0c]/95 backdrop-blur-md border-t border-[#282828] flex items-center justify-around px-1 select-none">
           <button
-            onClick={() => setActiveTab('dashboard')}
+            onClick={() => handleNavigateToTab('dashboard')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
               activeTab === 'dashboard' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
             }`}
@@ -1216,7 +1237,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setActiveTab('customers')}
+            onClick={() => handleNavigateToTab('customers')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors relative ${
               activeTab === 'customers' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
             }`}
@@ -1231,7 +1252,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setActiveTab('free_customers')}
+            onClick={() => handleNavigateToTab('free_customers')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors relative ${
               activeTab === 'free_customers' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
             }`}
@@ -1248,7 +1269,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setActiveTab('reports')}
+            onClick={() => handleNavigateToTab('reports')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
               activeTab === 'reports' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
             }`}
@@ -1258,7 +1279,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setActiveTab('analytics')}
+            onClick={() => handleNavigateToTab('analytics')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
               activeTab === 'analytics' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
             }`}
@@ -1268,7 +1289,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setActiveTab('cold_leads')}
+            onClick={() => handleNavigateToTab('cold_leads')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
               activeTab === 'cold_leads' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
             }`}
@@ -1278,7 +1299,7 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => setActiveTab('admin_reports')}
+            onClick={() => handleNavigateToTab('admin_reports')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
               activeTab === 'admin_reports' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
             }`}
@@ -1287,10 +1308,7 @@ export default function App() {
             <span>عملکرد</span>
           </button>
           <button
-            onClick={() => {
-              setActiveTab('personal_portal');
-              setPortalSubTab('profile');
-            }}
+            onClick={() => handleNavigateToTab('personal_portal', 'profile')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
               activeTab === 'personal_portal' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
             }`}

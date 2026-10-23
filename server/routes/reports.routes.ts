@@ -32,14 +32,15 @@ router.get('/', async (req: Request, res: Response) => {
     : 25;
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
 
-  if (!isAdmin && !userId && !personnelId && !userName && !customer_id) {
-    return res.json({
-      data: [],
-      meta: { filter_count: 0, total_count: 0, page: reqPage, limit: reqLimit, total_pages: 1 },
-    });
-  }
+  const activeFilter = isAdmin ? admin_filter : staff_filter;
+  const requiresRelationalFilter = Boolean(
+    activeFilter &&
+    activeFilter !== 'all' &&
+    activeFilter !== 'active_followups' &&
+    activeFilter !== 'no_followup'
+  );
 
-  if (directusUrl && directusAdminToken && !isUnlimited) {
+  if (directusUrl && directusAdminToken && !isUnlimited && !requiresRelationalFilter) {
     try {
       const directusPageLimit = Math.min(reqLimit, 100);
       let directusPath = `/items/customer_reports?page=${reqPage}&limit=${directusPageLimit}&meta=*&sort=-date_created`;
