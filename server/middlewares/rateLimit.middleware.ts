@@ -11,6 +11,17 @@ interface ClientRateRecord {
 const clientRecords = new Map<string, ClientRateRecord>();
 
 export function rateLimiter(req: Request, res: Response, next: NextFunction) {
+  // Always bypass health checks, status probes, and system pings for Docker/Coolify
+  if (
+    req.path === '/api/health' ||
+    req.path === '/health' ||
+    req.path === '/api/bff-status' ||
+    req.path === '/bff-status' ||
+    req.path === '/favicon.ico'
+  ) {
+    return next();
+  }
+
   // Skip rate limiting for static assets or dev middleware
   if (!req.path.startsWith('/api')) {
     return next();

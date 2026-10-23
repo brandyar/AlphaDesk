@@ -22,7 +22,7 @@ RUN npm install --include=dev --no-audit --no-fund --legacy-peer-deps
 COPY . .
 
 # Compile client React SPA to /dist using vite
-RUN npx vite build
+RUN npm run build
 
 # --- Stage 2: Production Execution Image ---
 FROM node:20-alpine AS runner
@@ -43,6 +43,7 @@ COPY server.ts ./server.ts
 COPY server ./server
 COPY directus-schema.json ./directus-schema.json
 COPY tsconfig.json ./tsconfig.json
+COPY index.html ./index.html
 
 # Fix file permissions for non-root 'node' user
 RUN chown -R node:node /app
@@ -52,9 +53,9 @@ USER node
 
 EXPOSE 3000
 
-# Self-contained healthcheck using Node.js built-in fetch
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+# Self-contained healthcheck using Node.js built-in fetch with dynamic port resolution
+HEALTHCHECK --interval=20s --timeout=5s --start-period=15s --retries=5 \
+  CMD node -e "const port = process.env.PORT || 3000; fetch('http://127.0.0.1:' + port + '/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
 # Start production server
 CMD ["npm", "start"]

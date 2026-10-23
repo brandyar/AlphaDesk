@@ -15,8 +15,8 @@ services:
       - DIRECTUS_URL=${DIRECTUS_URL:-}
       - DIRECTUS_ADMIN_TOKEN=${DIRECTUS_ADMIN_TOKEN:-}
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
-      interval: 30s
+      test: ["CMD", "node", "-e", "const port = process.env.PORT || 3000; fetch('http://127.0.0.1:' + port + '/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 20s
       timeout: 5s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 15s

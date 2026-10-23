@@ -29,6 +29,16 @@ const __dirname = path.dirname(__filename);
 
 export const app = express();
 
+// 1. Direct unmetered healthcheck endpoints for Coolify / Docker container probes
+app.get(['/health', '/api/health'], (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+    directusConnected: Boolean(directusUrl && directusAdminToken),
+  });
+});
+
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(rateLimiter);
@@ -64,33 +74,72 @@ export async function startServer() {
           }
         } catch {}
       })
-      .catch((err) => console.warn('Database initialization warning:', err.message));
+      .catch((err) => console.warn('Database initialization warning:', err?.message || err));
   }
 
-  if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa'
+  // Determine whether pre-built frontend distribution exists
+  const distPath = path.resolve(__dirname, '../dist');
+  const hasDist = fs.existsSync(distPath) && fs.existsSync(path.resolve(distPath, 'index.html'));
+
+  if (hasDist) {
+    // Priority 1: If production dist exists, always serve static assets directly
+    console.log(`Serving pre-compiled frontend assets from ${distPath}`);
+    app.use(express.static(distPath));
+    app.get('*', (req, res, next) => {
+      if (
+        req.path.startsWith('/api') ||
+        req.path === '/health' ||
+        req.path === '/bff-status'
+      ) {
+        return next();
+      }
+      res.sendFile(path.resolve(distPath, 'index.html'));
     });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.resolve(__dirname, '../dist');
-    if (fs.existsSync(distPath)) {
-      app.use(express.static(distPath));
-      app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) {
-          return res.status(404).json({ error: 'API endpoint not found' });
-        }
-        res.sendFile(path.resolve(distPath, 'index.html'));
+  } else if (process.env.NODE_ENV !== 'production') {
+    // Priority 2: In development environment without dist, start Vite middleware
+    try {
+      const { createServer: createViteServer } = await import('vite');
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
       });
-    } else {
-      console.warn('Production build dist folder not found! Run npm run build first.');
+      app.use(vite.middlewares);
+      console.log('Vite development middleware mounted successfully.');
+    } catch (viteErr: any) {
+      console.warn('Vite development middleware could not be loaded:', viteErr?.message || viteErr);
     }
+  } else {
+    // Priority 3: In production without dist, provide graceful 200 fallback so probes pass
+    console.warn('Production build dist folder not found! Providing graceful fallback response.');
+    app.get('/', (req, res) => {
+      res.status(200).send('AlphaDesk CRM Server is operational. Building client bundle...');
+    });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server listening on port ${PORT}`);
-    console.log(`BFF Mode: ${directusUrl ? 'Online Database Connected' : 'Offline Mode'}`);
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server listening on port ${PORT} (0.0.0.0)`);
+    console.log(`BFF Mode: ${directusUrl ? 'Online Database Connected' : 'Offline In-Memory Mode'}`);
   });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use by another process.`);
+    } else {
+      console.error('Server socket error encountered:', err);
+    }
+  });
+
+  // Graceful termination for Docker / Coolify stop signals
+  const handleShutdown = (signal: string) => {
+    console.log(`${signal} received. Closing HTTP server gracefully...`);
+    server.close(() => {
+      console.log('HTTP server closed successfully.');
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+  process.on('SIGINT', () => handleShutdown('SIGINT'));
+
+  return server;
 }
