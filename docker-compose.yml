@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: alphadesk-crm
-    restart: always
+    restart: unless-stopped
     ports:
       - "${PORT:-3000}:3000"
     environment:
@@ -15,8 +15,9 @@ services:
       - DIRECTUS_URL=${DIRECTUS_URL:-}
       - DIRECTUS_ADMIN_TOKEN=${DIRECTUS_ADMIN_TOKEN:-}
     healthcheck:
-      test: ["CMD", "node", "-e", "const port = process.env.PORT || 3000; fetch('http://127.0.0.1:' + port + '/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
-      interval: 20s
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:' + (process.env.PORT || 3000) + '/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 15s
+      start_period: 60s
+    command: ["node", "server.js"]

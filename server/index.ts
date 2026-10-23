@@ -77,11 +77,19 @@ export async function startServer() {
       .catch((err) => console.warn('Database initialization warning:', err?.message || err));
   }
 
-  // Determine whether pre-built frontend distribution exists
-  const distPath = path.resolve(__dirname, '../dist');
-  const hasDist = fs.existsSync(distPath) && fs.existsSync(path.resolve(distPath, 'index.html'));
+  // Robust dist folder discovery across root server.js, tsx, or custom working directories
+  const candidateDistDirs = [
+    path.resolve(process.cwd(), 'dist'),
+    path.resolve(__dirname, 'dist'),
+    path.resolve(__dirname, '../dist'),
+    path.resolve(__dirname, '../../dist'),
+  ];
+  const distPath = candidateDistDirs.find(
+    (p) => fs.existsSync(p) && fs.existsSync(path.resolve(p, 'index.html'))
+  );
+  const hasDist = Boolean(distPath);
 
-  if (hasDist) {
+  if (hasDist && distPath) {
     // Priority 1: If production dist exists, always serve static assets directly
     console.log(`Serving pre-compiled frontend assets from ${distPath}`);
     app.use(express.static(distPath));
