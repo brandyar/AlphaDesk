@@ -1,11 +1,126 @@
 import {
   directusUrl,
   directusAdminToken,
+  personnelData,
   projectSettingsData,
   updateProjectSettingsData,
   tenantSettingsMap,
 } from '../config.ts';
 import { directusFetch } from '../directus/client.ts';
+
+/**
+ * Resolves the full name of a user directly from the `personnel` collection (`name` field).
+ * Searches local synchronized personnelData and queries Directus personnel collection if needed.
+ */
+export async function getPersonnelFullName(
+  identifier?: string | null,
+  fallback?: string
+): Promise<{ fullName: string; phone?: string; id?: string }> {
+  const clean = identifier ? String(identifier).trim() : '';
+  const searchFallback = fallback ? String(fallback).trim() : '';
+
+  // 1. Check in-memory synchronized personnelData
+  if (clean) {
+    const cleanLower = clean.toLowerCase();
+    const rawUid = cleanLower.replace(/^p-/, '');
+    const cleanDigits = clean.replace(/\D/g, '');
+
+    const pLocal = personnelData.find((p) => {
+      if (!p) return false;
+      const pid = p.id ? String(p.id).toLowerCase() : '';
+      const puid = (p as any).user_id ? String((p as any).user_id).toLowerCase() : '';
+      const pemail = p.email ? String(p.email).toLowerCase() : '';
+      const puname = (p as any).username ? String((p as any).username).toLowerCase() : '';
+      const pphone = p.phone ? String(p.phone).replace(/\D/g, '') : '';
+
+      return (
+        pid === cleanLower ||
+        (rawUid && (pid === rawUid || pid === `p-${rawUid}`)) ||
+        puid === cleanLower ||
+        pemail === cleanLower ||
+        puname === cleanLower ||
+        (cleanDigits.length >= 7 && pphone && (pphone === cleanDigits || pphone.endsWith(cleanDigits))) ||
+        (p.name && p.name.trim().toLowerCase() === cleanLower)
+      );
+    });
+
+    if (pLocal && pLocal.name && pLocal.name.trim()) {
+      return {
+        fullName: pLocal.name.trim(),
+        phone: pLocal.phone,
+        id: pLocal.id,
+      };
+    }
+  }
+
+  // Also check fallback in local personnelData
+  if (searchFallback) {
+    const pNameLocal = personnelData.find(
+      (p) => p && p.name && p.name.trim().toLowerCase() === searchFallback.toLowerCase()
+    );
+    if (pNameLocal && pNameLocal.name && pNameLocal.name.trim()) {
+      return {
+        fullName: pNameLocal.name.trim(),
+        phone: pNameLocal.phone,
+        id: pNameLocal.id,
+      };
+    }
+  }
+
+  // 2. Query Directus personnel collection directly if connected
+  if (directusUrl && directusAdminToken) {
+    try {
+      if (clean) {
+        const cleanDigits = clean.replace(/\D/g, '');
+        const queryParts = [
+          `filter[_or][0][id][_eq]=${encodeURIComponent(clean)}`,
+          `filter[_or][1][user_id][_eq]=${encodeURIComponent(clean)}`,
+          `filter[_or][2][email][_ieq]=${encodeURIComponent(clean)}`,
+          `filter[_or][3][username][_ieq]=${encodeURIComponent(clean)}`,
+          `filter[_or][4][name][_ieq]=${encodeURIComponent(clean)}`,
+        ];
+        if (cleanDigits.length >= 7) {
+          queryParts.push(`filter[_or][5][phone][_icontains]=${encodeURIComponent(cleanDigits)}`);
+        }
+
+        const dRes = await directusFetch(`/items/personnel?${queryParts.join('&')}&limit=1`).catch(() => null);
+        if (dRes?.data && Array.isArray(dRes.data) && dRes.data.length > 0) {
+          const item = dRes.data[0];
+          if (item?.name && item.name.trim()) {
+            return {
+              fullName: item.name.trim(),
+              phone: item.phone,
+              id: String(item.id),
+            };
+          }
+        }
+      }
+
+      if (searchFallback && searchFallback.length > 2) {
+        const dNameRes = await directusFetch(
+          `/items/personnel?filter[name][_ieq]=${encodeURIComponent(searchFallback)}&limit=1`
+        ).catch(() => null);
+        if (dNameRes?.data && Array.isArray(dNameRes.data) && dNameRes.data.length > 0) {
+          const item = dNameRes.data[0];
+          if (item?.name && item.name.trim()) {
+            return {
+              fullName: item.name.trim(),
+              phone: item.phone,
+              id: String(item.id),
+            };
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn('[IPPanel SMS] Directus personnel lookup warning:', err.message);
+    }
+  }
+
+  // Fallback to provided name or default
+  return {
+    fullName: searchFallback || clean || 'همکار گرامی',
+  };
+}
 
 export function getPatternTextForCode(code: string | null | undefined): string {
   if (!code) return '';
@@ -64,12 +179,36 @@ export function resolvePatternVariables(
     const lower = ph.toLowerCase();
     if (lower === 'mobile' || lower === 'phone') {
       cleanVars[ph] = cleanVars.mobile || cleanVars.phone || recipientPhone || '09120000000';
+    } else if (
+      lower === 'name' ||
+      lower === 'fullname' ||
+      lower === 'full_name' ||
+      lower === 'user_name' ||
+      lower === 'personnel_name' ||
+      lower === 'marketer_name' ||
+      lower === 'applicant_name' ||
+      lower === 'person' ||
+      lower === 'user'
+    ) {
+      cleanVars[ph] =
+        cleanVars.name ||
+        cleanVars.fullName ||
+        cleanVars.full_name ||
+        cleanVars.user_name ||
+        cleanVars.personnel_name ||
+        cleanVars.applicant_name ||
+        'همکار گرامی';
     } else if (lower === 'family' || lower === 'last_name') {
-      const fullName = cleanVars.fullName || cleanVars.name || 'همکار گرامی';
+      const fullName =
+        cleanVars.family ||
+        cleanVars.last_name ||
+        cleanVars.fullName ||
+        cleanVars.name ||
+        'همکار گرامی';
       const parts = fullName.split(' ');
       cleanVars[ph] = parts.length > 1 ? parts.slice(1).join(' ') : 'گرامی';
-    } else if (lower === 'name' || lower === 'first_name') {
-      const fullName = cleanVars.fullName || cleanVars.name || 'همکار';
+    } else if (lower === 'first_name') {
+      const fullName = cleanVars.first_name || cleanVars.fullName || cleanVars.name || 'همکار';
       const parts = fullName.split(' ');
       cleanVars[ph] = parts[0] || 'همکار';
     } else if (lower === 'date' || lower === 'request_date' || lower === 'approval_date') {

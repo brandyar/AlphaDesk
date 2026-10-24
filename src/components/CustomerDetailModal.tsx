@@ -774,9 +774,16 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               </div>
             </div>
 
-            <p className="text-xs text-[#B3B3B3] leading-relaxed whitespace-pre-wrap">
-              {customer.interview_report || 'هیچ یادداشتی برای مصاحبه اولیه ثبت نشده است.'}
-            </p>
+            {/* Interview report text with distinct background */}
+            <div className="p-3.5 rounded-xl bg-[#1c1c1c] border border-[#2d2d2d] shadow-sm space-y-1.5">
+              <div className="text-[11px] font-semibold text-[#1DB954] flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>شرح و متن مصاحبه اولیه:</span>
+              </div>
+              <p className="text-xs sm:text-[13px] text-zinc-100 leading-relaxed whitespace-pre-wrap font-normal">
+                {customer.interview_report || 'هیچ یادداشتی برای مصاحبه اولیه ثبت نشده است.'}
+              </p>
+            </div>
 
             {customer.next_followup_date && (
               <div className="pt-2 text-xs text-[#A7A7A7] flex items-center gap-2">
@@ -1001,9 +1008,16 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                         </div>
                       </div>
 
-                      <p className="text-xs text-[#B3B3B3] leading-relaxed whitespace-pre-wrap">
-                        {rep.report_text}
-                      </p>
+                      {/* Report text with distinct, clear background container */}
+                      <div className="p-3.5 rounded-xl bg-[#1c1c1c] border border-[#2d2d2d] shadow-sm space-y-1.5">
+                        <div className="text-[11px] font-semibold text-[#1DB954] flex items-center gap-1.5">
+                          <MessageSquare className="w-3.5 h-3.5" />
+                          <span>متن گزارش مذاکره:</span>
+                        </div>
+                        <p className="text-xs sm:text-[13px] text-zinc-100 leading-relaxed whitespace-pre-wrap font-normal">
+                          {rep.report_text}
+                        </p>
+                      </div>
 
                       {/* Contract / Invoice Details Card */}
                       {(rep.contract_number || rep.contract_amount || rep.contract_items || rep.contract_date) && (

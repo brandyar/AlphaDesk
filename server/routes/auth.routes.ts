@@ -15,7 +15,7 @@ import {
   formatAvatarUrl,
   getRequestUser,
 } from '../middlewares/auth.middleware.ts';
-import { sendIppanelSmsPattern, sendTenantAdminsSmsPattern } from '../services/sms.service.ts';
+import { sendIppanelSmsPattern, sendTenantAdminsSmsPattern, getPersonnelFullName } from '../services/sms.service.ts';
 import { enrichPersonnel } from './personnel.routes.ts';
 
 const router = Router();
@@ -325,17 +325,21 @@ router.post('/login', async (req: Request, res: Response) => {
         let avatarUrl = formatAvatarUrl(meUser.avatar || pItem?.avatar);
 
         if (projectSettingsData.login_pattern) {
-          const uPhone = pItem?.phone || '';
-          const fullName = pItem?.name || meUser.email;
+          const pInfo = await getPersonnelFullName(pItem?.id || meUser.id, pItem?.name);
+          const fullName = pInfo.fullName || pItem?.name || `${meUser.first_name || ''} ${meUser.last_name || ''}`.trim() || meUser.email;
+          const uPhone = pInfo.phone || pItem?.phone || '';
           const parts = fullName.split(' ');
           const fName = parts[0] || 'همکار';
           const lName = parts.length > 1 ? parts.slice(1).join(' ') : 'گرامی';
           const now = new Date();
 
           const loginVars = {
-            name: fName,
-            family: lName,
+            name: fullName,
             fullName: fullName,
+            user_name: fullName,
+            personnel_name: fullName,
+            family: lName,
+            first_name: fName,
             mobile: uPhone || 'نامشخص',
             phone: uPhone || 'نامشخص',
             date: now.toLocaleDateString('fa-IR'),
@@ -399,17 +403,21 @@ router.post('/login', async (req: Request, res: Response) => {
 
   if (found) {
     if (projectSettingsData.login_pattern) {
-      const uPhone = found.phone || '';
-      const fullName = found.name || found.email;
+      const pInfo = await getPersonnelFullName(found.id, found.name);
+      const fullName = pInfo.fullName || found.name || found.email;
+      const uPhone = pInfo.phone || found.phone || '';
       const parts = fullName.split(' ');
       const fName = parts[0] || 'همکار';
       const lName = parts.length > 1 ? parts.slice(1).join(' ') : 'گرامی';
       const now = new Date();
 
       const loginVars = {
-        name: fName,
-        family: lName,
+        name: fullName,
         fullName: fullName,
+        user_name: fullName,
+        personnel_name: fullName,
+        family: lName,
+        first_name: fName,
         mobile: uPhone || 'نامشخص',
         phone: uPhone || 'نامشخص',
         date: now.toLocaleDateString('fa-IR'),

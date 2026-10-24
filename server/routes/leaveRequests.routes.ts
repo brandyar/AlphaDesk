@@ -9,7 +9,7 @@ import {
 } from '../config.ts';
 import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
 import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
-import { sendIppanelSmsPattern, sendTenantAdminsSmsPattern } from '../services/sms.service.ts';
+import { sendIppanelSmsPattern, sendTenantAdminsSmsPattern, getPersonnelFullName } from '../services/sms.service.ts';
 import { resolvePersonnelId, getSafeDirectusPersonnelForeignKey, resolveDirectusTenantId } from '../directus/sync.ts';
 import { cleanCustomerPayloadForDirectus, normalizePersianString } from '../services/phoneNormalizer.ts';
 import { LeaveRequest } from '../types.ts';
@@ -155,21 +155,28 @@ router.post('/api/leave-requests', async (req: Request, res: Response) => {
   };
 
   let applicantPhone = '';
+  const applicantInfo = await getPersonnelFullName(targetPersonnelId || rawPId, targetPersonnelName);
+  const applicantFullName = applicantInfo.fullName || targetPersonnelName;
   const applicantP = personnelData.find(p => p.id === targetPersonnelId || p.user_id === targetPersonnelId || p.name === targetPersonnelName);
-  if (applicantP?.phone) {
+  if (applicantInfo.phone) {
+    applicantPhone = applicantInfo.phone;
+  } else if (applicantP?.phone) {
     applicantPhone = applicantP.phone;
   }
 
-  const nameParts = (targetPersonnelName || '').trim().split(' ');
+  const nameParts = applicantFullName.trim().split(' ');
   const fName = nameParts[0] || 'همکار';
   const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'گرامی';
   const now = new Date();
   const jalaliDate = now.toLocaleDateString('fa-IR');
 
   const leaveVars: Record<string, string> = {
-    name: fName,
+    name: applicantFullName,
+    fullName: applicantFullName,
+    user_name: applicantFullName,
+    personnel_name: applicantFullName,
     family: lName,
-    fullName: targetPersonnelName,
+    first_name: fName,
     mobile: applicantPhone || 'نامشخص',
     phone: applicantPhone || 'نامشخص',
     request_date: jalaliDate,
@@ -267,7 +274,7 @@ router.post('/api/leave-requests', async (req: Request, res: Response) => {
 router.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { status, manager_note } = req.body;
-  const { userName, isAdmin, userRole, personnelId } = getRequestUser(req);
+  const { userName, isAdmin, userRole, personnelId, userId } = getRequestUser(req);
 
   const currentP = personnelData.find(p => p.id === personnelId);
   const canApprove = isAdmin || userRole === 'admin' || userRole === 'sales_manager' || currentP?.permissions?.can_approve_leaves;
@@ -275,11 +282,14 @@ router.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
     return res.status(403).json({ error: 'شما دسترسی لازم برای تایید یا رد درخواست‌های مرخصی را ندارید.' });
   }
 
+  const reviewerInfo = await getPersonnelFullName(personnelId || userId, userName);
+  const reviewerFullName = reviewerInfo.fullName || userName || 'مدیر سیستم';
+
   const nowIso = new Date().toISOString();
   const updatePayload = {
     status: status || 'pending',
     manager_note: manager_note || null,
-    reviewed_by: userName || 'مدیر سیستم',
+    reviewed_by: reviewerFullName,
     reviewed_at: nowIso
   };
 
@@ -299,8 +309,10 @@ router.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
   }
 
   if (targetReq) {
+    const applicantInfo = await getPersonnelFullName(targetReq.personnel_id, targetReq.personnel_name);
+    const applicantFullName = applicantInfo.fullName || targetReq.personnel_name;
     const applicantP = personnelData.find(p => p.id === targetReq!.personnel_id || p.user_id === targetReq!.personnel_id || p.name === targetReq!.personnel_name);
-    const applicantPhone = applicantP?.phone;
+    const applicantPhone = applicantInfo.phone || applicantP?.phone;
 
     let patternToUse = '';
     if (status === 'approved') {
@@ -314,16 +326,19 @@ router.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
     }
 
     if (patternToUse) {
-      const nameParts = (targetReq.personnel_name || '').trim().split(' ');
+      const nameParts = (applicantFullName || '').trim().split(' ');
       const fName = nameParts[0] || 'همکار';
       const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'گرامی';
       const now = new Date();
       const jalaliDate = now.toLocaleDateString('fa-IR');
 
       const statusVars = {
-        name: fName,
+        name: applicantFullName,
+        fullName: applicantFullName,
+        user_name: applicantFullName,
+        personnel_name: applicantFullName,
         family: lName,
-        fullName: targetReq.personnel_name,
+        first_name: fName,
         mobile: applicantPhone || 'نامشخص',
         phone: applicantPhone || 'نامشخص',
         request_date: targetReq.date_created ? new Date(targetReq.date_created).toLocaleDateString('fa-IR') : jalaliDate,
@@ -338,7 +353,7 @@ router.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
         days: String(targetReq.days_count || 1),
         hours: String(targetReq.hours_count || 1),
         manager_note: manager_note || (status === 'approved' ? 'تایید شد' : 'رد شد'),
-        reviewed_by: userName || 'مدیریت'
+        reviewed_by: reviewerFullName
       };
 
       if (applicantPhone) {
