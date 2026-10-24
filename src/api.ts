@@ -276,11 +276,27 @@ export interface PaginatedResult<T> {
 
 export function normalizePaginatedResponse<T>(resData: any, reqPage = 1, reqLimit = 25): PaginatedResult<T> {
   if (resData && Array.isArray(resData.data) && resData.meta) {
-    const filterCount = Number(resData.meta.filter_count) ?? resData.data.length;
-    const totalCount = Number(resData.meta.total_count) ?? filterCount;
-    const page = Number(resData.meta.page || reqPage);
-    const limit = Number(resData.meta.limit || reqLimit);
-    const totalPages = Number(resData.meta.total_pages || Math.max(1, Math.ceil(filterCount / (limit || 25))));
+    const rawFC = resData.meta.filter_count ?? resData.meta.total_count;
+    const filterCount =
+      typeof rawFC === 'number' && !isNaN(rawFC)
+        ? rawFC
+        : !isNaN(Number(rawFC)) && rawFC !== null && rawFC !== undefined
+        ? Number(rawFC)
+        : resData.data.length;
+
+    const rawTC = resData.meta.total_count ?? filterCount;
+    const totalCount =
+      typeof rawTC === 'number' && !isNaN(rawTC)
+        ? rawTC
+        : !isNaN(Number(rawTC)) && rawTC !== null && rawTC !== undefined
+        ? Number(rawTC)
+        : filterCount;
+
+    const page = Number(resData.meta.page) || reqPage;
+    const limit = Number(resData.meta.limit) || reqLimit;
+    const totalPages =
+      Number(resData.meta.total_pages) || Math.max(1, Math.ceil(filterCount / (limit || 25)));
+
     return {
       data: resData.data,
       meta: {

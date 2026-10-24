@@ -618,17 +618,27 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
     ];
     setEditingAllowedMenus(perms?.allowed_menus || defaultMenus);
 
+    const isRoleAdminOrManager = p.role === 'admin' || p.role === 'sales_manager';
+    const isRoleAdmin = p.role === 'admin';
+
+    const getActionPerm = (key: string, roleDefault: boolean): boolean => {
+      if (perms && typeof (perms as any)[key] === 'boolean') {
+        return Boolean((perms as any)[key]);
+      }
+      return roleDefault;
+    };
+
     setEditingActionPermissions({
-      can_view_all_customers: Boolean(perms?.can_view_all_customers || p.role === 'admin' || p.role === 'sales_manager'),
-      can_edit_customer: perms?.can_edit_customer !== false,
-      can_delete_customer: Boolean(perms?.can_delete_customer || p.role === 'admin'),
-      can_export_data: Boolean(perms?.can_export_data || p.role === 'admin' || p.role === 'sales_manager'),
-      can_extend_ownership: Boolean(perms?.can_extend_ownership || p.role === 'admin' || p.role === 'sales_manager'),
-      can_switch_ownership: Boolean(perms?.can_switch_ownership || p.role === 'admin' || p.role === 'sales_manager'),
-      can_manage_leads: Boolean(perms?.can_manage_leads || p.role === 'admin' || p.role === 'sales_manager'),
-      can_approve_leaves: Boolean(perms?.can_approve_leaves || p.role === 'admin'),
-      can_approve_advances: Boolean(perms?.can_approve_advances || p.role === 'admin'),
-      can_manage_tenants: Boolean(perms?.can_manage_tenants || p.role === 'admin'),
+      can_view_all_customers: getActionPerm('can_view_all_customers', isRoleAdminOrManager),
+      can_edit_customer: getActionPerm('can_edit_customer', true),
+      can_delete_customer: getActionPerm('can_delete_customer', isRoleAdmin),
+      can_export_data: getActionPerm('can_export_data', isRoleAdminOrManager),
+      can_extend_ownership: getActionPerm('can_extend_ownership', isRoleAdminOrManager),
+      can_switch_ownership: getActionPerm('can_switch_ownership', isRoleAdminOrManager),
+      can_manage_leads: getActionPerm('can_manage_leads', isRoleAdminOrManager),
+      can_approve_leaves: getActionPerm('can_approve_leaves', isRoleAdmin),
+      can_approve_advances: getActionPerm('can_approve_advances', isRoleAdmin),
+      can_manage_tenants: getActionPerm('can_manage_tenants', isRoleAdmin),
     });
 
     setEditingReportScope(perms?.report_view_scope || (p.role === 'admin' || p.role === 'sales_manager' ? 'all' : 'own_only'));

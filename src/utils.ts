@@ -525,3 +525,70 @@ export function getAvatarUrl(avatar?: string | null): string | undefined {
   if (trimmed.startsWith('/')) return trimmed;
   return `/api/assets/${trimmed}`;
 }
+
+export function getUserAllowedTenants(
+  currentPersonnel: any | null,
+  currentUser: any | null,
+  tenants: any[] = []
+): any[] {
+  const effectiveTenants =
+    tenants && tenants.length > 0
+      ? tenants
+      : [
+          {
+            id: 'default',
+            name: 'سازمان مرکزی آلفادسک',
+            slug: 'alphadesk-hq',
+            status: 'active',
+            date_created: '',
+          },
+        ];
+
+  // Global System Admin check (currentUser.is_admin === true and not restricted to a single tenant personnel)
+  const isGlobalSystemAdmin = Boolean(
+    currentUser?.is_admin &&
+      (!currentPersonnel ||
+        !currentPersonnel.tenant_id ||
+        currentPersonnel.tenant_id === 'default' ||
+        currentPersonnel.tenant_id === '1' ||
+        (currentPersonnel.allowed_tenant_ids && currentPersonnel.allowed_tenant_ids.includes('all')))
+  );
+
+  if (isGlobalSystemAdmin) {
+    return effectiveTenants;
+  }
+
+  // Retrieve allowed tenant IDs from personnel record
+  const rawAllowed =
+    currentPersonnel?.allowed_tenant_ids ||
+    currentPersonnel?.permissions?.allowed_tenant_ids;
+
+  let allowedIds: string[] = [];
+
+  if (Array.isArray(rawAllowed) && rawAllowed.length > 0) {
+    allowedIds = rawAllowed.map(String);
+  } else if (currentPersonnel?.tenant_id) {
+    allowedIds = [String(currentPersonnel.tenant_id)];
+  } else {
+    allowedIds = ['default', '1'];
+  }
+
+  if (allowedIds.includes('all')) {
+    return effectiveTenants;
+  }
+
+  const allowedSet = new Set(allowedIds);
+
+  const matched = effectiveTenants.filter((t) => {
+    const tid = String(t.id);
+    const tslug = t.slug ? String(t.slug) : '';
+    if (allowedSet.has(tid) || (tslug && allowedSet.has(tslug))) return true;
+    if ((tid === '1' || tid === 'default') && (allowedSet.has('1') || allowedSet.has('default'))) {
+      return true;
+    }
+    return false;
+  });
+
+  return matched.length > 0 ? matched : effectiveTenants.slice(0, 1);
+}
+

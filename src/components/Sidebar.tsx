@@ -27,7 +27,7 @@ import {
   Database,
 } from 'lucide-react';
 import { Personnel, TeamSubTab, Tenant } from '../types';
-import { getAvatarUrl } from '../utils';
+import { getAvatarUrl, getUserAllowedTenants } from '../utils';
 
 export type NavTab =
   | 'dashboard'
@@ -116,41 +116,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
         ];
 
-  // Determine allowed tenants for current user
-  const userAllowedTenants =
-    isAdmin || currentPersonnel?.role === 'admin'
-      ? effectiveTenants
-      : effectiveTenants.filter((t) => {
-          const allowed =
-            currentPersonnel?.allowed_tenant_ids ||
-            currentPersonnel?.permissions?.allowed_tenant_ids;
-          if (allowed && allowed.length > 0) {
-            return allowed.some(
-              (id) =>
-                String(id) === String(t.id) ||
-                (id === 'default' && (String(t.id) === '1' || String(t.id) === 'default'))
-            );
-          }
-          if (currentPersonnel?.tenant_id) {
-            return (
-              String(currentPersonnel.tenant_id) === String(t.id) ||
-              (currentPersonnel.tenant_id === 'default' &&
-                (String(t.id) === '1' || String(t.id) === 'default'))
-            );
-          }
-          return String(t.id) === '1' || String(t.id) === 'default';
-        });
-
-  const canSwitchTenants =
-    (isAdmin || currentPersonnel?.role === 'admin')
-      ? effectiveTenants.length > 1
-      : userAllowedTenants.length > 1;
+  // Determine allowed tenants for current user dynamically
+  const userAllowedTenants = getUserAllowedTenants(currentPersonnel, null, effectiveTenants);
+  const canSwitchTenants = userAllowedTenants.length > 1;
 
   const activeTenant = effectiveTenants.find((t) => String(t.id) === String(activeTenantId));
   const activeTenantName =
     activeTenantId === 'all'
       ? 'همه سازمان‌ها (تجمیعی)'
       : activeTenant?.name || (userAllowedTenants[0]?.name ?? 'سازمان مرکزی آلفادسک');
+
 
   const navItems: {
     id: NavTab;

@@ -109,7 +109,7 @@ import {
   DashboardSummary,
   getMe,
 } from './api';
-import { matchPersonnelToCustomer, matchPersonnelToReport } from './utils';
+import { matchPersonnelToCustomer, matchPersonnelToReport, getUserAllowedTenants } from './utils';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
@@ -213,8 +213,10 @@ export default function App() {
   };
 
   const handleSelectTenant = (tenantId: string) => {
-    if (!isCurrentUserAdmin && tenantId === 'all') {
-      showToast('مشاهده تجمیعی همه سازمان‌ها فقط برای مدیر سیستم مجاز است.', 'error');
+    const allowed = getUserAllowedTenants(currentPersonnel, currentUser, tenants);
+    const isAllowed = allowed.some((t) => String(t.id) === String(tenantId) || (tenantId === 'all' && currentUser?.is_admin));
+    if (!isAllowed) {
+      showToast('شما مجاز به دسترسی یا سوییچ به این سازمان نیستید.', 'error');
       return;
     }
     setActiveTenantId(tenantId);
@@ -279,34 +281,16 @@ export default function App() {
         setCurrentPersonnel(targetPersonnel);
         setApiPersonnelContext(targetPersonnel);
 
-        // For non-admin, auto-correct active tenant if they don't have access to 'all' or selected tenant
-        const isUserAdmin = Boolean(
-          targetPersonnel
-            ? targetPersonnel.role === 'admin' || targetPersonnel.role === 'sales_manager'
-            : targetUser?.is_admin ||
-              targetUser?.app_role === 'admin' ||
-              targetUser?.app_role === 'sales_manager'
+        const allowedTenants = getUserAllowedTenants(targetPersonnel, targetUser, tData);
+        const currentActive = getActiveTenantId();
+        const isCurrentAllowed = allowedTenants.some(
+          (t) => String(t.id) === String(currentActive) || (currentActive === 'all' && targetUser?.is_admin)
         );
 
-        if (!isUserAdmin) {
-          const userAllowed =
-            targetPersonnel.allowed_tenant_ids ||
-            targetPersonnel.permissions?.allowed_tenant_ids;
-          const currentActive = getActiveTenantId();
-          const fallback =
-            userAllowed && userAllowed.length > 0
-              ? String(userAllowed[0])
-              : targetPersonnel.tenant_id
-              ? String(targetPersonnel.tenant_id)
-              : 'default';
-
-          if (
-            currentActive === 'all' ||
-            (userAllowed && userAllowed.length > 0 && !userAllowed.some((id) => String(id) === currentActive))
-          ) {
-            setActiveTenantId(fallback);
-            setActiveTenantIdState(fallback);
-          }
+        if (!isCurrentAllowed && allowedTenants.length > 0) {
+          const fallback = String(allowedTenants[0].id);
+          setActiveTenantId(fallback);
+          setActiveTenantIdState(fallback);
         }
       }
 

@@ -18,7 +18,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Personnel, AuthUser, Tenant } from '../types';
-import { getAvatarUrl } from '../utils';
+import { getAvatarUrl, getUserAllowedTenants } from '../utils';
 
 interface HeaderProps {
   searchQuery: string;
@@ -66,6 +66,15 @@ export const Header: React.FC<HeaderProps> = ({
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isOrgMenuOpen, setIsOrgMenuOpen] = useState(false);
 
+  const isGlobalAdmin = Boolean(
+    currentUser?.is_admin &&
+      (!currentPersonnel ||
+        !currentPersonnel.tenant_id ||
+        currentPersonnel.tenant_id === 'default' ||
+        currentPersonnel.tenant_id === '1' ||
+        (currentPersonnel.allowed_tenant_ids && currentPersonnel.allowed_tenant_ids.includes('all')))
+  );
+
   const isAdmin = Boolean(
     currentUser?.is_admin ||
     currentUser?.app_role === 'admin' ||
@@ -75,7 +84,7 @@ export const Header: React.FC<HeaderProps> = ({
   );
 
   const canAccessTenants =
-    isAdmin ||
+    isGlobalAdmin ||
     (currentPersonnel?.permissions?.can_manage_tenants ?? false) ||
     (currentPersonnel?.permissions?.allowed_menus?.includes('tenants') ?? false);
 
@@ -95,37 +104,16 @@ export const Header: React.FC<HeaderProps> = ({
           },
         ];
 
-  // Determine allowed tenants for current user
-  const userAllowedTenants = isAdmin
-    ? effectiveTenants
-    : effectiveTenants.filter((t) => {
-        const allowed =
-          currentPersonnel?.allowed_tenant_ids ||
-          currentPersonnel?.permissions?.allowed_tenant_ids;
-        if (allowed && allowed.length > 0) {
-          return allowed.some(
-            (id) =>
-              String(id) === String(t.id) ||
-              (id === 'default' && (String(t.id) === '1' || String(t.id) === 'default'))
-          );
-        }
-        if (currentPersonnel?.tenant_id) {
-          return (
-            String(currentPersonnel.tenant_id) === String(t.id) ||
-            (currentPersonnel.tenant_id === 'default' &&
-              (String(t.id) === '1' || String(t.id) === 'default'))
-          );
-        }
-        return String(t.id) === '1' || String(t.id) === 'default';
-      });
-
-  const canSwitchTenants = isAdmin ? effectiveTenants.length > 1 : userAllowedTenants.length > 1;
+  // Determine allowed tenants for current user dynamically
+  const userAllowedTenants = getUserAllowedTenants(currentPersonnel, currentUser, effectiveTenants);
+  const canSwitchTenants = isGlobalAdmin ? effectiveTenants.length > 1 : userAllowedTenants.length > 1;
 
   const activeTenant = effectiveTenants.find((t) => String(t.id) === String(activeTenantId));
   const activeTenantName =
     activeTenantId === 'all'
       ? 'همه سازمان‌ها'
       : activeTenant?.name || (userAllowedTenants[0]?.name ?? 'سازمان مرکزی');
+
 
   return (
     <header className="h-16 sm:h-18 bg-[#121212] border-b border-[#282828] sticky top-0 z-30 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 select-none">
