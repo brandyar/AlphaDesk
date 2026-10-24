@@ -570,6 +570,24 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </select>
           </div>
 
+          {/* Page Size Selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#A7A7A7]">تعداد در صفحه:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+            >
+              <option value={10} className="bg-[#181818] text-white">۱۰ گزارش</option>
+              <option value={25} className="bg-[#181818] text-white">۲۵ گزارش</option>
+              <option value={50} className="bg-[#181818] text-white">۵۰ گزارش</option>
+              <option value={100} className="bg-[#181818] text-white">۱۰۰ گزارش</option>
+            </select>
+          </div>
+
           {/* Negotiator Dropdown - ONLY for Admin */}
           {userIsAdmin && (
             <div className="flex items-center gap-2">
@@ -847,7 +865,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         pageSize={pageSize}
         displayedCount={displayedReports.length}
         isLoading={false}
-        onPageChange={(p) => setCurrentPage(p)}
+        onPageChange={(p) => {
+          setCurrentPage(p);
+          const el = document.querySelector('main');
+          if (el) el.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
         label="گزارش مذاکره"
       />
     </div>

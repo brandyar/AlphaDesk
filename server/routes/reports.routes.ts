@@ -26,9 +26,9 @@ router.get('/', async (req: Request, res: Response) => {
 
   const isUnlimited = all === 'true' || limit === 'all' || limit === '50000';
   const reqLimit = isUnlimited
-    ? 50
+    ? 10000
     : limit
-    ? Math.min(Math.max(1, parseInt(String(limit), 10)), 100)
+    ? Math.min(Math.max(1, parseInt(String(limit), 10)), 500)
     : 25;
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
 

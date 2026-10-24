@@ -3472,7 +3472,7 @@ router4.get("/", async (req, res) => {
   const { customer_id, page, limit, all, status, negotiator, search, admin_filter, staff_filter, start_date, end_date, fields } = req.query;
   const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
   const isUnlimited = all === "true" || limit === "all" || limit === "50000";
-  const reqLimit = isUnlimited ? 50 : limit ? Math.min(Math.max(1, parseInt(String(limit), 10)), 100) : 25;
+  const reqLimit = isUnlimited ? 1e4 : limit ? Math.min(Math.max(1, parseInt(String(limit), 10)), 500) : 25;
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
   const activeFilter = isAdmin ? admin_filter : staff_filter;
   const requiresRelationalFilter = Boolean(

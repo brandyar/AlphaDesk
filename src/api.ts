@@ -656,7 +656,17 @@ export async function fetchAnalyticsDaily(params: {
 }
 
 export async function fetchCustomerReports(
-  customerId?: string,
+  customerIdOrOptions?:
+    | string
+    | {
+        page?: number;
+        limit?: number;
+        all?: boolean;
+        startDate?: string;
+        endDate?: string;
+        negotiator?: string;
+        fields?: string;
+      },
   options?: {
     page?: number;
     limit?: number;
@@ -667,16 +677,21 @@ export async function fetchCustomerReports(
     fields?: string;
   }
 ): Promise<CustomerReport[]> {
+  const customerId = typeof customerIdOrOptions === 'string' ? customerIdOrOptions : undefined;
+  const opts =
+    typeof customerIdOrOptions === 'object' && customerIdOrOptions !== null
+      ? customerIdOrOptions
+      : options;
+
   const params = new URLSearchParams();
   if (customerId) params.append('customer_id', customerId);
-  if (options?.page) params.append('page', String(options.page));
-  if (options?.limit !== undefined) params.append('limit', String(options.limit));
-  else params.append('limit', '25');
-  if (options?.all) params.append('all', 'true');
-  if (options?.startDate) params.append('start_date', options.startDate);
-  if (options?.endDate) params.append('end_date', options.endDate);
-  if (options?.negotiator) params.append('negotiator', options.negotiator);
-  if (options?.fields) params.append('fields', options.fields);
+  if (opts?.page) params.append('page', String(opts.page));
+  if (opts?.limit !== undefined) params.append('limit', String(opts.limit));
+  if (opts?.all || opts?.limit === undefined) params.append('all', 'true');
+  if (opts?.startDate) params.append('start_date', opts.startDate);
+  if (opts?.endDate) params.append('end_date', opts.endDate);
+  if (opts?.negotiator) params.append('negotiator', opts.negotiator);
+  if (opts?.fields) params.append('fields', opts.fields);
 
   const q = params.toString() ? `?${params.toString()}` : '';
   const res = await fetch(`${BASE_URL}/customer-reports${q}`, {
