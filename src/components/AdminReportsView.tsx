@@ -150,26 +150,23 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
     return () => window.removeEventListener('crm_admin_report_saved', handleSaved);
   }, []);
 
-  const userIsAdmin = Boolean(
-    isAdmin ||
+  const canViewAllAdminReports = Boolean(
     currentUser?.is_admin ||
-    currentUser?.app_role === 'admin' ||
-    currentUser?.app_role === 'sales_manager' ||
-    currentPersonnel?.role === 'admin' ||
-    currentPersonnel?.role === 'sales_manager'
+    currentPersonnel?.permissions?.report_view_scope === 'all' ||
+    (currentPersonnel?.role === 'admin' && currentPersonnel?.permissions?.report_view_scope !== 'own_only')
   );
+  const userIsAdmin = canViewAllAdminReports;
 
   const visibleReports = items.filter((r) => {
-    if (userIsAdmin) return true;
+    if (canViewAllAdminReports) return true;
     const isSelf =
       r.personnel_id === currentPersonnel?.id ||
       r.personnel_id === currentUser?.id ||
-      r.personnel_name === currentPersonnel?.name ||
-      r.personnel_name === currentUser?.name;
+      (r.personnel_name && currentPersonnel?.name && r.personnel_name === currentPersonnel.name) ||
+      (r.personnel_name && currentUser?.name && r.personnel_name === currentUser.name);
     if (isSelf) return true;
 
     const scope = currentPersonnel?.permissions?.report_view_scope;
-    if (scope === 'all') return true;
     if (scope === 'specific_personnel') {
       const allowedIds = currentPersonnel?.permissions?.visible_report_personnel_ids || [];
       return allowedIds.includes(r.personnel_id);

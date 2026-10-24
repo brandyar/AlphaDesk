@@ -39,7 +39,8 @@ function normalizeReport(r: any) {
 
 // GET /api/administrative-reports and alias /api/admin-reports
 const getHandler = async (req: Request, res: Response) => {
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+  const reqUser = getRequestUser(req);
+  const { userId, personnelId, isAdmin, userName, tenantId, reportViewScope, visibleReportPersonnelIds } = reqUser;
 
   if (directusUrl && directusAdminToken) {
     try {
@@ -51,12 +52,25 @@ const getHandler = async (req: Request, res: Response) => {
           reports = reports.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
         }
 
-        if (!isAdmin && (userId || personnelId)) {
-          reports = reports.filter((r: any) =>
-            r.personnel_id === personnelId ||
-            r.personnel_id === userId ||
-            (userName && r.personnel_name === userName)
-          );
+        if (!isAdmin) {
+          const scope = reportViewScope || 'own_only';
+          if (scope === 'own_only') {
+            reports = reports.filter((r: any) =>
+              r.personnel_id === personnelId ||
+              r.personnel_id === userId ||
+              (userName && r.personnel_name === userName)
+            );
+          } else if (scope === 'specific_personnel') {
+            const allowedIds = new Set([
+              personnelId,
+              userId,
+              ...(visibleReportPersonnelIds || []),
+            ].map(String));
+            reports = reports.filter((r: any) =>
+              allowedIds.has(String(r.personnel_id)) || (userName && r.personnel_name === userName)
+            );
+          }
+          // if scope === 'all', keep all tenant reports
         }
         return res.json(reports);
       }

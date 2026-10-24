@@ -133,23 +133,45 @@ export function getRequestUser(req: Request): RequestUserContext {
   const isDirectusSystemAdmin = Boolean(
     !pMatch && (DIRECTUS_ADMIN_ROLE_IDS.includes(roleId) || userRole === 'admin')
   );
-  const isAdmin = Boolean(
+  // System super admin (owner/global system user)
+  const isGlobalSystemAdmin = Boolean(
     hasUserContext &&
-      (pMatch
-        ? (pMatch.role === 'admin' || pMatch.role === 'sales_manager')
-        : isDirectusSystemAdmin)
+      ((userRole === 'admin' && !pMatch) || isDirectusSystemAdmin)
   );
+
+  // Personnel-level admin/manager (for admin functions like creating personnel/managing tenants)
+  const isPersonnelAdmin = Boolean(
+    hasUserContext &&
+      (pMatch ? (pMatch.role === 'admin' || pMatch.role === 'sales_manager') : isGlobalSystemAdmin)
+  );
+
+  // Customer visibility rule: explicitly enabled in permissions OR global system admin OR (role admin and not explicitly false)
   const canViewAllCustomers = Boolean(
-    isAdmin || (pMatch?.permissions as any)?.can_view_all_customers === true
+    isGlobalSystemAdmin ||
+      pMatch?.permissions?.can_view_all_customers === true ||
+      (pMatch?.role === 'admin' && pMatch?.permissions?.can_view_all_customers !== false)
   );
+
+  // Administrative report view scope
+  const reportViewScope: 'all' | 'own_only' | 'specific_personnel' =
+    isGlobalSystemAdmin
+      ? 'all'
+      : (pMatch?.permissions?.report_view_scope as any) ||
+        (pMatch?.role === 'admin' && pMatch?.permissions?.report_view_scope !== 'own_only' ? 'all' : 'own_only');
+
+  const visibleReportPersonnelIds: string[] =
+    pMatch?.permissions?.visible_report_personnel_ids || [];
 
   return {
     userId: isSessionRevoked ? '' : userId,
     personnelId: isSessionRevoked ? '' : personnelId,
-    userRole: isAdmin ? (pMatch?.role === 'sales_manager' ? 'sales_manager' : 'admin') : resolvedRole || 'marketer',
+    userRole: isPersonnelAdmin ? (pMatch?.role === 'sales_manager' ? 'sales_manager' : 'admin') : resolvedRole || 'marketer',
     roleId,
-    isAdmin,
+    isAdmin: isGlobalSystemAdmin,
+    isPersonnelAdmin,
     canViewAllCustomers,
+    reportViewScope,
+    visibleReportPersonnelIds,
     userName: isSessionRevoked ? '' : userName,
     userEmail: isSessionRevoked ? '' : userEmail,
     tenantId,

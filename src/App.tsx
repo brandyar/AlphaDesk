@@ -184,12 +184,16 @@ export default function App() {
     }
   };
 
+  const canViewAllCustomers = Boolean(
+    currentUser?.is_admin ||
+      currentPersonnel?.permissions?.can_view_all_customers === true ||
+      (currentPersonnel?.role === 'admin' && currentPersonnel?.permissions?.can_view_all_customers !== false)
+  );
+
   const isCurrentUserAdmin = Boolean(
-    currentPersonnel
-      ? currentPersonnel.role === 'admin' || currentPersonnel.role === 'sales_manager'
-      : currentUser?.is_admin ||
-        currentUser?.app_role === 'admin' ||
-        currentUser?.app_role === 'sales_manager'
+    currentUser?.is_admin ||
+      currentPersonnel?.role === 'admin' ||
+      currentPersonnel?.permissions?.can_manage_personnel === true
   );
 
   const canAccessTenantsTab =
@@ -427,21 +431,21 @@ export default function App() {
     }
   };
 
-  // Strictly user-scoped customers: if non-admin, strictly restrict to this marketer's portfolio
+  // Strictly user-scoped customers: if cannot view all, strictly restrict to this marketer's portfolio
   const userScopedCustomers = React.useMemo(() => {
     if (!currentUser) return [];
-    if (isCurrentUserAdmin) return customers;
+    if (canViewAllCustomers) return customers;
 
     return customers.filter((c) => matchPersonnelToCustomer(c, currentPersonnel, currentUser));
-  }, [customers, isCurrentUserAdmin, currentPersonnel, currentUser]);
+  }, [customers, canViewAllCustomers, currentPersonnel, currentUser]);
 
-  // Strictly user-scoped reports: if non-admin, strictly restrict to this marketer's reports
+  // Strictly user-scoped reports: if cannot view all, strictly restrict to this marketer's reports
   const userScopedReports = React.useMemo(() => {
     if (!currentUser) return [];
-    if (isCurrentUserAdmin) return reports;
+    if (canViewAllCustomers) return reports;
 
     return reports.filter((r) => matchPersonnelToReport(r, currentPersonnel, currentUser));
-  }, [reports, isCurrentUserAdmin, currentPersonnel, currentUser]);
+  }, [reports, canViewAllCustomers, currentPersonnel, currentUser]);
 
   // Filter customers for current view
   const filteredCustomers = React.useMemo(() => {

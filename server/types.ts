@@ -243,7 +243,10 @@ export interface RequestUserContext {
   userRole: string;
   roleId: string;
   isAdmin: boolean;
+  isPersonnelAdmin?: boolean;
   canViewAllCustomers?: boolean;
+  reportViewScope?: 'all' | 'own_only' | 'specific_personnel';
+  visibleReportPersonnelIds?: string[];
   userName: string;
   userEmail: string;
   tenantId: string;

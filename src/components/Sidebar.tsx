@@ -186,22 +186,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Granular menu permission helper
   const isMenuAllowed = (menuId: string): boolean => {
-    if (isAdmin || currentPersonnel?.role === 'admin') return true;
-    if (!currentPersonnel?.permissions?.allowed_menus) {
-      if (menuId === 'team' || menuId === 'tenants') return false;
-      return true;
+    if (isAdmin && !currentPersonnel) return true; // Global system admin
+    if (currentPersonnel?.permissions?.allowed_menus && Array.isArray(currentPersonnel.permissions.allowed_menus)) {
+      return currentPersonnel.permissions.allowed_menus.includes(menuId);
     }
-    return currentPersonnel.permissions.allowed_menus.includes(menuId);
+    if (menuId === 'team' || menuId === 'tenants') {
+      return Boolean(isAdmin || currentPersonnel?.role === 'admin' || currentPersonnel?.role === 'sales_manager');
+    }
+    return true;
   };
 
   const visibleNavItems = navItems.filter((item) => isMenuAllowed(item.id));
-  const canAccessTeam = isAdmin || currentPersonnel?.role === 'admin' || isMenuAllowed('team');
+  const canAccessTeam = isMenuAllowed('team');
   const canAccessPortal = isMenuAllowed('personal_portal');
   const canAccessTenants =
-    isAdmin ||
-    currentPersonnel?.role === 'admin' ||
-    (currentPersonnel?.permissions?.can_manage_tenants ?? false) ||
-    (currentPersonnel?.permissions?.allowed_menus?.includes('tenants') ?? false);
+    (isAdmin && !currentPersonnel) ||
+    isMenuAllowed('tenants') ||
+    (currentPersonnel?.permissions?.can_manage_tenants ?? false);
 
   return (
     <>
