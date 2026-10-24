@@ -11,21 +11,22 @@ import { AdministrativeReport } from '../types.ts';
 
 const router = Router();
 
-function formatHourlyLogsForDb(hourlyLogs: any): string | null {
+function formatHourlyLogsForDb(hourlyLogs: any): any {
   if (!hourlyLogs) return null;
+  if (Array.isArray(hourlyLogs)) {
+    return hourlyLogs.length > 0 ? hourlyLogs : null;
+  }
+  if (typeof hourlyLogs === 'object' && hourlyLogs !== null) {
+    return hourlyLogs;
+  }
   if (typeof hourlyLogs === 'string') {
     const trimmed = hourlyLogs.trim();
     if (!trimmed) return null;
     try {
-      JSON.parse(trimmed);
-      return trimmed;
-    } catch {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parsed.length > 0 ? parsed : null;
+      if (typeof parsed === 'object' && parsed !== null) return parsed;
       return null;
-    }
-  }
-  if (Array.isArray(hourlyLogs) || typeof hourlyLogs === 'object') {
-    try {
-      return JSON.stringify(hourlyLogs);
     } catch {
       return null;
     }
@@ -35,7 +36,7 @@ function formatHourlyLogsForDb(hourlyLogs: any): string | null {
 
 function normalizeReport(r: any) {
   let hourly = r.hourly_logs;
-  if (typeof hourly === 'string' && hourly.startsWith('[')) {
+  if (typeof hourly === 'string' && (hourly.startsWith('[') || hourly.startsWith('{'))) {
     try {
       hourly = JSON.parse(hourly);
     } catch {}
@@ -137,29 +138,29 @@ const postHandler = async (req: Request, res: Response) => {
   };
 
   if (directusUrl && directusAdminToken) {
+    const directusReportPayload = {
+      ...newReport,
+      tenant_id: resolveDirectusTenantId(targetTenantId)
+    };
     try {
-      const directusReportPayload = {
-        ...newReport,
-        tenant_id: resolveDirectusTenantId(targetTenantId)
-      };
       const created = await directusFetch('/items/administrative_reports', {
         method: 'POST',
         body: JSON.stringify(directusReportPayload)
       });
       return res.status(201).json(normalizeReport(created.data || newReport));
     } catch (err: any) {
-      if (err.message && err.message.toLowerCase().includes('hourly_logs')) {
+      const errStr = (err.message || '').toLowerCase();
+      if (errStr.includes('hourly_logs') || errStr.includes('type json') || errStr.includes('syntax for type json')) {
         try {
-          const { hourly_logs, ...fallbackReport } = newReport;
+          const { hourly_logs, ...fallbackReport } = directusReportPayload;
           const created = await directusFetch('/items/administrative_reports', {
             method: 'POST',
-            body: JSON.stringify({
-              ...fallbackReport,
-              tenant_id: resolveDirectusTenantId(targetTenantId)
-            })
+            body: JSON.stringify(fallbackReport)
           });
           return res.status(201).json(normalizeReport({ ...(created.data || fallbackReport), hourly_logs: newReport.hourly_logs }));
-        } catch {}
+        } catch (fbErr: any) {
+          console.error('Fallback admin report create error:', fbErr.message);
+        }
       }
       console.error('Admin report create error:', err.message);
       return res.status(500).json({
@@ -213,7 +214,8 @@ const patchHandler = async (req: Request, res: Response) => {
         });
         updatedData = updated.data || { id, ...updateData };
       } catch (patchErr: any) {
-        if (patchErr.message && patchErr.message.toLowerCase().includes('hourly_logs')) {
+        const patchErrStr = (patchErr.message || '').toLowerCase();
+        if (patchErrStr.includes('hourly_logs') || patchErrStr.includes('type json') || patchErrStr.includes('syntax for type json')) {
           delete updateData.hourly_logs;
           const updatedFallback = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`, {
             method: 'PATCH',

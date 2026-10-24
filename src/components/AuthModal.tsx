@@ -83,10 +83,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (mode === 'login') {
         const res = await loginUser(usernameOrEmail.trim(), password);
         setSuccessMessage('با موفقیت وارد شدید.');
-        setTimeout(() => {
-          onAuthSuccess(res);
-          if (onClose) onClose();
-        }, 400);
+        onAuthSuccess(res);
+        if (onClose) onClose();
       } else {
         const res = await registerUser({
           email: email.trim(),
@@ -96,10 +94,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           phone: phone.trim(),
         });
         setSuccessMessage('ثبت نام با موفقیت انجام شد و وارد شدید.');
-        setTimeout(() => {
-          onAuthSuccess(res);
-          if (onClose) onClose();
-        }, 500);
+        onAuthSuccess(res);
+        if (onClose) onClose();
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'خطا در برقراری ارتباط با سرور.');

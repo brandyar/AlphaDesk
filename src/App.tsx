@@ -258,7 +258,7 @@ export default function App() {
         fetchCustomerReports({ page: 1, limit: 10 }).catch(() => []),
       ]);
 
-      // If a newer fetch was started (e.g. user switched tenant or logged in), discard stale results
+      // If a newer fetch was started, discard stale results
       if (currentVersion !== fetchVersionRef.current) return;
 
       setPersonnelList(pData);
@@ -299,9 +299,6 @@ export default function App() {
           setActiveTenantIdState(fallback);
         }
       }
-
-      // Core load finished: release loading spinner immediately for instant responsiveness!
-      setLoading(false);
     } catch (e) {
       console.error('Error loading data:', e);
     } finally {
@@ -310,6 +307,16 @@ export default function App() {
       }
     }
   };
+
+  // Safety fallback: Never leave the UI stuck on loading/skeleton state for more than 2.5s
+  useEffect(() => {
+    if (loading) {
+      const timer = setTimeout(() => {
+        setLoading(false);
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
 
   useEffect(() => {
     // Verify & refresh user session and roles dynamically from server on mount
@@ -329,6 +336,7 @@ export default function App() {
               user: data.user,
               personnel: data.personnel || stored.personnel,
             });
+            loadAllData(data.personnel, data.user);
           }
         })
         .catch(() => {});
@@ -366,12 +374,14 @@ export default function App() {
   };
 
   const handleAuthSuccess = (authData: AuthResponse) => {
-    // 1. Immediately reset data state so previous session or full data is cleared instantly
+    // 1. Immediately reset data state & switch view to dashboard
     setCustomers([]);
     setReports([]);
     setColdLeads([]);
     setAdminReports([]);
     setDashboardSummary(null);
+    setActiveTab('dashboard');
+    setIsAuthModalOpen(false);
     setLoading(true);
 
     // 2. Set user and personnel context
