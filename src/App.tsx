@@ -247,7 +247,7 @@ export default function App() {
         fetchLeaveRequests().catch(() => []),
         fetchAdvanceRequests().catch(() => []),
         fetchCustomers({ all: true }).catch(() => []),
-        fetchCustomerReports({ all: true }).catch(() => []),
+        fetchCustomerReports({ page: 1, limit: 10 }).catch(() => []),
       ]);
 
       // If a newer fetch was started (e.g. user switched tenant or logged in), discard stale results

@@ -21,7 +21,21 @@ import { CustomerReport } from '../types.ts';
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
-  const { customer_id, page, limit, all, status, negotiator, search, admin_filter, staff_filter, start_date, end_date, fields } = req.query;
+  const {
+    customer_id,
+    page,
+    limit,
+    all,
+    status,
+    negotiator,
+    search,
+    admin_filter,
+    staff_filter,
+    start_date,
+    end_date,
+    fields,
+    sort,
+  } = req.query;
   const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
 
   const isUnlimited = all === 'true' || limit === 'all' || limit === '50000';
@@ -32,18 +46,23 @@ router.get('/', async (req: Request, res: Response) => {
     : 25;
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
 
-  const activeFilter = isAdmin ? admin_filter : staff_filter;
-  const requiresRelationalFilter = Boolean(
-    activeFilter &&
-    activeFilter !== 'all' &&
-    activeFilter !== 'active_followups' &&
-    activeFilter !== 'no_followup'
-  );
+  // Determine sort parameter (default: -date_created -> newest first)
+  let sortParam = '-date_created';
+  if (sort === 'oldest') {
+    sortParam = 'date_created';
+  } else if (sort === 'highest_score') {
+    sortParam = '-negotiation_score,-date_created';
+  } else if (sort === 'followup_soonest') {
+    sortParam = 'next_followup_date,-date_created';
+  }
 
-  if (directusUrl && directusAdminToken && !isUnlimited && !requiresRelationalFilter) {
+  const activeFilter = String(admin_filter || staff_filter || '');
+
+  // Query Directus directly with pagination and server-side filters
+  if (directusUrl && directusAdminToken && !isUnlimited) {
     try {
       const directusPageLimit = Math.min(reqLimit, 100);
-      let directusPath = `/items/customer_reports?page=${reqPage}&limit=${directusPageLimit}&meta=*&sort=-date_created`;
+      let directusPath = `/items/customer_reports?page=${reqPage}&limit=${directusPageLimit}&meta=total_count,filter_count&sort=${sortParam}`;
 
       let andIdx = 0;
 
@@ -61,6 +80,7 @@ router.get('/', async (req: Request, res: Response) => {
         let repOr = 0;
         if (userName) {
           directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][negotiator_name][_icontains]=${encodeURIComponent(userName)}`;
+          directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][customer_id][assigned_marketer_name][_icontains]=${encodeURIComponent(userName)}`;
         }
         if (personnelId) {
           directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][created_by][_eq]=${encodeURIComponent(String(personnelId))}`;
@@ -68,19 +88,41 @@ router.get('/', async (req: Request, res: Response) => {
           if (rawP !== String(personnelId)) {
             directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][created_by][_eq]=${encodeURIComponent(rawP)}`;
           }
+          directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(String(personnelId))}`;
         }
         if (userId) {
           directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][created_by][_eq]=${encodeURIComponent(String(userId))}`;
+          directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(String(userId))}`;
         }
         andIdx++;
       }
 
-      // Handle follow-up filter shortcuts in Directus
-      const activeFilter = isAdmin ? admin_filter : staff_filter;
+      // Handle category tab filters directly in Directus
       if (activeFilter === 'active_followups') {
         directusPath += `&filter[_and][${andIdx++}][next_followup_date][_nnull]=true`;
       } else if (activeFilter === 'no_followup') {
         directusPath += `&filter[_and][${andIdx++}][next_followup_date][_null]=true`;
+      } else if (activeFilter === 'expired_customers' || activeFilter === 'expired') {
+        const nowIso = new Date().toISOString();
+        directusPath += `&filter[_and][${andIdx}][_or][0][customer_id][is_expired][_eq]=true` +
+          `&filter[_and][${andIdx}][_or][1][customer_id][assignment_deadline][_lt]=${encodeURIComponent(nowIso)}`;
+        andIdx++;
+      } else if (activeFilter === 'near_expiry_customers') {
+        const nowIso = new Date().toISOString();
+        const in3DaysIso = new Date(Date.now() + 3 * 86400000).toISOString();
+        directusPath += `&filter[_and][${andIdx}][_or][0][customer_id][status][_eq]=%D9%BE%DB%8C%DA%AF%DB%8C%D8%B1%DB%8C%20%D9%82%D8%A8%D9%84%20%D8%A7%D8%B2%20%D8%A7%D9%86%D9%82%D8%B6%D8%A7` +
+          `&filter[_and][${andIdx}][_or][1][_and][0][customer_id][assignment_deadline][_gte]=${encodeURIComponent(nowIso)}` +
+          `&filter[_and][${andIdx}][_or][1][_and][1][customer_id][assignment_deadline][_lte]=${encodeURIComponent(in3DaysIso)}`;
+        andIdx++;
+      } else if (activeFilter === 'due_less_3_days' || activeFilter === 'due_less_7_days' || activeFilter === 'due_less_10_days') {
+        const daysNum = activeFilter === 'due_less_3_days' ? 3 : activeFilter === 'due_less_7_days' ? 7 : 10;
+        const nowIso = new Date().toISOString();
+        const maxIso = new Date(Date.now() + daysNum * 86400000).toISOString();
+        directusPath += `&filter[_and][${andIdx}][_or][0][_and][0][next_followup_date][_gte]=${encodeURIComponent(nowIso)}` +
+          `&filter[_and][${andIdx}][_or][0][_and][1][next_followup_date][_lte]=${encodeURIComponent(maxIso)}` +
+          `&filter[_and][${andIdx}][_or][1][_and][0][customer_id][assignment_deadline][_gte]=${encodeURIComponent(nowIso)}` +
+          `&filter[_and][${andIdx}][_or][1][_and][1][customer_id][assignment_deadline][_lte]=${encodeURIComponent(maxIso)}`;
+        andIdx++;
       }
 
       if (status && status !== 'همه') {
@@ -99,7 +141,9 @@ router.get('/', async (req: Request, res: Response) => {
         const s = search.trim();
         directusPath += `&filter[_and][${andIdx}][_or][0][report_text][_icontains]=${encodeURIComponent(s)}` +
           `&filter[_and][${andIdx}][_or][1][negotiator_name][_icontains]=${encodeURIComponent(s)}` +
-          `&filter[_and][${andIdx}][_or][2][negotiation_phone][_icontains]=${encodeURIComponent(s)}`;
+          `&filter[_and][${andIdx}][_or][2][negotiation_phone][_icontains]=${encodeURIComponent(s)}` +
+          `&filter[_and][${andIdx}][_or][3][customer_id][company_name][_icontains]=${encodeURIComponent(s)}` +
+          `&filter[_and][${andIdx}][_or][4][customer_id][manager_name][_icontains]=${encodeURIComponent(s)}`;
         andIdx++;
       }
 
@@ -109,16 +153,22 @@ router.get('/', async (req: Request, res: Response) => {
       if (end_date) {
         directusPath += `&filter[_and][${andIdx++}][date_created][_lte]=${encodeURIComponent(String(end_date))}`;
       }
-      if (fields) {
-        directusPath += `&fields=${encodeURIComponent(String(fields))}`;
-      }
 
-      const resData = await directusFetch(directusPath, {}, 1).catch(() => null);
+      const defaultReportFields =
+        '*,customer_id.id,customer_id.company_name,customer_id.manager_name,customer_id.status,customer_id.province,customer_id.city,customer_id.next_followup_date,customer_id.assignment_deadline,customer_id.is_expired,customer_id.assigned_marketer_id,customer_id.assigned_marketer_name';
+      directusPath += `&fields=${encodeURIComponent(fields ? String(fields) : defaultReportFields)}`;
+
+      console.log('[Directus Reports Query] Path:', directusPath);
+      const resData = await directusFetch(directusPath, {}, 1).catch((err) => {
+        console.error('[Directus Reports Query Error]:', err.message);
+        return null;
+      });
+      console.log('[Directus Reports Query] resData meta:', resData?.meta);
       if (resData && Array.isArray(resData.data)) {
         let items = resData.data;
         const totalCount = resData.meta?.filter_count ?? resData.meta?.total_count ?? items.length;
 
-        // Directus caps single queries at 100 items. If client requested reqLimit > 100, fetch remaining pages.
+        // If client specifically requested more than 100 items (e.g. export or unlimited)
         if (reqLimit > 100 && totalCount > items.length && items.length >= 100) {
           const allRes = await directusFetchAllPages(directusPath, {}).catch(() => null);
           if (allRes && Array.isArray(allRes.data) && allRes.data.length > 0) {
@@ -151,10 +201,23 @@ router.get('/', async (req: Request, res: Response) => {
   const allCustomers = await ensureCustomersCache().catch(() => customersData);
   const rawReports = await ensureReportsCache().catch(() => reportsData);
 
-  // Sort by date_created descending (newest first)
+  // Sort according to requested sort option (default: newest first)
   const allReports = [...rawReports].sort((a, b) => {
     const tA = new Date(a.date_created || 0).getTime();
     const tB = new Date(b.date_created || 0).getTime();
+    if (sort === 'oldest') {
+      return tA - tB;
+    } else if (sort === 'highest_score') {
+      const sA = Number(a.negotiation_score) || 0;
+      const sB = Number(b.negotiation_score) || 0;
+      if (sB !== sA) return sB - sA;
+      return tB - tA;
+    } else if (sort === 'followup_soonest') {
+      const fA = a.next_followup_date ? new Date(a.next_followup_date).getTime() : Infinity;
+      const fB = b.next_followup_date ? new Date(b.next_followup_date).getTime() : Infinity;
+      if (fA !== fB) return fA - fB;
+      return tB - tA;
+    }
     return tB - tA;
   });
 

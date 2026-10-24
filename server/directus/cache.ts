@@ -51,7 +51,7 @@ export async function ensureReportsCache(forceRefresh = false): Promise<any[]> {
     return reportsCache.data;
   }
 
-  const res = await directusFetch('/items/customer_reports?limit=5000&sort=-date_created').catch(() => null);
+  const res = await directusFetch('/items/customer_reports?limit=500&sort=-date_created').catch(() => null);
   const items = res?.data || [];
   if (items && items.length > 0) {
     reportsCache = {

@@ -705,7 +705,16 @@ export async function fetchCustomerReports(
 
 export async function fetchCustomerReportsPaginated(
   customerId?: string,
-  options?: { page?: number; limit?: number; search?: string; status?: string; negotiator?: string; adminFilter?: string; staffFilter?: string }
+  options?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    negotiator?: string;
+    adminFilter?: string;
+    staffFilter?: string;
+    sortBy?: string;
+  }
 ): Promise<PaginatedResult<CustomerReport>> {
   const params = new URLSearchParams();
   if (customerId) params.append('customer_id', customerId);
@@ -714,6 +723,7 @@ export async function fetchCustomerReportsPaginated(
   if (options?.negotiator) params.append('negotiator', options.negotiator);
   if (options?.adminFilter) params.append('admin_filter', options.adminFilter);
   if (options?.staffFilter) params.append('staff_filter', options.staffFilter);
+  if (options?.sortBy) params.append('sort', options.sortBy);
   params.append('page', String(options?.page || 1));
   params.append('limit', String(options?.limit || 25));
 
