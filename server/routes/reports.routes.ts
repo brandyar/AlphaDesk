@@ -36,7 +36,23 @@ router.get('/', async (req: Request, res: Response) => {
     fields,
     sort,
   } = req.query;
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+  const {
+    userId,
+    personnelId,
+    isAdmin,
+    isPersonnelAdmin,
+    canViewAllCustomers,
+    reportViewScope,
+    userName,
+    tenantId,
+  } = getRequestUser(req);
+
+  const canViewAllReports = Boolean(
+    isAdmin ||
+    isPersonnelAdmin ||
+    canViewAllCustomers ||
+    reportViewScope === 'all'
+  );
 
   const isUnlimited = all === 'true' || limit === 'all' || limit === '50000';
   const reqLimit = isUnlimited
@@ -76,7 +92,7 @@ router.get('/', async (req: Request, res: Response) => {
 
       if (customer_id) {
         directusPath += `&filter[_and][${andIdx++}][customer_id][_eq]=${encodeURIComponent(String(customer_id))}`;
-      } else if (!isAdmin && (userName || personnelId || userId)) {
+      } else if (!canViewAllReports && (userName || personnelId || userId)) {
         let repOr = 0;
         if (userName) {
           directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][negotiator_name][_icontains]=${encodeURIComponent(userName)}`;
@@ -265,7 +281,7 @@ router.get('/', async (req: Request, res: Response) => {
             r.customer_id !== null &&
             String((r.customer_id as any).id) === String(customer_id))
       );
-    } else if (!isAdmin) {
+    } else if (!canViewAllReports) {
       result = result.filter((r) => {
         const normUserName = normalizePersianString(userName);
         const normNeg = normalizePersianString(r.negotiator_name);
@@ -328,7 +344,7 @@ router.get('/', async (req: Request, res: Response) => {
       result = result.filter((r) => r.date_created && new Date(r.date_created).getTime() <= eMs);
     }
 
-    if (isAdmin && admin_filter && admin_filter !== 'all') {
+    if (canViewAllReports && admin_filter && admin_filter !== 'all') {
       switch (admin_filter) {
         case 'active_followups':
           result = result.filter((r) => {
@@ -373,7 +389,7 @@ router.get('/', async (req: Request, res: Response) => {
           });
           break;
       }
-    } else if (!isAdmin && staff_filter) {
+    } else if (!canViewAllReports && staff_filter) {
       switch (staff_filter) {
         case 'active_followups':
           result = result.filter((r) => {
@@ -573,9 +589,9 @@ router.post('/', async (req: Request, res: Response) => {
 
 router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { isAdmin } = getRequestUser(req);
+  const { isAdmin, isPersonnelAdmin } = getRequestUser(req);
 
-  if (!isAdmin) {
+  if (!isAdmin && !isPersonnelAdmin) {
     return res.status(403).json({ error: 'فقط مدیر سیستم اجازه حذف گزارش مذاکره را دارد.' });
   }
 

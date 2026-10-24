@@ -187,12 +187,14 @@ export default function App() {
   const canViewAllCustomers = Boolean(
     currentUser?.is_admin ||
       currentPersonnel?.permissions?.can_view_all_customers === true ||
-      (currentPersonnel?.role === 'admin' && currentPersonnel?.permissions?.can_view_all_customers !== false)
+      ((currentPersonnel?.role === 'admin' || currentPersonnel?.role === 'sales_manager') &&
+        currentPersonnel?.permissions?.can_view_all_customers !== false)
   );
 
   const isCurrentUserAdmin = Boolean(
     currentUser?.is_admin ||
       currentPersonnel?.role === 'admin' ||
+      currentPersonnel?.role === 'sales_manager' ||
       currentPersonnel?.permissions?.can_manage_personnel === true
   );
 

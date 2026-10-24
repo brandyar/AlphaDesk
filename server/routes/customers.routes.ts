@@ -170,7 +170,7 @@ router.get('/', async (req: Request, res: Response) => {
     if (tenantId && tenantId !== 'all' && (isAdmin || isFreeOnly)) {
       list = list.filter((c) => matchesTenant(c.tenant_id, tenantId));
     }
-    if (!isAdmin && (userId || personnelId) && !isFreeOnly) {
+    if (!isAdmin && !canViewAllCustomers && (userId || personnelId) && !isFreeOnly) {
       list = list.filter(
         (c) =>
           c.assigned_marketer_id === personnelId ||
@@ -339,7 +339,7 @@ router.get('/', async (req: Request, res: Response) => {
   if (tenantId && tenantId !== 'all' && (isAdmin || isFreeOnly)) {
     list = list.filter((c) => matchesTenant(c.tenant_id, tenantId));
   }
-  if (!isAdmin && (userId || personnelId) && !isFreeOnly) {
+  if (!isAdmin && !canViewAllCustomers && (userId || personnelId) && !isFreeOnly) {
     list = list.filter(
       (c) =>
         c.assigned_marketer_id === personnelId ||
@@ -857,9 +857,9 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
 router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { isAdmin } = getRequestUser(req);
+  const { isAdmin, isPersonnelAdmin } = getRequestUser(req);
 
-  if (!isAdmin) {
+  if (!isAdmin && !isPersonnelAdmin) {
     return res.status(403).json({ error: 'فقط مدیر سیستم اجازه حذف پرونده مشتری را دارد.' });
   }
 

@@ -19,7 +19,8 @@ const router = Router();
 
 // GET /api/cold-leads
 router.get('/api/cold-leads', async (req: Request, res: Response) => {
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+  const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, userName, tenantId } = getRequestUser(req);
+  const canViewAllLeads = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers);
 
   if (directusUrl && directusAdminToken) {
     try {
@@ -35,7 +36,7 @@ router.get('/api/cold-leads', async (req: Request, res: Response) => {
           leads = leads.filter((l: any) => matchesTenant(l.tenant_id, tenantId));
         }
 
-        if (!isAdmin && (userName || userId || personnelId)) {
+        if (!canViewAllLeads && (userName || userId || personnelId)) {
           leads = leads.filter((l: any) =>
             (personnelId && (l.assigned_to_id === personnelId || l.assigned_to === personnelId)) ||
             (userId && (l.assigned_to_id === userId || l.assigned_to === userId)) ||
@@ -53,7 +54,7 @@ router.get('/api/cold-leads', async (req: Request, res: Response) => {
   if (tenantId && tenantId !== 'all') {
     leads = leads.filter((l: any) => matchesTenant(l.tenant_id, tenantId));
   }
-  if (!isAdmin && (userName || userId || personnelId)) {
+  if (!canViewAllLeads && (userName || userId || personnelId)) {
     leads = leads.filter((l) =>
       (personnelId && l.assigned_to === personnelId) ||
       (userName && l.assigned_to === userName)
@@ -173,9 +174,9 @@ router.patch('/api/cold-leads/:id', async (req: Request, res: Response) => {
 // POST /api/cold-leads/bulk-assign
 router.post('/api/cold-leads/bulk-assign', async (req: Request, res: Response) => {
   const { lead_ids, target_marketer_id } = req.body;
-  const { isAdmin } = getRequestUser(req);
+  const { isAdmin, isPersonnelAdmin } = getRequestUser(req);
 
-  if (!isAdmin) {
+  if (!isAdmin && !isPersonnelAdmin) {
     return res.status(403).json({ error: 'فقط مدیر سیستم اجازه انتقال و تخصیص گروهی شماره‌ها را دارد.' });
   }
 
