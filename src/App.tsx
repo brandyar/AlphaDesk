@@ -747,13 +747,16 @@ export default function App() {
       if (reportData.id) {
         const updated = await updateAdminReport(reportData.id, reportData);
         setAdminReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+        window.dispatchEvent(new CustomEvent('crm_admin_report_saved', { detail: updated }));
         showToast('گزارش عملکرد اداری با موفقیت بروزرسانی شد.', 'success');
       } else {
         const created = await createAdminReport(reportData);
         setAdminReports((prev) => [created, ...prev]);
+        window.dispatchEvent(new CustomEvent('crm_admin_report_saved', { detail: created }));
         showToast('گزارش عملکرد اداری با موفقیت ثبت شد.', 'success');
       }
       fetchBffStatus().then(setBffStatus).catch(() => {});
+      fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
     } catch (err: any) {
       showToast('خطا در ثبت/ویرایش گزارش اداری: ' + (err.message || 'خطای نامشخص'), 'error');
       throw err;

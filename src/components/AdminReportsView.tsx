@@ -59,6 +59,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingReport, setEditingReport] = useState<AdministrativeReport | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   const [personnelId, setPersonnelId] = useState(currentPersonnel?.id || personnelList[0]?.id || '');
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
@@ -249,11 +250,12 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
     }
 
     if (!finalSummary && activeHourlyList.length === 0) {
-      alert('لطفاً شرح اقدامات روزانه یا حداقل یک گزارش ساعتی وارد کنید.');
+      setModalError('لطفاً شرح اقدامات روزانه یا حداقل یک گزارش ساعتی وارد کنید.');
       return;
     }
 
     setSubmitting(true);
+    setModalError(null);
     try {
       const targetPId = userIsAdmin ? personnelId : (currentPersonnel?.id || currentUser?.id || personnelId);
       const selectedPerson = personnelList.find((p) => p.id === targetPId);
@@ -282,8 +284,9 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
 
       setShowAddModal(false);
       setEditingReport(null);
+      setModalError(null);
     } catch (err: any) {
-      alert('خطا در ثبت/ویرایش گزارش: ' + (err.message || 'خطایی رخ داد'));
+      setModalError(err.message || 'خطا در ثبت یا بروزرسانی گزارش اداری');
     } finally {
       setSubmitting(false);
     }
@@ -618,6 +621,22 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
             </div>
 
             <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
+              {modalError && (
+                <div className="p-3 bg-red-950/80 border border-red-500/50 rounded-xl text-red-300 text-xs flex items-center justify-between gap-2 animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                    <span>{modalError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setModalError(null)}
+                    className="text-red-400 hover:text-white text-xs px-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
               <div className={`grid gap-4 ${userIsAdmin ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
                 {userIsAdmin && (
                   <div>

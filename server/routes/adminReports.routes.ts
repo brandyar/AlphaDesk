@@ -111,7 +111,7 @@ router.get('/api/admin-reports', getHandler);
 const postHandler = async (req: Request, res: Response) => {
   const payload = req.body;
   const { userId, personnelId, userName, tenantId } = getRequestUser(req);
-  const newAdmId = crypto.randomUUID();
+  const newAdmId = payload.id && typeof payload.id === 'string' && payload.id.length >= 10 ? payload.id : crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
   const rawPId = payload.personnel_id || personnelId || userId;
@@ -180,14 +180,19 @@ router.post('/api/admin-reports', postHandler);
 const patchHandler = async (req: Request, res: Response) => {
   const { id } = req.params;
   const payload = req.body;
-  const { isAdmin } = getRequestUser(req);
+  const { isAdmin, isPersonnelAdmin, tenantId, userId, personnelId, userName } = getRequestUser(req);
 
   if (directusUrl && directusAdminToken) {
     try {
       const existingRes = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`).catch(() => null);
       if (existingRes?.data) {
-        if (existingRes.data.status === 'submitted' && !isAdmin) {
-          return res.status(403).json({ error: 'این گزارش ثبت نهایی شده است و امکان ویرایش آن وجود ندارد.' });
+        if (existingRes.data.status === 'submitted' && !isAdmin && !isPersonnelAdmin) {
+          // Allow re-submitting if the employee is just updating today's submitted report
+          const isToday = existingRes.data.report_date === new Date().toISOString().split('T')[0];
+          const isOwner = existingRes.data.personnel_id === personnelId || existingRes.data.personnel_id === userId;
+          if (!isToday && !isOwner) {
+            return res.status(403).json({ error: 'این گزارش ثبت نهایی شده است و امکان ویرایش آن وجود ندارد.' });
+          }
         }
       }
 
@@ -204,6 +209,10 @@ const patchHandler = async (req: Request, res: Response) => {
         date_updated: new Date().toISOString()
       };
 
+      if (payload.tenant_id) {
+        updateData.tenant_id = resolveDirectusTenantId(payload.tenant_id);
+      }
+
       Object.keys(updateData).forEach(k => updateData[k] === undefined && delete updateData[k]);
 
       let updatedData: any;
@@ -215,7 +224,33 @@ const patchHandler = async (req: Request, res: Response) => {
         updatedData = updated.data || { id, ...updateData };
       } catch (patchErr: any) {
         const patchErrStr = (patchErr.message || '').toLowerCase();
-        if (patchErrStr.includes('hourly_logs') || patchErrStr.includes('type json') || patchErrStr.includes('syntax for type json')) {
+        if (patchErrStr.includes('not found') || patchErrStr.includes('404')) {
+          // Record did not exist in Directus, insert it as POST
+          const targetTenantId = payload.tenant_id || tenantId || 'default';
+          const resolved = await resolvePersonnelId(payload.personnel_id || personnelId || userId, payload.personnel_name || userName);
+          const insertPayload = {
+            id,
+            tenant_id: resolveDirectusTenantId(targetTenantId),
+            personnel_id: resolved.personnelId || 'p-1',
+            personnel_name: resolved.personnelName || payload.personnel_name || userName || 'پرسنل شرکت',
+            report_date: payload.report_date || new Date().toISOString().split('T')[0],
+            calls_count: Number(payload.calls_count) || 0,
+            successful_contacts: Number(payload.successful_contacts) || 0,
+            leads_converted: Number(payload.leads_converted) || 0,
+            tasks_summary: payload.tasks_summary || '',
+            challenges: payload.challenges || '',
+            tomorrow_plan: payload.tomorrow_plan || '',
+            hourly_logs: formatHourlyLogsForDb(payload.hourly_logs),
+            status: payload.status === 'submitted' ? 'submitted' : 'draft',
+            date_created: new Date().toISOString(),
+            ...updateData
+          };
+          const created = await directusFetch('/items/administrative_reports', {
+            method: 'POST',
+            body: JSON.stringify(insertPayload)
+          });
+          return res.json(normalizeReport(created.data || insertPayload));
+        } else if (patchErrStr.includes('hourly_logs') || patchErrStr.includes('type json') || patchErrStr.includes('syntax for type json')) {
           delete updateData.hourly_logs;
           const updatedFallback = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`, {
             method: 'PATCH',
