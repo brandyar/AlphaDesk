@@ -121,10 +121,15 @@ export const Header: React.FC<HeaderProps> = ({
   const userAllowedTenants = getUserAllowedTenants(currentPersonnel, currentUser, effectiveTenants);
   const canSwitchTenants = isAdmin || isGlobalAdmin || userAllowedTenants.length > 1;
 
-  const activeTenant = effectiveTenants.find((t) => String(t.id) === String(activeTenantId));
+  const activeTenant = effectiveTenants.find(
+    (t) =>
+      String(t.id) === String(activeTenantId) ||
+      (t.slug && String(t.slug) === String(activeTenantId)) ||
+      ((activeTenantId === 'default' || activeTenantId === '1') && (String(t.id) === 'default' || String(t.id) === '1'))
+  );
   const activeTenantName =
     activeTenantId === 'all'
-      ? 'همه سازمان‌ها'
+      ? 'همه سازمان‌ها (تجمیعی)'
       : activeTenant?.name || (userAllowedTenants[0]?.name ?? 'سازمان مرکزی');
 
 
@@ -302,7 +307,7 @@ export const Header: React.FC<HeaderProps> = ({
                       </select>
                     ) : (
                       <div className="text-xs font-bold text-white bg-[#121212] px-2.5 py-1.5 rounded-lg border border-[#282828] flex items-center justify-between">
-                        <span className="truncate">{userAllowedTenants[0]?.name || activeTenantName}</span>
+                        <span className="truncate">{activeTenantName}</span>
                         <span className="w-1.5 h-1.5 rounded-full bg-[#1DB954]" />
                       </div>
                     )}

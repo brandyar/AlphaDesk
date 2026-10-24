@@ -120,7 +120,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const userAllowedTenants = getUserAllowedTenants(currentPersonnel, isAdmin ? { is_admin: true } : null, effectiveTenants);
   const canSwitchTenants = userAllowedTenants.length > 1;
 
-  const activeTenant = effectiveTenants.find((t) => String(t.id) === String(activeTenantId));
+  const activeTenant = effectiveTenants.find(
+    (t) =>
+      String(t.id) === String(activeTenantId) ||
+      (t.slug && String(t.slug) === String(activeTenantId)) ||
+      ((activeTenantId === 'default' || activeTenantId === '1') && (String(t.id) === 'default' || String(t.id) === '1'))
+  );
   const activeTenantName =
     activeTenantId === 'all'
       ? 'همه سازمان‌ها (تجمیعی)'
@@ -286,7 +291,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="min-w-0 text-right">
                     <div className="text-[10px] text-[#888888] font-medium">سازمان شما:</div>
                     <div className="text-xs font-bold text-white truncate max-w-[150px]">
-                      {userAllowedTenants[0]?.name || activeTenantName}
+                      {activeTenantName}
                     </div>
                   </div>
                 </div>
