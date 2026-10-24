@@ -19,6 +19,7 @@ import {
   Edit2,
   Save,
   FileEdit,
+  Lock,
 } from 'lucide-react';
 import { AdministrativeReport, Personnel, AuthUser, HourlyWorkLog } from '../types';
 import { formatPersianDate, formatPersianDateTime, toPersianDigits } from '../utils';
@@ -206,6 +207,10 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
   };
 
   const handleOpenEditModal = (report: AdministrativeReport) => {
+    // Only draft reports can be edited
+    if (report.status === 'submitted') {
+      return;
+    }
     setEditingReport(report);
     setPersonnelId(report.personnel_id);
     setReportDate(report.report_date ? report.report_date.split('T')[0] : new Date().toISOString().split('T')[0]);
@@ -235,6 +240,12 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
   };
 
   const handleSubmit = async (targetStatus: 'draft' | 'submitted') => {
+    // Prevent editing if the report being edited is already submitted
+    if (editingReport && editingReport.status === 'submitted') {
+      setModalError('این گزارش ثبت نهایی شده است و امکان ویرایش آن وجود ندارد.');
+      return;
+    }
+
     // Compile hourly logs into list
     const activeHourlyList: HourlyWorkLog[] = Object.entries(hourlyLogs)
       .filter(([_, act]) => act.trim().length > 0)
@@ -398,7 +409,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
             const hourlyItems = parseReportHourlyLogs(report);
             const isExpanded = expandedIds.has(report.id);
             const isDraft = report.status === 'draft';
-            const canEdit = isDraft || userIsAdmin;
+            const canEdit = isDraft;
 
             return (
               <div
@@ -423,13 +434,23 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                         </span>
                         {/* Status Badge: draft vs submitted */}
                         <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
                             isDraft
                               ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
                               : 'bg-[#1DB954]/15 text-[#1DB954] border-[#1DB954]/30'
                           }`}
                         >
-                          {isDraft ? 'پیش‌نویس' : 'ثبت نهایی'}
+                          {isDraft ? (
+                            <>
+                              <FileEdit className="w-2.5 h-2.5" />
+                              <span>پیش‌نویس</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="w-2.5 h-2.5" />
+                              <span>ثبت نهایی</span>
+                            </>
+                          )}
                         </span>
                       </div>
                       <div className="text-xs text-[#888] mt-0.5 flex items-center gap-2">
@@ -456,8 +477,8 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                       </span>
                     </div>
 
-                    {/* Edit Button (allowed if draft or admin) */}
-                    {canEdit && (
+                    {/* Edit Button (strictly allowed only if draft) */}
+                    {canEdit ? (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -465,11 +486,19 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                           handleOpenEditModal(report);
                         }}
                         className="h-8 px-3 rounded-full text-xs font-bold bg-[#242424] text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 flex items-center gap-1 transition-colors cursor-pointer"
-                        title="ویرایش گزارش"
+                        title="ویرایش پیش‌نویس گزارش"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                         <span>ویرایش</span>
                       </button>
+                    ) : (
+                      <div
+                        className="h-8 px-2.5 rounded-full text-[11px] font-medium bg-[#1c1c1c] text-[#888] border border-[#2a2a2a] flex items-center gap-1 select-none"
+                        title="این گزارش ثبت نهایی شده و غیرقابل ویرایش است"
+                      >
+                        <Lock className="w-3 h-3 text-[#777]" />
+                        <span className="hidden sm:inline">ثبت نهایی</span>
+                      </div>
                     )}
 
                     {/* Expand/Collapse Trigger */}

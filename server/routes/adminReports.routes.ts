@@ -186,13 +186,8 @@ const patchHandler = async (req: Request, res: Response) => {
     try {
       const existingRes = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`).catch(() => null);
       if (existingRes?.data) {
-        if (existingRes.data.status === 'submitted' && !isAdmin && !isPersonnelAdmin) {
-          // Allow re-submitting if the employee is just updating today's submitted report
-          const isToday = existingRes.data.report_date === new Date().toISOString().split('T')[0];
-          const isOwner = existingRes.data.personnel_id === personnelId || existingRes.data.personnel_id === userId;
-          if (!isToday && !isOwner) {
-            return res.status(403).json({ error: 'این گزارش ثبت نهایی شده است و امکان ویرایش آن وجود ندارد.' });
-          }
+        if (existingRes.data.status === 'submitted') {
+          return res.status(403).json({ error: 'این گزارش ثبت نهایی شده است و امکان ویرایش آن وجود ندارد.' });
         }
       }
 
