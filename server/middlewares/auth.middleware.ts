@@ -131,33 +131,34 @@ export function getRequestUser(req: Request): RequestUserContext {
 
   const resolvedRole = pMatch?.role || userRole || '';
   const isDirectusSystemAdmin = Boolean(
-    !pMatch && (DIRECTUS_ADMIN_ROLE_IDS.includes(roleId) || userRole === 'admin')
-  );
-  // System super admin (owner/global system user)
-  const isGlobalSystemAdmin = Boolean(
-    hasUserContext &&
-      ((userRole === 'admin' && !pMatch) || isDirectusSystemAdmin)
+    DIRECTUS_ADMIN_ROLE_IDS.includes(roleId) || userRole === 'admin'
   );
 
-  // Personnel-level admin/manager (for admin functions like creating personnel/managing tenants)
+  // System admin (global admin or personnel with admin role)
+  const isSystemAdmin = Boolean(
+    hasUserContext &&
+      (isDirectusSystemAdmin || userRole === 'admin' || pMatch?.role === 'admin')
+  );
+
+  // Personnel-level admin/manager (admin or sales_manager)
   const isPersonnelAdmin = Boolean(
     hasUserContext &&
-      (pMatch ? (pMatch.role === 'admin' || pMatch.role === 'sales_manager') : isGlobalSystemAdmin)
+      (isSystemAdmin || pMatch?.role === 'sales_manager')
   );
 
-  // Customer visibility rule: explicitly enabled in permissions OR global system admin OR (role admin and not explicitly false)
+  // Customer visibility rule: Admin OR explicitly enabled in permissions OR sales manager (unless explicitly disabled)
   const canViewAllCustomers = Boolean(
-    isGlobalSystemAdmin ||
+    isSystemAdmin ||
       pMatch?.permissions?.can_view_all_customers === true ||
-      (pMatch?.role === 'admin' && pMatch?.permissions?.can_view_all_customers !== false)
+      (pMatch?.role === 'sales_manager' && pMatch?.permissions?.can_view_all_customers !== false)
   );
 
   // Administrative report view scope
   const reportViewScope: 'all' | 'own_only' | 'specific_personnel' =
-    isGlobalSystemAdmin
+    isSystemAdmin
       ? 'all'
       : (pMatch?.permissions?.report_view_scope as any) ||
-        (pMatch?.role === 'admin' && pMatch?.permissions?.report_view_scope !== 'own_only' ? 'all' : 'own_only');
+        (pMatch?.role === 'sales_manager' && pMatch?.permissions?.report_view_scope !== 'own_only' ? 'all' : 'own_only');
 
   const visibleReportPersonnelIds: string[] =
     pMatch?.permissions?.visible_report_personnel_ids || [];
@@ -167,7 +168,7 @@ export function getRequestUser(req: Request): RequestUserContext {
     personnelId: isSessionRevoked ? '' : personnelId,
     userRole: isPersonnelAdmin ? (pMatch?.role === 'sales_manager' ? 'sales_manager' : 'admin') : resolvedRole || 'marketer',
     roleId,
-    isAdmin: isGlobalSystemAdmin,
+    isAdmin: isSystemAdmin,
     isPersonnelAdmin,
     canViewAllCustomers,
     reportViewScope,
