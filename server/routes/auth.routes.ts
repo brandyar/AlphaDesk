@@ -197,23 +197,26 @@ router.post('/login', async (req: Request, res: Response) => {
       let directusUserEmail = cleanIdentifier;
 
       if (!cleanIdentifier.includes('@')) {
+        const cleanDigits = rawIdentifier.replace(/\D/g, '');
         let pRes = await directusFetch(
-          `/items/personnel?filter[_or][0][username][_eq]=${encodeURIComponent(
+          `/items/personnel?filter[_or][0][username][_ieq]=${encodeURIComponent(
             rawIdentifier
-          )}&filter[_or][1][phone][_eq]=${encodeURIComponent(rawIdentifier)}&limit=1`
+          )}&filter[_or][1][phone][_ieq]=${encodeURIComponent(rawIdentifier)}${
+            cleanDigits.length >= 7 ? `&filter[_or][2][phone][_icontains]=${encodeURIComponent(cleanDigits)}` : ''
+          }&limit=1`
         ).catch(() => null);
 
         if (!pRes?.data || !Array.isArray(pRes.data) || pRes.data.length === 0) {
           pRes = await directusFetch(
-            `/items/personnel?filter[_or][0][username][_eq]=${encodeURIComponent(
+            `/items/personnel?filter[_or][0][username][_ieq]=${encodeURIComponent(
               cleanIdentifier
-            )}&filter[_or][1][phone][_eq]=${encodeURIComponent(cleanIdentifier)}&limit=1`
+            )}&filter[_or][1][phone][_ieq]=${encodeURIComponent(cleanIdentifier)}&limit=1`
           ).catch(() => null);
         }
 
         if (pRes?.data && Array.isArray(pRes.data) && pRes.data.length > 0) {
           const foundPersonnel = pRes.data[0];
-          if (foundPersonnel.email) {
+          if (foundPersonnel.email && foundPersonnel.email.trim()) {
             directusUserEmail = foundPersonnel.email.toLowerCase().trim();
           }
         }
@@ -257,13 +260,31 @@ router.post('/login', async (req: Request, res: Response) => {
 
         if (!pRes?.data || !Array.isArray(pRes.data) || pRes.data.length === 0) {
           pRes = await directusFetch(
-            `/items/personnel?filter[email][_eq]=${encodeURIComponent(meUser.email)}`
+            `/items/personnel?filter[email][_ieq]=${encodeURIComponent(meUser.email)}`
           ).catch(() => null);
         }
 
         let pItem = pRes?.data?.[0] || null;
 
-
+        if (pItem) {
+          if (!pItem.user_id || pItem.user_id !== meUser.id) {
+            pItem.user_id = meUser.id;
+            await directusFetch(`/items/personnel/${pItem.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ user_id: meUser.id }),
+            }).catch(() => {});
+          }
+          const pIdx = personnelData.findIndex(
+            (p) =>
+              String(p.id) === String(pItem.id) ||
+              (p.email && p.email.toLowerCase() === meUser.email.toLowerCase())
+          );
+          if (pIdx >= 0) {
+            personnelData[pIdx] = { ...personnelData[pIdx], ...pItem, user_id: meUser.id };
+          } else {
+            personnelData.push({ ...pItem, user_id: meUser.id });
+          }
+        }
 
         if (!pItem) {
           const cleanPName =
@@ -286,6 +307,7 @@ router.post('/login', async (req: Request, res: Response) => {
           }).catch(() => null);
 
           pItem = createdPRes?.data || newPersonnelPayload;
+          personnelData.push(pItem);
         }
 
         pItem = enrichPersonnel(pItem);
@@ -358,12 +380,22 @@ router.post('/login', async (req: Request, res: Response) => {
     }
   }
 
-  const found = personnelData.find(
-    (p) =>
-      (p.email && p.email.toLowerCase() === cleanIdentifier) ||
-      (p.username && p.username.toLowerCase() === cleanIdentifier) ||
-      (p.phone && p.phone.replace(/[\s\-_()]/g, '') === cleanIdentifier.replace(/[\s\-_()]/g, ''))
-  );
+  const cleanDigits = cleanIdentifier.replace(/\D/g, '');
+
+  const found = personnelData.find((p) => {
+    if (!p) return false;
+    const pEmail = p.email ? String(p.email).trim().toLowerCase() : '';
+    const pUsername = p.username ? String(p.username).trim().toLowerCase() : '';
+    const pPhone = p.phone ? String(p.phone).trim() : '';
+    const pPhoneDigits = pPhone.replace(/\D/g, '');
+
+    if (cleanIdentifier && pEmail && pEmail === cleanIdentifier) return true;
+    if (cleanIdentifier && pUsername && pUsername === cleanIdentifier) return true;
+    if (cleanDigits && cleanDigits.length >= 7 && pPhoneDigits && pPhoneDigits === cleanDigits) return true;
+    if (cleanIdentifier && pPhone && pPhone.replace(/[\s\-_()]/g, '').toLowerCase() === cleanIdentifier.replace(/[\s\-_()]/g, '')) return true;
+
+    return false;
+  });
 
   if (found) {
     if (projectSettingsData.login_pattern) {
@@ -455,12 +487,23 @@ router.get('/me', async (req: Request, res: Response) => {
   }
 
   if (!pItem) {
-    pItem = personnelData.find(
-      (p) =>
-        (personnelId && p.id === personnelId) ||
-        (userId && p.user_id === userId) ||
-        (userEmail && p.email?.toLowerCase() === userEmail?.toLowerCase())
-    );
+    pItem = personnelData.find((p) => {
+      if (!p) return false;
+      const pId = p.id ? String(p.id).trim().toLowerCase() : '';
+      const pUserId = p.user_id ? String(p.user_id).trim().toLowerCase() : '';
+      const pEmail = p.email ? String(p.email).trim().toLowerCase() : '';
+
+      const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
+      const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
+      const cleanUEmail = userEmail ? String(userEmail).trim().toLowerCase() : '';
+
+      if (cleanPId && pId && pId === cleanPId) return true;
+      if (cleanUId && pUserId && pUserId === cleanUId) return true;
+      if (cleanUId && pId && pId === cleanUId) return true;
+      if (cleanUEmail && pEmail && pEmail === cleanUEmail) return true;
+
+      return false;
+    });
   }
 
   if (pItem) {

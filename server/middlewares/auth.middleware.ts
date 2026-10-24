@@ -107,18 +107,24 @@ export function getRequestUser(req: Request): RequestUserContext {
   );
 
   const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
-  const rawUid = cleanPId.replace(/^p-/, '');
+  const rawUid = cleanPId ? cleanPId.replace(/^p-/, '') : '';
   const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
-  const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : '';
+  const cleanEmail = userEmail ? String(userEmail).trim().toLowerCase() : '';
 
-  const pMatch = personnelData.find(
-    (p) =>
-      (cleanPId &&
-        (p.id?.toLowerCase() === cleanPId || p.id?.toLowerCase() === `p-${rawUid}`)) ||
-      (cleanUId &&
-        (p.user_id?.toLowerCase() === cleanUId || p.id?.toLowerCase() === cleanUId)) ||
-      (cleanEmail && p.email?.toLowerCase() === cleanEmail)
-  );
+  const pMatch = personnelData.find((p) => {
+    if (!p) return false;
+    const pId = p.id ? String(p.id).trim().toLowerCase() : '';
+    const pUserId = p.user_id ? String(p.user_id).trim().toLowerCase() : '';
+    const pEmail = p.email ? String(p.email).trim().toLowerCase() : '';
+
+    if (cleanPId && pId && pId === cleanPId) return true;
+    if (cleanPId && rawUid && pId && (pId === `p-${rawUid}` || pId === rawUid)) return true;
+    if (cleanUId && pUserId && pUserId === cleanUId) return true;
+    if (cleanUId && pId && pId === cleanUId) return true;
+    if (cleanEmail && pEmail && pEmail === cleanEmail) return true;
+
+    return false;
+  });
 
   if (!userName && pMatch?.name) {
     userName = pMatch.name;
