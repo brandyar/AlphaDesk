@@ -68,8 +68,9 @@ export function invalidateDashboardSummaryCache() {
 
 // GET /api/dashboard-summary & /api/dashboard/summary
 const handleDashboardSummary = async (req: Request, res: Response) => {
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
-  const cacheKey = `${tenantId || 'all'}_${isAdmin ? 'admin' : userId || userName || 'staff'}`;
+  const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, reportViewScope, userName, tenantId } = getRequestUser(req);
+  const canViewAll = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers || reportViewScope === 'all');
+  const cacheKey = `${tenantId || 'all'}_${canViewAll ? 'admin' : userId || userName || 'staff'}`;
   const now = Date.now();
   const cached = dashboardSummaryCacheMap.get(cacheKey);
   if (cached && now - cached.timestamp < DASHBOARD_CACHE_TTL_MS) {
@@ -95,7 +96,7 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
       let marketerRepFilter = '';
       let marketerLeadFilter = '';
 
-      if (!isAdmin) {
+      if (!canViewAll) {
         if (cleanPId) {
           marketerCustFilter = `&filter[_or][0][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`;
           if (rawUid && rawUid !== cleanPId) {

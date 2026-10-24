@@ -11,6 +11,28 @@ import { AdministrativeReport } from '../types.ts';
 
 const router = Router();
 
+function formatHourlyLogsForDb(hourlyLogs: any): string | null {
+  if (!hourlyLogs) return null;
+  if (typeof hourlyLogs === 'string') {
+    const trimmed = hourlyLogs.trim();
+    if (!trimmed) return null;
+    try {
+      JSON.parse(trimmed);
+      return trimmed;
+    } catch {
+      return null;
+    }
+  }
+  if (Array.isArray(hourlyLogs) || typeof hourlyLogs === 'object') {
+    try {
+      return JSON.stringify(hourlyLogs);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function normalizeReport(r: any) {
   let hourly = r.hourly_logs;
   if (typeof hourly === 'string' && hourly.startsWith('[')) {
@@ -95,6 +117,7 @@ const postHandler = async (req: Request, res: Response) => {
   const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
 
   const targetTenantId = payload.tenant_id || tenantId || 'default';
+  const dbHourlyLogs = formatHourlyLogsForDb(payload.hourly_logs);
 
   const newReport: AdministrativeReport = {
     id: newAdmId,
@@ -108,7 +131,7 @@ const postHandler = async (req: Request, res: Response) => {
     tasks_summary: payload.tasks_summary || '',
     challenges: payload.challenges || '',
     tomorrow_plan: payload.tomorrow_plan || '',
-    hourly_logs: payload.hourly_logs || null,
+    hourly_logs: dbHourlyLogs as any,
     status: payload.status === 'submitted' ? 'submitted' : 'draft',
     date_created: nowIso
   };
@@ -175,18 +198,34 @@ const patchHandler = async (req: Request, res: Response) => {
         tasks_summary: payload.tasks_summary !== undefined ? payload.tasks_summary : undefined,
         challenges: payload.challenges !== undefined ? payload.challenges : undefined,
         tomorrow_plan: payload.tomorrow_plan !== undefined ? payload.tomorrow_plan : undefined,
-        hourly_logs: payload.hourly_logs !== undefined ? payload.hourly_logs : undefined,
+        hourly_logs: payload.hourly_logs !== undefined ? formatHourlyLogsForDb(payload.hourly_logs) : undefined,
         status: payload.status || undefined,
         date_updated: new Date().toISOString()
       };
 
       Object.keys(updateData).forEach(k => updateData[k] === undefined && delete updateData[k]);
 
-      const updated = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`, {
-        method: 'PATCH',
-        body: JSON.stringify(updateData)
-      });
-      return res.json(normalizeReport(updated.data || { id, ...updateData }));
+      let updatedData: any;
+      try {
+        const updated = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify(updateData)
+        });
+        updatedData = updated.data || { id, ...updateData };
+      } catch (patchErr: any) {
+        if (patchErr.message && patchErr.message.toLowerCase().includes('hourly_logs')) {
+          delete updateData.hourly_logs;
+          const updatedFallback = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(updateData)
+          });
+          updatedData = { ...(updatedFallback.data || { id, ...updateData }), hourly_logs: payload.hourly_logs };
+        } else {
+          throw patchErr;
+        }
+      }
+
+      return res.json(normalizeReport(updatedData));
     } catch (err: any) {
       return res.status(500).json({ error: `خطا در ویرایش گزارش اداری: ${err.message}` });
     }

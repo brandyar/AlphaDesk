@@ -544,51 +544,53 @@ export function getUserAllowedTenants(
           },
         ];
 
-  // Global System Admin check (currentUser.is_admin === true and not restricted to a single tenant personnel)
-  const isGlobalSystemAdmin = Boolean(
-    currentUser?.is_admin &&
-      (!currentPersonnel ||
-        !currentPersonnel.tenant_id ||
-        currentPersonnel.tenant_id === 'default' ||
-        currentPersonnel.tenant_id === '1' ||
-        (currentPersonnel.allowed_tenant_ids && currentPersonnel.allowed_tenant_ids.includes('all')))
-  );
-
-  if (isGlobalSystemAdmin) {
-    return effectiveTenants;
-  }
-
-  // Retrieve allowed tenant IDs from personnel record
   const rawAllowed =
     currentPersonnel?.allowed_tenant_ids ||
     currentPersonnel?.permissions?.allowed_tenant_ids;
 
-  let allowedIds: string[] = [];
+  // If explicit allowed_tenant_ids array is provided and not containing 'all'
+  if (Array.isArray(rawAllowed) && rawAllowed.length > 0 && !rawAllowed.includes('all')) {
+    const allowedSet = new Set(rawAllowed.map(String));
+    const matched = effectiveTenants.filter((t) => {
+      const tid = String(t.id);
+      const tslug = t.slug ? String(t.slug) : '';
+      if (allowedSet.has(tid) || (tslug && allowedSet.has(tslug))) return true;
+      if ((tid === '1' || tid === 'default') && (allowedSet.has('1') || allowedSet.has('default'))) {
+        return true;
+      }
+      return false;
+    });
+    if (matched.length > 0) return matched;
+  }
 
-  if (Array.isArray(rawAllowed) && rawAllowed.length > 0) {
-    allowedIds = rawAllowed.map(String);
-  } else if (currentPersonnel?.tenant_id) {
+  // Admin users (system admin or personnel admin) can access all tenants unless explicitly restricted above
+  const isAdminUser = Boolean(
+    currentUser?.is_admin ||
+    currentUser?.app_role === 'admin' ||
+    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
+    currentPersonnel?.role === 'admin' ||
+    (rawAllowed && Array.isArray(rawAllowed) && rawAllowed.includes('all'))
+  );
+
+  if (isAdminUser) {
+    return effectiveTenants;
+  }
+
+  // Regular personnel restricted to their assigned tenant
+  let allowedIds: string[] = [];
+  if (currentPersonnel?.tenant_id) {
     allowedIds = [String(currentPersonnel.tenant_id)];
   } else {
     allowedIds = ['default', '1'];
   }
 
-  if (allowedIds.includes('all')) {
-    return effectiveTenants;
-  }
-
   const allowedSet = new Set(allowedIds);
-
   const matched = effectiveTenants.filter((t) => {
     const tid = String(t.id);
     const tslug = t.slug ? String(t.slug) : '';
-    if (allowedSet.has(tid) || (tslug && allowedSet.has(tslug))) return true;
-    if ((tid === '1' || tid === 'default') && (allowedSet.has('1') || allowedSet.has('default'))) {
-      return true;
-    }
-    return false;
+    return allowedSet.has(tid) || (tslug && allowedSet.has(tslug)) || ((tid === '1' || tid === 'default') && (allowedSet.has('1') || allowedSet.has('default')));
   });
 
-  return matched.length > 0 ? matched : effectiveTenants.slice(0, 1);
+  return matched.length > 0 ? matched : effectiveTenants;
 }
 

@@ -117,7 +117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ];
 
   // Determine allowed tenants for current user dynamically
-  const userAllowedTenants = getUserAllowedTenants(currentPersonnel, null, effectiveTenants);
+  const userAllowedTenants = getUserAllowedTenants(currentPersonnel, isAdmin ? { is_admin: true } : null, effectiveTenants);
   const canSwitchTenants = userAllowedTenants.length > 1;
 
   const activeTenant = effectiveTenants.find((t) => String(t.id) === String(activeTenantId));

@@ -23,9 +23,10 @@ const ANALYTICS_CACHE_TTL = 30000; // 30 seconds
 // GET /api/analytics/stats
 router.get(['/stats', '/api/analytics/stats'], async (req: Request, res: Response) => {
   const { start_date, end_date, negotiator } = req.query;
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+  const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, reportViewScope, userName, tenantId } = getRequestUser(req);
+  const canViewAllAnalytics = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers || reportViewScope === 'all');
 
-  const targetNegotiator = !isAdmin
+  const targetNegotiator = !canViewAllAnalytics
     ? userName || ''
     : negotiator && negotiator !== 'all' && negotiator !== 'همه'
     ? String(negotiator)
@@ -297,11 +298,12 @@ function gregorianIsoToJalali(isoString?: string | null): string {
 // GET /api/analytics/daily
 router.get(['/daily', '/api/analytics/daily'], async (req: Request, res: Response) => {
   const { days, start_date, end_date, negotiator } = req.query;
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+  const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, reportViewScope, userName, tenantId } = getRequestUser(req);
+  const canViewAllAnalytics = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers || reportViewScope === 'all');
 
   const daysCount = days ? Math.max(1, Math.min(parseInt(String(days), 10), 90)) : 14;
 
-  const targetNegotiator = !isAdmin
+  const targetNegotiator = !canViewAllAnalytics
     ? userName || ''
     : negotiator && negotiator !== 'all' && negotiator !== 'همه'
     ? String(negotiator)

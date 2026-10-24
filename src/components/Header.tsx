@@ -88,8 +88,21 @@ export const Header: React.FC<HeaderProps> = ({
     (currentPersonnel?.permissions?.can_manage_tenants ?? false) ||
     (currentPersonnel?.permissions?.allowed_menus?.includes('tenants') ?? false);
 
-  const displayName = currentUser?.name || currentPersonnel?.name || 'کاربر مهمان';
-  const initial = displayName.charAt(0) || 'U';
+  const getCleanString = (val?: any): string => {
+    if (!val) return '';
+    const str = String(val).trim();
+    if (str === 'undefined' || str === 'null') return '';
+    return str;
+  };
+
+  const displayName =
+    getCleanString(currentUser?.name) ||
+    getCleanString(currentUser?.first_name ? `${currentUser.first_name} ${currentUser.last_name || ''}` : null) ||
+    getCleanString(currentPersonnel?.name) ||
+    getCleanString(currentUser?.email ? currentUser.email.split('@')[0] : null) ||
+    'کاربر مهمان';
+
+  const initial = displayName.charAt(0).toUpperCase() || 'U';
 
   const effectiveTenants =
     tenants && tenants.length > 0
@@ -106,7 +119,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   // Determine allowed tenants for current user dynamically
   const userAllowedTenants = getUserAllowedTenants(currentPersonnel, currentUser, effectiveTenants);
-  const canSwitchTenants = isGlobalAdmin ? effectiveTenants.length > 1 : userAllowedTenants.length > 1;
+  const canSwitchTenants = isAdmin || isGlobalAdmin || userAllowedTenants.length > 1;
 
   const activeTenant = effectiveTenants.find((t) => String(t.id) === String(activeTenantId));
   const activeTenantName =
