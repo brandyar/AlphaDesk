@@ -62,17 +62,17 @@ router.get('/', async (req: Request, res: Response) => {
     : 25;
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
 
-  // Determine sort parameter (default: -date_created -> newest first)
+  const activeFilter = String(admin_filter || staff_filter || '');
+
+  // Determine sort parameter (default: -date_created -> newest first, or next_followup_date for active_followups)
   let sortParam = '-date_created';
   if (sort === 'oldest') {
     sortParam = 'date_created';
   } else if (sort === 'highest_score') {
     sortParam = '-negotiation_score,-date_created';
-  } else if (sort === 'followup_soonest') {
+  } else if (sort === 'followup_soonest' || (activeFilter === 'active_followups' && sort !== 'oldest' && sort !== 'highest_score' && sort !== 'newest_explicit')) {
     sortParam = 'next_followup_date,-date_created';
   }
-
-  const activeFilter = String(admin_filter || staff_filter || '');
 
   // Query Directus directly with pagination and server-side filters
   if (directusUrl && directusAdminToken && !isUnlimited) {
@@ -435,6 +435,42 @@ router.get('/', async (req: Request, res: Response) => {
   };
 
   const filtered = applyFilters(allReports);
+
+  // Apply in-memory sort before slicing for pagination
+  const effectiveSort = (sort === 'followup_soonest' || (activeFilter === 'active_followups' && sort !== 'oldest' && sort !== 'highest_score' && sort !== 'newest_explicit'))
+    ? 'followup_soonest'
+    : (sort || 'newest');
+
+  filtered.sort((a: any, b: any) => {
+    if (effectiveSort === 'followup_soonest') {
+      const customerA = allCustomers.find((c) => c.id === a.customer_id);
+      const customerB = allCustomers.find((c) => c.id === b.customer_id);
+      const dateAStr = a.next_followup_date || customerA?.next_followup_date;
+      const dateBStr = b.next_followup_date || customerB?.next_followup_date;
+      const tA = dateAStr ? new Date(dateAStr).getTime() : Infinity;
+      const tB = dateBStr ? new Date(dateBStr).getTime() : Infinity;
+      if (tA !== tB) return tA - tB;
+      const cA = a.date_created ? new Date(a.date_created).getTime() : 0;
+      const cB = b.date_created ? new Date(b.date_created).getTime() : 0;
+      return cB - cA;
+    } else if (effectiveSort === 'oldest') {
+      const cA = a.date_created ? new Date(a.date_created).getTime() : 0;
+      const cB = b.date_created ? new Date(b.date_created).getTime() : 0;
+      return cA - cB;
+    } else if (effectiveSort === 'highest_score') {
+      const sA = Number(a.negotiation_score) || 0;
+      const sB = Number(b.negotiation_score) || 0;
+      if (sB !== sA) return sB - sA;
+      const cA = a.date_created ? new Date(a.date_created).getTime() : 0;
+      const cB = b.date_created ? new Date(b.date_created).getTime() : 0;
+      return cB - cA;
+    } else {
+      const cA = a.date_created ? new Date(a.date_created).getTime() : 0;
+      const cB = b.date_created ? new Date(b.date_created).getTime() : 0;
+      return cB - cA;
+    }
+  });
+
   const totalCount = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / reqLimit));
   const startIndex = (reqPage - 1) * reqLimit;

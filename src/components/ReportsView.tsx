@@ -188,6 +188,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     const currentVersion = ++fetchVersionRef.current;
     setIsLoading(true);
 
+    const effectiveSortBy: SortOption =
+      (userIsAdmin ? adminFilter === 'active_followups' : staffFilter === 'active_followups') &&
+      sortBy === 'newest'
+        ? 'followup_soonest'
+        : sortBy;
+
     fetchCustomerReportsPaginated(undefined, {
       page: currentPage,
       limit: pageSize,
@@ -196,7 +202,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       negotiator: userIsAdmin && selectedNegotiator !== 'همه' ? selectedNegotiator : undefined,
       adminFilter: userIsAdmin ? adminFilter : undefined,
       staffFilter: !userIsAdmin ? staffFilter : undefined,
-      sortBy: sortBy,
+      sortBy: effectiveSortBy,
     })
       .then((res) => {
         if (currentVersion !== fetchVersionRef.current) return;
@@ -309,7 +315,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               return (
                 <button
                   key={opt.id}
-                  onClick={() => setAdminFilter(opt.id)}
+                  onClick={() => {
+                    setAdminFilter(opt.id);
+                    if (opt.id === 'active_followups') {
+                      setSortBy('followup_soonest');
+                    } else if (sortBy === 'followup_soonest') {
+                      setSortBy('newest');
+                    }
+                  }}
                   className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-2 select-none ${
                     active
                       ? 'bg-[#1DB954] text-black shadow-md shadow-[#1DB954]/20'
@@ -325,7 +338,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               return (
                 <button
                   key={opt.id}
-                  onClick={() => setStaffFilter(opt.id)}
+                  onClick={() => {
+                    setStaffFilter(opt.id);
+                    if (opt.id === 'active_followups') {
+                      setSortBy('followup_soonest');
+                    } else if (sortBy === 'followup_soonest') {
+                      setSortBy('newest');
+                    }
+                  }}
                   className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-2 select-none ${
                     active
                       ? 'bg-[#1DB954] text-black shadow-md shadow-[#1DB954]/20'

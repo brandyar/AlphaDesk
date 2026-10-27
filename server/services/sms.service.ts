@@ -125,17 +125,25 @@ export async function getPersonnelFullName(
 export function getPatternTextForCode(code: string | null | undefined): string {
   if (!code) return '';
   const c = String(code).trim();
-  if (projectSettingsData.login_pattern?.trim() === c) return projectSettingsData.login_pattern_text || '';
-  if (projectSettingsData.dayli_leave_request_pattern?.trim() === c) return projectSettingsData.dayli_leave_request_text || '';
-  if (projectSettingsData.hourly_leave_request_pattern?.trim() === c) return projectSettingsData.hourly_leave_request_text || '';
-  if (projectSettingsData.dayli_leave_accept_pattern?.trim() === c) return projectSettingsData.dayli_leave_accept_text || '';
-  if (projectSettingsData.dayli_leave_reject_pattern?.trim() === c) return projectSettingsData.dayli_leave_reject_text || '';
-  if (projectSettingsData.hourly_leave_accept_pattern?.trim() === c) return projectSettingsData.hourly_leave_accept_text || '';
-  if (projectSettingsData.hourly_leave_reject_pattern?.trim() === c) return projectSettingsData.hourly_leave_reject_text || '';
-  if (projectSettingsData.addvance_request_pattern?.trim() === c) return projectSettingsData.addvance_request_text || '';
-  if (projectSettingsData.addvance_accept_pattern?.trim() === c) return projectSettingsData.addvance_accept_text || '';
-  if (projectSettingsData.lower_addvance_accept_pattern?.trim() === c) return projectSettingsData.lower_addvance_accept_text || '';
-  if (projectSettingsData.addvance_reject_pattern?.trim() === c) return projectSettingsData.addvance_reject_text || '';
+  const ps: any = projectSettingsData || {};
+
+  if (ps.login_pattern?.trim() === c) return ps.login_pattern_text || '';
+  if ((ps.dayli_leave_request_pattern?.trim() === c) || (ps.daily_leave_request_pattern?.trim() === c)) {
+    return ps.dayli_leave_request_text || ps.daily_leave_request_text || '';
+  }
+  if (ps.hourly_leave_request_pattern?.trim() === c) return ps.hourly_leave_request_text || '';
+  if ((ps.dayli_leave_accept_pattern?.trim() === c) || (ps.daily_leave_accept_pattern?.trim() === c)) {
+    return ps.dayli_leave_accept_text || ps.daily_leave_accept_text || '';
+  }
+  if ((ps.dayli_leave_reject_pattern?.trim() === c) || (ps.daily_leave_reject_pattern?.trim() === c)) {
+    return ps.dayli_leave_reject_text || ps.daily_leave_reject_text || '';
+  }
+  if (ps.hourly_leave_accept_pattern?.trim() === c) return ps.hourly_leave_accept_text || '';
+  if (ps.hourly_leave_reject_pattern?.trim() === c) return ps.hourly_leave_reject_text || '';
+  if (ps.addvance_request_pattern?.trim() === c) return ps.addvance_request_text || '';
+  if (ps.addvance_accept_pattern?.trim() === c) return ps.addvance_accept_text || '';
+  if (ps.lower_addvance_accept_pattern?.trim() === c) return ps.lower_addvance_accept_text || '';
+  if (ps.addvance_reject_pattern?.trim() === c) return ps.addvance_reject_text || '';
   return '';
 }
 
@@ -221,8 +229,10 @@ export function resolvePatternVariables(
       cleanVars[ph] = cleanVars.device || 'سامانه وب آلفادسک';
     } else if (lower === 'leave_type') {
       cleanVars[ph] = cleanVars.leave_type || 'مرخصی';
-    } else if (lower === 'leave_date') {
-      cleanVars[ph] = cleanVars.leave_date || cleanVars.start_date || cleanVars.date || jalaliDate;
+    } else if (lower === 'leave_date' || lower === 'from_date') {
+      cleanVars[ph] = cleanVars.leave_date || cleanVars.from_date || cleanVars.start_date || cleanVars.date || jalaliDate;
+    } else if (lower === 'to_date') {
+      cleanVars[ph] = cleanVars.to_date || cleanVars.end_date || cleanVars.leave_date || cleanVars.start_date || jalaliDate;
     } else if (lower === 'from_time') {
       cleanVars[ph] = cleanVars.from_time || cleanVars.start_time || '09:00';
     } else if (lower === 'to_time') {
@@ -232,9 +242,15 @@ export function resolvePatternVariables(
     } else if (lower === 'end_time') {
       cleanVars[ph] = cleanVars.end_time || cleanVars.to_time || '17:00';
     } else if (lower === 'start_date') {
-      cleanVars[ph] = cleanVars.start_date || cleanVars.leave_date || jalaliDate;
+      cleanVars[ph] = cleanVars.start_date || cleanVars.from_date || cleanVars.leave_date || jalaliDate;
     } else if (lower === 'end_date') {
-      cleanVars[ph] = cleanVars.end_date || cleanVars.start_date || jalaliDate;
+      cleanVars[ph] = cleanVars.end_date || cleanVars.to_date || cleanVars.start_date || jalaliDate;
+    } else if (lower === 'days' || lower === 'day' || lower === 'count') {
+      cleanVars[ph] = cleanVars.days || cleanVars.day || cleanVars.count || '1';
+    } else if (lower === 'hours' || lower === 'hour') {
+      cleanVars[ph] = cleanVars.hours || cleanVars.hour || '1';
+    } else if (lower === 'duration') {
+      cleanVars[ph] = cleanVars.duration || cleanVars.days || cleanVars.hours || '1';
     } else if (lower === 'amount' || lower === 'requested_amount' || lower === 'approved_amount') {
       cleanVars[ph] =
         cleanVars[ph] ||
@@ -242,8 +258,8 @@ export function resolvePatternVariables(
         cleanVars.requested_amount ||
         cleanVars.approved_amount ||
         '0';
-    } else if (lower === 'reason') {
-      cleanVars[ph] = cleanVars.reason || '-';
+    } else if (lower === 'reason' || lower === 'description') {
+      cleanVars[ph] = cleanVars.reason || cleanVars.description || '-';
     } else if (lower === 'manager_note') {
       cleanVars[ph] = cleanVars.manager_note || 'بررسی شد';
     } else if (lower === 'reviewed_by') {

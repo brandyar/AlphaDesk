@@ -55,6 +55,7 @@ import {
   getTodayJalali,
   JALALI_MONTH_NAMES,
   getAvatarUrl,
+  compressImage,
 } from '../utils';
 import { PersianDatePicker } from './PersianDatePicker';
 import { uploadAvatar, fetchLeaveRequests, fetchAdvanceRequests } from '../api';
@@ -163,7 +164,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -171,29 +172,31 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       showToast('لطفاً یک فایل تصویری معتبر (JPG, PNG, WEBP) انتخاب نمایید.', 'error');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('حجم فایل تصویر نباید بیشتر از ۵ مگابایت باشد.', 'error');
-      return;
-    }
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const dataUrl = event.target?.result as string;
-      setProfileAvatar(dataUrl);
-      setIsUploadingAvatar(true);
-      try {
-        const res = await uploadAvatar(dataUrl, file.name);
-        if (res.avatarUrl) {
-          setProfileAvatar(res.avatarUrl);
-          showToast('تصویر پروفایل شما با موفقیت بارگذاری شد.', 'success');
-        }
-      } catch (err: any) {
-        showToast('خطا در بارگذاری تصویر: ' + (err.message || 'خطای نامشخص'), 'error');
-      } finally {
-        setIsUploadingAvatar(false);
+    setIsUploadingAvatar(true);
+    try {
+      // Client-side automatic compression (resizes large camera/phone photos to max 600px, < 80KB)
+      showToast('در حال فشرده‌سازی و پردازش تصویر...', 'info');
+      const compressedDataUrl = await compressImage(file, 600, 0.82);
+      setProfileAvatar(compressedDataUrl);
+
+      // Upload to server/Directus
+      const fileName = file.name.replace(/\.[^/.]+$/, '') + '.webp';
+      const res = await uploadAvatar(compressedDataUrl, fileName);
+      if (res.avatarUrl) {
+        setProfileAvatar(res.avatarUrl);
+        showToast('تصویر پروفایل شما با موفقیت فشرده‌سازی و بارگذاری شد.', 'success');
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.error('Avatar upload/compression error:', err);
+      showToast('خطا در بارگذاری تصویر: ' + (err.message || 'خطای نامشخص'), 'error');
+    } finally {
+      setIsUploadingAvatar(false);
+      // Reset input value so same file can be selected again if needed
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   // Password Change State

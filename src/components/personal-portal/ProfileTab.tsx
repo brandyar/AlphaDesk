@@ -124,7 +124,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-[#777]">
-              فرمت‌های مجاز: JPG, PNG, WEBP (حداکثر ۵ مگابایت) • ذخیره مستقیم در پایگاه داده
+              فرمت‌های مجاز: JPG, PNG, WEBP (فشرده‌سازی خودکار هوشمند) • ذخیره مستقیم در پایگاه داده
             </p>
           </div>
 

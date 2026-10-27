@@ -6,6 +6,7 @@ import {
   leaveRequestsData,
   personnelData,
   projectSettingsData,
+  updateProjectSettingsData,
 } from '../config.ts';
 import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
 import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
@@ -169,12 +170,15 @@ router.post('/api/leave-requests', async (req: Request, res: Response) => {
   const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'گرامی';
   const now = new Date();
   const jalaliDate = now.toLocaleDateString('fa-IR');
+  const startJalali = isoStartDate ? new Date(isoStartDate).toLocaleDateString('fa-IR') : jalaliDate;
+  const endJalali = isoEndDate ? new Date(isoEndDate).toLocaleDateString('fa-IR') : startJalali;
 
   const leaveVars: Record<string, string> = {
     name: applicantFullName,
     fullName: applicantFullName,
     user_name: applicantFullName,
     personnel_name: applicantFullName,
+    applicant_name: applicantFullName,
     family: lName,
     first_name: fName,
     mobile: applicantPhone || 'نامشخص',
@@ -182,20 +186,55 @@ router.post('/api/leave-requests', async (req: Request, res: Response) => {
     request_date: jalaliDate,
     leave_type: newRequest.leave_type === 'daily' ? 'مرخصی روزانه' : 'مرخصی ساعتی',
     days: String(newRequest.days_count || 1),
+    day: String(newRequest.days_count || 1),
+    count: String(newRequest.days_count || 1),
+    duration: String(newRequest.leave_type === 'daily' ? newRequest.days_count || 1 : newRequest.hours_count || 1),
     hours: String(newRequest.hours_count || 1),
-    start_date: payload.start_date || jalaliDate,
-    end_date: payload.end_date || payload.start_date || jalaliDate,
-    leave_date: payload.start_date || jalaliDate,
+    hour: String(newRequest.hours_count || 1),
+    start_date: startJalali,
+    end_date: endJalali,
+    from_date: startJalali,
+    to_date: endJalali,
+    leave_date: startJalali,
+    date: startJalali,
     start_time: newRequest.start_time || '',
     end_time: newRequest.end_time || '',
     from_time: newRequest.start_time || '',
     to_time: newRequest.end_time || '',
-    reason: newRequest.reason || '-'
+    reason: newRequest.reason || '-',
+    description: newRequest.reason || '-'
   };
 
-  const patternToUse = newRequest.leave_type === 'daily'
-    ? projectSettingsData.dayli_leave_request_pattern
-    : projectSettingsData.hourly_leave_request_pattern;
+  // Ensure latest projectSettingsData is loaded from Directus if empty
+  const ps: any = projectSettingsData || {};
+  if (
+    (!ps.dayli_leave_request_pattern &&
+     !ps.daily_leave_request_pattern &&
+     !ps.hourly_leave_request_pattern) &&
+    directusUrl &&
+    directusAdminToken
+  ) {
+    try {
+      const resp = await directusFetch('/items/project_settings').catch(() => null);
+      if (resp?.data) {
+        const item = Array.isArray(resp.data) ? resp.data[0] : resp.data;
+        if (item) updateProjectSettingsData(item);
+      }
+    } catch {}
+  }
+
+  const latestPs: any = projectSettingsData || {};
+  const dailyPattern =
+    latestPs.dayli_leave_request_pattern ||
+    latestPs.daily_leave_request_pattern ||
+    latestPs.dayli_leave_pattern ||
+    latestPs.daily_leave_pattern ||
+    '';
+  const hourlyPattern =
+    latestPs.hourly_leave_request_pattern ||
+    latestPs.hourly_leave_pattern ||
+    '';
+  const patternToUse = newRequest.leave_type === 'daily' ? dailyPattern : hourlyPattern;
 
   if (patternToUse) {
     if (applicantPhone) {
@@ -204,6 +243,8 @@ router.post('/api/leave-requests', async (req: Request, res: Response) => {
     }
     sendTenantAdminsSmsPattern(targetTenantId, patternToUse, leaveVars)
       .catch(e => console.warn('Leave request SMS to admin error:', e.message));
+  } else {
+    console.warn(`[Leave Request SMS] No SMS pattern configured for leave type: ${newRequest.leave_type}`);
   }
 
   if (directusUrl && directusAdminToken) {
@@ -314,15 +355,16 @@ router.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
     const applicantP = personnelData.find(p => p.id === targetReq!.personnel_id || p.user_id === targetReq!.personnel_id || p.name === targetReq!.personnel_name);
     const applicantPhone = applicantInfo.phone || applicantP?.phone;
 
+    const targetPs: any = projectSettingsData || {};
     let patternToUse = '';
     if (status === 'approved') {
-      patternToUse = targetReq.leave_type === 'daily'
-        ? (projectSettingsData.dayli_leave_accept_pattern || '')
-        : (projectSettingsData.hourly_leave_accept_pattern || '');
+      const dailyAccept = targetPs.dayli_leave_accept_pattern || targetPs.daily_leave_accept_pattern || '';
+      const hourlyAccept = targetPs.hourly_leave_accept_pattern || '';
+      patternToUse = targetReq.leave_type === 'daily' ? dailyAccept : hourlyAccept;
     } else if (status === 'rejected') {
-      patternToUse = targetReq.leave_type === 'daily'
-        ? (projectSettingsData.dayli_leave_reject_pattern || '')
-        : (projectSettingsData.hourly_leave_reject_pattern || '');
+      const dailyReject = targetPs.dayli_leave_reject_pattern || targetPs.daily_leave_reject_pattern || '';
+      const hourlyReject = targetPs.hourly_leave_reject_pattern || '';
+      patternToUse = targetReq.leave_type === 'daily' ? dailyReject : hourlyReject;
     }
 
     if (patternToUse) {
@@ -331,27 +373,37 @@ router.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
       const lName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'گرامی';
       const now = new Date();
       const jalaliDate = now.toLocaleDateString('fa-IR');
+      const startJalali = targetReq.start_date ? new Date(targetReq.start_date).toLocaleDateString('fa-IR') : jalaliDate;
+      const endJalali = targetReq.end_date ? new Date(targetReq.end_date).toLocaleDateString('fa-IR') : startJalali;
 
       const statusVars = {
         name: applicantFullName,
         fullName: applicantFullName,
         user_name: applicantFullName,
         personnel_name: applicantFullName,
+        applicant_name: applicantFullName,
         family: lName,
         first_name: fName,
         mobile: applicantPhone || 'نامشخص',
         phone: applicantPhone || 'نامشخص',
         request_date: targetReq.date_created ? new Date(targetReq.date_created).toLocaleDateString('fa-IR') : jalaliDate,
         leave_type: targetReq.leave_type === 'daily' ? 'مرخصی روزانه' : 'مرخصی ساعتی',
-        leave_date: targetReq.start_date || jalaliDate,
-        start_date: targetReq.start_date || jalaliDate,
-        end_date: targetReq.end_date || targetReq.start_date || jalaliDate,
+        leave_date: startJalali,
+        start_date: startJalali,
+        end_date: endJalali,
+        from_date: startJalali,
+        to_date: endJalali,
+        date: startJalali,
         start_time: targetReq.start_time || '',
         end_time: targetReq.end_time || '',
         from_time: targetReq.start_time || '',
         to_time: targetReq.end_time || '',
         days: String(targetReq.days_count || 1),
+        day: String(targetReq.days_count || 1),
+        count: String(targetReq.days_count || 1),
+        duration: String(targetReq.leave_type === 'daily' ? targetReq.days_count || 1 : targetReq.hours_count || 1),
         hours: String(targetReq.hours_count || 1),
+        hour: String(targetReq.hours_count || 1),
         manager_note: manager_note || (status === 'approved' ? 'تایید شد' : 'رد شد'),
         reviewed_by: reviewerFullName
       };

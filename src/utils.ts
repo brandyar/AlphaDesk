@@ -526,6 +526,70 @@ export function getAvatarUrl(avatar?: string | null): string | undefined {
   return `/api/assets/${trimmed}`;
 }
 
+/**
+ * Compresses an image File using HTML Canvas and returns a lightweight Base64 Data URL.
+ * Automatically resizes image to maximum dimension (default 600px) and compresses to WebP/JPEG.
+ */
+export async function compressImage(
+  file: File,
+  maxDimension: number = 600,
+  quality: number = 0.82
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('خطا در خواندن فایل تصویر'));
+    reader.onload = (readerEvent) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('فایل انتخاب‌شده یک تصویر معتبر نمی‌باشد.'));
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(readerEvent.target?.result as string);
+          return;
+        }
+
+        // Draw image with smooth bicubic scaling
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Try webp first, fall back to jpeg
+        let mimeType = 'image/webp';
+        if (file.type === 'image/png' || file.type === 'image/jpeg') {
+          mimeType = 'image/jpeg';
+        }
+
+        try {
+          const dataUrl = canvas.toDataURL(mimeType, quality);
+          resolve(dataUrl);
+        } catch {
+          const fallbackDataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(fallbackDataUrl);
+        }
+      };
+      img.src = readerEvent.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export function getUserAllowedTenants(
   currentPersonnel: any | null,
   currentUser: any | null,

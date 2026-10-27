@@ -25,6 +25,7 @@ import {
   Hash,
   DollarSign,
   PackageCheck,
+  Building2,
 } from 'lucide-react';
 import { Customer, CustomerReport, Personnel, NegotiationStatus, ChannelType, CustomerContact, AuthUser } from '../types';
 import {
@@ -223,12 +224,13 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
         <div className="p-4 sm:p-6 bg-[#121212] border-b border-[#282828] flex flex-wrap items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-12 h-12 rounded-xl bg-[#282828] border border-[#3e3e3e] flex items-center justify-center text-[#1DB954] font-black text-xl flex-shrink-0">
-              {customer.company_name.charAt(0)}
+              {(customer.manager_name?.trim() || customer.negotiator_name?.trim() || customer.company_name).charAt(0)}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
+                {/* Main Heading: Business Owner's Name */}
                 <h2 className="text-xl font-extrabold text-white truncate">
-                  {customer.company_name}
+                  {customer.manager_name?.trim() || customer.negotiator_name?.trim() || 'صاحب کسب و کار (نامشخص)'}
                 </h2>
                 {/* Status indicator */}
                 <div
@@ -243,9 +245,20 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </span>
                 )}
               </div>
-              <p className="text-xs text-[#A7A7A7] mt-1">
-                {customer.business_type || 'حوزه فعالیت نامشخص'} · {customer.province}، {customer.city}
-              </p>
+
+              {/* Sub-Heading: Business / Company Name and Details */}
+              <div className="flex items-center gap-1.5 text-xs text-[#1DB954] font-medium mt-1 flex-wrap">
+                <Building2 className="w-3.5 h-3.5 text-[#1DB954] flex-shrink-0" />
+                <span className="text-white font-bold">{customer.company_name}</span>
+                <span className="text-[#555]">·</span>
+                <span className="text-[#A7A7A7]">{customer.business_type || 'حوزه فعالیت نامشخص'}</span>
+                {(customer.province || customer.city) && (
+                  <>
+                    <span className="text-[#555]">·</span>
+                    <span className="text-[#A7A7A7]">{customer.province}{customer.city ? `، ${customer.city}` : ''}</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
