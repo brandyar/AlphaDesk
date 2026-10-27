@@ -92,10 +92,18 @@ export async function startServer() {
   if (process.env.NODE_ENV === 'production') {
     if (hasDist && distPath) {
       console.log(`[Production] Serving pre-compiled frontend assets from ${distPath}`);
+      const assetsPath = path.resolve(distPath, 'assets');
+      if (fs.existsSync(assetsPath)) {
+        app.use('/assets', express.static(assetsPath, {
+          maxAge: '1y',
+          immutable: true,
+        }));
+      }
       app.use(express.static(distPath));
       app.get('*', (req, res, next) => {
         if (
           req.path.startsWith('/api') ||
+          req.path.startsWith('/assets') ||
           req.path === '/health' ||
           req.path === '/bff-status'
         ) {

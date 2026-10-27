@@ -420,7 +420,6 @@ const handleAssetProxy = async (req: Request, res: Response) => {
 };
 
 router.get('/api/assets/:id', handleAssetProxy);
-router.get('/assets/:id', handleAssetProxy);
 
 // POST /api/upload-avatar
 router.post('/api/upload-avatar', async (req: Request, res: Response) => {
