@@ -50,6 +50,7 @@ interface ReportsViewProps {
 type AdminFilterType =
   | 'all'
   | 'active_followups'
+  | 'overdue_followups'
   | 'no_followup'
   | 'latest_reports'
   | 'near_expiry_customers'
@@ -58,6 +59,7 @@ type AdminFilterType =
 // Staff/Employee filter keys
 type StaffFilterType =
   | 'active_followups'
+  | 'overdue_followups'
   | 'no_followup'
   | 'unfollowed_referrals'
   | 'due_less_3_days'
@@ -257,6 +259,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const adminFilterOptions = [
     { id: 'all' as AdminFilterType, label: 'همه گزارشات' },
     { id: 'active_followups' as AdminFilterType, label: 'پیگیری‌های فعال' },
+    { id: 'overdue_followups' as AdminFilterType, label: 'پیگیری‌های گذشته' },
     { id: 'no_followup' as AdminFilterType, label: 'گزارشات فاقد پیگیری' },
     { id: 'latest_reports' as AdminFilterType, label: 'آخرین گزارشات ثبت شده' },
     { id: 'near_expiry_customers' as AdminFilterType, label: 'مشتریان نزدیک انقضا' },
@@ -266,6 +269,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   // Staff filter items definition
   const staffFilterOptions = [
     { id: 'active_followups' as StaffFilterType, label: 'پیگیری‌های فعال' },
+    { id: 'overdue_followups' as StaffFilterType, label: 'پیگیری‌های گذشته' },
     { id: 'no_followup' as StaffFilterType, label: 'مشتریان فاقد پیگیری' },
     {
       id: 'unfollowed_referrals' as StaffFilterType,

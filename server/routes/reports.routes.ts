@@ -72,6 +72,8 @@ router.get('/', async (req: Request, res: Response) => {
     sortParam = '-negotiation_score,-date_created';
   } else if (sort === 'followup_soonest' || (activeFilter === 'active_followups' && sort !== 'oldest' && sort !== 'highest_score' && sort !== 'newest_explicit')) {
     sortParam = 'next_followup_date,-date_created';
+  } else if (activeFilter === 'overdue_followups' && sort !== 'oldest' && sort !== 'highest_score' && sort !== 'newest_explicit') {
+    sortParam = '-next_followup_date,-date_created';
   }
 
   // Query Directus directly with pagination and server-side filters
@@ -113,9 +115,18 @@ router.get('/', async (req: Request, res: Response) => {
         andIdx++;
       }
 
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const startOfTodayIso = startOfToday.toISOString();
+
       // Handle category tab filters directly in Directus
       if (activeFilter === 'active_followups') {
+        // Active follow-ups MUST only include dates that have not passed yet (>= start of today)
+        directusPath += `&filter[_and][${andIdx++}][next_followup_date][_gte]=${encodeURIComponent(startOfTodayIso)}`;
+      } else if (activeFilter === 'overdue_followups') {
+        // Overdue follow-ups: follow-up date is in the past (< start of today)
         directusPath += `&filter[_and][${andIdx++}][next_followup_date][_nnull]=true`;
+        directusPath += `&filter[_and][${andIdx++}][next_followup_date][_lt]=${encodeURIComponent(startOfTodayIso)}`;
       } else if (activeFilter === 'no_followup') {
         directusPath += `&filter[_and][${andIdx++}][next_followup_date][_null]=true`;
       } else if (activeFilter === 'expired_customers' || activeFilter === 'expired') {
@@ -353,6 +364,15 @@ router.get('/', async (req: Request, res: Response) => {
             return isActiveDate(followupDate);
           });
           break;
+        case 'overdue_followups':
+          result = result.filter((r) => {
+            const customer = allCustomers.find((c) => c.id === r.customer_id);
+            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            if (!followupDate) return false;
+            const days = getDaysUntil(followupDate);
+            return days !== null && days < 0;
+          });
+          break;
         case 'no_followup':
           result = result.filter((r) => {
             const customer = allCustomers.find((c) => c.id === r.customer_id);
@@ -398,6 +418,15 @@ router.get('/', async (req: Request, res: Response) => {
             return isActiveDate(followupDate);
           });
           break;
+        case 'overdue_followups':
+          result = result.filter((r) => {
+            const customer = allCustomers.find((c) => c.id === r.customer_id);
+            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            if (!followupDate) return false;
+            const days = getDaysUntil(followupDate);
+            return days !== null && days < 0;
+          });
+          break;
         case 'no_followup':
           result = result.filter((r) => {
             const customer = allCustomers.find((c) => c.id === r.customer_id);
@@ -439,6 +468,8 @@ router.get('/', async (req: Request, res: Response) => {
   // Apply in-memory sort before slicing for pagination
   const effectiveSort = (sort === 'followup_soonest' || (activeFilter === 'active_followups' && sort !== 'oldest' && sort !== 'highest_score' && sort !== 'newest_explicit'))
     ? 'followup_soonest'
+    : (activeFilter === 'overdue_followups' && sort !== 'oldest' && sort !== 'highest_score' && sort !== 'newest_explicit')
+    ? 'followup_overdue'
     : (sort || 'newest');
 
   filtered.sort((a: any, b: any) => {
@@ -450,6 +481,17 @@ router.get('/', async (req: Request, res: Response) => {
       const tA = dateAStr ? new Date(dateAStr).getTime() : Infinity;
       const tB = dateBStr ? new Date(dateBStr).getTime() : Infinity;
       if (tA !== tB) return tA - tB;
+      const cA = a.date_created ? new Date(a.date_created).getTime() : 0;
+      const cB = b.date_created ? new Date(b.date_created).getTime() : 0;
+      return cB - cA;
+    } else if (effectiveSort === 'followup_overdue') {
+      const customerA = allCustomers.find((c) => c.id === a.customer_id);
+      const customerB = allCustomers.find((c) => c.id === b.customer_id);
+      const dateAStr = a.next_followup_date || customerA?.next_followup_date;
+      const dateBStr = b.next_followup_date || customerB?.next_followup_date;
+      const tA = dateAStr ? new Date(dateAStr).getTime() : -Infinity;
+      const tB = dateBStr ? new Date(dateBStr).getTime() : -Infinity;
+      if (tA !== tB) return tB - tA;
       const cA = a.date_created ? new Date(a.date_created).getTime() : 0;
       const cB = b.date_created ? new Date(b.date_created).getTime() : 0;
       return cB - cA;
