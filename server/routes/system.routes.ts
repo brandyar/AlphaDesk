@@ -345,11 +345,16 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
       }
 
       if (userId) {
+        let directusAvatarId: string | undefined = undefined;
+        if (typeof avatar === 'string') {
+          const match = avatar.match(/\/api\/assets\/([a-zA-Z0-9\-_]+)/);
+          directusAvatarId = match ? match[1] : (!avatar.startsWith('http') && !avatar.startsWith('data:') && !avatar.startsWith('/') ? avatar : undefined);
+        }
         await directusFetch(`/users/${userId}`, {
           method: 'PATCH',
           body: JSON.stringify({
             ...(name ? { first_name: name } : {}),
-            ...(avatar ? { avatar } : {})
+            ...(directusAvatarId ? { avatar: directusAvatarId } : {})
           })
         }).catch(() => {});
       }
@@ -386,16 +391,18 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
   res.json({ success: true, personnel: targetPersonnel, message: 'مشخصات پروفایل با موفقیت در پایگاه داده مرکزی ذخیره شد.' });
 });
 
-// GET /api/assets/:id & /assets/:id (Directus asset proxy with admin token)
+// GET /api/assets/:id (Directus asset proxy with admin token)
 const handleAssetProxy = async (req: Request, res: Response) => {
   const { id } = req.params;
   if (!id) {
     return res.status(400).send('Asset ID is required');
   }
 
+  const cleanId = id.replace(/\.[a-zA-Z0-9]+$/, '');
+
   if (directusUrl && directusAdminToken) {
     try {
-      const directusAssetUrl = `${directusUrl.replace(/\/$/, '')}/assets/${id}`;
+      const directusAssetUrl = `${directusUrl.replace(/\/$/, '')}/assets/${cleanId}`;
       const assetRes = await fetch(directusAssetUrl, {
         headers: {
           'Authorization': `Bearer ${directusAdminToken}`
@@ -409,10 +416,10 @@ const handleAssetProxy = async (req: Request, res: Response) => {
         const buffer = await assetRes.arrayBuffer();
         return res.send(Buffer.from(buffer));
       } else {
-        console.warn(`[Asset Proxy] Directus asset ${id} returned HTTP ${assetRes.status}`);
+        console.warn(`[Asset Proxy] Directus asset ${cleanId} returned HTTP ${assetRes.status}`);
       }
     } catch (err: any) {
-      console.warn(`[Asset Proxy] Error fetching asset ${id}:`, err.message);
+      console.warn(`[Asset Proxy] Error fetching asset ${cleanId}:`, err.message);
     }
   }
 

@@ -284,6 +284,12 @@ export default function App() {
       }
 
       if (targetPersonnel) {
+        if (targetPersonnel.status === 'inactive' || targetPersonnel.active === false) {
+          showToast('حساب کاربری شما توسط مدیریت غیرفعال شده است.', 'error');
+          handleLogout();
+          return;
+        }
+
         setCurrentPersonnel(targetPersonnel);
         setApiPersonnelContext(targetPersonnel);
 
@@ -810,6 +816,7 @@ export default function App() {
         const updatedUser = {
           ...currentUser,
           name: res.personnel.name || currentUser.name,
+          avatar: res.personnel.avatar || currentUser.avatar,
         };
         setCurrentUser(updatedUser);
         saveAuthSession({

@@ -62,25 +62,42 @@ export function safeDecodeURIComponent(str?: string | null): string {
   }
 }
 
-export function formatAvatarUrl(avatar: string | null | undefined): string | undefined {
-  if (!avatar || typeof avatar !== 'string') return undefined;
-  const trimmed = avatar.trim();
-  if (!trimmed) return undefined;
-  if (
-    trimmed.startsWith('http://') ||
-    trimmed.startsWith('https://') ||
-    trimmed.startsWith('data:')
-  ) {
-    return trimmed;
+export function formatAvatarUrl(avatar: any): string | undefined {
+  if (!avatar) return undefined;
+  let raw = '';
+  if (typeof avatar === 'object' && avatar !== null) {
+    raw = avatar.id || avatar.url || avatar.filename_disk || '';
+  } else if (typeof avatar === 'string') {
+    raw = avatar.trim();
   }
-  if (directusUrl) {
-    const cleanBase = directusUrl.replace(/\/$/, '');
-    if (trimmed.startsWith('/assets/')) return `${cleanBase}${trimmed}`;
-    if (trimmed.startsWith('/')) return `${cleanBase}${trimmed}`;
-    return `${cleanBase}/assets/${trimmed}`;
+  if (!raw) return undefined;
+
+  // Base64 data URLs
+  if (raw.startsWith('data:')) return raw;
+
+  // Already our authenticated API proxy
+  if (raw.startsWith('/api/assets/')) return raw;
+
+  // Relative /assets/ path -> route to /api/assets/
+  if (raw.startsWith('/assets/')) return `/api${raw}`;
+
+  // If a full URL contains /assets/<uuid> (e.g. from internal directusUrl or direct link)
+  // route through our authenticated proxy so client browsers don't get 403 or network errors
+  const directusAssetsMatch = raw.match(/\/assets\/([a-zA-Z0-9\-_]+)/);
+  if (directusAssetsMatch && directusAssetsMatch[1]) {
+    return `/api/assets/${directusAssetsMatch[1]}`;
   }
-  if (trimmed.startsWith('/')) return trimmed;
-  return `/api/assets/${trimmed}`;
+
+  // External URLs (e.g. external CDN, gravatar, ui-avatars)
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw;
+  }
+
+  // Other relative paths
+  if (raw.startsWith('/')) return raw;
+
+  // Raw Directus file UUID string (e.g. 68f9b7c8-4720-4c57-...)
+  return `/api/assets/${raw}`;
 }
 
 export function getRequestUser(req: Request): RequestUserContext {
@@ -130,9 +147,15 @@ export function getRequestUser(req: Request): RequestUserContext {
     userName = pMatch.name;
   }
 
+  // Check if personnel account is inactive/suspended
+  const isInactive = Boolean(
+    pMatch && (pMatch.status === 'inactive' || pMatch.active === false)
+  );
+
   const hasUserContext = Boolean(
     (userId || personnelId || userEmail || req.headers['authorization']) &&
-      !isSessionRevoked
+      !isSessionRevoked &&
+      !isInactive
   );
 
   const resolvedRole = pMatch?.role || userRole || '';
@@ -170,8 +193,8 @@ export function getRequestUser(req: Request): RequestUserContext {
     pMatch?.permissions?.visible_report_personnel_ids || [];
 
   return {
-    userId: isSessionRevoked ? '' : userId,
-    personnelId: isSessionRevoked ? '' : personnelId,
+    userId: isSessionRevoked || isInactive ? '' : userId,
+    personnelId: isSessionRevoked || isInactive ? '' : personnelId,
     userRole: isPersonnelAdmin ? (pMatch?.role === 'sales_manager' ? 'sales_manager' : 'admin') : resolvedRole || 'marketer',
     roleId,
     isAdmin: isSystemAdmin,
@@ -179,11 +202,12 @@ export function getRequestUser(req: Request): RequestUserContext {
     canViewAllCustomers,
     reportViewScope,
     visibleReportPersonnelIds,
-    userName: isSessionRevoked ? '' : userName,
-    userEmail: isSessionRevoked ? '' : userEmail,
+    userName: isSessionRevoked || isInactive ? '' : userName,
+    userEmail: isSessionRevoked || isInactive ? '' : userEmail,
     tenantId,
     isAuthenticated: hasUserContext,
     isSessionRevoked,
+    isInactive,
   };
 }
 
@@ -191,4 +215,29 @@ export function isCentralAdmin(req: Request): boolean {
   const user = getRequestUser(req);
   if (!user.isAdmin) return false;
   return user.tenantId === 'all' || user.tenantId === 'default' || user.tenantId === '1';
+}
+
+export function checkInactivePersonnel(req: Request, res: any, next: any) {
+  // Allow health checks, login, and static assets
+  const path = req.path || '';
+  if (
+    path.startsWith('/health') ||
+    path.startsWith('/api/health') ||
+    path.startsWith('/api/auth/login') ||
+    path.startsWith('/auth/login') ||
+    path.startsWith('/api/assets') ||
+    path.startsWith('/assets')
+  ) {
+    return next();
+  }
+
+  const user = getRequestUser(req);
+  if (user.isInactive) {
+    return res.status(403).json({
+      error: 'ACCOUNT_INACTIVE',
+      message: 'حساب کاربری شما توسط مدیریت غیرفعال شده است و امکان استفاده از سامانه را ندارید. لطفاً با مدیر سیستم تماس بگیرید.',
+    });
+  }
+
+  next();
 }

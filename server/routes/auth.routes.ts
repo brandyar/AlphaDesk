@@ -312,6 +312,14 @@ router.post('/login', async (req: Request, res: Response) => {
 
         pItem = enrichPersonnel(pItem);
 
+        // Block login if personnel account is inactive
+        if (pItem && (pItem.status === 'inactive' || pItem.active === false)) {
+          return res.status(403).json({
+            error: 'ACCOUNT_INACTIVE',
+            message: 'حساب کاربری شما توسط مدیریت غیرفعال شده است و امکان ورود به سامانه را ندارید. لطفاً با مدیر سیستم تماس بگیرید.',
+          });
+        }
+
         // Strict personnel-based role determination: the role defined in the personnel collection is the single source of truth
         const isAdmin = Boolean(
           pItem
@@ -402,6 +410,13 @@ router.post('/login', async (req: Request, res: Response) => {
   });
 
   if (found) {
+    if (found.status === 'inactive' || found.active === false) {
+      return res.status(403).json({
+        error: 'ACCOUNT_INACTIVE',
+        message: 'حساب کاربری شما توسط مدیریت غیرفعال شده است و امکان ورود به سامانه را ندارید. لطفاً با مدیر سیستم تماس بگیرید.',
+      });
+    }
+
     if (projectSettingsData.login_pattern) {
       const pInfo = await getPersonnelFullName(found.id, found.name);
       const fullName = pInfo.fullName || found.name || found.email;

@@ -252,4 +252,5 @@ export interface RequestUserContext {
   tenantId: string;
   isAuthenticated: boolean;
   isSessionRevoked: boolean;
+  isInactive?: boolean;
 }

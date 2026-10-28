@@ -245,6 +245,12 @@ router.patch('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const patch = req.body;
 
+  if (patch.status) {
+    patch.active = patch.status !== 'inactive';
+  } else if (patch.active !== undefined) {
+    patch.status = patch.active ? 'active' : 'inactive';
+  }
+
   const idx = personnelData.findIndex((p) => String(p.id) === String(id));
   if (idx !== -1) {
     personnelData[idx] = enrichPersonnel({ ...personnelData[idx], ...patch });
@@ -257,10 +263,30 @@ router.patch('/:id', async (req: Request, res: Response) => {
         directusPatch.tenant_id = resolveDirectusTenantId(patch.tenant_id);
       }
 
+      // If avatar is /api/assets/<fileId>, extract raw UUID for Directus file relation
+      if (typeof patch.avatar === 'string') {
+        const fileMatch = patch.avatar.match(/\/api\/assets\/([a-zA-Z0-9\-_]+)/);
+        if (fileMatch && fileMatch[1]) {
+          directusPatch.avatar = fileMatch[1];
+        }
+      }
+
       const patched = await directusFetch(`/items/personnel/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         body: JSON.stringify(directusPatch),
       });
+
+      // Synchronize Directus user account status (active / suspended)
+      const targetUserId = patch.user_id || (idx !== -1 ? personnelData[idx]?.user_id : null);
+      if (patch.status && targetUserId) {
+        await directusFetch(`/users/${targetUserId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: patch.status === 'inactive' ? 'suspended' : 'active',
+          }),
+        }).catch((e) => console.warn('Could not update directus_users status:', e.message));
+      }
+
       if (patched?.data) {
         const item = enrichPersonnel({
           ...(idx !== -1 ? personnelData[idx] : {}),

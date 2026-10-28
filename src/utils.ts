@@ -513,17 +513,44 @@ export function matchPersonnelToReport(
   return false;
 }
 
-export function getAvatarUrl(avatar?: string | null): string | undefined {
-  if (!avatar || typeof avatar !== 'string') return undefined;
-  const trimmed = avatar.trim();
-  if (!trimmed) return undefined;
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
-    return trimmed;
+export function getAvatarUrl(avatar?: any): string | undefined {
+  if (!avatar) return undefined;
+
+  let raw: string = '';
+  if (typeof avatar === 'object' && avatar !== null) {
+    raw = avatar.id || avatar.url || avatar.filename_disk || '';
+  } else if (typeof avatar === 'string') {
+    raw = avatar.trim();
   }
-  if (trimmed.startsWith('/api/assets/')) return trimmed;
-  if (trimmed.startsWith('/assets/')) return `/api${trimmed}`;
-  if (trimmed.startsWith('/')) return trimmed;
-  return `/api/assets/${trimmed}`;
+
+  if (!raw) return undefined;
+
+  // Base64 data URLs
+  if (raw.startsWith('data:')) return raw;
+
+  // Already our authenticated API proxy
+  if (raw.startsWith('/api/assets/')) return raw;
+
+  // Relative /assets/ path -> route to /api/assets/
+  if (raw.startsWith('/assets/')) return `/api${raw}`;
+
+  // If a full URL contains /assets/<uuid> (e.g. from internal directusUrl or direct link)
+  // route through our authenticated proxy so client browsers don't get 403 or network errors
+  const directusAssetsMatch = raw.match(/\/assets\/([a-zA-Z0-9\-_]+)/);
+  if (directusAssetsMatch && directusAssetsMatch[1]) {
+    return `/api/assets/${directusAssetsMatch[1]}`;
+  }
+
+  // External URLs (e.g. external CDN, gravatar, ui-avatars)
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw;
+  }
+
+  // Other relative paths
+  if (raw.startsWith('/')) return raw;
+
+  // Raw Directus file UUID string (e.g. 68f9b7c8-4720-4c57-...)
+  return `/api/assets/${raw}`;
 }
 
 /**

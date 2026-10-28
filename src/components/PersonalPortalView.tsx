@@ -179,12 +179,22 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       showToast('در حال فشرده‌سازی و پردازش تصویر...', 'info');
       const compressedDataUrl = await compressImage(file, 600, 0.82);
       setProfileAvatar(compressedDataUrl);
-
-      // Upload to server/Directus
       const fileName = file.name.replace(/\.[^/.]+$/, '') + '.webp';
       const res = await uploadAvatar(compressedDataUrl, fileName);
       if (res.avatarUrl) {
         setProfileAvatar(res.avatarUrl);
+        // Immediately persist to profile so header, sidebar, and colleague list update instantly
+        try {
+          await onUpdateProfile({
+            name: profileName,
+            username: profileUsername.trim() || undefined,
+            phone: profilePhone,
+            avatar: res.avatarUrl,
+            bank_card_number: profileBankCard,
+            iban: profileIban,
+            national_id: profileNationalId,
+          });
+        } catch {}
         showToast('تصویر پروفایل شما با موفقیت فشرده‌سازی و بارگذاری شد.', 'success');
       }
     } catch (err: any) {
@@ -487,7 +497,21 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
             <div className="relative">
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#1DB954] to-[#14833b] text-black font-black text-xl flex items-center justify-center shadow-lg shadow-[#1DB954]/20 overflow-hidden border-2 border-[#1DB954]">
                 {profileAvatar ? (
-                  <img src={profileAvatar} alt={profileName} className="w-full h-full object-cover" />
+                  <img
+                    src={getAvatarUrl(profileAvatar)}
+                    alt={profileName}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = 'none';
+                      const parent = (e.currentTarget as HTMLElement).parentElement;
+                      if (parent && !parent.querySelector('.portal-avatar-fallback')) {
+                        const span = document.createElement('span');
+                        span.className = 'portal-avatar-fallback text-black font-black text-xl';
+                        span.textContent = profileName.charAt(0) || 'ک';
+                        parent.appendChild(span);
+                      }
+                    }}
+                  />
                 ) : (
                   <span>{profileName.charAt(0) || 'ک'}</span>
                 )}

@@ -101,6 +101,16 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
                   src={getAvatarUrl(profileAvatar)}
                   alt="avatar preview"
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'none';
+                    const parent = (e.currentTarget as HTMLElement).parentElement;
+                    if (parent && !parent.querySelector('.profile-tab-avatar-fallback')) {
+                      const span = document.createElement('span');
+                      span.className = 'profile-tab-avatar-fallback text-[#1DB954] text-lg font-bold';
+                      span.textContent = profileName.charAt(0) || 'ک';
+                      parent.appendChild(span);
+                    }
+                  }}
                 />
               ) : (
                 <span className="text-[#1DB954] text-lg font-bold">

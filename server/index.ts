@@ -11,6 +11,7 @@ import {
 import { directusFetch } from './directus/client.ts';
 import { ensureDirectusTenants, ensureDirectusPersonnel } from './directus/sync.ts';
 import { rateLimiter } from './middlewares/rateLimit.middleware.ts';
+import { checkInactivePersonnel } from './middlewares/auth.middleware.ts';
 
 import authRoutes from './routes/auth.routes.ts';
 import personnelRoutes from './routes/personnel.routes.ts';
@@ -42,6 +43,9 @@ app.get(['/health', '/api/health'], (req, res) => {
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use(rateLimiter);
+
+// Block inactive personnel from performing any operations
+app.use(checkInactivePersonnel);
 
 // Mount all modular API routers
 app.use('/api/auth', authRoutes);

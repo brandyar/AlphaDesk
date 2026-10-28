@@ -530,6 +530,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   const [editingActionPermissions, setEditingActionPermissions] = useState<Record<string, boolean>>({});
   const [editingReportScope, setEditingReportScope] = useState<'all' | 'own_only' | 'specific_personnel'>('own_only');
   const [editingVisibleReportPersonnelIds, setEditingVisibleReportPersonnelIds] = useState<string[]>([]);
+  const [editingStatus, setEditingStatus] = useState<'active' | 'inactive'>('active');
 
   const handleAddEditingFamilyContact = () => {
     setEditingFamilyContacts((prev) => [
@@ -556,6 +557,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   const openEditColleague = (p: Personnel) => {
     setEditingColleague(p);
     setEditingRole((p.role as PersonnelRole) || 'marketer');
+    setEditingStatus(p.status === 'inactive' || p.active === false ? 'inactive' : 'active');
     const primaryTenant = p.tenant_id || 'default';
     setEditingTenantId(primaryTenant);
     
@@ -717,7 +719,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
         family_contacts: cleanFamilyContacts.length > 0 ? cleanFamilyContacts : undefined,
         role: editingRole,
         permissions,
-        status: editingColleague.status,
+        status: editingStatus,
+        active: editingStatus === 'active',
       });
       showToast('مشخصات و دسترسی‌های همکار با موفقیت به‌روزرسانی شد.', 'success');
       setEditingColleague(null);
@@ -1953,7 +1956,21 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-[#222] border border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-sm flex-shrink-0">
                               {p.avatar ? (
-                                <img src={getAvatarUrl(p.avatar)} alt={p.name} className="w-full h-full object-cover" />
+                                <img
+                                  src={getAvatarUrl(p.avatar)}
+                                  alt={p.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLElement).style.display = 'none';
+                                    const parent = (e.currentTarget as HTMLElement).parentElement;
+                                    if (parent && !parent.querySelector('.table-avatar-fallback')) {
+                                      const span = document.createElement('span');
+                                      span.className = 'table-avatar-fallback text-[#1DB954] font-bold text-sm';
+                                      span.textContent = p.name ? p.name.charAt(0) : '؟';
+                                      parent.appendChild(span);
+                                    }
+                                  }}
+                                />
                               ) : (
                                 <span>{p.name.charAt(0)}</span>
                               )}
@@ -1977,12 +1994,24 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         {/* Role & Tenant */}
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           <div className="flex flex-col gap-1 items-start">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold border ${roleCfg.badgeClass}`}
-                            >
-                              <RoleIcon className="w-3 h-3" />
-                              <span>{roleCfg.label}</span>
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold border ${roleCfg.badgeClass}`}
+                              >
+                                <RoleIcon className="w-3 h-3" />
+                                <span>{roleCfg.label}</span>
+                              </span>
+                              {p.status === 'inactive' || p.active === false ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                                  <EyeOff className="w-3 h-3" />
+                                  <span>غیرفعال</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md text-[9px] font-medium bg-[#1a2e20]/60 text-[#1DB954] border border-[#1DB954]/30">
+                                  <span>فعال</span>
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[11px] text-[#A7A7A7] flex items-center gap-1">
                               <Building2 className="w-3 h-3 text-[#1DB954]" />
                               <span>{p.tenant_name || 'سازمان مرکزی'}</span>
@@ -2127,7 +2156,21 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-12 h-12 rounded-2xl bg-[#222] border-2 border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-base flex-shrink-0 shadow-md">
                           {p.avatar ? (
-                            <img src={getAvatarUrl(p.avatar)} alt={p.name} className="w-full h-full object-cover" />
+                            <img
+                              src={getAvatarUrl(p.avatar)}
+                              alt={p.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = 'none';
+                                const parent = (e.currentTarget as HTMLElement).parentElement;
+                                if (parent && !parent.querySelector('.card-avatar-fallback')) {
+                                  const span = document.createElement('span');
+                                  span.className = 'card-avatar-fallback text-[#1DB954] font-bold text-base';
+                                  span.textContent = p.name ? p.name.charAt(0) : '؟';
+                                  parent.appendChild(span);
+                                }
+                              }}
+                            />
                           ) : (
                             <span>{p.name.charAt(0)}</span>
                           )}
@@ -2146,6 +2189,16 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                               <RoleIcon className="w-3 h-3" />
                               <span>{roleCfg.label}</span>
                             </span>
+                            {p.status === 'inactive' || p.active === false ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                                <EyeOff className="w-3 h-3" />
+                                <span>غیرفعال</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md text-[9px] font-medium bg-[#1a2e20]/60 text-[#1DB954] border border-[#1DB954]/30">
+                                <span>فعال</span>
+                              </span>
+                            )}
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-[#121212] border border-[#2c2c2c] text-[#A7A7A7]">
                               <Building2 className="w-3 h-3 text-[#1DB954]" />
                               <span>{p.tenant_name || 'سازمان مرکزی'}</span>
@@ -2863,41 +2916,41 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {/* 7. MODALS: Edit Colleague Modal                               */}
       {/* ------------------------------------------------------------- */}
       {editingColleague && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm overflow-y-auto animate-in fade-in">
-          <div className="bg-[#181818] border border-[#282828] rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-sm overflow-y-auto animate-in fade-in">
+          <div className="bg-[#181818] border border-[#282828] rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
             {/* Modal Header */}
-            <div className="p-4 sm:p-5 bg-[#121212] border-b border-[#282828] flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954]">
-                  <Edit2 className="w-5 h-5" />
+            <div className="p-3.5 sm:p-5 bg-[#121212] border-b border-[#282828] flex items-center justify-between flex-shrink-0 gap-3">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954] flex-shrink-0">
+                  <Edit2 className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
-                <div>
-                  <h3 className="font-bold text-sm sm:text-base text-white">
+                <div className="min-w-0">
+                  <h3 className="font-bold text-sm sm:text-base text-white truncate">
                     ویرایش همکار: {editingColleague.name}
                   </h3>
-                  <p className="text-[11px] text-[#888]">
-                    اصلاح اطلاعات هویتی، راه‌های تماس چندگانه و پیکربندی دقیق دسترسی‌ها
+                  <p className="text-[10px] sm:text-[11px] text-[#888] truncate">
+                    اصلاح اطلاعات فردی، راه‌های تماس چندگانه و وضعیت فعالیت
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setEditingColleague(null)}
-                className="w-8 h-8 rounded-full bg-[#242424] hover:bg-[#303030] flex items-center justify-center text-[#888] hover:text-white transition-colors"
+                className="w-8 h-8 rounded-full bg-[#242424] hover:bg-[#303030] flex items-center justify-center text-[#888] hover:text-white transition-colors flex-shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1 text-xs">
+            <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto flex-1 text-xs overscroll-contain">
               {/* 1. Identity & Role */}
-              <div className="space-y-3">
+              <div className="space-y-2.5 sm:space-y-3">
                 <div className="text-xs font-bold text-white flex items-center gap-2">
                   <UserCheck className="w-4 h-4 text-[#1DB954]" />
-                  <span>مشخصات فردی و نقش سازمانی</span>
+                  <span>مشخصات فردی، وضعیت و نقش سازمانی</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#141414] p-3.5 rounded-xl border border-[#262626]">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 bg-[#141414] p-3 sm:p-4 rounded-xl border border-[#262626]">
                   <div>
                     <label className="block text-[#B3B3B3] mb-1 font-semibold">نام و نام خانوادگی</label>
                     <input
@@ -2906,7 +2959,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       onChange={(e) =>
                         setEditingColleague({ ...editingColleague, name: e.target.value })
                       }
-                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954]"
+                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] text-xs"
                     />
                   </div>
 
@@ -2923,7 +2976,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         setEditingColleague({ ...editingColleague, username: e.target.value })
                       }
                       placeholder="sara_ahmadi"
-                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono"
+                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono text-xs"
                     />
                   </div>
 
@@ -2936,8 +2989,36 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       onChange={(e) =>
                         setEditingColleague({ ...editingColleague, email: e.target.value })
                       }
-                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono"
+                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono text-xs"
                     />
+                  </div>
+
+                  {/* Status Selection (Active / Inactive) */}
+                  <div>
+                    <label className="block text-[#B3B3B3] mb-1 font-semibold flex items-center justify-between">
+                      <span>وضعیت حساب کاربری</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                        editingStatus === 'active' ? 'bg-[#1DB954]/20 text-[#1DB954]' : 'bg-rose-500/20 text-rose-400'
+                      }`}>
+                        {editingStatus === 'active' ? 'فعال' : 'غیرفعال (مسدود)'}
+                      </span>
+                    </label>
+                    <select
+                      value={editingStatus}
+                      onChange={(e) => setEditingStatus(e.target.value as 'active' | 'inactive')}
+                      className={`w-full h-9 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                        editingStatus === 'active'
+                          ? 'bg-[#1e1e1e] text-[#1DB954] border-[#1DB954]/50 focus:border-[#1DB954]'
+                          : 'bg-rose-950/30 text-rose-400 border-rose-500/50 focus:border-rose-500'
+                      }`}
+                    >
+                      <option value="active" className="bg-[#181818] text-[#1DB954]">
+                        ✓ فعال (مجاز به ورود و فعالیت در سامانه)
+                      </option>
+                      <option value="inactive" className="bg-[#181818] text-rose-400">
+                        ✕ غیرفعال (مسدود شده - عدم امکان ورود و فعالیت)
+                      </option>
+                    </select>
                   </div>
 
                   <div>
@@ -2956,7 +3037,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           setEditingAllowedTenantIds([...editingAllowedTenantIds, val]);
                         }
                       }}
-                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] cursor-pointer"
+                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] cursor-pointer text-xs"
                     >
                       {tenants.map((t) => (
                         <option key={t.id} value={t.id}>
@@ -2982,7 +3063,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           setEditingReportScope(cfg.defaultReportScope);
                         }
                       }}
-                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] cursor-pointer"
+                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] cursor-pointer text-xs"
                     >
                       {(Object.keys(PERSONNEL_ROLE_CONFIG) as PersonnelRole[]).map((rKey) => (
                         <option key={rKey} value={rKey}>
@@ -3000,7 +3081,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           <span>سازمان‌ها و شعب مجاز جهت سوییچ (عضویت در چند شعبه):</span>
                         </span>
                         <span className="text-[10px] text-[#888]">
-                          فقط در شعب تیک‌خورده مجاز به فعالیت و سوییچ خواهد بود
+                          فقط در شعب تیک‌خورده مجاز به فعالیت خواهد بود
                         </span>
                       </label>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
@@ -3052,7 +3133,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               </div>
 
               {/* 2. Multiple Phones & Contact Methods */}
-              <div className="space-y-3">
+              <div className="space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-bold text-white flex items-center gap-2">
                     <Phone className="w-4 h-4 text-blue-400" />
@@ -3073,59 +3154,63 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                   </button>
                 </div>
 
-                <div className="space-y-2 bg-[#141414] p-3.5 rounded-xl border border-[#262626]">
+                <div className="space-y-2.5 bg-[#141414] p-3 sm:p-4 rounded-xl border border-[#262626]">
                   {editingPhones.map((ph, idx) => (
-                    <div key={ph.id} className="flex items-center gap-2">
-                      <select
-                        value={ph.label}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setEditingPhones((prev) =>
-                            prev.map((item) => (item.id === ph.id ? { ...item, label: val } : item))
-                          );
-                        }}
-                        className="w-36 h-9 px-2 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] cursor-pointer"
-                      >
-                        {COMMON_PHONE_LABELS.map((lbl) => (
-                          <option key={lbl} value={lbl}>
-                            {lbl}
-                          </option>
-                        ))}
-                      </select>
-
-                      <input
-                        type="text"
-                        dir="ltr"
-                        value={ph.number}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setEditingPhones((prev) =>
-                            prev.map((item) => (item.id === ph.id ? { ...item, number: val } : item))
-                          );
-                        }}
-                        placeholder={idx === 0 ? 'شماره اصلی' : 'شماره تماس'}
-                        className="flex-1 h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono text-xs"
-                      />
-
-                      {editingPhones.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingPhones(editingPhones.filter((item) => item.id !== ph.id));
+                    <div key={ph.id} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <div className="w-full sm:w-36 flex-shrink-0">
+                        <select
+                          value={ph.label}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditingPhones((prev) =>
+                              prev.map((item) => (item.id === ph.id ? { ...item, label: val } : item))
+                            );
                           }}
-                          className="w-9 h-9 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center justify-center flex-shrink-0"
-                          title="حذف"
+                          className="w-full h-9 px-2 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] cursor-pointer"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                          {COMMON_PHONE_LABELS.map((lbl) => (
+                            <option key={lbl} value={lbl}>
+                              {lbl}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-1">
+                        <input
+                          type="text"
+                          dir="ltr"
+                          value={ph.number}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditingPhones((prev) =>
+                              prev.map((item) => (item.id === ph.id ? { ...item, number: val } : item))
+                            );
+                          }}
+                          placeholder={idx === 0 ? 'شماره اصلی' : 'شماره تماس'}
+                          className="flex-1 h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono text-xs"
+                        />
+
+                        {editingPhones.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPhones(editingPhones.filter((item) => item.id !== ph.id));
+                            }}
+                            className="w-9 h-9 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center justify-center flex-shrink-0"
+                            title="حذف"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* 3. Granular Permissions (Menus, Capabilities, Reports Scope) */}
-              <div className="space-y-4 bg-[#141414] p-4 rounded-xl border border-[#262626]">
+              <div className="space-y-4 bg-[#141414] p-3 sm:p-4 rounded-xl border border-[#262626]">
                 <div className="text-xs font-bold text-white flex items-center gap-2 border-b border-[#242424] pb-2.5">
                   <Shield className="w-4 h-4 text-amber-400" />
                   <span>سطوح دسترسی ریزدانه و اختیارات</span>
@@ -3146,11 +3231,11 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 bg-[#121212] border-t border-[#282828] flex items-center justify-end gap-2.5 flex-shrink-0">
+            <div className="p-3.5 sm:p-4 bg-[#121212] border-t border-[#282828] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-2.5 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => setEditingColleague(null)}
-                className="px-4 py-2 rounded-xl bg-[#282828] hover:bg-[#333] text-white text-xs font-bold transition-colors"
+                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#282828] hover:bg-[#333] text-white text-xs font-bold transition-colors text-center"
               >
                 انصراف
               </button>
@@ -3158,7 +3243,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 type="button"
                 onClick={handleSaveColleagueEdit}
                 disabled={isUpdatingColleague}
-                className="px-6 py-2 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black text-xs font-extrabold shadow-md shadow-[#1DB954]/20 transition-all flex items-center gap-1.5"
+                className="w-full sm:w-auto px-6 py-2 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black text-xs font-extrabold shadow-md shadow-[#1DB954]/20 transition-all flex items-center justify-center gap-1.5"
               >
                 {isUpdatingColleague ? (
                   <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />

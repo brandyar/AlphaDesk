@@ -151,7 +151,12 @@ async function handleResponse<T>(res: globalThis.Response, defaultErrorMsg: stri
       // ignore
     }
 
-    if (res.status === 401 || errCode === 'ALL_SESSIONS_REVOKED') {
+    if (
+      res.status === 401 ||
+      errCode === 'ALL_SESSIONS_REVOKED' ||
+      errCode === 'ACCOUNT_INACTIVE' ||
+      (res.status === 403 && (errorMsg.includes('غیرفعال') || errCode === 'ACCOUNT_INACTIVE'))
+    ) {
       clearAuthSession();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('crm_force_logout', { detail: { message: errorMsg } }));

@@ -789,7 +789,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-full bg-[#282828] flex items-center justify-center text-[#1DB954] font-bold text-xs border border-[#3e3e3e] flex-shrink-0 overflow-hidden">
               {currentPersonnel?.avatar ? (
-                <img src={getAvatarUrl(currentPersonnel.avatar)} alt="avatar" className="w-full h-full object-cover" />
+                <img
+                  src={getAvatarUrl(currentPersonnel.avatar)}
+                  alt="avatar"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'none';
+                    const parent = (e.currentTarget as HTMLElement).parentElement;
+                    if (parent && !parent.querySelector('.sidebar-avatar-fallback')) {
+                      const span = document.createElement('span');
+                      span.className = 'sidebar-avatar-fallback font-bold text-xs';
+                      span.textContent = currentPersonnel ? currentPersonnel.name.charAt(0) : 'U';
+                      parent.appendChild(span);
+                    }
+                  }}
+                />
               ) : (
                 currentPersonnel ? currentPersonnel.name.charAt(0) : 'U'
               )}

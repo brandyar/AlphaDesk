@@ -223,7 +223,14 @@ export const Header: React.FC<HeaderProps> = ({
                     alt={displayName}
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
+                      (e.currentTarget as HTMLElement).style.display = 'none';
+                      const parent = (e.currentTarget as HTMLElement).parentElement;
+                      if (parent && !parent.querySelector('.header-avatar-fallback')) {
+                        const span = document.createElement('span');
+                        span.className = 'header-avatar-fallback font-bold text-xs';
+                        span.textContent = initial;
+                        parent.appendChild(span);
+                      }
                     }}
                   />
                 ) : (
