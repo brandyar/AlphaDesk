@@ -23,6 +23,7 @@ import advanceRequestRoutes from './routes/advanceRequests.routes.ts';
 import tenantRoutes from './routes/tenants.routes.ts';
 import adminReportRoutes from './routes/adminReports.routes.ts';
 import analyticsRoutes from './routes/analytics.routes.ts';
+import contactRoutes from './routes/contacts.routes.ts';
 import systemRoutes from './routes/system.routes.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -54,6 +55,8 @@ app.use(authRoutes);
 app.use('/api/personnel', personnelRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/customer-reports', reportRoutes);
+app.use('/api/contacts', contactRoutes);
+app.use('/contacts', contactRoutes);
 app.use('/api/tenants', tenantRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use(analyticsRoutes);

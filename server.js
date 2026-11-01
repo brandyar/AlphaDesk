@@ -814,10 +814,6 @@ function rateLimiter(req, res, next) {
   next();
 }
 
-// server/routes/auth.routes.ts
-import { Router as Router2 } from "express";
-import crypto3 from "crypto";
-
 // server/middlewares/auth.middleware.ts
 function matchesTenant(itemTenantId, activeTenantId) {
   if (!activeTenantId || activeTenantId === "all") return true;
@@ -862,20 +858,26 @@ function safeDecodeURIComponent(str) {
   }
 }
 function formatAvatarUrl(avatar) {
-  if (!avatar || typeof avatar !== "string") return void 0;
-  const trimmed = avatar.trim();
-  if (!trimmed) return void 0;
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:")) {
-    return trimmed;
+  if (!avatar) return void 0;
+  let raw = "";
+  if (typeof avatar === "object" && avatar !== null) {
+    raw = avatar.id || avatar.url || avatar.filename_disk || "";
+  } else if (typeof avatar === "string") {
+    raw = avatar.trim();
   }
-  if (directusUrl) {
-    const cleanBase = directusUrl.replace(/\/$/, "");
-    if (trimmed.startsWith("/assets/")) return `${cleanBase}${trimmed}`;
-    if (trimmed.startsWith("/")) return `${cleanBase}${trimmed}`;
-    return `${cleanBase}/assets/${trimmed}`;
+  if (!raw) return void 0;
+  if (raw.startsWith("data:")) return raw;
+  if (raw.startsWith("/api/assets/")) return raw;
+  if (raw.startsWith("/assets/")) return `/api${raw}`;
+  const directusAssetsMatch = raw.match(/\/assets\/([a-zA-Z0-9\-_]+)/);
+  if (directusAssetsMatch && directusAssetsMatch[1]) {
+    return `/api/assets/${directusAssetsMatch[1]}`;
   }
-  if (trimmed.startsWith("/")) return trimmed;
-  return `/api/assets/${trimmed}`;
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return raw;
+  }
+  if (raw.startsWith("/")) return raw;
+  return `/api/assets/${raw}`;
 }
 function getRequestUser(req) {
   const userId = req.headers["x-user-id"] || req.query.user_id || "";
@@ -892,58 +894,189 @@ function getRequestUser(req) {
     globalSessionRevocationTimestamp > 0 && (!sessionIat || sessionIat < globalSessionRevocationTimestamp)
   );
   const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : "";
-  const rawUid = cleanPId.replace(/^p-/, "");
+  const rawUid = cleanPId ? cleanPId.replace(/^p-/, "") : "";
   const cleanUId = userId ? String(userId).trim().toLowerCase() : "";
-  const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : "";
-  const pMatch = personnelData.find(
-    (p) => cleanPId && (p.id?.toLowerCase() === cleanPId || p.id?.toLowerCase() === `p-${rawUid}`) || cleanUId && (p.user_id?.toLowerCase() === cleanUId || p.id?.toLowerCase() === cleanUId) || cleanEmail && p.email?.toLowerCase() === cleanEmail
-  );
+  const cleanEmail = userEmail ? String(userEmail).trim().toLowerCase() : "";
+  const pMatch = personnelData.find((p) => {
+    if (!p) return false;
+    const pId = p.id ? String(p.id).trim().toLowerCase() : "";
+    const pUserId = p.user_id ? String(p.user_id).trim().toLowerCase() : "";
+    const pEmail = p.email ? String(p.email).trim().toLowerCase() : "";
+    if (cleanPId && pId && pId === cleanPId) return true;
+    if (cleanPId && rawUid && pId && (pId === `p-${rawUid}` || pId === rawUid)) return true;
+    if (cleanUId && pUserId && pUserId === cleanUId) return true;
+    if (cleanUId && pId && pId === cleanUId) return true;
+    if (cleanEmail && pEmail && pEmail === cleanEmail) return true;
+    return false;
+  });
   if (!userName && pMatch?.name) {
     userName = pMatch.name;
   }
+  const isInactive = Boolean(
+    pMatch && (pMatch.status === "inactive" || pMatch.active === false)
+  );
   const hasUserContext = Boolean(
-    (userId || personnelId || userEmail || req.headers["authorization"]) && !isSessionRevoked
+    (userId || personnelId || userEmail || req.headers["authorization"]) && !isSessionRevoked && !isInactive
   );
   const resolvedRole = pMatch?.role || userRole || "";
   const isDirectusSystemAdmin = Boolean(
-    !pMatch && (DIRECTUS_ADMIN_ROLE_IDS.includes(roleId) || userRole === "admin")
+    DIRECTUS_ADMIN_ROLE_IDS.includes(roleId) || userRole === "admin"
   );
-  const isAdmin = Boolean(
-    hasUserContext && (pMatch ? pMatch.role === "admin" || pMatch.role === "sales_manager" : isDirectusSystemAdmin)
+  const isSystemAdmin = Boolean(
+    hasUserContext && (isDirectusSystemAdmin || userRole === "admin" || pMatch?.role === "admin")
+  );
+  const isPersonnelAdmin = Boolean(
+    hasUserContext && (isSystemAdmin || pMatch?.role === "sales_manager")
   );
   const canViewAllCustomers = Boolean(
-    isAdmin || pMatch?.permissions?.can_view_all_customers === true
+    isSystemAdmin || pMatch?.permissions?.can_view_all_customers === true || pMatch?.role === "sales_manager" && pMatch?.permissions?.can_view_all_customers !== false
   );
+  const reportViewScope = isSystemAdmin ? "all" : pMatch?.permissions?.report_view_scope || (pMatch?.role === "sales_manager" && pMatch?.permissions?.report_view_scope !== "own_only" ? "all" : "own_only");
+  const visibleReportPersonnelIds = pMatch?.permissions?.visible_report_personnel_ids || [];
   return {
-    userId: isSessionRevoked ? "" : userId,
-    personnelId: isSessionRevoked ? "" : personnelId,
-    userRole: isAdmin ? pMatch?.role === "sales_manager" ? "sales_manager" : "admin" : resolvedRole || "marketer",
+    userId: isSessionRevoked || isInactive ? "" : userId,
+    personnelId: isSessionRevoked || isInactive ? "" : personnelId,
+    userRole: isPersonnelAdmin ? pMatch?.role === "sales_manager" ? "sales_manager" : "admin" : resolvedRole || "marketer",
     roleId,
-    isAdmin,
+    isAdmin: isSystemAdmin,
+    isPersonnelAdmin,
     canViewAllCustomers,
-    userName: isSessionRevoked ? "" : userName,
-    userEmail: isSessionRevoked ? "" : userEmail,
+    reportViewScope,
+    visibleReportPersonnelIds,
+    userName: isSessionRevoked || isInactive ? "" : userName,
+    userEmail: isSessionRevoked || isInactive ? "" : userEmail,
     tenantId,
     isAuthenticated: hasUserContext,
-    isSessionRevoked
+    isSessionRevoked,
+    isInactive
   };
 }
+function checkInactivePersonnel(req, res, next) {
+  const path2 = req.path || "";
+  if (path2.startsWith("/health") || path2.startsWith("/api/health") || path2.startsWith("/api/auth/login") || path2.startsWith("/auth/login") || path2.startsWith("/api/assets") || path2.startsWith("/assets")) {
+    return next();
+  }
+  const user = getRequestUser(req);
+  if (user.isInactive) {
+    return res.status(403).json({
+      error: "ACCOUNT_INACTIVE",
+      message: "\u062D\u0633\u0627\u0628 \u06A9\u0627\u0631\u0628\u0631\u06CC \u0634\u0645\u0627 \u062A\u0648\u0633\u0637 \u0645\u062F\u06CC\u0631\u06CC\u062A \u063A\u06CC\u0631\u0641\u0639\u0627\u0644 \u0634\u062F\u0647 \u0627\u0633\u062A \u0648 \u0627\u0645\u06A9\u0627\u0646 \u0627\u0633\u062A\u0641\u0627\u062F\u0647 \u0627\u0632 \u0633\u0627\u0645\u0627\u0646\u0647 \u0631\u0627 \u0646\u062F\u0627\u0631\u06CC\u062F. \u0644\u0637\u0641\u0627\u064B \u0628\u0627 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u062A\u0645\u0627\u0633 \u0628\u06AF\u06CC\u0631\u06CC\u062F."
+    });
+  }
+  next();
+}
+
+// server/routes/auth.routes.ts
+import { Router as Router2 } from "express";
+import crypto3 from "crypto";
 
 // server/services/sms.service.ts
+async function getPersonnelFullName(identifier, fallback) {
+  const clean = identifier ? String(identifier).trim() : "";
+  const searchFallback = fallback ? String(fallback).trim() : "";
+  if (clean) {
+    const cleanLower = clean.toLowerCase();
+    const rawUid = cleanLower.replace(/^p-/, "");
+    const cleanDigits = clean.replace(/\D/g, "");
+    const pLocal = personnelData.find((p) => {
+      if (!p) return false;
+      const pid = p.id ? String(p.id).toLowerCase() : "";
+      const puid = p.user_id ? String(p.user_id).toLowerCase() : "";
+      const pemail = p.email ? String(p.email).toLowerCase() : "";
+      const puname = p.username ? String(p.username).toLowerCase() : "";
+      const pphone = p.phone ? String(p.phone).replace(/\D/g, "") : "";
+      return pid === cleanLower || rawUid && (pid === rawUid || pid === `p-${rawUid}`) || puid === cleanLower || pemail === cleanLower || puname === cleanLower || cleanDigits.length >= 7 && pphone && (pphone === cleanDigits || pphone.endsWith(cleanDigits)) || p.name && p.name.trim().toLowerCase() === cleanLower;
+    });
+    if (pLocal && pLocal.name && pLocal.name.trim()) {
+      return {
+        fullName: pLocal.name.trim(),
+        phone: pLocal.phone,
+        id: pLocal.id
+      };
+    }
+  }
+  if (searchFallback) {
+    const pNameLocal = personnelData.find(
+      (p) => p && p.name && p.name.trim().toLowerCase() === searchFallback.toLowerCase()
+    );
+    if (pNameLocal && pNameLocal.name && pNameLocal.name.trim()) {
+      return {
+        fullName: pNameLocal.name.trim(),
+        phone: pNameLocal.phone,
+        id: pNameLocal.id
+      };
+    }
+  }
+  if (directusUrl && directusAdminToken) {
+    try {
+      if (clean) {
+        const cleanDigits = clean.replace(/\D/g, "");
+        const queryParts = [
+          `filter[_or][0][id][_eq]=${encodeURIComponent(clean)}`,
+          `filter[_or][1][user_id][_eq]=${encodeURIComponent(clean)}`,
+          `filter[_or][2][email][_ieq]=${encodeURIComponent(clean)}`,
+          `filter[_or][3][username][_ieq]=${encodeURIComponent(clean)}`,
+          `filter[_or][4][name][_ieq]=${encodeURIComponent(clean)}`
+        ];
+        if (cleanDigits.length >= 7) {
+          queryParts.push(`filter[_or][5][phone][_icontains]=${encodeURIComponent(cleanDigits)}`);
+        }
+        const dRes = await directusFetch(`/items/personnel?${queryParts.join("&")}&limit=1`).catch(() => null);
+        if (dRes?.data && Array.isArray(dRes.data) && dRes.data.length > 0) {
+          const item = dRes.data[0];
+          if (item?.name && item.name.trim()) {
+            return {
+              fullName: item.name.trim(),
+              phone: item.phone,
+              id: String(item.id)
+            };
+          }
+        }
+      }
+      if (searchFallback && searchFallback.length > 2) {
+        const dNameRes = await directusFetch(
+          `/items/personnel?filter[name][_ieq]=${encodeURIComponent(searchFallback)}&limit=1`
+        ).catch(() => null);
+        if (dNameRes?.data && Array.isArray(dNameRes.data) && dNameRes.data.length > 0) {
+          const item = dNameRes.data[0];
+          if (item?.name && item.name.trim()) {
+            return {
+              fullName: item.name.trim(),
+              phone: item.phone,
+              id: String(item.id)
+            };
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("[IPPanel SMS] Directus personnel lookup warning:", err.message);
+    }
+  }
+  return {
+    fullName: searchFallback || clean || "\u0647\u0645\u06A9\u0627\u0631 \u06AF\u0631\u0627\u0645\u06CC"
+  };
+}
 function getPatternTextForCode(code) {
   if (!code) return "";
   const c = String(code).trim();
-  if (projectSettingsData.login_pattern?.trim() === c) return projectSettingsData.login_pattern_text || "";
-  if (projectSettingsData.dayli_leave_request_pattern?.trim() === c) return projectSettingsData.dayli_leave_request_text || "";
-  if (projectSettingsData.hourly_leave_request_pattern?.trim() === c) return projectSettingsData.hourly_leave_request_text || "";
-  if (projectSettingsData.dayli_leave_accept_pattern?.trim() === c) return projectSettingsData.dayli_leave_accept_text || "";
-  if (projectSettingsData.dayli_leave_reject_pattern?.trim() === c) return projectSettingsData.dayli_leave_reject_text || "";
-  if (projectSettingsData.hourly_leave_accept_pattern?.trim() === c) return projectSettingsData.hourly_leave_accept_text || "";
-  if (projectSettingsData.hourly_leave_reject_pattern?.trim() === c) return projectSettingsData.hourly_leave_reject_text || "";
-  if (projectSettingsData.addvance_request_pattern?.trim() === c) return projectSettingsData.addvance_request_text || "";
-  if (projectSettingsData.addvance_accept_pattern?.trim() === c) return projectSettingsData.addvance_accept_text || "";
-  if (projectSettingsData.lower_addvance_accept_pattern?.trim() === c) return projectSettingsData.lower_addvance_accept_text || "";
-  if (projectSettingsData.addvance_reject_pattern?.trim() === c) return projectSettingsData.addvance_reject_text || "";
+  const ps = projectSettingsData || {};
+  if (ps.login_pattern?.trim() === c) return ps.login_pattern_text || "";
+  if (ps.dayli_leave_request_pattern?.trim() === c || ps.daily_leave_request_pattern?.trim() === c) {
+    return ps.dayli_leave_request_text || ps.daily_leave_request_text || "";
+  }
+  if (ps.hourly_leave_request_pattern?.trim() === c) return ps.hourly_leave_request_text || "";
+  if (ps.dayli_leave_accept_pattern?.trim() === c || ps.daily_leave_accept_pattern?.trim() === c) {
+    return ps.dayli_leave_accept_text || ps.daily_leave_accept_text || "";
+  }
+  if (ps.dayli_leave_reject_pattern?.trim() === c || ps.daily_leave_reject_pattern?.trim() === c) {
+    return ps.dayli_leave_reject_text || ps.daily_leave_reject_text || "";
+  }
+  if (ps.hourly_leave_accept_pattern?.trim() === c) return ps.hourly_leave_accept_text || "";
+  if (ps.hourly_leave_reject_pattern?.trim() === c) return ps.hourly_leave_reject_text || "";
+  if (ps.addvance_request_pattern?.trim() === c) return ps.addvance_request_text || "";
+  if (ps.addvance_accept_pattern?.trim() === c) return ps.addvance_accept_text || "";
+  if (ps.lower_addvance_accept_pattern?.trim() === c) return ps.lower_addvance_accept_text || "";
+  if (ps.addvance_reject_pattern?.trim() === c) return ps.addvance_reject_text || "";
   return "";
 }
 function resolvePatternVariables(patternCode, recipientPhone, variables = {}) {
@@ -977,12 +1110,14 @@ function resolvePatternVariables(patternCode, recipientPhone, variables = {}) {
     const lower = ph.toLowerCase();
     if (lower === "mobile" || lower === "phone") {
       cleanVars[ph] = cleanVars.mobile || cleanVars.phone || recipientPhone || "09120000000";
+    } else if (lower === "name" || lower === "fullname" || lower === "full_name" || lower === "user_name" || lower === "personnel_name" || lower === "marketer_name" || lower === "applicant_name" || lower === "person" || lower === "user") {
+      cleanVars[ph] = cleanVars.name || cleanVars.fullName || cleanVars.full_name || cleanVars.user_name || cleanVars.personnel_name || cleanVars.applicant_name || "\u0647\u0645\u06A9\u0627\u0631 \u06AF\u0631\u0627\u0645\u06CC";
     } else if (lower === "family" || lower === "last_name") {
-      const fullName = cleanVars.fullName || cleanVars.name || "\u0647\u0645\u06A9\u0627\u0631 \u06AF\u0631\u0627\u0645\u06CC";
+      const fullName = cleanVars.family || cleanVars.last_name || cleanVars.fullName || cleanVars.name || "\u0647\u0645\u06A9\u0627\u0631 \u06AF\u0631\u0627\u0645\u06CC";
       const parts = fullName.split(" ");
       cleanVars[ph] = parts.length > 1 ? parts.slice(1).join(" ") : "\u06AF\u0631\u0627\u0645\u06CC";
-    } else if (lower === "name" || lower === "first_name") {
-      const fullName = cleanVars.fullName || cleanVars.name || "\u0647\u0645\u06A9\u0627\u0631";
+    } else if (lower === "first_name") {
+      const fullName = cleanVars.first_name || cleanVars.fullName || cleanVars.name || "\u0647\u0645\u06A9\u0627\u0631";
       const parts = fullName.split(" ");
       cleanVars[ph] = parts[0] || "\u0647\u0645\u06A9\u0627\u0631";
     } else if (lower === "date" || lower === "request_date" || lower === "approval_date") {
@@ -995,8 +1130,10 @@ function resolvePatternVariables(patternCode, recipientPhone, variables = {}) {
       cleanVars[ph] = cleanVars.device || "\u0633\u0627\u0645\u0627\u0646\u0647 \u0648\u0628 \u0622\u0644\u0641\u0627\u062F\u0633\u06A9";
     } else if (lower === "leave_type") {
       cleanVars[ph] = cleanVars.leave_type || "\u0645\u0631\u062E\u0635\u06CC";
-    } else if (lower === "leave_date") {
-      cleanVars[ph] = cleanVars.leave_date || cleanVars.start_date || cleanVars.date || jalaliDate;
+    } else if (lower === "leave_date" || lower === "from_date") {
+      cleanVars[ph] = cleanVars.leave_date || cleanVars.from_date || cleanVars.start_date || cleanVars.date || jalaliDate;
+    } else if (lower === "to_date") {
+      cleanVars[ph] = cleanVars.to_date || cleanVars.end_date || cleanVars.leave_date || cleanVars.start_date || jalaliDate;
     } else if (lower === "from_time") {
       cleanVars[ph] = cleanVars.from_time || cleanVars.start_time || "09:00";
     } else if (lower === "to_time") {
@@ -1006,13 +1143,19 @@ function resolvePatternVariables(patternCode, recipientPhone, variables = {}) {
     } else if (lower === "end_time") {
       cleanVars[ph] = cleanVars.end_time || cleanVars.to_time || "17:00";
     } else if (lower === "start_date") {
-      cleanVars[ph] = cleanVars.start_date || cleanVars.leave_date || jalaliDate;
+      cleanVars[ph] = cleanVars.start_date || cleanVars.from_date || cleanVars.leave_date || jalaliDate;
     } else if (lower === "end_date") {
-      cleanVars[ph] = cleanVars.end_date || cleanVars.start_date || jalaliDate;
+      cleanVars[ph] = cleanVars.end_date || cleanVars.to_date || cleanVars.start_date || jalaliDate;
+    } else if (lower === "days" || lower === "day" || lower === "count") {
+      cleanVars[ph] = cleanVars.days || cleanVars.day || cleanVars.count || "1";
+    } else if (lower === "hours" || lower === "hour") {
+      cleanVars[ph] = cleanVars.hours || cleanVars.hour || "1";
+    } else if (lower === "duration") {
+      cleanVars[ph] = cleanVars.duration || cleanVars.days || cleanVars.hours || "1";
     } else if (lower === "amount" || lower === "requested_amount" || lower === "approved_amount") {
       cleanVars[ph] = cleanVars[ph] || cleanVars.amount || cleanVars.requested_amount || cleanVars.approved_amount || "0";
-    } else if (lower === "reason") {
-      cleanVars[ph] = cleanVars.reason || "-";
+    } else if (lower === "reason" || lower === "description") {
+      cleanVars[ph] = cleanVars.reason || cleanVars.description || "-";
     } else if (lower === "manager_note") {
       cleanVars[ph] = cleanVars.manager_note || "\u0628\u0631\u0631\u0633\u06CC \u0634\u062F";
     } else if (lower === "reviewed_by") {
@@ -1465,6 +1608,11 @@ router.patch("/:id", async (req, res) => {
   }
   const { id } = req.params;
   const patch = req.body;
+  if (patch.status) {
+    patch.active = patch.status !== "inactive";
+  } else if (patch.active !== void 0) {
+    patch.status = patch.active ? "active" : "inactive";
+  }
   const idx = personnelData.findIndex((p) => String(p.id) === String(id));
   if (idx !== -1) {
     personnelData[idx] = enrichPersonnel({ ...personnelData[idx], ...patch });
@@ -1475,10 +1623,25 @@ router.patch("/:id", async (req, res) => {
       if (patch.tenant_id) {
         directusPatch.tenant_id = resolveDirectusTenantId(patch.tenant_id);
       }
+      if (typeof patch.avatar === "string") {
+        const fileMatch = patch.avatar.match(/\/api\/assets\/([a-zA-Z0-9\-_]+)/);
+        if (fileMatch && fileMatch[1]) {
+          directusPatch.avatar = fileMatch[1];
+        }
+      }
       const patched = await directusFetch(`/items/personnel/${encodeURIComponent(id)}`, {
         method: "PATCH",
         body: JSON.stringify(directusPatch)
       });
+      const targetUserId = patch.user_id || (idx !== -1 ? personnelData[idx]?.user_id : null);
+      if (patch.status && targetUserId) {
+        await directusFetch(`/users/${targetUserId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            status: patch.status === "inactive" ? "suspended" : "active"
+          })
+        }).catch((e) => console.warn("Could not update directus_users status:", e.message));
+      }
       if (patched?.data) {
         const item = enrichPersonnel({
           ...idx !== -1 ? personnelData[idx] : {},
@@ -1788,21 +1951,22 @@ router2.post("/login", async (req, res) => {
     try {
       let directusUserEmail = cleanIdentifier;
       if (!cleanIdentifier.includes("@")) {
+        const cleanDigits2 = rawIdentifier.replace(/\D/g, "");
         let pRes = await directusFetch(
-          `/items/personnel?filter[_or][0][username][_eq]=${encodeURIComponent(
+          `/items/personnel?filter[_or][0][username][_ieq]=${encodeURIComponent(
             rawIdentifier
-          )}&filter[_or][1][phone][_eq]=${encodeURIComponent(rawIdentifier)}&limit=1`
+          )}&filter[_or][1][phone][_ieq]=${encodeURIComponent(rawIdentifier)}${cleanDigits2.length >= 7 ? `&filter[_or][2][phone][_icontains]=${encodeURIComponent(cleanDigits2)}` : ""}&limit=1`
         ).catch(() => null);
         if (!pRes?.data || !Array.isArray(pRes.data) || pRes.data.length === 0) {
           pRes = await directusFetch(
-            `/items/personnel?filter[_or][0][username][_eq]=${encodeURIComponent(
+            `/items/personnel?filter[_or][0][username][_ieq]=${encodeURIComponent(
               cleanIdentifier
-            )}&filter[_or][1][phone][_eq]=${encodeURIComponent(cleanIdentifier)}&limit=1`
+            )}&filter[_or][1][phone][_ieq]=${encodeURIComponent(cleanIdentifier)}&limit=1`
           ).catch(() => null);
         }
         if (pRes?.data && Array.isArray(pRes.data) && pRes.data.length > 0) {
           const foundPersonnel = pRes.data[0];
-          if (foundPersonnel.email) {
+          if (foundPersonnel.email && foundPersonnel.email.trim()) {
             directusUserEmail = foundPersonnel.email.toLowerCase().trim();
           }
         }
@@ -1840,10 +2004,28 @@ router2.post("/login", async (req, res) => {
         ).catch(() => null);
         if (!pRes?.data || !Array.isArray(pRes.data) || pRes.data.length === 0) {
           pRes = await directusFetch(
-            `/items/personnel?filter[email][_eq]=${encodeURIComponent(meUser.email)}`
+            `/items/personnel?filter[email][_ieq]=${encodeURIComponent(meUser.email)}`
           ).catch(() => null);
         }
         let pItem = pRes?.data?.[0] || null;
+        if (pItem) {
+          if (!pItem.user_id || pItem.user_id !== meUser.id) {
+            pItem.user_id = meUser.id;
+            await directusFetch(`/items/personnel/${pItem.id}`, {
+              method: "PATCH",
+              body: JSON.stringify({ user_id: meUser.id })
+            }).catch(() => {
+            });
+          }
+          const pIdx = personnelData.findIndex(
+            (p) => String(p.id) === String(pItem.id) || p.email && p.email.toLowerCase() === meUser.email.toLowerCase()
+          );
+          if (pIdx >= 0) {
+            personnelData[pIdx] = { ...personnelData[pIdx], ...pItem, user_id: meUser.id };
+          } else {
+            personnelData.push({ ...pItem, user_id: meUser.id });
+          }
+        }
         if (!pItem) {
           const cleanPName = `${meUser.first_name || ""} ${meUser.last_name || ""}`.trim() || meUser.email;
           const newPId = crypto3.randomUUID();
@@ -1862,24 +2044,35 @@ router2.post("/login", async (req, res) => {
             body: JSON.stringify(newPersonnelPayload)
           }).catch(() => null);
           pItem = createdPRes?.data || newPersonnelPayload;
+          personnelData.push(pItem);
         }
         pItem = enrichPersonnel(pItem);
+        if (pItem && (pItem.status === "inactive" || pItem.active === false)) {
+          return res.status(403).json({
+            error: "ACCOUNT_INACTIVE",
+            message: "\u062D\u0633\u0627\u0628 \u06A9\u0627\u0631\u0628\u0631\u06CC \u0634\u0645\u0627 \u062A\u0648\u0633\u0637 \u0645\u062F\u06CC\u0631\u06CC\u062A \u063A\u06CC\u0631\u0641\u0639\u0627\u0644 \u0634\u062F\u0647 \u0627\u0633\u062A \u0648 \u0627\u0645\u06A9\u0627\u0646 \u0648\u0631\u0648\u062F \u0628\u0647 \u0633\u0627\u0645\u0627\u0646\u0647 \u0631\u0627 \u0646\u062F\u0627\u0631\u06CC\u062F. \u0644\u0637\u0641\u0627\u064B \u0628\u0627 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u062A\u0645\u0627\u0633 \u0628\u06AF\u06CC\u0631\u06CC\u062F."
+          });
+        }
         const isAdmin = Boolean(
           pItem ? pItem.role === "admin" || pItem.role === "sales_manager" : isDirectusAdmin
         );
         const appRole = pItem ? pItem.role : isAdmin ? "admin" : "marketer";
         let avatarUrl = formatAvatarUrl(meUser.avatar || pItem?.avatar);
         if (projectSettingsData.login_pattern) {
-          const uPhone = pItem?.phone || "";
-          const fullName = pItem?.name || meUser.email;
+          const pInfo = await getPersonnelFullName(pItem?.id || meUser.id, pItem?.name);
+          const fullName = pInfo.fullName || pItem?.name || `${meUser.first_name || ""} ${meUser.last_name || ""}`.trim() || meUser.email;
+          const uPhone = pInfo.phone || pItem?.phone || "";
           const parts = fullName.split(" ");
           const fName = parts[0] || "\u0647\u0645\u06A9\u0627\u0631";
           const lName = parts.length > 1 ? parts.slice(1).join(" ") : "\u06AF\u0631\u0627\u0645\u06CC";
           const now2 = /* @__PURE__ */ new Date();
           const loginVars = {
-            name: fName,
-            family: lName,
+            name: fullName,
             fullName,
+            user_name: fullName,
+            personnel_name: fullName,
+            family: lName,
+            first_name: fName,
             mobile: uPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
             phone: uPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
             date: now2.toLocaleDateString("fa-IR"),
@@ -1920,21 +2113,41 @@ router2.post("/login", async (req, res) => {
       console.warn("Directus auth login failed, trying local fallback:", err.message);
     }
   }
-  const found = personnelData.find(
-    (p) => p.email && p.email.toLowerCase() === cleanIdentifier || p.username && p.username.toLowerCase() === cleanIdentifier || p.phone && p.phone.replace(/[\s\-_()]/g, "") === cleanIdentifier.replace(/[\s\-_()]/g, "")
-  );
+  const cleanDigits = cleanIdentifier.replace(/\D/g, "");
+  const found = personnelData.find((p) => {
+    if (!p) return false;
+    const pEmail = p.email ? String(p.email).trim().toLowerCase() : "";
+    const pUsername = p.username ? String(p.username).trim().toLowerCase() : "";
+    const pPhone = p.phone ? String(p.phone).trim() : "";
+    const pPhoneDigits = pPhone.replace(/\D/g, "");
+    if (cleanIdentifier && pEmail && pEmail === cleanIdentifier) return true;
+    if (cleanIdentifier && pUsername && pUsername === cleanIdentifier) return true;
+    if (cleanDigits && cleanDigits.length >= 7 && pPhoneDigits && pPhoneDigits === cleanDigits) return true;
+    if (cleanIdentifier && pPhone && pPhone.replace(/[\s\-_()]/g, "").toLowerCase() === cleanIdentifier.replace(/[\s\-_()]/g, "")) return true;
+    return false;
+  });
   if (found) {
+    if (found.status === "inactive" || found.active === false) {
+      return res.status(403).json({
+        error: "ACCOUNT_INACTIVE",
+        message: "\u062D\u0633\u0627\u0628 \u06A9\u0627\u0631\u0628\u0631\u06CC \u0634\u0645\u0627 \u062A\u0648\u0633\u0637 \u0645\u062F\u06CC\u0631\u06CC\u062A \u063A\u06CC\u0631\u0641\u0639\u0627\u0644 \u0634\u062F\u0647 \u0627\u0633\u062A \u0648 \u0627\u0645\u06A9\u0627\u0646 \u0648\u0631\u0648\u062F \u0628\u0647 \u0633\u0627\u0645\u0627\u0646\u0647 \u0631\u0627 \u0646\u062F\u0627\u0631\u06CC\u062F. \u0644\u0637\u0641\u0627\u064B \u0628\u0627 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u062A\u0645\u0627\u0633 \u0628\u06AF\u06CC\u0631\u06CC\u062F."
+      });
+    }
     if (projectSettingsData.login_pattern) {
-      const uPhone = found.phone || "";
-      const fullName = found.name || found.email;
+      const pInfo = await getPersonnelFullName(found.id, found.name);
+      const fullName = pInfo.fullName || found.name || found.email;
+      const uPhone = pInfo.phone || found.phone || "";
       const parts = fullName.split(" ");
       const fName = parts[0] || "\u0647\u0645\u06A9\u0627\u0631";
       const lName = parts.length > 1 ? parts.slice(1).join(" ") : "\u06AF\u0631\u0627\u0645\u06CC";
       const now2 = /* @__PURE__ */ new Date();
       const loginVars = {
-        name: fName,
-        family: lName,
+        name: fullName,
         fullName,
+        user_name: fullName,
+        personnel_name: fullName,
+        family: lName,
+        first_name: fName,
         mobile: uPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
         phone: uPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
         date: now2.toLocaleDateString("fa-IR"),
@@ -2003,9 +2216,20 @@ router2.get("/me", async (req, res) => {
     }
   }
   if (!pItem) {
-    pItem = personnelData.find(
-      (p) => personnelId && p.id === personnelId || userId && p.user_id === userId || userEmail && p.email?.toLowerCase() === userEmail?.toLowerCase()
-    );
+    pItem = personnelData.find((p) => {
+      if (!p) return false;
+      const pId = p.id ? String(p.id).trim().toLowerCase() : "";
+      const pUserId = p.user_id ? String(p.user_id).trim().toLowerCase() : "";
+      const pEmail = p.email ? String(p.email).trim().toLowerCase() : "";
+      const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : "";
+      const cleanUId = userId ? String(userId).trim().toLowerCase() : "";
+      const cleanUEmail = userEmail ? String(userEmail).trim().toLowerCase() : "";
+      if (cleanPId && pId && pId === cleanPId) return true;
+      if (cleanUId && pUserId && pUserId === cleanUId) return true;
+      if (cleanUId && pId && pId === cleanUId) return true;
+      if (cleanUEmail && pEmail && pEmail === cleanUEmail) return true;
+      return false;
+    });
   }
   if (pItem) {
     pItem = enrichPersonnel(pItem);
@@ -2101,7 +2325,7 @@ async function ensureReportsCache(forceRefresh = false) {
   if (!forceRefresh && reportsCache && now2 - reportsCache.timestamp < CACHE_TTL_MS) {
     return reportsCache.data;
   }
-  const res = await directusFetch("/items/customer_reports?limit=5000&sort=-date_created").catch(() => null);
+  const res = await directusFetch("/items/customer_reports?limit=500&sort=-date_created").catch(() => null);
   const items = res?.data || [];
   if (items && items.length > 0) {
     reportsCache = {
@@ -2569,7 +2793,7 @@ router3.get("/", async (req, res) => {
     if (tenantId && tenantId !== "all" && (isAdmin || isFreeOnly)) {
       list2 = list2.filter((c) => matchesTenant(c.tenant_id, tenantId));
     }
-    if (!isAdmin && (userId || personnelId) && !isFreeOnly) {
+    if (!isAdmin && !canViewAllCustomers && (userId || personnelId) && !isFreeOnly) {
       list2 = list2.filter(
         (c) => c.assigned_marketer_id === personnelId || c.assigned_marketer_id === userId || userName && c.assigned_marketer_name === userName
       );
@@ -2707,7 +2931,7 @@ router3.get("/", async (req, res) => {
   if (tenantId && tenantId !== "all" && (isAdmin || isFreeOnly)) {
     list = list.filter((c) => matchesTenant(c.tenant_id, tenantId));
   }
-  if (!isAdmin && (userId || personnelId) && !isFreeOnly) {
+  if (!isAdmin && !canViewAllCustomers && (userId || personnelId) && !isFreeOnly) {
     list = list.filter(
       (c) => c.assigned_marketer_id === personnelId || c.assigned_marketer_id === userId || userName && c.assigned_marketer_name === userName
     );
@@ -2783,6 +3007,23 @@ router3.get("/:id", async (req, res) => {
   cust.reports = reportsData.filter((r) => String(r.customer_id) === String(id));
   cust.contacts = contactsData.filter((ct) => String(ct.customer_id) === String(id));
   res.json(cust);
+});
+router3.get("/:id/contacts", async (req, res) => {
+  const { id } = req.params;
+  if (directusUrl && directusAdminToken) {
+    try {
+      const contactsRes = await directusFetch(
+        `/items/customer_contacts?filter[customer_id][_eq]=${encodeURIComponent(id)}&sort=-date_created`
+      );
+      if (contactsRes?.data && Array.isArray(contactsRes.data)) {
+        return res.json(contactsRes.data);
+      }
+    } catch (e) {
+      console.warn(`Error fetching contacts for customer ${id}:`, e.message);
+    }
+  }
+  const filtered = contactsData.filter((ct) => String(ct.customer_id) === String(id));
+  return res.json(filtered);
 });
 router3.post("/bulk-set-deadline", async (req, res) => {
   const { target = "all", marketer_id, customer_ids, days = 30 } = req.body;
@@ -3130,8 +3371,8 @@ router3.patch("/:id", async (req, res) => {
 });
 router3.delete("/:id", async (req, res) => {
   const { id } = req.params;
-  const { isAdmin } = getRequestUser(req);
-  if (!isAdmin) {
+  const { isAdmin, isPersonnelAdmin } = getRequestUser(req);
+  if (!isAdmin && !isPersonnelAdmin) {
     return res.status(403).json({ error: "\u0641\u0642\u0637 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u0627\u062C\u0627\u0632\u0647 \u062D\u0630\u0641 \u067E\u0631\u0648\u0646\u062F\u0647 \u0645\u0634\u062A\u0631\u06CC \u0631\u0627 \u062F\u0627\u0631\u062F." });
   }
   if (directusUrl && directusAdminToken) {
@@ -3469,19 +3710,52 @@ import { Router as Router4 } from "express";
 import crypto6 from "crypto";
 var router4 = Router4();
 router4.get("/", async (req, res) => {
-  const { customer_id, page, limit, all, status, negotiator, search, admin_filter, staff_filter, start_date, end_date, fields } = req.query;
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+  const {
+    customer_id,
+    page,
+    limit,
+    all,
+    status,
+    negotiator,
+    search,
+    admin_filter,
+    staff_filter,
+    start_date,
+    end_date,
+    fields,
+    sort
+  } = req.query;
+  const {
+    userId,
+    personnelId,
+    isAdmin,
+    isPersonnelAdmin,
+    canViewAllCustomers,
+    reportViewScope,
+    userName,
+    tenantId
+  } = getRequestUser(req);
+  const canViewAllReports = Boolean(
+    isAdmin || isPersonnelAdmin || canViewAllCustomers || reportViewScope === "all"
+  );
   const isUnlimited = all === "true" || limit === "all" || limit === "50000";
   const reqLimit = isUnlimited ? 1e4 : limit ? Math.min(Math.max(1, parseInt(String(limit), 10)), 500) : 25;
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
-  const activeFilter = isAdmin ? admin_filter : staff_filter;
-  const requiresRelationalFilter = Boolean(
-    activeFilter && activeFilter !== "all" && activeFilter !== "active_followups" && activeFilter !== "no_followup"
-  );
-  if (directusUrl && directusAdminToken && !isUnlimited && !requiresRelationalFilter) {
+  const activeFilter = String(admin_filter || staff_filter || "");
+  let sortParam = "-date_created";
+  if (sort === "oldest") {
+    sortParam = "date_created";
+  } else if (sort === "highest_score") {
+    sortParam = "-negotiation_score,-date_created";
+  } else if (sort === "followup_soonest" || activeFilter === "active_followups" && sort !== "oldest" && sort !== "highest_score" && sort !== "newest_explicit") {
+    sortParam = "next_followup_date,-date_created";
+  } else if (activeFilter === "overdue_followups" && sort !== "oldest" && sort !== "highest_score" && sort !== "newest_explicit") {
+    sortParam = "-next_followup_date,-date_created";
+  }
+  if (directusUrl && directusAdminToken && !isUnlimited) {
     try {
       const directusPageLimit = Math.min(reqLimit, 100);
-      let directusPath = `/items/customer_reports?page=${reqPage}&limit=${directusPageLimit}&meta=*&sort=-date_created`;
+      let directusPath = `/items/customer_reports?page=${reqPage}&limit=${directusPageLimit}&meta=total_count,filter_count&sort=${sortParam}`;
       let andIdx = 0;
       if (tenantId && tenantId !== "all") {
         const tenantNum = resolveDirectusTenantId(tenantId);
@@ -3491,10 +3765,11 @@ router4.get("/", async (req, res) => {
       }
       if (customer_id) {
         directusPath += `&filter[_and][${andIdx++}][customer_id][_eq]=${encodeURIComponent(String(customer_id))}`;
-      } else if (!isAdmin && (userName || personnelId || userId)) {
+      } else if (!canViewAllReports && (userName || personnelId || userId)) {
         let repOr = 0;
         if (userName) {
           directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][negotiator_name][_icontains]=${encodeURIComponent(userName)}`;
+          directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][customer_id][assigned_marketer_name][_icontains]=${encodeURIComponent(userName)}`;
         }
         if (personnelId) {
           directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][created_by][_eq]=${encodeURIComponent(String(personnelId))}`;
@@ -3502,17 +3777,39 @@ router4.get("/", async (req, res) => {
           if (rawP !== String(personnelId)) {
             directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][created_by][_eq]=${encodeURIComponent(rawP)}`;
           }
+          directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(String(personnelId))}`;
         }
         if (userId) {
           directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][created_by][_eq]=${encodeURIComponent(String(userId))}`;
+          directusPath += `&filter[_and][${andIdx}][_or][${repOr++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(String(userId))}`;
         }
         andIdx++;
       }
-      const activeFilter2 = isAdmin ? admin_filter : staff_filter;
-      if (activeFilter2 === "active_followups") {
+      const startOfToday = /* @__PURE__ */ new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const startOfTodayIso = startOfToday.toISOString();
+      if (activeFilter === "active_followups") {
+        directusPath += `&filter[_and][${andIdx++}][next_followup_date][_gte]=${encodeURIComponent(startOfTodayIso)}`;
+      } else if (activeFilter === "overdue_followups") {
         directusPath += `&filter[_and][${andIdx++}][next_followup_date][_nnull]=true`;
-      } else if (activeFilter2 === "no_followup") {
+        directusPath += `&filter[_and][${andIdx++}][next_followup_date][_lt]=${encodeURIComponent(startOfTodayIso)}`;
+      } else if (activeFilter === "no_followup") {
         directusPath += `&filter[_and][${andIdx++}][next_followup_date][_null]=true`;
+      } else if (activeFilter === "expired_customers" || activeFilter === "expired") {
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        directusPath += `&filter[_and][${andIdx}][_or][0][customer_id][is_expired][_eq]=true&filter[_and][${andIdx}][_or][1][customer_id][assignment_deadline][_lt]=${encodeURIComponent(nowIso)}`;
+        andIdx++;
+      } else if (activeFilter === "near_expiry_customers") {
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        const in3DaysIso = new Date(Date.now() + 3 * 864e5).toISOString();
+        directusPath += `&filter[_and][${andIdx}][_or][0][customer_id][status][_eq]=%D9%BE%DB%8C%DA%AF%DB%8C%D8%B1%DB%8C%20%D9%82%D8%A8%D9%84%20%D8%A7%D8%B2%20%D8%A7%D9%86%D9%82%D8%B6%D8%A7&filter[_and][${andIdx}][_or][1][_and][0][customer_id][assignment_deadline][_gte]=${encodeURIComponent(nowIso)}&filter[_and][${andIdx}][_or][1][_and][1][customer_id][assignment_deadline][_lte]=${encodeURIComponent(in3DaysIso)}`;
+        andIdx++;
+      } else if (activeFilter === "due_less_3_days" || activeFilter === "due_less_7_days" || activeFilter === "due_less_10_days") {
+        const daysNum = activeFilter === "due_less_3_days" ? 3 : activeFilter === "due_less_7_days" ? 7 : 10;
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        const maxIso = new Date(Date.now() + daysNum * 864e5).toISOString();
+        directusPath += `&filter[_and][${andIdx}][_or][0][_and][0][next_followup_date][_gte]=${encodeURIComponent(nowIso)}&filter[_and][${andIdx}][_or][0][_and][1][next_followup_date][_lte]=${encodeURIComponent(maxIso)}&filter[_and][${andIdx}][_or][1][_and][0][customer_id][assignment_deadline][_gte]=${encodeURIComponent(nowIso)}&filter[_and][${andIdx}][_or][1][_and][1][customer_id][assignment_deadline][_lte]=${encodeURIComponent(maxIso)}`;
+        andIdx++;
       }
       if (status && status !== "\u0647\u0645\u0647") {
         if (String(status) === "\u0642\u0631\u0627\u0631\u062F\u0627\u062F" || String(status) === "\u0642\u0631\u0627\u0631\u062F\u0627\u062F / \u0641\u0627\u06A9\u062A\u0648\u0631") {
@@ -3526,7 +3823,7 @@ router4.get("/", async (req, res) => {
       }
       if (search && typeof search === "string" && search.trim()) {
         const s = search.trim();
-        directusPath += `&filter[_and][${andIdx}][_or][0][report_text][_icontains]=${encodeURIComponent(s)}&filter[_and][${andIdx}][_or][1][negotiator_name][_icontains]=${encodeURIComponent(s)}&filter[_and][${andIdx}][_or][2][negotiation_phone][_icontains]=${encodeURIComponent(s)}`;
+        directusPath += `&filter[_and][${andIdx}][_or][0][report_text][_icontains]=${encodeURIComponent(s)}&filter[_and][${andIdx}][_or][1][negotiator_name][_icontains]=${encodeURIComponent(s)}&filter[_and][${andIdx}][_or][2][negotiation_phone][_icontains]=${encodeURIComponent(s)}&filter[_and][${andIdx}][_or][3][customer_id][company_name][_icontains]=${encodeURIComponent(s)}&filter[_and][${andIdx}][_or][4][customer_id][manager_name][_icontains]=${encodeURIComponent(s)}`;
         andIdx++;
       }
       if (start_date) {
@@ -3535,10 +3832,14 @@ router4.get("/", async (req, res) => {
       if (end_date) {
         directusPath += `&filter[_and][${andIdx++}][date_created][_lte]=${encodeURIComponent(String(end_date))}`;
       }
-      if (fields) {
-        directusPath += `&fields=${encodeURIComponent(String(fields))}`;
-      }
-      const resData = await directusFetch(directusPath, {}, 1).catch(() => null);
+      const defaultReportFields = "*,customer_id.id,customer_id.company_name,customer_id.manager_name,customer_id.status,customer_id.province,customer_id.city,customer_id.next_followup_date,customer_id.assignment_deadline,customer_id.is_expired,customer_id.assigned_marketer_id,customer_id.assigned_marketer_name";
+      directusPath += `&fields=${encodeURIComponent(fields ? String(fields) : defaultReportFields)}`;
+      console.log("[Directus Reports Query] Path:", directusPath);
+      const resData = await directusFetch(directusPath, {}, 1).catch((err) => {
+        console.error("[Directus Reports Query Error]:", err.message);
+        return null;
+      });
+      console.log("[Directus Reports Query] resData meta:", resData?.meta);
       if (resData && Array.isArray(resData.data)) {
         let items = resData.data;
         const totalCount2 = resData.meta?.filter_count ?? resData.meta?.total_count ?? items.length;
@@ -3573,6 +3874,19 @@ router4.get("/", async (req, res) => {
   const allReports = [...rawReports].sort((a, b) => {
     const tA = new Date(a.date_created || 0).getTime();
     const tB = new Date(b.date_created || 0).getTime();
+    if (sort === "oldest") {
+      return tA - tB;
+    } else if (sort === "highest_score") {
+      const sA = Number(a.negotiation_score) || 0;
+      const sB = Number(b.negotiation_score) || 0;
+      if (sB !== sA) return sB - sA;
+      return tB - tA;
+    } else if (sort === "followup_soonest") {
+      const fA = a.next_followup_date ? new Date(a.next_followup_date).getTime() : Infinity;
+      const fB = b.next_followup_date ? new Date(b.next_followup_date).getTime() : Infinity;
+      if (fA !== fB) return fA - fB;
+      return tB - tA;
+    }
     return tB - tA;
   });
   const getDaysUntil = (dateIso) => {
@@ -3610,7 +3924,7 @@ router4.get("/", async (req, res) => {
       result = result.filter(
         (r) => String(r.customer_id) === String(customer_id) || typeof r.customer_id === "object" && r.customer_id !== null && String(r.customer_id.id) === String(customer_id)
       );
-    } else if (!isAdmin) {
+    } else if (!canViewAllReports) {
       result = result.filter((r) => {
         const normUserName = normalizePersianString(userName);
         const normNeg = normalizePersianString(r.negotiator_name);
@@ -3655,13 +3969,22 @@ router4.get("/", async (req, res) => {
       const eMs = new Date(String(end_date)).getTime();
       result = result.filter((r) => r.date_created && new Date(r.date_created).getTime() <= eMs);
     }
-    if (isAdmin && admin_filter && admin_filter !== "all") {
+    if (canViewAllReports && admin_filter && admin_filter !== "all") {
       switch (admin_filter) {
         case "active_followups":
           result = result.filter((r) => {
             const customer = allCustomers.find((c) => c.id === r.customer_id);
             const followupDate = r.next_followup_date || customer?.next_followup_date;
             return isActiveDate(followupDate);
+          });
+          break;
+        case "overdue_followups":
+          result = result.filter((r) => {
+            const customer = allCustomers.find((c) => c.id === r.customer_id);
+            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            if (!followupDate) return false;
+            const days = getDaysUntil(followupDate);
+            return days !== null && days < 0;
           });
           break;
         case "no_followup":
@@ -3700,13 +4023,22 @@ router4.get("/", async (req, res) => {
           });
           break;
       }
-    } else if (!isAdmin && staff_filter) {
+    } else if (!canViewAllReports && staff_filter) {
       switch (staff_filter) {
         case "active_followups":
           result = result.filter((r) => {
             const customer = allCustomers.find((c) => c.id === r.customer_id);
             const followupDate = r.next_followup_date || customer?.next_followup_date;
             return isActiveDate(followupDate);
+          });
+          break;
+        case "overdue_followups":
+          result = result.filter((r) => {
+            const customer = allCustomers.find((c) => c.id === r.customer_id);
+            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            if (!followupDate) return false;
+            const days = getDaysUntil(followupDate);
+            return days !== null && days < 0;
           });
           break;
         case "no_followup":
@@ -3741,6 +4073,47 @@ router4.get("/", async (req, res) => {
     return result;
   };
   const filtered = applyFilters(allReports);
+  const effectiveSort = sort === "followup_soonest" || activeFilter === "active_followups" && sort !== "oldest" && sort !== "highest_score" && sort !== "newest_explicit" ? "followup_soonest" : activeFilter === "overdue_followups" && sort !== "oldest" && sort !== "highest_score" && sort !== "newest_explicit" ? "followup_overdue" : sort || "newest";
+  filtered.sort((a, b) => {
+    if (effectiveSort === "followup_soonest") {
+      const customerA = allCustomers.find((c) => c.id === a.customer_id);
+      const customerB = allCustomers.find((c) => c.id === b.customer_id);
+      const dateAStr = a.next_followup_date || customerA?.next_followup_date;
+      const dateBStr = b.next_followup_date || customerB?.next_followup_date;
+      const tA = dateAStr ? new Date(dateAStr).getTime() : Infinity;
+      const tB = dateBStr ? new Date(dateBStr).getTime() : Infinity;
+      if (tA !== tB) return tA - tB;
+      const cA = a.date_created ? new Date(a.date_created).getTime() : 0;
+      const cB = b.date_created ? new Date(b.date_created).getTime() : 0;
+      return cB - cA;
+    } else if (effectiveSort === "followup_overdue") {
+      const customerA = allCustomers.find((c) => c.id === a.customer_id);
+      const customerB = allCustomers.find((c) => c.id === b.customer_id);
+      const dateAStr = a.next_followup_date || customerA?.next_followup_date;
+      const dateBStr = b.next_followup_date || customerB?.next_followup_date;
+      const tA = dateAStr ? new Date(dateAStr).getTime() : -Infinity;
+      const tB = dateBStr ? new Date(dateBStr).getTime() : -Infinity;
+      if (tA !== tB) return tB - tA;
+      const cA = a.date_created ? new Date(a.date_created).getTime() : 0;
+      const cB = b.date_created ? new Date(b.date_created).getTime() : 0;
+      return cB - cA;
+    } else if (effectiveSort === "oldest") {
+      const cA = a.date_created ? new Date(a.date_created).getTime() : 0;
+      const cB = b.date_created ? new Date(b.date_created).getTime() : 0;
+      return cA - cB;
+    } else if (effectiveSort === "highest_score") {
+      const sA = Number(a.negotiation_score) || 0;
+      const sB = Number(b.negotiation_score) || 0;
+      if (sB !== sA) return sB - sA;
+      const cA = a.date_created ? new Date(a.date_created).getTime() : 0;
+      const cB = b.date_created ? new Date(b.date_created).getTime() : 0;
+      return cB - cA;
+    } else {
+      const cA = a.date_created ? new Date(a.date_created).getTime() : 0;
+      const cB = b.date_created ? new Date(b.date_created).getTime() : 0;
+      return cB - cA;
+    }
+  });
   const totalCount = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / reqLimit));
   const startIndex = (reqPage - 1) * reqLimit;
@@ -3871,8 +4244,8 @@ router4.post("/", async (req, res) => {
 });
 router4.delete("/:id", async (req, res) => {
   const { id } = req.params;
-  const { isAdmin } = getRequestUser(req);
-  if (!isAdmin) {
+  const { isAdmin, isPersonnelAdmin } = getRequestUser(req);
+  if (!isAdmin && !isPersonnelAdmin) {
     return res.status(403).json({ error: "\u0641\u0642\u0637 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u0627\u062C\u0627\u0632\u0647 \u062D\u0630\u0641 \u06AF\u0632\u0627\u0631\u0634 \u0645\u0630\u0627\u06A9\u0631\u0647 \u0631\u0627 \u062F\u0627\u0631\u062F." });
   }
   if (directusUrl && directusAdminToken) {
@@ -3901,7 +4274,8 @@ import { Router as Router5 } from "express";
 import crypto7 from "crypto";
 var router5 = Router5();
 router5.get("/api/cold-leads", async (req, res) => {
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+  const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, userName, tenantId } = getRequestUser(req);
+  const canViewAllLeads = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers);
   if (directusUrl && directusAdminToken) {
     try {
       const result = await directusFetchAllPages("/items/cold_leads?sort=-date_created");
@@ -3914,7 +4288,7 @@ router5.get("/api/cold-leads", async (req, res) => {
         if (tenantId && tenantId !== "all") {
           leads2 = leads2.filter((l) => matchesTenant(l.tenant_id, tenantId));
         }
-        if (!isAdmin && (userName || userId || personnelId)) {
+        if (!canViewAllLeads && (userName || userId || personnelId)) {
           leads2 = leads2.filter(
             (l) => personnelId && (l.assigned_to_id === personnelId || l.assigned_to === personnelId) || userId && (l.assigned_to_id === userId || l.assigned_to === userId) || userName && (l.assigned_to_name === userName || l.assigned_to === userName)
           );
@@ -3929,7 +4303,7 @@ router5.get("/api/cold-leads", async (req, res) => {
   if (tenantId && tenantId !== "all") {
     leads = leads.filter((l) => matchesTenant(l.tenant_id, tenantId));
   }
-  if (!isAdmin && (userName || userId || personnelId)) {
+  if (!canViewAllLeads && (userName || userId || personnelId)) {
     leads = leads.filter(
       (l) => personnelId && l.assigned_to === personnelId || userName && l.assigned_to === userName
     );
@@ -4031,8 +4405,8 @@ router5.patch("/api/cold-leads/:id", async (req, res) => {
 });
 router5.post("/api/cold-leads/bulk-assign", async (req, res) => {
   const { lead_ids, target_marketer_id } = req.body;
-  const { isAdmin } = getRequestUser(req);
-  if (!isAdmin) {
+  const { isAdmin, isPersonnelAdmin } = getRequestUser(req);
+  if (!isAdmin && !isPersonnelAdmin) {
     return res.status(403).json({ error: "\u0641\u0642\u0637 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u0627\u062C\u0627\u0632\u0647 \u0627\u0646\u062A\u0642\u0627\u0644 \u0648 \u062A\u062E\u0635\u06CC\u0635 \u06AF\u0631\u0648\u0647\u06CC \u0634\u0645\u0627\u0631\u0647\u200C\u0647\u0627 \u0631\u0627 \u062F\u0627\u0631\u062F." });
   }
   if (!Array.isArray(lead_ids) || lead_ids.length === 0) {
@@ -4255,40 +4629,74 @@ router6.post("/api/leave-requests", async (req, res) => {
     date_created: nowIso
   };
   let applicantPhone = "";
+  const applicantInfo = await getPersonnelFullName(targetPersonnelId || rawPId, targetPersonnelName);
+  const applicantFullName = applicantInfo.fullName || targetPersonnelName;
   const applicantP = personnelData.find((p) => p.id === targetPersonnelId || p.user_id === targetPersonnelId || p.name === targetPersonnelName);
-  if (applicantP?.phone) {
+  if (applicantInfo.phone) {
+    applicantPhone = applicantInfo.phone;
+  } else if (applicantP?.phone) {
     applicantPhone = applicantP.phone;
   }
-  const nameParts = (targetPersonnelName || "").trim().split(" ");
+  const nameParts = applicantFullName.trim().split(" ");
   const fName = nameParts[0] || "\u0647\u0645\u06A9\u0627\u0631";
   const lName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "\u06AF\u0631\u0627\u0645\u06CC";
   const now2 = /* @__PURE__ */ new Date();
   const jalaliDate = now2.toLocaleDateString("fa-IR");
+  const startJalali = isoStartDate ? new Date(isoStartDate).toLocaleDateString("fa-IR") : jalaliDate;
+  const endJalali = isoEndDate ? new Date(isoEndDate).toLocaleDateString("fa-IR") : startJalali;
   const leaveVars = {
-    name: fName,
+    name: applicantFullName,
+    fullName: applicantFullName,
+    user_name: applicantFullName,
+    personnel_name: applicantFullName,
+    applicant_name: applicantFullName,
     family: lName,
-    fullName: targetPersonnelName,
+    first_name: fName,
     mobile: applicantPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
     phone: applicantPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
     request_date: jalaliDate,
     leave_type: newRequest.leave_type === "daily" ? "\u0645\u0631\u062E\u0635\u06CC \u0631\u0648\u0632\u0627\u0646\u0647" : "\u0645\u0631\u062E\u0635\u06CC \u0633\u0627\u0639\u062A\u06CC",
     days: String(newRequest.days_count || 1),
+    day: String(newRequest.days_count || 1),
+    count: String(newRequest.days_count || 1),
+    duration: String(newRequest.leave_type === "daily" ? newRequest.days_count || 1 : newRequest.hours_count || 1),
     hours: String(newRequest.hours_count || 1),
-    start_date: payload.start_date || jalaliDate,
-    end_date: payload.end_date || payload.start_date || jalaliDate,
-    leave_date: payload.start_date || jalaliDate,
+    hour: String(newRequest.hours_count || 1),
+    start_date: startJalali,
+    end_date: endJalali,
+    from_date: startJalali,
+    to_date: endJalali,
+    leave_date: startJalali,
+    date: startJalali,
     start_time: newRequest.start_time || "",
     end_time: newRequest.end_time || "",
     from_time: newRequest.start_time || "",
     to_time: newRequest.end_time || "",
-    reason: newRequest.reason || "-"
+    reason: newRequest.reason || "-",
+    description: newRequest.reason || "-"
   };
-  const patternToUse = newRequest.leave_type === "daily" ? projectSettingsData.dayli_leave_request_pattern : projectSettingsData.hourly_leave_request_pattern;
+  const ps = projectSettingsData || {};
+  if (!ps.dayli_leave_request_pattern && !ps.daily_leave_request_pattern && !ps.hourly_leave_request_pattern && directusUrl && directusAdminToken) {
+    try {
+      const resp = await directusFetch("/items/project_settings").catch(() => null);
+      if (resp?.data) {
+        const item = Array.isArray(resp.data) ? resp.data[0] : resp.data;
+        if (item) updateProjectSettingsData(item);
+      }
+    } catch {
+    }
+  }
+  const latestPs = projectSettingsData || {};
+  const dailyPattern = latestPs.dayli_leave_request_pattern || latestPs.daily_leave_request_pattern || latestPs.dayli_leave_pattern || latestPs.daily_leave_pattern || "";
+  const hourlyPattern = latestPs.hourly_leave_request_pattern || latestPs.hourly_leave_pattern || "";
+  const patternToUse = newRequest.leave_type === "daily" ? dailyPattern : hourlyPattern;
   if (patternToUse) {
     if (applicantPhone) {
       sendIppanelSmsPattern(applicantPhone, patternToUse, leaveVars).catch((e) => console.warn("Leave request SMS to applicant error:", e.message));
     }
     sendTenantAdminsSmsPattern(targetTenantId, patternToUse, leaveVars).catch((e) => console.warn("Leave request SMS to admin error:", e.message));
+  } else {
+    console.warn(`[Leave Request SMS] No SMS pattern configured for leave type: ${newRequest.leave_type}`);
   }
   if (directusUrl && directusAdminToken) {
     try {
@@ -4352,17 +4760,19 @@ router6.post("/api/leave-requests", async (req, res) => {
 router6.patch("/api/leave-requests/:id", async (req, res) => {
   const { id } = req.params;
   const { status, manager_note } = req.body;
-  const { userName, isAdmin, userRole, personnelId } = getRequestUser(req);
+  const { userName, isAdmin, userRole, personnelId, userId } = getRequestUser(req);
   const currentP = personnelData.find((p) => p.id === personnelId);
   const canApprove = isAdmin || userRole === "admin" || userRole === "sales_manager" || currentP?.permissions?.can_approve_leaves;
   if (!canApprove) {
     return res.status(403).json({ error: "\u0634\u0645\u0627 \u062F\u0633\u062A\u0631\u0633\u06CC \u0644\u0627\u0632\u0645 \u0628\u0631\u0627\u06CC \u062A\u0627\u06CC\u06CC\u062F \u06CC\u0627 \u0631\u062F \u062F\u0631\u062E\u0648\u0627\u0633\u062A\u200C\u0647\u0627\u06CC \u0645\u0631\u062E\u0635\u06CC \u0631\u0627 \u0646\u062F\u0627\u0631\u06CC\u062F." });
   }
+  const reviewerInfo = await getPersonnelFullName(personnelId || userId, userName);
+  const reviewerFullName = reviewerInfo.fullName || userName || "\u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645";
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const updatePayload = {
     status: status || "pending",
     manager_note: manager_note || null,
-    reviewed_by: userName || "\u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645",
+    reviewed_by: reviewerFullName,
     reviewed_at: nowIso
   };
   let targetReq = leaveRequestsData.find((r) => String(r.id) === String(id));
@@ -4381,39 +4791,59 @@ router6.patch("/api/leave-requests/:id", async (req, res) => {
     }
   }
   if (targetReq) {
+    const applicantInfo = await getPersonnelFullName(targetReq.personnel_id, targetReq.personnel_name);
+    const applicantFullName = applicantInfo.fullName || targetReq.personnel_name;
     const applicantP = personnelData.find((p) => p.id === targetReq.personnel_id || p.user_id === targetReq.personnel_id || p.name === targetReq.personnel_name);
-    const applicantPhone = applicantP?.phone;
+    const applicantPhone = applicantInfo.phone || applicantP?.phone;
+    const targetPs = projectSettingsData || {};
     let patternToUse = "";
     if (status === "approved") {
-      patternToUse = targetReq.leave_type === "daily" ? projectSettingsData.dayli_leave_accept_pattern || "" : projectSettingsData.hourly_leave_accept_pattern || "";
+      const dailyAccept = targetPs.dayli_leave_accept_pattern || targetPs.daily_leave_accept_pattern || "";
+      const hourlyAccept = targetPs.hourly_leave_accept_pattern || "";
+      patternToUse = targetReq.leave_type === "daily" ? dailyAccept : hourlyAccept;
     } else if (status === "rejected") {
-      patternToUse = targetReq.leave_type === "daily" ? projectSettingsData.dayli_leave_reject_pattern || "" : projectSettingsData.hourly_leave_reject_pattern || "";
+      const dailyReject = targetPs.dayli_leave_reject_pattern || targetPs.daily_leave_reject_pattern || "";
+      const hourlyReject = targetPs.hourly_leave_reject_pattern || "";
+      patternToUse = targetReq.leave_type === "daily" ? dailyReject : hourlyReject;
     }
     if (patternToUse) {
-      const nameParts = (targetReq.personnel_name || "").trim().split(" ");
+      const nameParts = (applicantFullName || "").trim().split(" ");
       const fName = nameParts[0] || "\u0647\u0645\u06A9\u0627\u0631";
       const lName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "\u06AF\u0631\u0627\u0645\u06CC";
       const now2 = /* @__PURE__ */ new Date();
       const jalaliDate = now2.toLocaleDateString("fa-IR");
+      const startJalali = targetReq.start_date ? new Date(targetReq.start_date).toLocaleDateString("fa-IR") : jalaliDate;
+      const endJalali = targetReq.end_date ? new Date(targetReq.end_date).toLocaleDateString("fa-IR") : startJalali;
       const statusVars = {
-        name: fName,
+        name: applicantFullName,
+        fullName: applicantFullName,
+        user_name: applicantFullName,
+        personnel_name: applicantFullName,
+        applicant_name: applicantFullName,
         family: lName,
-        fullName: targetReq.personnel_name,
+        first_name: fName,
         mobile: applicantPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
         phone: applicantPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
         request_date: targetReq.date_created ? new Date(targetReq.date_created).toLocaleDateString("fa-IR") : jalaliDate,
         leave_type: targetReq.leave_type === "daily" ? "\u0645\u0631\u062E\u0635\u06CC \u0631\u0648\u0632\u0627\u0646\u0647" : "\u0645\u0631\u062E\u0635\u06CC \u0633\u0627\u0639\u062A\u06CC",
-        leave_date: targetReq.start_date || jalaliDate,
-        start_date: targetReq.start_date || jalaliDate,
-        end_date: targetReq.end_date || targetReq.start_date || jalaliDate,
+        leave_date: startJalali,
+        start_date: startJalali,
+        end_date: endJalali,
+        from_date: startJalali,
+        to_date: endJalali,
+        date: startJalali,
         start_time: targetReq.start_time || "",
         end_time: targetReq.end_time || "",
         from_time: targetReq.start_time || "",
         to_time: targetReq.end_time || "",
         days: String(targetReq.days_count || 1),
+        day: String(targetReq.days_count || 1),
+        count: String(targetReq.days_count || 1),
+        duration: String(targetReq.leave_type === "daily" ? targetReq.days_count || 1 : targetReq.hours_count || 1),
         hours: String(targetReq.hours_count || 1),
+        hour: String(targetReq.hours_count || 1),
         manager_note: manager_note || (status === "approved" ? "\u062A\u0627\u06CC\u06CC\u062F \u0634\u062F" : "\u0631\u062F \u0634\u062F"),
-        reviewed_by: userName || "\u0645\u062F\u06CC\u0631\u06CC\u062A"
+        reviewed_by: reviewerFullName
       };
       if (applicantPhone) {
         sendIppanelSmsPattern(applicantPhone, patternToUse, statusVars).catch((e) => console.warn("Leave request status SMS error:", e.message));
@@ -4558,21 +4988,28 @@ router7.post("/api/advance-requests", async (req, res) => {
     date_created: nowIso
   };
   let applicantPhone = "";
+  const applicantInfo = await getPersonnelFullName(targetPersonnelId || rawPId, targetPersonnelName);
+  const applicantFullName = applicantInfo.fullName || targetPersonnelName;
   const applicantP = personnelData.find((p) => p.id === targetPersonnelId || p.user_id === targetPersonnelId || p.name === targetPersonnelName);
-  if (applicantP?.phone) {
+  if (applicantInfo.phone) {
+    applicantPhone = applicantInfo.phone;
+  } else if (applicantP?.phone) {
     applicantPhone = applicantP.phone;
   }
   if (projectSettingsData.addvance_request_pattern) {
-    const nameParts = (targetPersonnelName || "").trim().split(" ");
+    const nameParts = applicantFullName.trim().split(" ");
     const fName = nameParts[0] || "\u0647\u0645\u06A9\u0627\u0631";
     const lName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "\u06AF\u0631\u0627\u0645\u06CC";
     const now2 = /* @__PURE__ */ new Date();
     const jalaliDate = now2.toLocaleDateString("fa-IR");
     const amountStr = String(newRequest.amount || 0);
     const advVars = {
-      name: fName,
+      name: applicantFullName,
+      fullName: applicantFullName,
+      user_name: applicantFullName,
+      personnel_name: applicantFullName,
       family: lName,
-      fullName: targetPersonnelName,
+      first_name: fName,
       mobile: applicantPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
       phone: applicantPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
       amount: amountStr,
@@ -4647,18 +5084,20 @@ router7.post("/api/advance-requests", async (req, res) => {
 router7.patch("/api/advance-requests/:id", async (req, res) => {
   const { id } = req.params;
   const { status, approved_amount, manager_note } = req.body;
-  const { userName, isAdmin, userRole, personnelId } = getRequestUser(req);
+  const { userName, isAdmin, userRole, personnelId, userId } = getRequestUser(req);
   const currentP = personnelData.find((p) => p.id === personnelId);
   const canApprove = isAdmin || userRole === "admin" || userRole === "sales_manager" || currentP?.permissions?.can_approve_advances;
   if (!canApprove) {
     return res.status(403).json({ error: "\u0634\u0645\u0627 \u062F\u0633\u062A\u0631\u0633\u06CC \u0644\u0627\u0632\u0645 \u0628\u0631\u0627\u06CC \u062A\u0627\u06CC\u06CC\u062F \u06CC\u0627 \u0631\u062F \u062F\u0631\u062E\u0648\u0627\u0633\u062A\u200C\u0647\u0627\u06CC \u0645\u0633\u0627\u0639\u062F\u0647 \u0631\u0627 \u0646\u062F\u0627\u0631\u06CC\u062F." });
   }
+  const reviewerInfo = await getPersonnelFullName(personnelId || userId, userName);
+  const reviewerFullName = reviewerInfo.fullName || userName || "\u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645";
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const updatePayload = {
     status: status || "pending",
     approved_amount: approved_amount !== void 0 ? Number(approved_amount) : null,
     manager_note: manager_note || null,
-    reviewed_by: userName || "\u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645",
+    reviewed_by: reviewerFullName,
     reviewed_at: nowIso
   };
   let targetReq = advanceRequestsData.find((r) => String(r.id) === String(id));
@@ -4677,8 +5116,10 @@ router7.patch("/api/advance-requests/:id", async (req, res) => {
     }
   }
   if (targetReq) {
+    const applicantInfo = await getPersonnelFullName(targetReq.personnel_id, targetReq.personnel_name);
+    const applicantFullName = applicantInfo.fullName || targetReq.personnel_name;
     const applicantP = personnelData.find((p) => p.id === targetReq.personnel_id || p.user_id === targetReq.personnel_id || p.name === targetReq.personnel_name);
-    const applicantPhone = applicantP?.phone;
+    const applicantPhone = applicantInfo.phone || applicantP?.phone;
     let patternToUse = "";
     if (status === "approved") {
       patternToUse = projectSettingsData.addvance_accept_pattern || "";
@@ -4686,15 +5127,18 @@ router7.patch("/api/advance-requests/:id", async (req, res) => {
       patternToUse = projectSettingsData.addvance_reject_pattern || "";
     }
     if (patternToUse) {
-      const nameParts = (targetReq.personnel_name || "").trim().split(" ");
+      const nameParts = (applicantFullName || "").trim().split(" ");
       const fName = nameParts[0] || "\u0647\u0645\u06A9\u0627\u0631";
       const lName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "\u06AF\u0631\u0627\u0645\u06CC";
       const now2 = /* @__PURE__ */ new Date();
       const jalaliDate = now2.toLocaleDateString("fa-IR");
       const statusVars = {
-        name: fName,
+        name: applicantFullName,
+        fullName: applicantFullName,
+        user_name: applicantFullName,
+        personnel_name: applicantFullName,
         family: lName,
-        fullName: targetReq.personnel_name,
+        first_name: fName,
         mobile: applicantPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
         phone: applicantPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
         requested_amount: String(targetReq.amount || 0),
@@ -4703,7 +5147,7 @@ router7.patch("/api/advance-requests/:id", async (req, res) => {
         target_month: targetReq.target_month || "-",
         needed_date: targetReq.needed_date || jalaliDate,
         manager_note: manager_note || (status === "approved" ? "\u062A\u0627\u06CC\u06CC\u062F \u0634\u062F" : "\u0631\u062F \u0634\u062F"),
-        reviewed_by: userName || "\u0645\u062F\u06CC\u0631\u06CC\u062A"
+        reviewed_by: reviewerFullName
       };
       if (applicantPhone) {
         sendIppanelSmsPattern(applicantPhone, patternToUse, statusVars).catch((e) => console.warn("Advance request status SMS error:", e.message));
@@ -4918,9 +5362,31 @@ var tenants_routes_default = router8;
 import { Router as Router9 } from "express";
 import crypto10 from "crypto";
 var router9 = Router9();
+function formatHourlyLogsForDb(hourlyLogs) {
+  if (!hourlyLogs) return null;
+  if (Array.isArray(hourlyLogs)) {
+    return hourlyLogs.length > 0 ? hourlyLogs : null;
+  }
+  if (typeof hourlyLogs === "object" && hourlyLogs !== null) {
+    return hourlyLogs;
+  }
+  if (typeof hourlyLogs === "string") {
+    const trimmed = hourlyLogs.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parsed.length > 0 ? parsed : null;
+      if (typeof parsed === "object" && parsed !== null) return parsed;
+      return null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 function normalizeReport(r) {
   let hourly = r.hourly_logs;
-  if (typeof hourly === "string" && hourly.startsWith("[")) {
+  if (typeof hourly === "string" && (hourly.startsWith("[") || hourly.startsWith("{"))) {
     try {
       hourly = JSON.parse(hourly);
     } catch {
@@ -4945,7 +5411,8 @@ function normalizeReport(r) {
   };
 }
 var getHandler = async (req, res) => {
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+  const reqUser = getRequestUser(req);
+  const { userId, personnelId, isAdmin, userName, tenantId, reportViewScope, visibleReportPersonnelIds } = reqUser;
   if (directusUrl && directusAdminToken) {
     try {
       const result = await directusFetchAllPages("/items/administrative_reports?sort=-report_date");
@@ -4954,10 +5421,22 @@ var getHandler = async (req, res) => {
         if (tenantId && tenantId !== "all") {
           reports = reports.filter((r) => matchesTenant(r.tenant_id, tenantId));
         }
-        if (!isAdmin && (userId || personnelId)) {
-          reports = reports.filter(
-            (r) => r.personnel_id === personnelId || r.personnel_id === userId || userName && r.personnel_name === userName
-          );
+        if (!isAdmin) {
+          const scope = reportViewScope || "own_only";
+          if (scope === "own_only") {
+            reports = reports.filter(
+              (r) => r.personnel_id === personnelId || r.personnel_id === userId || userName && r.personnel_name === userName
+            );
+          } else if (scope === "specific_personnel") {
+            const allowedIds = new Set([
+              personnelId,
+              userId,
+              ...visibleReportPersonnelIds || []
+            ].map(String));
+            reports = reports.filter(
+              (r) => allowedIds.has(String(r.personnel_id)) || userName && r.personnel_name === userName
+            );
+          }
         }
         return res.json(reports);
       }
@@ -4972,11 +5451,12 @@ router9.get("/api/admin-reports", getHandler);
 var postHandler = async (req, res) => {
   const payload = req.body;
   const { userId, personnelId, userName, tenantId } = getRequestUser(req);
-  const newAdmId = crypto10.randomUUID();
+  const newAdmId = payload.id && typeof payload.id === "string" && payload.id.length >= 10 ? payload.id : crypto10.randomUUID();
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const rawPId = payload.personnel_id || personnelId || userId;
   const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
   const targetTenantId = payload.tenant_id || tenantId || "default";
+  const dbHourlyLogs = formatHourlyLogsForDb(payload.hourly_logs);
   const newReport = {
     id: newAdmId,
     tenant_id: targetTenantId,
@@ -4989,34 +5469,33 @@ var postHandler = async (req, res) => {
     tasks_summary: payload.tasks_summary || "",
     challenges: payload.challenges || "",
     tomorrow_plan: payload.tomorrow_plan || "",
-    hourly_logs: payload.hourly_logs || null,
+    hourly_logs: dbHourlyLogs,
     status: payload.status === "submitted" ? "submitted" : "draft",
     date_created: nowIso
   };
   if (directusUrl && directusAdminToken) {
+    const directusReportPayload = {
+      ...newReport,
+      tenant_id: resolveDirectusTenantId(targetTenantId)
+    };
     try {
-      const directusReportPayload = {
-        ...newReport,
-        tenant_id: resolveDirectusTenantId(targetTenantId)
-      };
       const created = await directusFetch("/items/administrative_reports", {
         method: "POST",
         body: JSON.stringify(directusReportPayload)
       });
       return res.status(201).json(normalizeReport(created.data || newReport));
     } catch (err) {
-      if (err.message && err.message.toLowerCase().includes("hourly_logs")) {
+      const errStr = (err.message || "").toLowerCase();
+      if (errStr.includes("hourly_logs") || errStr.includes("type json") || errStr.includes("syntax for type json")) {
         try {
-          const { hourly_logs, ...fallbackReport } = newReport;
+          const { hourly_logs, ...fallbackReport } = directusReportPayload;
           const created = await directusFetch("/items/administrative_reports", {
             method: "POST",
-            body: JSON.stringify({
-              ...fallbackReport,
-              tenant_id: resolveDirectusTenantId(targetTenantId)
-            })
+            body: JSON.stringify(fallbackReport)
           });
           return res.status(201).json(normalizeReport({ ...created.data || fallbackReport, hourly_logs: newReport.hourly_logs }));
-        } catch {
+        } catch (fbErr) {
+          console.error("Fallback admin report create error:", fbErr.message);
         }
       }
       console.error("Admin report create error:", err.message);
@@ -5033,12 +5512,12 @@ router9.post("/api/admin-reports", postHandler);
 var patchHandler = async (req, res) => {
   const { id } = req.params;
   const payload = req.body;
-  const { isAdmin } = getRequestUser(req);
+  const { isAdmin, isPersonnelAdmin, tenantId, userId, personnelId, userName } = getRequestUser(req);
   if (directusUrl && directusAdminToken) {
     try {
       const existingRes = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`).catch(() => null);
       if (existingRes?.data) {
-        if (existingRes.data.status === "submitted" && !isAdmin) {
+        if (existingRes.data.status === "submitted") {
           return res.status(403).json({ error: "\u0627\u06CC\u0646 \u06AF\u0632\u0627\u0631\u0634 \u062B\u0628\u062A \u0646\u0647\u0627\u06CC\u06CC \u0634\u062F\u0647 \u0627\u0633\u062A \u0648 \u0627\u0645\u06A9\u0627\u0646 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u0622\u0646 \u0648\u062C\u0648\u062F \u0646\u062F\u0627\u0631\u062F." });
         }
       }
@@ -5050,16 +5529,60 @@ var patchHandler = async (req, res) => {
         tasks_summary: payload.tasks_summary !== void 0 ? payload.tasks_summary : void 0,
         challenges: payload.challenges !== void 0 ? payload.challenges : void 0,
         tomorrow_plan: payload.tomorrow_plan !== void 0 ? payload.tomorrow_plan : void 0,
-        hourly_logs: payload.hourly_logs !== void 0 ? payload.hourly_logs : void 0,
+        hourly_logs: payload.hourly_logs !== void 0 ? formatHourlyLogsForDb(payload.hourly_logs) : void 0,
         status: payload.status || void 0,
         date_updated: (/* @__PURE__ */ new Date()).toISOString()
       };
+      if (payload.tenant_id) {
+        updateData.tenant_id = resolveDirectusTenantId(payload.tenant_id);
+      }
       Object.keys(updateData).forEach((k) => updateData[k] === void 0 && delete updateData[k]);
-      const updated = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        body: JSON.stringify(updateData)
-      });
-      return res.json(normalizeReport(updated.data || { id, ...updateData }));
+      let updatedData;
+      try {
+        const updated = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: JSON.stringify(updateData)
+        });
+        updatedData = updated.data || { id, ...updateData };
+      } catch (patchErr) {
+        const patchErrStr = (patchErr.message || "").toLowerCase();
+        if (patchErrStr.includes("not found") || patchErrStr.includes("404")) {
+          const targetTenantId = payload.tenant_id || tenantId || "default";
+          const resolved = await resolvePersonnelId(payload.personnel_id || personnelId || userId, payload.personnel_name || userName);
+          const insertPayload = {
+            id,
+            tenant_id: resolveDirectusTenantId(targetTenantId),
+            personnel_id: resolved.personnelId || "p-1",
+            personnel_name: resolved.personnelName || payload.personnel_name || userName || "\u067E\u0631\u0633\u0646\u0644 \u0634\u0631\u06A9\u062A",
+            report_date: payload.report_date || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+            calls_count: Number(payload.calls_count) || 0,
+            successful_contacts: Number(payload.successful_contacts) || 0,
+            leads_converted: Number(payload.leads_converted) || 0,
+            tasks_summary: payload.tasks_summary || "",
+            challenges: payload.challenges || "",
+            tomorrow_plan: payload.tomorrow_plan || "",
+            hourly_logs: formatHourlyLogsForDb(payload.hourly_logs),
+            status: payload.status === "submitted" ? "submitted" : "draft",
+            date_created: (/* @__PURE__ */ new Date()).toISOString(),
+            ...updateData
+          };
+          const created = await directusFetch("/items/administrative_reports", {
+            method: "POST",
+            body: JSON.stringify(insertPayload)
+          });
+          return res.json(normalizeReport(created.data || insertPayload));
+        } else if (patchErrStr.includes("hourly_logs") || patchErrStr.includes("type json") || patchErrStr.includes("syntax for type json")) {
+          delete updateData.hourly_logs;
+          const updatedFallback = await directusFetch(`/items/administrative_reports/${encodeURIComponent(id)}`, {
+            method: "PATCH",
+            body: JSON.stringify(updateData)
+          });
+          updatedData = { ...updatedFallback.data || { id, ...updateData }, hourly_logs: payload.hourly_logs };
+        } else {
+          throw patchErr;
+        }
+      }
+      return res.json(normalizeReport(updatedData));
     } catch (err) {
       return res.status(500).json({ error: `\u062E\u0637\u0627 \u062F\u0631 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u06AF\u0632\u0627\u0631\u0634 \u0627\u062F\u0627\u0631\u06CC: ${err.message}` });
     }
@@ -5077,8 +5600,9 @@ var analyticsCache = /* @__PURE__ */ new Map();
 var ANALYTICS_CACHE_TTL = 3e4;
 router10.get(["/stats", "/api/analytics/stats"], async (req, res) => {
   const { start_date, end_date, negotiator } = req.query;
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
-  const targetNegotiator = !isAdmin ? userName || "" : negotiator && negotiator !== "all" && negotiator !== "\u0647\u0645\u0647" ? String(negotiator) : "";
+  const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, reportViewScope, userName, tenantId } = getRequestUser(req);
+  const canViewAllAnalytics = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers || reportViewScope === "all");
+  const targetNegotiator = !canViewAllAnalytics ? userName || "" : negotiator && negotiator !== "all" && negotiator !== "\u0647\u0645\u0647" ? String(negotiator) : "";
   const cacheKey = `stats_${tenantId || "all"}_${start_date || ""}_${end_date || ""}_${targetNegotiator || "all"}`;
   const now2 = Date.now();
   const cached = analyticsCache.get(cacheKey);
@@ -5302,9 +5826,10 @@ function gregorianIsoToJalali(isoString) {
 }
 router10.get(["/daily", "/api/analytics/daily"], async (req, res) => {
   const { days, start_date, end_date, negotiator } = req.query;
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
+  const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, reportViewScope, userName, tenantId } = getRequestUser(req);
+  const canViewAllAnalytics = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers || reportViewScope === "all");
   const daysCount = days ? Math.max(1, Math.min(parseInt(String(days), 10), 90)) : 14;
-  const targetNegotiator = !isAdmin ? userName || "" : negotiator && negotiator !== "all" && negotiator !== "\u0647\u0645\u0647" ? String(negotiator) : "";
+  const targetNegotiator = !canViewAllAnalytics ? userName || "" : negotiator && negotiator !== "all" && negotiator !== "\u0647\u0645\u0647" ? String(negotiator) : "";
   const now2 = /* @__PURE__ */ new Date();
   let rangeStart = new Date(now2.getTime() - (daysCount - 1) * 24 * 60 * 60 * 1e3);
   rangeStart.setHours(0, 0, 0, 0);
@@ -5479,24 +6004,362 @@ router10.get(["/daily", "/api/analytics/daily"], async (req, res) => {
 });
 var analytics_routes_default = router10;
 
-// server/routes/system.routes.ts
+// server/routes/contacts.routes.ts
 import { Router as Router11 } from "express";
 import crypto11 from "crypto";
 var router11 = Router11();
-router11.get("/api/health", (req, res) => {
+router11.get("/check-duplicate", async (req, res) => {
+  try {
+    const value = String(req.query.value || "").trim();
+    const channelType = String(req.query.channel_type || "mobile").trim();
+    const excludeCustomerId = req.query.exclude_customer_id ? String(req.query.exclude_customer_id).trim() : void 0;
+    if (!value || value.length < 3) {
+      return res.json({ isDuplicate: false });
+    }
+    const dup = await asyncCheckContactDuplicate(value, channelType, excludeCustomerId);
+    if (dup && dup.isDuplicate) {
+      return res.json(dup);
+    }
+    return res.json({ isDuplicate: false });
+  } catch (err) {
+    console.warn("Check duplicate contact error:", err.message);
+    return res.json({ isDuplicate: false });
+  }
+});
+router11.get("/", async (req, res) => {
+  const { customer_id } = req.query;
+  if (directusUrl && directusAdminToken) {
+    try {
+      let q = "/items/customer_contacts?sort=-date_created";
+      if (customer_id) {
+        q += `&filter[customer_id][_eq]=${encodeURIComponent(String(customer_id))}`;
+      } else {
+        q += "&limit=100";
+      }
+      const directusRes = await directusFetch(q);
+      if (directusRes?.data && Array.isArray(directusRes.data)) {
+        return res.json(directusRes.data);
+      }
+    } catch (err) {
+      console.warn("Error fetching contacts from Directus:", err.message);
+    }
+  }
+  let filtered = [...contactsData];
+  if (customer_id) {
+    filtered = filtered.filter((c) => String(c.customer_id) === String(customer_id));
+  }
+  return res.json(filtered);
+});
+router11.get("/:id", async (req, res) => {
+  const { id } = req.params;
+  if (directusUrl && directusAdminToken) {
+    try {
+      const directusRes = await directusFetch(`/items/customer_contacts/${encodeURIComponent(id)}`);
+      if (directusRes?.data) {
+        return res.json(directusRes.data);
+      }
+    } catch (err) {
+      console.warn(`Error fetching contact ${id} from Directus:`, err.message);
+    }
+  }
+  const found = contactsData.find((c) => c.id === id);
+  if (found) {
+    return res.json(found);
+  }
+  return res.status(404).json({ error: "CONTACT_NOT_FOUND", message: "\u0634\u0645\u0627\u0631\u0647 \u062A\u0645\u0627\u0633 \u06CC\u0627\u0641\u062A \u0646\u0634\u062F." });
+});
+async function syncContactToParentCustomer(customerId, channelType, value, contactRole) {
+  try {
+    let existingCust = null;
+    if (directusUrl && directusAdminToken) {
+      const custRes = await directusFetch(`/items/customers/${encodeURIComponent(customerId)}`).catch(() => null);
+      if (custRes?.data) {
+        existingCust = custRes.data;
+      }
+    }
+    if (!existingCust) {
+      existingCust = customersData.find((c) => c.id === customerId);
+    }
+    if (!existingCust) return;
+    const patchPayload = {};
+    const cleanVal = String(value).trim();
+    if (channelType === "mobile") {
+      const mobiles = Array.isArray(existingCust.mobile_numbers) ? [...existingCust.mobile_numbers] : [];
+      if (!mobiles.includes(cleanVal)) {
+        mobiles.push(cleanVal);
+        patchPayload.mobile_numbers = mobiles;
+      }
+    }
+    if (channelType === "landline") {
+      const landlines = Array.isArray(existingCust.landline_numbers) ? [...existingCust.landline_numbers] : [];
+      if (!landlines.includes(cleanVal)) {
+        landlines.push(cleanVal);
+        patchPayload.landline_numbers = landlines;
+      }
+    }
+    if (channelType === "telegram") {
+      const tIds = Array.isArray(existingCust.telegram_ids) ? [...existingCust.telegram_ids] : [];
+      if (!tIds.includes(cleanVal)) {
+        tIds.push(cleanVal);
+        patchPayload.telegram_ids = tIds;
+      }
+      if (!existingCust.telegram_phone && /^09\d{9}$/.test(cleanVal)) {
+        patchPayload.telegram_phone = cleanVal;
+      }
+    }
+    if (channelType === "instagram") {
+      const iIds = Array.isArray(existingCust.instagram_ids) ? [...existingCust.instagram_ids] : [];
+      if (!iIds.includes(cleanVal)) {
+        iIds.push(cleanVal);
+        patchPayload.instagram_ids = iIds;
+      }
+    }
+    if (channelType === "email") {
+      const emails = Array.isArray(existingCust.emails) ? [...existingCust.emails] : [];
+      if (!emails.includes(cleanVal)) {
+        emails.push(cleanVal);
+        patchPayload.emails = emails;
+      }
+    }
+    if (channelType === "website") {
+      const websites = Array.isArray(existingCust.websites) ? [...existingCust.websites] : [];
+      if (!websites.includes(cleanVal)) {
+        websites.push(cleanVal);
+        patchPayload.websites = websites;
+      }
+    }
+    const roleLower = (contactRole || "").toLowerCase();
+    if (roleLower.includes("\u0645\u062F\u06CC\u0631") || roleLower.includes("manager")) {
+      const managerPhones = Array.isArray(existingCust.manager_phones) ? [...existingCust.manager_phones] : [];
+      if (!managerPhones.includes(cleanVal)) {
+        managerPhones.push(cleanVal);
+        patchPayload.manager_phones = managerPhones;
+      }
+    }
+    if (roleLower.includes("\u0645\u0630\u0627\u06A9\u0631\u0647") || roleLower.includes("negotiator")) {
+      const negotiatorPhones = Array.isArray(existingCust.negotiator_phones) ? [...existingCust.negotiator_phones] : [];
+      if (!negotiatorPhones.includes(cleanVal)) {
+        negotiatorPhones.push(cleanVal);
+        patchPayload.negotiator_phones = negotiatorPhones;
+      }
+    }
+    if (Object.keys(patchPayload).length > 0) {
+      if (directusUrl && directusAdminToken) {
+        await directusFetch(`/items/customers/${encodeURIComponent(customerId)}`, {
+          method: "PATCH",
+          body: JSON.stringify(patchPayload)
+        }).catch((err) => console.warn("Sync customer contacts patch warning:", err.message));
+      }
+      const memCust = customersData.find((c) => c.id === customerId);
+      if (memCust) {
+        Object.assign(memCust, patchPayload);
+      }
+      invalidateCustomersCache();
+    }
+  } catch (err) {
+    console.warn("Error in syncContactToParentCustomer:", err.message);
+  }
+}
+router11.post("/", async (req, res) => {
+  try {
+    const {
+      customer_id,
+      channel_type = "mobile",
+      value,
+      contact_name = "",
+      contact_role = "",
+      is_primary = false,
+      notes = ""
+    } = req.body;
+    if (!customer_id || !String(customer_id).trim()) {
+      return res.status(400).json({
+        error: "MISSING_CUSTOMER_ID",
+        message: "\u0634\u0646\u0627\u0633\u0647 \u0645\u0634\u062A\u0631\u06CC (customer_id) \u0627\u0644\u0632\u0627\u0645\u06CC \u0627\u0633\u062A."
+      });
+    }
+    const rawValue = String(value || "").trim();
+    if (!rawValue) {
+      return res.status(400).json({
+        error: "MISSING_VALUE",
+        message: "\u0645\u0642\u062F\u0627\u0631 \u0634\u0645\u0627\u0631\u0647 \u062A\u0645\u0627\u0633 \u06CC\u0627 \u0627\u06A9\u0627\u0646\u062A \u0627\u0644\u0632\u0627\u0645\u06CC \u0627\u0633\u062A."
+      });
+    }
+    const normVal = normalizeContactValue(rawValue, channel_type);
+    if (normVal && normVal.length >= 3) {
+      const dup = await asyncCheckContactDuplicate(rawValue, channel_type, customer_id);
+      if (dup && dup.isDuplicate && dup.conflictType === "active_marketer") {
+        return res.status(409).json({
+          error: "DUPLICATE_CONTACT",
+          message: dup.message || "\u0627\u06CC\u0646 \u0634\u0645\u0627\u0631\u0647 \u062A\u0645\u0627\u0633 \u062F\u0631 \u062D\u0627\u0644 \u062D\u0627\u0636\u0631 \u0628\u0631\u0627\u06CC \u0645\u0634\u062A\u0631\u06CC \u0641\u0639\u0627\u0644 \u062F\u06CC\u06AF\u0631\u06CC \u062B\u0628\u062A \u0634\u062F\u0647 \u0627\u0633\u062A.",
+          duplicate: dup
+        });
+      }
+    }
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const newId = crypto11.randomUUID();
+    const contactRecord = {
+      id: newId,
+      customer_id: String(customer_id).trim(),
+      channel_type: channel_type || "mobile",
+      value: rawValue,
+      normalized_value: normVal || rawValue,
+      contact_name: contact_name ? String(contact_name).trim() : "",
+      contact_role: contact_role ? String(contact_role).trim() : "",
+      is_primary: Boolean(is_primary),
+      notes: notes ? String(notes).trim() : "",
+      date_created: nowIso,
+      date_updated: nowIso
+    };
+    let directusCreated = null;
+    if (directusUrl && directusAdminToken) {
+      try {
+        const directusPayload = {
+          id: contactRecord.id,
+          customer_id: contactRecord.customer_id,
+          channel_type: contactRecord.channel_type,
+          value: contactRecord.value,
+          normalized_value: contactRecord.normalized_value,
+          contact_name: contactRecord.contact_name || null,
+          contact_role: contactRecord.contact_role || null,
+          is_primary: contactRecord.is_primary,
+          notes: contactRecord.notes || null,
+          date_created: contactRecord.date_created,
+          date_updated: contactRecord.date_updated
+        };
+        const createRes = await directusFetch("/items/customer_contacts", {
+          method: "POST",
+          body: JSON.stringify(directusPayload)
+        });
+        if (createRes?.data) {
+          directusCreated = createRes.data;
+        }
+      } catch (err) {
+        console.warn("Directus create customer_contacts error:", err.message);
+      }
+    }
+    contactsData.unshift(contactRecord);
+    await syncContactToParentCustomer(
+      contactRecord.customer_id,
+      contactRecord.channel_type,
+      contactRecord.value,
+      contactRecord.contact_role
+    );
+    invalidateCustomersCache();
+    const finalResult = directusCreated || contactRecord;
+    return res.status(201).json(finalResult);
+  } catch (err) {
+    console.error("Fatal error in POST /api/contacts:", err.message);
+    return res.status(500).json({
+      error: "CONTACT_CREATION_FAILED",
+      message: `\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u0634\u0645\u0627\u0631\u0647 \u062A\u0645\u0627\u0633: ${err.message}`
+    });
+  }
+});
+router11.patch("/:id", async (req, res) => {
+  const { id } = req.params;
+  const payload = req.body;
+  try {
+    const patchPayload = {
+      date_updated: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (payload.channel_type !== void 0) patchPayload.channel_type = payload.channel_type;
+    if (payload.value !== void 0) {
+      patchPayload.value = String(payload.value).trim();
+      patchPayload.normalized_value = normalizeContactValue(
+        patchPayload.value,
+        payload.channel_type || "mobile"
+      );
+    }
+    if (payload.contact_name !== void 0) patchPayload.contact_name = payload.contact_name;
+    if (payload.contact_role !== void 0) patchPayload.contact_role = payload.contact_role;
+    if (payload.is_primary !== void 0) patchPayload.is_primary = Boolean(payload.is_primary);
+    if (payload.notes !== void 0) patchPayload.notes = payload.notes;
+    let updatedContact = null;
+    if (directusUrl && directusAdminToken) {
+      try {
+        const directusRes = await directusFetch(`/items/customer_contacts/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: JSON.stringify(patchPayload)
+        });
+        if (directusRes?.data) {
+          updatedContact = directusRes.data;
+        }
+      } catch (err) {
+        console.warn("Directus patch contact error:", err.message);
+      }
+    }
+    const memIndex = contactsData.findIndex((c) => c.id === id);
+    if (memIndex !== -1) {
+      contactsData[memIndex] = { ...contactsData[memIndex], ...patchPayload };
+      if (!updatedContact) updatedContact = contactsData[memIndex];
+    }
+    if (!updatedContact) {
+      return res.status(404).json({ error: "CONTACT_NOT_FOUND", message: "\u0634\u0645\u0627\u0631\u0647 \u062A\u0645\u0627\u0633 \u06CC\u0627\u0641\u062A \u0646\u0634\u062F." });
+    }
+    if (patchPayload.value && updatedContact.customer_id) {
+      await syncContactToParentCustomer(
+        updatedContact.customer_id,
+        updatedContact.channel_type,
+        patchPayload.value,
+        updatedContact.contact_role
+      );
+    }
+    invalidateCustomersCache();
+    return res.json(updatedContact);
+  } catch (err) {
+    console.error("Error updating contact:", err.message);
+    return res.status(500).json({
+      error: "UPDATE_FAILED",
+      message: `\u062E\u0637\u0627 \u062F\u0631 \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u0645\u0627\u0631\u0647 \u062A\u0645\u0627\u0633: ${err.message}`
+    });
+  }
+});
+router11.delete("/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (directusUrl && directusAdminToken) {
+      try {
+        await directusFetch(`/items/customer_contacts/${encodeURIComponent(id)}`, {
+          method: "DELETE"
+        });
+      } catch (err) {
+        console.warn("Directus delete contact warning:", err.message);
+      }
+    }
+    const memIndex = contactsData.findIndex((c) => c.id === id);
+    if (memIndex !== -1) {
+      contactsData.splice(memIndex, 1);
+    }
+    invalidateCustomersCache();
+    return res.json({ success: true, id });
+  } catch (err) {
+    console.error("Error deleting contact:", err.message);
+    return res.status(500).json({
+      error: "DELETE_FAILED",
+      message: `\u062E\u0637\u0627 \u062F\u0631 \u062D\u0630\u0641 \u0634\u0645\u0627\u0631\u0647 \u062A\u0645\u0627\u0633: ${err.message}`
+    });
+  }
+});
+var contacts_routes_default = router11;
+
+// server/routes/system.routes.ts
+import { Router as Router12 } from "express";
+import crypto12 from "crypto";
+var router12 = Router12();
+router12.get("/api/health", (req, res) => {
   res.json({ status: "ok", uptime: process.uptime(), timestamp: (/* @__PURE__ */ new Date()).toISOString() });
 });
-router11.get("/health", (req, res) => {
+router12.get("/health", (req, res) => {
   res.json({ status: "ok", uptime: process.uptime(), timestamp: (/* @__PURE__ */ new Date()).toISOString() });
 });
-router11.get("/bff-status", (req, res) => {
+router12.get("/bff-status", (req, res) => {
   res.json({
     online: Boolean(directusUrl && directusAdminToken),
     url: directusUrl || "",
     database: "Directus"
   });
 });
-router11.get("/api/bff-status", (req, res) => {
+router12.get("/api/bff-status", (req, res) => {
   res.json({
     online: Boolean(directusUrl && directusAdminToken),
     url: directusUrl || "",
@@ -5511,8 +6374,9 @@ var migrationCustomersCache = null;
 var migrationCacheLastFetch = 0;
 var DASHBOARD_CACHE_TTL_MS = 3e4;
 var handleDashboardSummary = async (req, res) => {
-  const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
-  const cacheKey = `${tenantId || "all"}_${isAdmin ? "admin" : userId || userName || "staff"}`;
+  const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, reportViewScope, userName, tenantId } = getRequestUser(req);
+  const canViewAll = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers || reportViewScope === "all");
+  const cacheKey = `${tenantId || "all"}_${canViewAll ? "admin" : userId || userName || "staff"}`;
   const now2 = Date.now();
   const cached = dashboardSummaryCacheMap.get(cacheKey);
   if (cached && now2 - cached.timestamp < DASHBOARD_CACHE_TTL_MS) {
@@ -5534,7 +6398,7 @@ var handleDashboardSummary = async (req, res) => {
       let marketerCustFilter = "";
       let marketerRepFilter = "";
       let marketerLeadFilter = "";
-      if (!isAdmin) {
+      if (!canViewAll) {
         if (cleanPId) {
           marketerCustFilter = `&filter[_or][0][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`;
           if (rawUid && rawUid !== cleanPId) {
@@ -5639,9 +6503,9 @@ var handleDashboardSummary = async (req, res) => {
     urgent_expiring_customers: customersData.slice(0, 5)
   });
 };
-router11.get("/api/dashboard-summary", handleDashboardSummary);
-router11.get("/api/dashboard/summary", handleDashboardSummary);
-router11.get("/api/project-settings", async (req, res) => {
+router12.get("/api/dashboard-summary", handleDashboardSummary);
+router12.get("/api/dashboard/summary", handleDashboardSummary);
+router12.get("/api/project-settings", async (req, res) => {
   if (directusUrl && directusAdminToken) {
     try {
       const resp = await directusFetch("/items/project_settings").catch(() => null);
@@ -5656,7 +6520,7 @@ router11.get("/api/project-settings", async (req, res) => {
   }
   res.json(projectSettingsData);
 });
-router11.patch("/api/project-settings", async (req, res) => {
+router12.patch("/api/project-settings", async (req, res) => {
   const payload = req.body;
   const { isAdmin } = getRequestUser(req);
   if (!isAdmin) {
@@ -5685,7 +6549,7 @@ router11.patch("/api/project-settings", async (req, res) => {
   }
   res.json({ success: true, settings: projectSettingsData });
 });
-router11.post("/api/auth/update-profile", async (req, res) => {
+router12.post("/api/auth/update-profile", async (req, res) => {
   const {
     name,
     username,
@@ -5739,7 +6603,7 @@ router11.post("/api/auth/update-profile", async (req, res) => {
         });
         targetPersonnel = updatedRes?.data || { id: foundPId, ...personnelPatch };
       } else {
-        const newPId = personnelId || crypto11.randomUUID();
+        const newPId = personnelId || crypto12.randomUUID();
         const createdRes = await directusFetch("/items/personnel", {
           method: "POST",
           body: JSON.stringify({
@@ -5756,11 +6620,16 @@ router11.post("/api/auth/update-profile", async (req, res) => {
         targetPersonnel = createdRes?.data || { id: newPId, ...personnelPatch };
       }
       if (userId) {
+        let directusAvatarId = void 0;
+        if (typeof avatar === "string") {
+          const match = avatar.match(/\/api\/assets\/([a-zA-Z0-9\-_]+)/);
+          directusAvatarId = match ? match[1] : !avatar.startsWith("http") && !avatar.startsWith("data:") && !avatar.startsWith("/") ? avatar : void 0;
+        }
         await directusFetch(`/users/${userId}`, {
           method: "PATCH",
           body: JSON.stringify({
             ...name ? { first_name: name } : {},
-            ...avatar ? { avatar } : {}
+            ...directusAvatarId ? { avatar: directusAvatarId } : {}
           })
         }).catch(() => {
         });
@@ -5792,9 +6661,39 @@ router11.post("/api/auth/update-profile", async (req, res) => {
   }
   res.json({ success: true, personnel: targetPersonnel, message: "\u0645\u0634\u062E\u0635\u0627\u062A \u067E\u0631\u0648\u0641\u0627\u06CC\u0644 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062F\u0631 \u067E\u0627\u06CC\u06AF\u0627\u0647 \u062F\u0627\u062F\u0647 \u0645\u0631\u06A9\u0632\u06CC \u0630\u062E\u06CC\u0631\u0647 \u0634\u062F." });
 });
-router11.post("/api/upload-avatar", async (req, res) => {
+var handleAssetProxy2 = async (req, res) => {
+  const { id } = req.params;
+  if (!id) {
+    return res.status(400).send("Asset ID is required");
+  }
+  const cleanId = id.replace(/\.[a-zA-Z0-9]+$/, "");
+  if (directusUrl && directusAdminToken) {
+    try {
+      const directusAssetUrl = `${directusUrl.replace(/\/$/, "")}/assets/${cleanId}`;
+      const assetRes = await fetch(directusAssetUrl, {
+        headers: {
+          "Authorization": `Bearer ${directusAdminToken}`
+        }
+      });
+      if (assetRes.ok) {
+        const contentType = assetRes.headers.get("content-type") || "image/jpeg";
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+        const buffer = await assetRes.arrayBuffer();
+        return res.send(Buffer.from(buffer));
+      } else {
+        console.warn(`[Asset Proxy] Directus asset ${cleanId} returned HTTP ${assetRes.status}`);
+      }
+    } catch (err) {
+      console.warn(`[Asset Proxy] Error fetching asset ${cleanId}:`, err.message);
+    }
+  }
+  res.status(404).send("Asset not found");
+};
+router12.get("/api/assets/:id", handleAssetProxy2);
+router12.post("/api/upload-avatar", async (req, res) => {
   const { dataUrl, fileName, mimeType } = req.body;
-  const { userId, personnelId } = getRequestUser(req);
+  const { userId, personnelId, userEmail, userName } = getRequestUser(req);
   if (!dataUrl) {
     return res.status(400).json({ error: "\u0641\u0627\u06CC\u0644\u06CC \u0627\u0631\u0633\u0627\u0644 \u0646\u0634\u062F\u0647 \u0627\u0633\u062A." });
   }
@@ -5805,8 +6704,8 @@ router11.post("/api/upload-avatar", async (req, res) => {
       const matches = dataUrl.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
       if (matches && matches.length === 3) {
         const fileBuffer = Buffer.from(matches[2], "base64");
-        const fileType = matches[1] || mimeType || "image/jpeg";
-        const name = fileName || `avatar-${userId || Date.now()}.jpg`;
+        const fileType = matches[1] || mimeType || "image/webp";
+        const name = fileName || `avatar-${userId || personnelId || Date.now()}.webp`;
         const boundary = "----WebKitFormBoundary" + Math.random().toString(36).substring(2);
         const header = `--${boundary}\r
 Content-Disposition: form-data; name="file"; filename="${name}"\r
@@ -5829,7 +6728,7 @@ Content-Type: ${fileType}\r
           const fileData = await uploadRes.json();
           fileId = fileData?.data?.id;
           if (fileId) {
-            finalAvatarUrl = `${directusUrl.replace(/\/$/, "")}/assets/${fileId}`;
+            finalAvatarUrl = `/api/assets/${fileId}`;
             if (userId) {
               await directusFetch(`/users/${userId}`, {
                 method: "PATCH",
@@ -5837,21 +6736,45 @@ Content-Type: ${fileType}\r
               }).catch(() => {
               });
             }
+            let directusPersonnelId = null;
+            if (personnelId) {
+              const byPId = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
+              if (byPId?.data?.id) directusPersonnelId = byPId.data.id;
+            }
+            if (!directusPersonnelId && userId) {
+              const byUser = await directusFetch(`/items/personnel?filter[user_id][_eq]=${userId}&limit=1`).catch(() => null);
+              if (byUser?.data?.[0]?.id) directusPersonnelId = byUser.data[0].id;
+            }
+            if (!directusPersonnelId && userEmail) {
+              const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail)}&limit=1`).catch(() => null);
+              if (byEmail?.data?.[0]?.id) directusPersonnelId = byEmail.data[0].id;
+            }
+            if (directusPersonnelId) {
+              await directusFetch(`/items/personnel/${directusPersonnelId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ avatar: fileId })
+              }).catch((e) => console.warn("Could not update personnel avatar in Directus:", e.message));
+            }
           }
+        } else {
+          const errText = await uploadRes.text().catch(() => "");
+          console.warn("[Directus Upload Avatar Error]:", uploadRes.status, errText);
         }
       }
     } catch (e) {
-      console.error("Error uploading avatar to Directus:", e);
+      console.error("Error uploading avatar to Directus:", e.message);
     }
   }
   const targetId = personnelId || userId;
-  const idx = personnelData.findIndex((p) => p.id === targetId || p.id === "p-1");
+  const idx = personnelData.findIndex(
+    (p) => targetId && (p.id === targetId || p.user_id === targetId) || userEmail && p.email?.toLowerCase() === userEmail.toLowerCase() || userName && p.name === userName
+  );
   if (idx >= 0) {
     personnelData[idx].avatar = finalAvatarUrl;
   }
   res.json({ success: true, avatarUrl: finalAvatarUrl, fileId });
 });
-router11.post("/api/auth/change-password", async (req, res) => {
+router12.post("/api/auth/change-password", async (req, res) => {
   const { current_password, new_password } = req.body;
   const { userId } = getRequestUser(req);
   if (!new_password || new_password.length < 6) {
@@ -5870,7 +6793,7 @@ router11.post("/api/auth/change-password", async (req, res) => {
   }
   res.json({ success: true, message: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062A\u063A\u06CC\u06CC\u0631 \u06CC\u0627\u0641\u062A." });
 });
-router11.post("/api/check-expirations", (req, res) => {
+router12.post("/api/check-expirations", (req, res) => {
   res.json({ success: true });
 });
 var handleResetMigrationCache = (req, res) => {
@@ -5887,8 +6810,8 @@ var handleResetMigrationCache = (req, res) => {
   invalidateReportsCache();
   return res.json({ success: true, message: "\u062D\u0627\u0641\u0638\u0647 \u0645\u0648\u0642\u062A \u06A9\u0634 \u062F\u0631\u0648\u0646\u200C\u0631\u06CC\u0632\u06CC \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u067E\u0627\u06A9\u0633\u0627\u0632\u06CC \u0634\u062F." });
 };
-router11.post("/api/migration/reset-cache", handleResetMigrationCache);
-router11.post("/migration/reset-cache", handleResetMigrationCache);
+router12.post("/api/migration/reset-cache", handleResetMigrationCache);
+router12.post("/migration/reset-cache", handleResetMigrationCache);
 function jalaliToGregorian(jy, jm, jd) {
   let gy = jy <= 979 ? 621 : 1600;
   jy -= jy <= 979 ? 0 : 979;
@@ -6022,10 +6945,10 @@ function isValidUUID(str) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str.trim());
 }
 function deterministicUUID(input) {
-  if (!input) return crypto11.randomUUID();
+  if (!input) return crypto12.randomUUID();
   const cleanInput = String(input).trim();
   if (isValidUUID(cleanInput)) return cleanInput;
-  const hash = crypto11.createHash("md5").update("alphadesk-crm:" + cleanInput).digest("hex");
+  const hash = crypto12.createHash("md5").update("alphadesk-crm:" + cleanInput).digest("hex");
   return `${hash.substring(0, 8)}-${hash.substring(8, 12)}-4${hash.substring(13, 16)}-a${hash.substring(17, 20)}-${hash.substring(20, 32)}`;
 }
 function sanitizeCustomerForDirectus(cust, validPersonnelIds) {
@@ -6313,7 +7236,7 @@ var handleMigrationImport = async (req, res) => {
       } else if (callId) {
         custId = deterministicUUID(callId);
       } else {
-        custId = crypto11.randomUUID();
+        custId = crypto12.randomUUID();
       }
       if (callId) {
         globalCallIdToUUIDMap.set(callId, custId);
@@ -6347,7 +7270,7 @@ var handleMigrationImport = async (req, res) => {
         importedCustomersCount++;
         for (const m of mobileNumbers) {
           const cObj = {
-            id: crypto11.randomUUID(),
+            id: crypto12.randomUUID(),
             customer_id: custId,
             channel_type: "mobile",
             value: m,
@@ -6362,7 +7285,7 @@ var handleMigrationImport = async (req, res) => {
         }
         for (const l of landlineNumbers) {
           const cObj = {
-            id: crypto11.randomUUID(),
+            id: crypto12.randomUUID(),
             customer_id: custId,
             channel_type: "landline",
             value: l,
@@ -6378,7 +7301,7 @@ var handleMigrationImport = async (req, res) => {
         const insta = String(r.instaID || r.instagram_ids || "").trim();
         if (insta && insta !== "NULL" && insta !== "null") {
           const cObj = {
-            id: crypto11.randomUUID(),
+            id: crypto12.randomUUID(),
             customer_id: custId,
             channel_type: "instagram",
             value: insta,
@@ -6394,7 +7317,7 @@ var handleMigrationImport = async (req, res) => {
         const teleg = String(r.telegID || r.telegram_ids || r.tlgMobile || r.telegram_phone || "").trim();
         if (teleg && teleg !== "NULL" && teleg !== "null") {
           const cObj = {
-            id: crypto11.randomUUID(),
+            id: crypto12.randomUUID(),
             customer_id: custId,
             channel_type: "telegram",
             value: teleg,
@@ -6412,7 +7335,7 @@ var handleMigrationImport = async (req, res) => {
           for (const em of emails.split(/[,;\s]+/)) {
             if (em && em.includes("@")) {
               const cObj = {
-                id: crypto11.randomUUID(),
+                id: crypto12.randomUUID(),
                 customer_id: custId,
                 channel_type: "email",
                 value: em.toLowerCase(),
@@ -6430,7 +7353,7 @@ var handleMigrationImport = async (req, res) => {
         const web = String(r.website || r.websites || r.marketingWebsite || "").trim();
         if (web && web !== "NULL" && web !== "null") {
           const cObj = {
-            id: crypto11.randomUUID(),
+            id: crypto12.randomUUID(),
             customer_id: custId,
             channel_type: "website",
             value: web,
@@ -6481,7 +7404,7 @@ var handleMigrationImport = async (req, res) => {
         if (byPhone) matchedCustomerId = byPhone.id;
       }
       if (!matchedCustomerId) {
-        matchedCustomerId = callId ? deterministicUUID(callId) : crypto11.randomUUID();
+        matchedCustomerId = callId ? deterministicUUID(callId) : crypto12.randomUUID();
         if (callId) globalCallIdToUUIDMap.set(callId, matchedCustomerId);
         const orphanCust = {
           id: matchedCustomerId,
@@ -6603,10 +7526,10 @@ var handleMigrationImport = async (req, res) => {
     message: `\u062F\u0631\u0648\u0646\u200C\u0631\u06CC\u0632\u06CC \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0627\u0646\u062C\u0627\u0645 \u0634\u062F: ${importedPersonnelCount} \u06A9\u0627\u0631\u0634\u0646\u0627\u0633 \u062C\u062F\u06CC\u062F\u060C ${importedCustomersCount} \u0645\u0634\u062A\u0631\u06CC \u062C\u062F\u06CC\u062F\u060C \u0648 ${importedReportsCount} \u06AF\u0632\u0627\u0631\u0634 \u062B\u0628\u062A \u0634\u062F\u0646\u062F. (${skippedCount} \u0631\u06A9\u0648\u0631\u062F \u0645\u0648\u062C\u0648\u062F \u0646\u0627\u062F\u06CC\u062F\u0647 \u06AF\u0631\u0641\u062A\u0647 \u0634\u062F) ${autoAssignedCount > 0 ? `\u062A\u0639\u062F\u0627\u062F ${autoAssignedCount} \u0645\u0634\u062A\u0631\u06CC \u0622\u0632\u0627\u062F \u06AF\u0632\u0627\u0631\u0634\u200C\u062F\u0627\u0631 \u0628\u0647 \u0622\u062E\u0631\u06CC\u0646 \u0628\u0627\u0632\u0627\u0631\u06CC\u0627\u0628 \u0645\u0631\u0628\u0648\u0637\u0647 \u0645\u062A\u0635\u0644 \u06AF\u0631\u062F\u06CC\u062F\u0646\u062F.` : ""}`
   });
 };
-router11.post("/api/migration/import", handleMigrationImport);
-router11.post("/migration/import", handleMigrationImport);
-router11.post("/api/migration/reset-cache", handleResetMigrationCache);
-router11.post("/migration/reset-cache", handleResetMigrationCache);
+router12.post("/api/migration/import", handleMigrationImport);
+router12.post("/migration/import", handleMigrationImport);
+router12.post("/api/migration/reset-cache", handleResetMigrationCache);
+router12.post("/migration/reset-cache", handleResetMigrationCache);
 async function autoAssignFreeCustomersWithReports(targetTenantId) {
   let reassignedCount = 0;
   const reassignedDetails = [];
@@ -6718,8 +7641,8 @@ var handleAutoAssignFreeWithReports = async (req, res) => {
   const result = await autoAssignFreeCustomersWithReports(tenant_id);
   res.json(result);
 };
-router11.post("/api/migration/auto-assign-free-with-reports", handleAutoAssignFreeWithReports);
-router11.post("/migration/auto-assign-free-with-reports", handleAutoAssignFreeWithReports);
+router12.post("/api/migration/auto-assign-free-with-reports", handleAutoAssignFreeWithReports);
+router12.post("/migration/auto-assign-free-with-reports", handleAutoAssignFreeWithReports);
 var handleBackfillTenants = async (req, res) => {
   const result = await backfillNullTenantsDirectus();
   invalidateCustomersCache();
@@ -6730,9 +7653,9 @@ var handleBackfillTenants = async (req, res) => {
     message: `\u0627\u0635\u0644\u0627\u062D \u0634\u0646\u0627\u0633\u0647 \u0633\u0627\u0632\u0645\u0627\u0646 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0627\u0646\u062C\u0627\u0645 \u0634\u062F: ${result.updatedCustomers} \u0645\u0634\u062A\u0631\u06CC \u0648 ${result.updatedReports} \u06AF\u0632\u0627\u0631\u0634 \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F\u0646\u062F.`
   });
 };
-router11.post("/api/migration/backfill-tenants", handleBackfillTenants);
-router11.post("/migration/backfill-tenants", handleBackfillTenants);
-var system_routes_default = router11;
+router12.post("/api/migration/backfill-tenants", handleBackfillTenants);
+router12.post("/migration/backfill-tenants", handleBackfillTenants);
+var system_routes_default = router12;
 
 // server/index.ts
 var __filename = fileURLToPath(import.meta.url);
@@ -6749,12 +7672,15 @@ app.get(["/health", "/api/health"], (req, res) => {
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 app.use(rateLimiter);
+app.use(checkInactivePersonnel);
 app.use("/api/auth", auth_routes_default);
 app.use("/api", auth_routes_default);
 app.use(auth_routes_default);
 app.use("/api/personnel", personnel_routes_default);
 app.use("/api/customers", customers_routes_default);
 app.use("/api/customer-reports", reports_routes_default);
+app.use("/api/contacts", contacts_routes_default);
+app.use("/contacts", contacts_routes_default);
 app.use("/api/tenants", tenants_routes_default);
 app.use("/api/analytics", analytics_routes_default);
 app.use(analytics_routes_default);
@@ -6791,9 +7717,16 @@ async function startServer() {
   if (process.env.NODE_ENV === "production") {
     if (hasDist && distPath) {
       console.log(`[Production] Serving pre-compiled frontend assets from ${distPath}`);
+      const assetsPath = path.resolve(distPath, "assets");
+      if (fs.existsSync(assetsPath)) {
+        app.use("/assets", express.static(assetsPath, {
+          maxAge: "1y",
+          immutable: true
+        }));
+      }
       app.use(express.static(distPath));
       app.get("*", (req, res, next) => {
-        if (req.path.startsWith("/api") || req.path === "/health" || req.path === "/bff-status") {
+        if (req.path.startsWith("/api") || req.path.startsWith("/assets") || req.path === "/health" || req.path === "/bff-status") {
           return next();
         }
         res.sendFile(path.resolve(distPath, "index.html"));

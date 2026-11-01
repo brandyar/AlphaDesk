@@ -439,6 +439,25 @@ router.get('/:id', async (req: Request, res: Response) => {
   res.json(cust);
 });
 
+// GET /api/customers/:id/contacts - Get contacts for a customer
+router.get('/:id/contacts', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (directusUrl && directusAdminToken) {
+    try {
+      const contactsRes = await directusFetch(
+        `/items/customer_contacts?filter[customer_id][_eq]=${encodeURIComponent(id)}&sort=-date_created`
+      );
+      if (contactsRes?.data && Array.isArray(contactsRes.data)) {
+        return res.json(contactsRes.data);
+      }
+    } catch (e: any) {
+      console.warn(`Error fetching contacts for customer ${id}:`, e.message);
+    }
+  }
+  const filtered = contactsData.filter((ct) => String(ct.customer_id) === String(id));
+  return res.json(filtered);
+});
+
 // POST /api/customers/bulk-set-deadline
 router.post('/bulk-set-deadline', async (req: Request, res: Response) => {
   const { target = 'all', marketer_id, customer_ids, days = 30 } = req.body;
