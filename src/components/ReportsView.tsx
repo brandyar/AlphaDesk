@@ -309,15 +309,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       {/* Title & Action */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
             <span>گزارش‌های پیگیری و مذاکره با مشتریان</span>
-            <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold">
+            <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] border border-emerald-200 dark:border-transparent font-bold">
               {!userIsAdmin && staffFilter === 'unfollowed_referrals'
                 ? `${toPersianDigits(unfollowedReferralCustomers.length)} مشتری ارجاعی`
                 : `${toPersianDigits(totalCount)} گزارش یافت شد`}
             </span>
           </h2>
-          <p className="text-xs text-[#A7A7A7] mt-1">
+          <p className="text-xs text-slate-500 dark:text-[#A7A7A7] mt-1">
             {userIsAdmin
               ? 'پایش، ثبت و فیلتر دقیق گزارش‌های مذاکره و موعدهای پیگیری تمامی کارشناسان به ترتیب زمانی دقیق'
               : 'پایش موعدهای پیگیری، مشتریان ارجاعی، مهلت‌های سررسید و ثبت مذاکرات روزانه شما'}
@@ -326,7 +326,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
         <button
           onClick={() => onOpenAddReportModal()}
-          className="h-10 px-5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex items-center gap-2"
+          className="h-10 px-5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex items-center gap-2 cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
           <span>ثبت گزارش پیگیری جدید</span>
@@ -334,7 +334,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       </div>
 
       {/* Primary Role-Based Category Filter Bar (Tabs) */}
-      <div className="bg-[#181818] p-2 rounded-2xl border border-[#282828] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+      <div className="bg-white dark:bg-[#181818] p-2 rounded-2xl border border-slate-200 dark:border-[#282828] flex items-center gap-1.5 overflow-x-auto no-scrollbar shadow-xs">
         {userIsAdmin
           ? adminFilterOptions.map((opt) => {
               const active = adminFilter === opt.id;
@@ -349,10 +349,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       setSortBy('newest');
                     }
                   }}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-2 select-none ${
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-2 select-none cursor-pointer ${
                     active
                       ? 'bg-[#1DB954] text-black shadow-md shadow-[#1DB954]/20'
-                      : 'bg-[#222222] text-[#A7A7A7] hover:text-white hover:bg-[#2c2c2c]'
+                      : 'bg-slate-100 hover:bg-slate-200/80 dark:bg-[#222222] text-slate-700 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white dark:hover:bg-[#2c2c2c] border border-slate-200 dark:border-transparent'
                   }`}
                 >
                   <span>{opt.label}</span>
@@ -372,10 +372,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       setSortBy('newest');
                     }
                   }}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-2 select-none ${
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-2 select-none cursor-pointer ${
                     active
                       ? 'bg-[#1DB954] text-black shadow-md shadow-[#1DB954]/20'
-                      : 'bg-[#222222] text-[#A7A7A7] hover:text-white hover:bg-[#2c2c2c]'
+                      : 'bg-slate-100 hover:bg-slate-200/80 dark:bg-[#222222] text-slate-700 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white dark:hover:bg-[#2c2c2c] border border-slate-200 dark:border-transparent'
                   }`}
                 >
                   <span>{opt.label}</span>
@@ -396,7 +396,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       </div>
 
       {/* Secondary Search, Filter & Sort Toolbar */}
-      <div className="p-3 sm:p-4 bg-[#181818] rounded-2xl border border-[#282828] flex flex-wrap items-center justify-between gap-3">
+      <div className="p-3 sm:p-4 bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] flex flex-wrap items-center justify-between gap-3 shadow-xs">
         {/* Search Input */}
         <div className="flex-1 max-w-xs sm:max-w-sm relative min-w-[200px]">
           <input
@@ -404,41 +404,41 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="جستجو در متن گزارش، نام شرکت، نام مدیر، تلفن..."
-            className="w-full h-9 bg-[#282828] rounded-xl pl-3 pr-9 text-xs text-white placeholder-[#A7A7A7] focus:outline-none focus:border-[#1DB954] border border-[#3e3e3e]"
+            className="w-full h-9 bg-slate-50 dark:bg-[#282828] rounded-xl pl-3 pr-9 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#A7A7A7] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] border border-slate-200 dark:border-[#3e3e3e]"
           />
-          <Search className="w-3.5 h-3.5 text-[#A7A7A7] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Search className="w-3.5 h-3.5 text-slate-400 dark:text-[#A7A7A7] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
           {/* Sort Selector */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[#A7A7A7] flex items-center gap-1">
-              <ArrowUpDown className="w-3.5 h-3.5 text-[#1DB954]" />
+            <span className="text-xs text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
+              <ArrowUpDown className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
               <span>مرتب‌سازی:</span>
             </span>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+              className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
             >
-              <option value="newest" className="bg-[#181818] text-white">جدیدترین تاریخ ثبت (پیش‌فرض)</option>
-              <option value="oldest" className="bg-[#181818] text-white">قدیمی‌ترین تاریخ ثبت</option>
-              <option value="followup_soonest" className="bg-[#181818] text-white">نزدیک‌ترین موعد پیگیری</option>
-              <option value="highest_score" className="bg-[#181818] text-white">بیشترین امتیاز مذاکره</option>
+              <option value="newest" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">جدیدترین تاریخ ثبت (پیش‌فرض)</option>
+              <option value="oldest" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">قدیمی‌ترین تاریخ ثبت</option>
+              <option value="followup_soonest" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">نزدیک‌ترین موعد پیگیری</option>
+              <option value="highest_score" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">بیشترین امتیاز مذاکره</option>
             </select>
           </div>
 
           {/* Status Dropdown */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[#A7A7A7]">وضعیت:</span>
+            <span className="text-xs text-slate-500 dark:text-[#A7A7A7]">وضعیت:</span>
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+              className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
             >
-              <option value="همه" className="bg-[#181818] text-white">همه وضعیت‌ها</option>
+              <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه وضعیت‌ها</option>
               {NEGOTIATION_STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-[#181818] text-white">
+                <option key={opt.value} value={opt.value} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                   {opt.label}
                 </option>
               ))}
@@ -447,34 +447,34 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
           {/* Page Size Selector */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[#A7A7A7]">تعداد در صفحه:</span>
+            <span className="text-xs text-slate-500 dark:text-[#A7A7A7]">تعداد در صفحه:</span>
             <select
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
                 setCurrentPage(1);
               }}
-              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+              className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
             >
-              <option value={10} className="bg-[#181818] text-white">۱۰ گزارش</option>
-              <option value={25} className="bg-[#181818] text-white">۲۵ گزارش</option>
-              <option value={50} className="bg-[#181818] text-white">۵۰ گزارش</option>
-              <option value={100} className="bg-[#181818] text-white">۱۰۰ گزارش</option>
+              <option value={10} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۱۰ گزارش</option>
+              <option value={25} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۲۵ گزارش</option>
+              <option value={50} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۵۰ گزارش</option>
+              <option value={100} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۱۰۰ گزارش</option>
             </select>
           </div>
 
           {/* Negotiator Dropdown - ONLY for Admin */}
           {userIsAdmin && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-[#A7A7A7]">مذاکره‌کننده:</span>
+              <span className="text-xs text-slate-500 dark:text-[#A7A7A7]">مذاکره‌کننده:</span>
               <select
                 value={selectedNegotiator}
                 onChange={(e) => setSelectedNegotiator(e.target.value)}
-                className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+                className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
               >
-                <option value="همه" className="bg-[#181818] text-white">همه کارشناسان</option>
+                <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه کارشناسان</option>
                 {personnelList.map((p) => (
-                  <option key={p.id} value={p.name} className="bg-[#181818] text-white">
+                  <option key={p.id} value={p.name} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                     {p.name}
                   </option>
                 ))}
@@ -487,16 +487,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       {/* Special View: Unfollowed Referrals (مشتریان ارجاعی پیگیری نشده) */}
       {!userIsAdmin && staffFilter === 'unfollowed_referrals' ? (
         unfollowedReferralCustomers.length === 0 ? (
-          <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
-            <CheckCircle className="w-10 h-10 text-[#1DB954] mx-auto" />
-            <h3 className="text-sm font-bold text-white">تمام مشتریان ارجاعی پیگیری شده‌اند!</h3>
-            <p className="text-xs text-[#A7A7A7]">
+          <div className="p-12 text-center bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] space-y-3 shadow-xs">
+            <CheckCircle className="w-10 h-10 text-emerald-600 dark:text-[#1DB954] mx-auto" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">تمام مشتریان ارجاعی پیگیری شده‌اند!</h3>
+            <p className="text-xs text-slate-500 dark:text-[#A7A7A7]">
               هیچ مشتری بدون گزارش پیگیری در پرونده‌های اختصاص‌یافته به شما وجود ندارد.
             </p>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="p-3 bg-[#F59B23]/10 border border-[#F59B23]/30 rounded-xl flex items-center justify-between text-xs text-[#F59B23]">
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between text-xs text-amber-700 dark:text-[#F59B23]">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4" />
                 <span>مشتریان زیر به شما ارجاع داده شده‌اند اما هنوز هیچ گزارش مذاکره‌ای برای آنها ثبت نکرده‌اید:</span>
@@ -510,37 +510,37 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 return (
                   <div
                     key={c.id}
-                    className="bg-[#181818] hover:bg-[#202020] rounded-2xl p-4 border border-[#282828] hover:border-[#3e3e3e] transition-all flex flex-col justify-between space-y-3"
+                    className="bg-white hover:bg-slate-50/80 dark:bg-[#181818] dark:hover:bg-[#202020] rounded-2xl p-4 border border-slate-200 hover:border-slate-300 dark:border-[#282828] dark:hover:border-[#3e3e3e] shadow-xs transition-all flex flex-col justify-between space-y-3"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2">
                         <button
                           onClick={() => onSelectCustomer(c)}
-                          className="font-bold text-sm text-white hover:text-[#1DB954] text-right truncate flex items-center gap-1.5"
+                          className="font-bold text-sm text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-[#1DB954] text-right truncate flex items-center gap-1.5 cursor-pointer"
                         >
-                          <User className="w-4 h-4 text-[#1DB954] shrink-0" />
+                          <User className="w-4 h-4 text-emerald-600 dark:text-[#1DB954] shrink-0" />
                           <span>{c.manager_name || c.negotiator_name || c.company_name}</span>
                         </button>
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-[#E22134]/15 text-[#E22134] border border-[#E22134]/30 font-bold shrink-0">
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 dark:bg-[#E22134]/15 dark:text-[#E22134] dark:border-[#E22134]/30 font-bold shrink-0">
                           فاقد گزارش
                         </span>
                       </div>
-                      <p className="text-xs text-[#A7A7A7] mt-1 truncate">
+                      <p className="text-xs text-slate-500 dark:text-[#A7A7A7] mt-1 truncate">
                         {c.company_name} {c.business_type ? `• ${c.business_type}` : ''} • {c.city}
                       </p>
                       {phone !== '-' && (
-                        <div className="mt-2 text-xs text-white font-mono flex items-center gap-1.5" dir="ltr">
-                          <Phone className="w-3.5 h-3.5 text-[#1DB954]" />
+                        <div className="mt-2 text-xs text-slate-900 dark:text-white font-mono flex items-center gap-1.5" dir="ltr">
+                          <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                           <span>{phone}</span>
                         </div>
                       )}
                     </div>
 
-                    <div className="pt-2 border-t border-[#282828] flex items-center justify-between gap-2">
+                    <div className="pt-2 border-t border-slate-100 dark:border-[#282828] flex items-center justify-between gap-2">
                       <button
                         type="button"
                         onClick={() => onSelectCustomer(c)}
-                        className="text-xs text-[#A7A7A7] hover:text-white flex items-center gap-1"
+                        className="text-xs text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white flex items-center gap-1 cursor-pointer"
                       >
                         <span>مشاهده پرونده</span>
                         <ChevronLeft className="w-3.5 h-3.5" />
@@ -548,7 +548,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onOpenAddReportModal(c.id)}
-                        className="px-3 py-1.5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all flex items-center gap-1 shadow-md shadow-[#1DB954]/20"
+                        className="px-3 py-1.5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all flex items-center gap-1 shadow-md shadow-[#1DB954]/20 cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>ثبت اولین مذاکره</span>
@@ -565,28 +565,28 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           {[...Array(6)].map((_, i) => (
             <div
               key={i}
-              className="bg-[#181818] rounded-2xl p-5 border border-[#282828] animate-pulse space-y-3"
+              className="bg-white dark:bg-[#181818] rounded-2xl p-5 border border-slate-200 dark:border-[#282828] animate-pulse space-y-3 shadow-xs"
             >
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 bg-[#282828] rounded-full"></div>
-                  <div className="h-4 bg-[#282828] rounded w-36"></div>
-                  <div className="h-4 bg-[#282828] rounded-full w-20"></div>
+                  <div className="w-4 h-4 bg-slate-200 dark:bg-[#282828] rounded-full"></div>
+                  <div className="h-4 bg-slate-200 dark:bg-[#282828] rounded w-36"></div>
+                  <div className="h-4 bg-slate-200 dark:bg-[#282828] rounded-full w-20"></div>
                 </div>
-                <div className="h-4 bg-[#282828] rounded w-24"></div>
+                <div className="h-4 bg-slate-200 dark:bg-[#282828] rounded w-24"></div>
               </div>
-              <div className="h-14 bg-[#121212] rounded-xl border border-[#222]"></div>
+              <div className="h-14 bg-slate-100 dark:bg-[#121212] rounded-xl border border-slate-200 dark:border-[#222]"></div>
               <div className="flex justify-between items-center pt-2">
-                <div className="h-3 bg-[#282828] rounded w-48"></div>
-                <div className="h-3 bg-[#282828] rounded w-24"></div>
+                <div className="h-3 bg-slate-200 dark:bg-[#282828] rounded w-48"></div>
+                <div className="h-3 bg-slate-200 dark:bg-[#282828] rounded w-24"></div>
               </div>
             </div>
           ))}
         </div>
       ) : displayedReports.length === 0 ? (
-        <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
-          <MessageSquareText className="w-10 h-10 text-[#535353] mx-auto" />
-          <p className="text-xs text-[#A7A7A7]">هیچ گزارشی مطابق با فیلترها و مرتب‌سازی انتخابی یافت نشد.</p>
+        <div className="p-12 text-center bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] space-y-3 shadow-xs">
+          <MessageSquareText className="w-10 h-10 text-slate-400 dark:text-[#535353] mx-auto" />
+          <p className="text-xs text-slate-500 dark:text-[#A7A7A7]">هیچ گزارشی مطابق با فیلترها و مرتب‌سازی انتخابی یافت نشد.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -602,10 +602,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             return (
               <div
                 key={rep.id}
-                className={`bg-[#181818] hover:bg-[#1c1c1c] rounded-2xl p-5 border transition-all space-y-3 ${
+                className={`bg-white hover:bg-slate-50/80 dark:bg-[#181818] dark:hover:bg-[#1c1c1c] rounded-2xl p-5 border transition-all space-y-3 shadow-xs ${
                   customerIsExpired
-                    ? 'border-[#E22134]/40 bg-[#E22134]/5'
-                    : 'border-[#282828] hover:border-[#3e3e3e]'
+                    ? 'border-rose-300 bg-rose-50/40 dark:border-[#E22134]/40 dark:bg-[#E22134]/5'
+                    : 'border-slate-200 hover:border-slate-300 dark:border-[#282828] dark:hover:border-[#3e3e3e]'
                 }`}
               >
                 {/* Header row */}
@@ -615,17 +615,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     {customer ? (
                       <button
                         onClick={() => onSelectCustomer(customer)}
-                        className="font-bold text-sm text-white hover:text-[#1DB954] transition-colors flex items-center gap-1.5"
+                        className="font-bold text-sm text-slate-900 hover:text-emerald-600 dark:text-white dark:hover:text-[#1DB954] transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
-                        <User className="w-4 h-4 text-[#1DB954]" />
+                        <User className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                         <span>{customer.manager_name || customer.negotiator_name || rep.negotiator_name || customer.company_name}</span>
                         {customer.company_name && (
-                          <span className="text-xs text-[#888] font-normal">({customer.company_name})</span>
+                          <span className="text-xs text-slate-500 dark:text-[#888] font-normal">({customer.company_name})</span>
                         )}
                       </button>
                     ) : (
-                      <span className="font-bold text-sm text-white flex items-center gap-1.5">
-                        <User className="w-4 h-4 text-[#1DB954]" />
+                      <span className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <User className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                         <span>{rep.negotiator_name || 'مدیر کسب و کار'}</span>
                       </span>
                     )}
@@ -639,24 +639,24 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
                     {/* Expired Warning Badge */}
                     {customerIsExpired && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#E22134]/20 text-[#E22134] border border-[#E22134]/30 font-bold">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-[#E22134]/20 dark:text-[#E22134] dark:border-[#E22134]/30 font-bold">
                         منقضی شده
                       </span>
                     )}
                   </div>
 
                   {/* Metadata */}
-                  <div className="flex items-center gap-4 text-xs text-[#A7A7A7]">
-                    <span className="flex items-center gap-1 text-white">
-                      <User className="w-3.5 h-3.5 text-[#1DB954]" />
+                  <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-[#A7A7A7]">
+                    <span className="flex items-center gap-1 text-slate-900 dark:text-white">
+                      <User className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                       <span>{rep.negotiator_name}</span>
                     </span>
                     {rep.negotiation_phone && (
-                      <span className="font-mono" dir="ltr">
+                      <span className="font-mono text-slate-700 dark:text-slate-300" dir="ltr">
                         {rep.negotiation_phone}
                       </span>
                     )}
-                    <span className="px-2 py-0.5 rounded bg-[#282828] text-white font-mono font-bold">
+                    <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-[#282828] text-slate-800 dark:text-white border border-slate-200 dark:border-transparent font-mono font-bold">
                       امتیاز: {rep.negotiation_score} {Number(rep.negotiation_score) > 10 ? 'از ۲۰' : 'از ۱۰'}
                     </span>
                     <span className="font-mono">{formatPersianDateTime(rep.date_created)}</span>
@@ -664,20 +664,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 </div>
 
                 {/* Report Body */}
-                <p className="text-xs text-[#d1d1d1] leading-relaxed whitespace-pre-wrap bg-[#121212] p-3.5 rounded-xl border border-[#222]">
+                <p className="text-xs text-slate-800 dark:text-[#d1d1d1] leading-relaxed whitespace-pre-wrap bg-slate-50 dark:bg-[#121212] p-3.5 rounded-xl border border-slate-200 dark:border-[#222]">
                   {rep.report_text}
                 </p>
 
                 {/* Contract / Invoice Details Card */}
                 {(rep.contract_number || rep.contract_amount || rep.contract_items || rep.contract_date) && (
-                  <div className="p-3.5 rounded-xl bg-[#1DB954]/10 border border-[#1DB954]/25 space-y-2 text-xs">
-                    <div className="flex items-center justify-between font-bold text-[#1DB954] border-b border-[#1DB954]/20 pb-1.5">
+                  <div className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-[#1DB954]/10 border border-emerald-200 dark:border-[#1DB954]/25 space-y-2 text-xs">
+                    <div className="flex items-center justify-between font-bold text-emerald-800 dark:text-[#1DB954] border-b border-emerald-200 dark:border-[#1DB954]/20 pb-1.5">
                       <span className="flex items-center gap-1.5">
-                        <FileCheck2 className="w-4 h-4" />
+                        <FileCheck2 className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                         <span>اطلاعات سند قرارداد / فاکتور رسمی</span>
                       </span>
                       {rep.contract_number && (
-                        <span className="font-mono bg-[#181818] px-2.5 py-0.5 rounded border border-[#1DB954]/30 text-white">
+                        <span className="font-mono bg-white dark:bg-[#181818] px-2.5 py-0.5 rounded border border-emerald-300 dark:border-[#1DB954]/30 text-slate-900 dark:text-white">
                           شماره: {rep.contract_number}
                         </span>
                       )}
@@ -685,45 +685,45 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
                       {rep.contract_date && (
                         <div>
-                          <span className="text-[#888]">تاریخ قرارداد: </span>
-                          <span className="font-mono text-white font-semibold">{formatPersianDate(rep.contract_date)}</span>
+                          <span className="text-slate-500 dark:text-[#888]">تاریخ قرارداد: </span>
+                          <span className="font-mono text-slate-900 dark:text-white font-semibold">{formatPersianDate(rep.contract_date)}</span>
                         </div>
                       )}
                       {rep.contract_amount && (
                         <div>
-                          <span className="text-[#888]">مبلغ نهایی: </span>
-                          <span className="font-bold text-[#1DB954] font-mono">{formatToman(rep.contract_amount)}</span>
+                          <span className="text-slate-500 dark:text-[#888]">مبلغ نهایی: </span>
+                          <span className="font-bold text-emerald-700 dark:text-[#1DB954] font-mono">{formatToman(rep.contract_amount)}</span>
                         </div>
                       )}
                     </div>
                     {rep.contract_items && (
-                      <div className="text-[11px] bg-[#121212] p-2.5 rounded-lg border border-[#222]">
-                        <span className="text-[#888]">اقلام و خدمات: </span>
-                        <span className="text-white">{rep.contract_items}</span>
+                      <div className="text-[11px] bg-white dark:bg-[#121212] p-2.5 rounded-lg border border-emerald-200 dark:border-[#222]">
+                        <span className="text-slate-500 dark:text-[#888]">اقلام و خدمات: </span>
+                        <span className="text-slate-900 dark:text-white">{rep.contract_items}</span>
                       </div>
                     )}
                   </div>
                 )}
 
                 {/* Footer / Followup & Deadline Details */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-[#222]">
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-100 dark:border-[#222]">
                   {rep.next_followup_date ? (
-                    <div className="text-[11px] text-[#A7A7A7] flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 text-[#1DB954]" />
+                    <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                       <span>موعد پیگیری بعدی:</span>
-                      <span className="text-white font-semibold font-mono">
+                      <span className="text-slate-900 dark:text-white font-semibold font-mono">
                         {formatPersianDate(rep.next_followup_date)}
                       </span>
                       {daysToFollowup !== null && (
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             daysToFollowup < 0
-                              ? 'bg-[#E22134]/15 text-[#E22134]'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-[#E22134]/15 dark:text-[#E22134] dark:border-transparent'
                               : daysToFollowup === 0
-                              ? 'bg-[#1DB954]/20 text-[#1DB954]'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-[#1DB954]/20 dark:text-[#1DB954] dark:border-transparent'
                               : daysToFollowup <= 3
-                              ? 'bg-[#F59B23]/20 text-[#F59B23]'
-                              : 'bg-[#282828] text-[#A7A7A7]'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-[#F59B23]/20 dark:text-[#F59B23] dark:border-transparent'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200 dark:bg-[#282828] dark:text-[#A7A7A7] dark:border-transparent'
                           }`}
                         >
                           {daysToFollowup < 0
@@ -735,7 +735,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       )}
                     </div>
                   ) : (
-                    <div className="text-[11px] text-[#666] flex items-center gap-1.5">
+                    <div className="text-[11px] text-slate-400 dark:text-[#666] flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5" />
                       <span>بدون موعد پیگیری بعدی</span>
                     </div>
@@ -745,7 +745,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => onSelectCustomer(customer)}
-                      className="text-xs text-[#1DB954] hover:underline font-bold flex items-center gap-1"
+                      className="text-xs text-emerald-600 dark:text-[#1DB954] hover:underline font-bold flex items-center gap-1 cursor-pointer"
                     >
                       <span>مشاهده پرونده کامل</span>
                       <ChevronLeft className="w-3.5 h-3.5" />

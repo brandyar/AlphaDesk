@@ -62,16 +62,16 @@ export const PaginationControl: React.FC<PaginationControlProps> = ({
   const endRecord = Math.min(startRecord + displayedCount - 1, totalCount);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-[#282828] text-xs text-[#A7A7A7]">
+    <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-200 dark:border-[#282828] text-xs text-slate-500 dark:text-[#A7A7A7]">
       {/* Total Count Info */}
       <div className="flex items-center gap-2">
-        {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-[#1DB954]" />}
+        {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 dark:text-[#1DB954]" />}
         <span>
           نمایش{' '}
-          <span className="font-bold text-white font-mono">
+          <span className="font-bold text-slate-900 dark:text-white font-mono">
             {toPersianDigits(startRecord)} تا {toPersianDigits(endRecord)}
           </span>{' '}
-          از <span className="font-bold text-[#1DB954] font-mono">{toPersianDigits(totalCount)}</span> {label}
+          از <span className="font-bold text-emerald-600 dark:text-[#1DB954] font-mono">{toPersianDigits(totalCount)}</span> {label}
         </span>
       </div>
 
@@ -82,7 +82,7 @@ export const PaginationControl: React.FC<PaginationControlProps> = ({
           onClick={() => onPageChange(1)}
           disabled={safeCurrentPage <= 1 || isLoading}
           title="صفحه اول"
-          className="w-8 h-8 rounded-xl bg-[#181818] border border-[#282828] flex items-center justify-center text-[#A7A7A7] hover:text-white hover:border-[#1DB954]/50 hover:bg-[#222222] disabled:opacity-30 disabled:pointer-events-none transition-all"
+          className="w-8 h-8 rounded-xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white hover:border-emerald-500/50 dark:hover:border-[#1DB954]/50 hover:bg-slate-50 dark:hover:bg-[#222222] disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer shadow-xs"
         >
           <ChevronsRight className="w-4 h-4" />
         </button>
@@ -92,7 +92,7 @@ export const PaginationControl: React.FC<PaginationControlProps> = ({
           onClick={() => onPageChange(safeCurrentPage - 1)}
           disabled={safeCurrentPage <= 1 || isLoading}
           title="صفحه قبلی"
-          className="w-8 h-8 rounded-xl bg-[#181818] border border-[#282828] flex items-center justify-center text-[#A7A7A7] hover:text-white hover:border-[#1DB954]/50 hover:bg-[#222222] disabled:opacity-30 disabled:pointer-events-none transition-all"
+          className="w-8 h-8 rounded-xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white hover:border-emerald-500/50 dark:hover:border-[#1DB954]/50 hover:bg-slate-50 dark:hover:bg-[#222222] disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer shadow-xs"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
@@ -102,7 +102,7 @@ export const PaginationControl: React.FC<PaginationControlProps> = ({
           {getPageNumbers().map((p, idx) => {
             if (p === '...') {
               return (
-                <span key={`ellipsis-${idx}`} className="px-1.5 text-[#555] font-mono">
+                <span key={`ellipsis-${idx}`} className="px-1.5 text-slate-400 dark:text-[#555] font-mono">
                   ...
                 </span>
               );
@@ -113,10 +113,10 @@ export const PaginationControl: React.FC<PaginationControlProps> = ({
                 key={`page-${p}`}
                 onClick={() => onPageChange(Number(p))}
                 disabled={isLoading}
-                className={`min-w-8 h-8 px-2 rounded-xl text-xs font-bold font-mono transition-all flex items-center justify-center ${
+                className={`min-w-8 h-8 px-2 rounded-xl text-xs font-bold font-mono transition-all flex items-center justify-center cursor-pointer ${
                   isCurrent
                     ? 'bg-[#1DB954] text-black shadow-md shadow-[#1DB954]/20 scale-105'
-                    : 'bg-[#181818] border border-[#282828] text-[#A7A7A7] hover:text-white hover:border-[#333]'
+                    : 'bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white hover:border-slate-300 dark:hover:border-[#333] shadow-xs'
                 }`}
               >
                 {toPersianDigits(p)}
@@ -130,7 +130,7 @@ export const PaginationControl: React.FC<PaginationControlProps> = ({
           onClick={() => onPageChange(safeCurrentPage + 1)}
           disabled={safeCurrentPage >= safeTotalPages || isLoading}
           title="صفحه بعدی"
-          className="w-8 h-8 rounded-xl bg-[#181818] border border-[#282828] flex items-center justify-center text-[#A7A7A7] hover:text-white hover:border-[#1DB954]/50 hover:bg-[#222222] disabled:opacity-30 disabled:pointer-events-none transition-all"
+          className="w-8 h-8 rounded-xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white hover:border-emerald-500/50 dark:hover:border-[#1DB954]/50 hover:bg-slate-50 dark:hover:bg-[#222222] disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer shadow-xs"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -140,7 +140,7 @@ export const PaginationControl: React.FC<PaginationControlProps> = ({
           onClick={() => onPageChange(safeTotalPages)}
           disabled={safeCurrentPage >= safeTotalPages || isLoading}
           title="صفحه آخر"
-          className="w-8 h-8 rounded-xl bg-[#181818] border border-[#282828] flex items-center justify-center text-[#A7A7A7] hover:text-white hover:border-[#1DB954]/50 hover:bg-[#222222] disabled:opacity-30 disabled:pointer-events-none transition-all"
+          className="w-8 h-8 rounded-xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white hover:border-emerald-500/50 dark:hover:border-[#1DB954]/50 hover:bg-slate-50 dark:hover:bg-[#222222] disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer shadow-xs"
         >
           <ChevronsLeft className="w-4 h-4" />
         </button>

@@ -491,11 +491,11 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       {/* ------------------------------------------------------------- */}
       {/* 1. TOP HEADER & SUB-MENUS */}
       {/* ------------------------------------------------------------- */}
-      <div className="bg-[#121212] border border-[#282828] rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+      <div className="bg-white dark:bg-[#121212] border border-slate-200 dark:border-[#282828] rounded-2xl p-4 sm:p-6 shadow-sm dark:shadow-xl space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#1DB954] to-[#14833b] text-black font-black text-xl flex items-center justify-center shadow-lg shadow-[#1DB954]/20 overflow-hidden border-2 border-[#1DB954]">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-[#1DB954] dark:to-[#14833b] text-white dark:text-black font-black text-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 dark:shadow-[#1DB954]/20 overflow-hidden border-2 border-emerald-500 dark:border-[#1DB954]">
                 {profileAvatar ? (
                   <img
                     src={getAvatarUrl(profileAvatar)}
@@ -506,7 +506,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
                       const parent = (e.currentTarget as HTMLElement).parentElement;
                       if (parent && !parent.querySelector('.portal-avatar-fallback')) {
                         const span = document.createElement('span');
-                        span.className = 'portal-avatar-fallback text-black font-black text-xl';
+                        span.className = 'portal-avatar-fallback text-white dark:text-black font-black text-xl';
                         span.textContent = profileName.charAt(0) || 'ک';
                         parent.appendChild(span);
                       }
@@ -516,19 +516,19 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
                   <span>{profileName.charAt(0) || 'ک'}</span>
                 )}
               </div>
-              <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-[#1DB954] rounded-full border-2 border-[#121212]" />
+              <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 dark:bg-[#1DB954] rounded-full border-2 border-white dark:border-[#121212]" />
             </div>
 
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                   پنل شخصی و امور پرسنلی
                 </h1>
-                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold border border-[#1DB954]/30">
+                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 dark:bg-[#1DB954]/15 text-emerald-700 dark:text-[#1DB954] font-bold border border-emerald-500/30 dark:border-[#1DB954]/30">
                   {isAdmin ? 'مدیر سیستم' : 'کارشناس فروش و مذاکره'}
                 </span>
               </div>
-              <p className="text-xs text-[#A7A7A7] mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-[#A7A7A7] mt-0.5">
                 {profileName} ({currentPersonnel?.email || currentUser?.email || 'کاربر سیستم'})
               </p>
             </div>
@@ -536,7 +536,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
 
           <button
             onClick={() => setShowLogoutConfirm(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 text-xs font-bold transition-all"
           >
             <LogOut className="w-4 h-4" />
             <span>خروج از حساب</span>
@@ -544,13 +544,13 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
         </div>
 
         {/* Navigation Tabs (Sub-menus) */}
-        <div className="flex items-center gap-2 border-t border-[#222] pt-4 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-2 border-t border-slate-200 dark:border-[#222] pt-4 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab('profile')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === 'profile'
-                ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
             }`}
           >
             <User className="w-4 h-4" />
@@ -561,8 +561,8 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
             onClick={() => setActiveTab('leave')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap relative ${
               activeTab === 'leave'
-                ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
             }`}
           >
             <CalendarDays className="w-4 h-4" />
@@ -584,8 +584,8 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
             onClick={() => setActiveTab('advance')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap relative ${
               activeTab === 'advance'
-                ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
             }`}
           >
             <Wallet className="w-4 h-4" />
@@ -725,39 +725,39 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       {/* 5. ADMIN REVIEW MODAL */}
       {/* ------------------------------------------------------------- */}
       {reviewModalItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#181818] border border-[#282828] w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-[#282828] pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/80 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
               <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-[#1DB954]" />
-                <h3 className="font-bold text-sm text-white">
+                <Shield className="w-5 h-5 text-emerald-600 dark:text-[#1DB954]" />
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
                   تعیین وضعیت درخواست {reviewModalItem.type === 'leave' ? 'مرخصی' : 'مساعده'}
                 </h3>
               </div>
               <button
                 onClick={() => setReviewModalItem(null)}
-                className="text-[#888] hover:text-white"
+                className="text-slate-400 dark:text-[#888] hover:text-slate-700 dark:hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 bg-[#121212] p-3.5 rounded-xl border border-[#222] text-xs">
+            <div className="space-y-3 bg-slate-50 dark:bg-[#121212] p-3.5 rounded-xl border border-slate-200 dark:border-[#222] text-xs">
               <div className="flex justify-between">
-                <span className="text-[#888]">کارشناس متقاضی:</span>
-                <span className="font-bold text-white">{reviewModalItem.item.personnel_name}</span>
+                <span className="text-slate-500 dark:text-[#888]">کارشناس متقاضی:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{reviewModalItem.item.personnel_name}</span>
               </div>
               {reviewModalItem.type === 'advance' && (
                 <div className="flex justify-between">
-                  <span className="text-[#888]">مبلغ درخواستی:</span>
-                  <span className="font-mono font-bold text-[#1DB954]">
+                  <span className="text-slate-500 dark:text-[#888]">مبلغ درخواستی:</span>
+                  <span className="font-mono font-bold text-emerald-600 dark:text-[#1DB954]">
                     {formatToman((reviewModalItem.item as SalaryAdvanceRequest).amount)}
                   </span>
                 </div>
               )}
               <div>
-                <span className="text-[#888] block mb-1">شرح علت:</span>
-                <p className="text-white leading-relaxed bg-[#181818] p-2 rounded-lg border border-[#282828]">
+                <span className="text-slate-500 dark:text-[#888] block mb-1">شرح علت:</span>
+                <p className="text-slate-800 dark:text-white leading-relaxed bg-white dark:bg-[#181818] p-2 rounded-lg border border-slate-200 dark:border-[#282828]">
                   {reviewModalItem.item.reason}
                 </p>
               </div>
@@ -765,7 +765,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
 
             {/* Decision Action Buttons */}
             <div className="space-y-3">
-              <label className="text-xs font-semibold text-[#B3B3B3]">
+              <label className="text-xs font-semibold text-slate-700 dark:text-[#B3B3B3]">
                 تصمیم مدیریت:
               </label>
               <div className="grid grid-cols-2 gap-3">
@@ -774,8 +774,8 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
                   onClick={() => setReviewAction('approved')}
                   className={`py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border ${
                     reviewAction === 'approved'
-                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500 shadow-md'
-                      : 'bg-[#121212] text-[#888] border-[#2c2c2c] hover:text-white'
+                      ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500 shadow-md'
+                      : 'bg-slate-50 dark:bg-[#121212] text-slate-500 dark:text-[#888] border-slate-200 dark:border-[#2c2c2c] hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   <Check className="w-4 h-4" />
@@ -787,8 +787,8 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
                   onClick={() => setReviewAction('rejected')}
                   className={`py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border ${
                     reviewAction === 'rejected'
-                      ? 'bg-rose-500/20 text-rose-400 border-rose-500 shadow-md'
-                      : 'bg-[#121212] text-[#888] border-[#2c2c2c] hover:text-white'
+                      ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400 border-rose-500 shadow-md'
+                      : 'bg-slate-50 dark:bg-[#121212] text-slate-500 dark:text-[#888] border-slate-200 dark:border-[#2c2c2c] hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   <X className="w-4 h-4" />
@@ -799,7 +799,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
               {/* If Advance is approved, allow modifying the approved amount */}
               {reviewModalItem.type === 'advance' && reviewAction === 'approved' && (
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">
                     مبلغ تایید شده (تومان)
                   </label>
                   <input
@@ -807,14 +807,14 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
                     dir="ltr"
                     value={reviewApprovedAmount}
                     onChange={(e) => setReviewApprovedAmount(e.target.value)}
-                    className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono font-bold"
+                    className="w-full h-10 px-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono font-bold"
                   />
                 </div>
               )}
 
               {/* Manager Note */}
               <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">
                   توضیحات و پیام به پرسنل (اختیاری)
                 </label>
                 <textarea
@@ -822,7 +822,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
                   onChange={(e) => setReviewManagerNote(e.target.value)}
                   placeholder="پیام یا توضیحات مرتبط با تایید یا رد درخواست..."
                   rows={2}
-                  className="w-full p-2.5 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none"
+                  className="w-full p-2.5 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
                 />
               </div>
             </div>
@@ -830,14 +830,14 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
             <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={() => setReviewModalItem(null)}
-                className="px-4 py-2 rounded-xl bg-[#242424] text-white text-xs font-bold hover:bg-[#333]"
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#242424] dark:hover:bg-[#333] text-slate-700 dark:text-white text-xs font-bold"
               >
                 انصراف
               </button>
               <button
                 onClick={handleConfirmReview}
                 disabled={isProcessingReview}
-                className="px-6 py-2 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black text-xs font-bold shadow-lg shadow-[#1DB954]/25 disabled:opacity-50"
+                className="px-6 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black text-xs font-bold shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 disabled:opacity-50"
               >
                 {isProcessingReview ? 'در حال ثبت...' : 'ثبت تصمیم نهایی'}
               </button>
@@ -850,21 +850,21 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       {/* 6. LOGOUT CONFIRMATION MODAL */}
       {/* ------------------------------------------------------------- */}
       {showLogoutConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#181818] border border-[#282828] w-full max-w-sm rounded-2xl p-6 text-center space-y-4 shadow-2xl">
-            <div className="w-12 h-12 rounded-full bg-rose-500/15 text-rose-400 flex items-center justify-center mx-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/80 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-sm rounded-2xl p-6 text-center space-y-4 shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
               <LogOut className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">خروج از حساب کاربری</h3>
-              <p className="text-xs text-[#888] mt-1">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">خروج از حساب کاربری</h3>
+              <p className="text-xs text-slate-500 dark:text-[#888] mt-1">
                 آیا از خروج از نشست کاربری فعلی خود در سامانه اطمینان دارید؟
               </p>
             </div>
             <div className="flex items-center justify-center gap-3 pt-2">
               <button
                 onClick={() => setShowLogoutConfirm(false)}
-                className="px-4 py-2 rounded-xl bg-[#282828] hover:bg-[#333] text-white text-xs font-bold"
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-[#282828] hover:bg-slate-200 dark:hover:bg-[#333] text-slate-700 dark:text-white text-xs font-bold"
               >
                 انصراف
               </button>

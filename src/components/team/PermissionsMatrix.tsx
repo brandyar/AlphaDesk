@@ -30,9 +30,9 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
     <div className="space-y-4">
       {/* Allowed Menus */}
       <div className="space-y-2">
-        <div className="text-xs font-semibold text-[#CCC] flex items-center justify-between">
+        <div className="text-xs font-semibold text-slate-700 dark:text-[#CCC] flex items-center justify-between">
           <span>منوهای مجاز سامانه (کدام منوها را در سایدبار ببیند):</span>
-          <span className="text-[11px] font-mono text-[#1DB954]">
+          <span className="text-[11px] font-mono text-emerald-600 dark:text-[#1DB954]">
             {toPersianDigits(allowedMenus.length)} از {toPersianDigits(SYSTEM_MENUS.length)} منو فعال
           </span>
         </div>
@@ -47,8 +47,8 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
                 key={menu.id}
                 className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-center gap-2.5 select-none ${
                   isChecked
-                    ? 'bg-[#1a2e20]/60 border-[#1DB954]/50 text-white'
-                    : 'bg-[#181818] border-[#282828] text-[#888] hover:text-[#CCC]'
+                    ? 'bg-emerald-500/10 dark:bg-[#1a2e20]/60 border-emerald-500/50 dark:border-[#1DB954]/50 text-slate-900 dark:text-white'
+                    : 'bg-slate-50 dark:bg-[#181818] border-slate-200 dark:border-[#282828] text-slate-500 dark:text-[#888] hover:text-slate-800 dark:hover:text-[#CCC]'
                 }`}
               >
                 <input
@@ -61,11 +61,11 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
                       setAllowedMenus(allowedMenus.filter((m) => m !== menu.id));
                     }
                   }}
-                  className="w-4 h-4 rounded text-[#1DB954] accent-[#1DB954] cursor-pointer"
+                  className="w-4 h-4 rounded text-emerald-600 dark:text-[#1DB954] accent-emerald-600 dark:accent-[#1DB954] cursor-pointer"
                 />
                 <div className="min-w-0">
                   <div className="text-xs font-bold truncate flex items-center gap-1.5">
-                    <MenuIcon className={`w-3.5 h-3.5 flex-shrink-0 ${isChecked ? 'text-[#1DB954]' : 'text-[#666]'}`} />
+                    <MenuIcon className={`w-3.5 h-3.5 flex-shrink-0 ${isChecked ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#666]'}`} />
                     <span className="truncate">{menu.label}</span>
                   </div>
                 </div>
@@ -76,8 +76,8 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
       </div>
 
       {/* Action Capabilities */}
-      <div className="space-y-2 pt-2 border-t border-[#222]">
-        <div className="text-xs font-semibold text-[#CCC]">
+      <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-[#222]">
+        <div className="text-xs font-semibold text-slate-700 dark:text-[#CCC]">
           مجوزهای کاری و اختیارات عملیاتی (چه کارهایی بتواند انجام دهد):
         </div>
 
@@ -90,8 +90,8 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
                 key={action.key}
                 className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 select-none ${
                   isAllowed
-                    ? 'bg-[#18231c] border-[#1DB954]/40 text-white'
-                    : 'bg-[#181818] border-[#282828] text-[#777] hover:text-[#B3B3B3]'
+                    ? 'bg-emerald-500/10 dark:bg-[#18231c] border-emerald-500/40 dark:border-[#1DB954]/40 text-slate-900 dark:text-white'
+                    : 'bg-slate-50 dark:bg-[#181818] border-slate-200 dark:border-[#282828] text-slate-500 dark:text-[#777] hover:text-slate-800 dark:hover:text-[#B3B3B3]'
                 }`}
               >
                 <input
@@ -103,7 +103,7 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
                       [action.key]: e.target.checked,
                     });
                   }}
-                  className="w-4 h-4 mt-0.5 rounded text-[#1DB954] accent-[#1DB954] cursor-pointer flex-shrink-0"
+                  className="w-4 h-4 mt-0.5 rounded text-emerald-600 dark:text-[#1DB954] accent-emerald-600 dark:accent-[#1DB954] cursor-pointer flex-shrink-0"
                 />
                 <span className="text-xs leading-relaxed">{action.label}</span>
               </label>
@@ -113,8 +113,8 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
       </div>
 
       {/* Report View Scope */}
-      <div className="space-y-3 pt-2 border-t border-[#222]">
-        <div className="text-xs font-semibold text-[#CCC] flex items-center justify-between">
+      <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-[#222]">
+        <div className="text-xs font-semibold text-slate-700 dark:text-[#CCC] flex items-center justify-between">
           <span>دامنه مشاهده گزارش کار پرسنل (گزارش کار کیا رو ببینه و کیا رو نبینه):</span>
         </div>
 
@@ -122,8 +122,8 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
           <label
             className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-2.5 select-none ${
               reportScope === 'all'
-                ? 'bg-[#1a2e20]/70 border-[#1DB954] text-white'
-                : 'bg-[#181818] border-[#282828] text-[#888]'
+                ? 'bg-emerald-500/10 dark:bg-[#1a2e20]/70 border-emerald-500 dark:border-[#1DB954] text-slate-900 dark:text-white'
+                : 'bg-slate-50 dark:bg-[#181818] border-slate-200 dark:border-[#282828] text-slate-500 dark:text-[#888]'
             }`}
           >
             <input
@@ -132,19 +132,19 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
               value="all"
               checked={reportScope === 'all'}
               onChange={() => setReportScope('all')}
-              className="accent-[#1DB954] cursor-pointer"
+              className="accent-emerald-600 dark:accent-[#1DB954] cursor-pointer"
             />
             <div>
-              <div className="text-xs font-bold text-white">همه همکاران</div>
-              <div className="text-[10px] text-[#777]">مشاهده گزارش کار کل پرسنل</div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white">همه همکاران</div>
+              <div className="text-[10px] text-slate-500 dark:text-[#777]">مشاهده گزارش کار کل پرسنل</div>
             </div>
           </label>
 
           <label
             className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-2.5 select-none ${
               reportScope === 'own_only'
-                ? 'bg-[#1a2e20]/70 border-[#1DB954] text-white'
-                : 'bg-[#181818] border-[#282828] text-[#888]'
+                ? 'bg-emerald-500/10 dark:bg-[#1a2e20]/70 border-emerald-500 dark:border-[#1DB954] text-slate-900 dark:text-white'
+                : 'bg-slate-50 dark:bg-[#181818] border-slate-200 dark:border-[#282828] text-slate-500 dark:text-[#888]'
             }`}
           >
             <input
@@ -153,19 +153,19 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
               value="own_only"
               checked={reportScope === 'own_only'}
               onChange={() => setReportScope('own_only')}
-              className="accent-[#1DB954] cursor-pointer"
+              className="accent-emerald-600 dark:accent-[#1DB954] cursor-pointer"
             />
             <div>
-              <div className="text-xs font-bold text-white">فقط گزارش کار خودش</div>
-              <div className="text-[10px] text-[#777]">عدم دسترسی به گزارش دیگران</div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white">فقط گزارش کار خودش</div>
+              <div className="text-[10px] text-slate-500 dark:text-[#777]">عدم دسترسی به گزارش دیگران</div>
             </div>
           </label>
 
           <label
             className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-2.5 select-none ${
               reportScope === 'specific_personnel'
-                ? 'bg-[#1a2e20]/70 border-[#1DB954] text-white'
-                : 'bg-[#181818] border-[#282828] text-[#888]'
+                ? 'bg-emerald-500/10 dark:bg-[#1a2e20]/70 border-emerald-500 dark:border-[#1DB954] text-slate-900 dark:text-white'
+                : 'bg-slate-50 dark:bg-[#181818] border-slate-200 dark:border-[#282828] text-slate-500 dark:text-[#888]'
             }`}
           >
             <input
@@ -174,19 +174,19 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
               value="specific_personnel"
               checked={reportScope === 'specific_personnel'}
               onChange={() => setReportScope('specific_personnel')}
-              className="accent-[#1DB954] cursor-pointer"
+              className="accent-emerald-600 dark:accent-[#1DB954] cursor-pointer"
             />
             <div>
-              <div className="text-xs font-bold text-white">همکاران مشخص و منتخب</div>
-              <div className="text-[10px] text-[#777]">فقط افراد انتخاب‌شده</div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white">همکاران مشخص و منتخب</div>
+              <div className="text-[10px] text-slate-500 dark:text-[#777]">فقط افراد انتخاب‌شده</div>
             </div>
           </label>
         </div>
 
         {/* Sub-selector for specific personnel */}
         {reportScope === 'specific_personnel' && (
-          <div className="p-3 bg-[#181818] rounded-xl border border-[#333] space-y-2 animate-in fade-in">
-            <div className="text-[11px] font-semibold text-[#BBB]">
+          <div className="p-3 bg-slate-50 dark:bg-[#181818] rounded-xl border border-slate-200 dark:border-[#333] space-y-2 animate-in fade-in">
+            <div className="text-[11px] font-semibold text-slate-700 dark:text-[#BBB]">
               تیک بزنید گزارش کار کدام یک از همکاران برای این فرد قابل رویت باشد:
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
@@ -197,8 +197,8 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
                     key={pers.id}
                     className={`p-2 rounded-lg border text-xs cursor-pointer flex items-center gap-2 ${
                       isSelected
-                        ? 'bg-[#1DB954]/15 border-[#1DB954]/50 text-white'
-                        : 'bg-[#121212] border-[#282828] text-[#888]'
+                        ? 'bg-emerald-500/15 border-emerald-500/50 text-slate-900 dark:text-white'
+                        : 'bg-white dark:bg-[#121212] border-slate-200 dark:border-[#282828] text-slate-500 dark:text-[#888]'
                     }`}
                   >
                     <input
@@ -213,7 +213,7 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
                           );
                         }
                       }}
-                      className="w-3.5 h-3.5 rounded text-[#1DB954] accent-[#1DB954]"
+                      className="w-3.5 h-3.5 rounded text-emerald-600 dark:text-[#1DB954] accent-emerald-600 dark:accent-[#1DB954]"
                     />
                     <span className="truncate">{pers.name}</span>
                   </label>

@@ -164,13 +164,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       {/* Top Title & Quick Action Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
             <span>مدیریت مشتریان و پرونده‌ها</span>
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold">
+            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] border border-emerald-200 dark:border-transparent font-bold">
               {toPersianDigits(totalCount)} پرونده
             </span>
           </h2>
-          <p className="text-xs text-[#A7A7A7] mt-1">
+          <p className="text-xs text-slate-500 dark:text-[#A7A7A7] mt-1">
             لیست مشتریان ثبت شده، اختصاص یافته به بازاریاب‌ها همراه با تایمر انقضای مهلت
           </p>
         </div>
@@ -179,14 +179,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           {/* Expired Filter Toggle */}
           <button
             onClick={() => onToggleExpiredOnly(!showExpiredOnly)}
-            className={`h-9 px-3 sm:px-3.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
+            className={`h-9 px-3 sm:px-3.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
               showExpiredOnly
                 ? 'bg-[#E22134] text-white shadow-lg shadow-[#E22134]/30'
-                : 'bg-[#282828] text-[#B3B3B3] hover:text-white border border-[#3e3e3e]'
+                : 'bg-white dark:bg-[#282828] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#3e3e3e] shadow-xs'
             }`}
             title="نمایش پرونده‌های با مهلت منقضی شده"
           >
-            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 text-amber-500 dark:text-current" />
             <span className="hidden sm:inline">منقضی شده‌ها</span>
           </button>
 
@@ -194,7 +194,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           {userIsAdmin && onOpenMergeModal && (
             <button
               onClick={onOpenMergeModal}
-              className="h-9 px-3 sm:px-4 rounded-full bg-[#282828] hover:bg-[#1DB954] text-[#B3B3B3] hover:text-black font-bold text-xs transition-all border border-[#3e3e3e] hover:border-[#1DB954] flex items-center gap-1.5 flex-shrink-0"
+              className="h-9 px-3 sm:px-4 rounded-full bg-white hover:bg-emerald-50 dark:bg-[#282828] dark:hover:bg-[#1DB954] text-slate-700 hover:text-emerald-800 dark:text-[#B3B3B3] dark:hover:text-black font-bold text-xs transition-all border border-slate-200 hover:border-emerald-300 dark:border-[#3e3e3e] dark:hover:border-[#1DB954] flex items-center gap-1.5 flex-shrink-0 cursor-pointer shadow-xs"
               title="ادغام پرونده‌های مشتریان تکراری"
             >
               <GitMerge className="w-3.5 h-3.5" />
@@ -205,7 +205,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           {/* New Customer Button (Icon only) */}
           <button
             onClick={onOpenNewCustomerModal}
-            className="w-9 h-9 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold flex items-center justify-center transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex-shrink-0"
+            className="w-9 h-9 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold flex items-center justify-center transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex-shrink-0 cursor-pointer"
             title="ثبت مشتری جدید"
             aria-label="ثبت مشتری جدید"
           >
@@ -215,23 +215,23 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       </div>
 
       {/* Clean Single-Row Filter Toolbar: Dropdowns instead of tags */}
-      <div className="p-3 sm:p-4 bg-[#181818] rounded-2xl border border-[#282828] flex flex-wrap items-center justify-between gap-3">
+      <div className="p-3 sm:p-4 bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] flex flex-wrap items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
           {/* Marketer Dropdown - ONLY for Admin */}
           {userIsAdmin && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-[#A7A7A7] flex items-center gap-1">
-                <Filter className="w-3.5 h-3.5 text-[#1DB954]" />
+              <span className="text-xs text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
+                <Filter className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                 <span>بازاریاب:</span>
               </span>
               <select
                 value={selectedMarketerId}
                 onChange={(e) => onSelectMarketerId(e.target.value)}
-                className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+                className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
               >
-                <option value="همه">همه بازاریاب‌ها</option>
+                <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه بازاریاب‌ها</option>
                 {personnelList.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-[#181818] text-white">
+                  <option key={p.id} value={p.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                     {p.name}
                   </option>
                 ))}
@@ -241,15 +241,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
           {/* Status Dropdown */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[#A7A7A7]">وضعیت پرونده:</span>
+            <span className="text-xs text-slate-500 dark:text-[#A7A7A7]">وضعیت پرونده:</span>
             <select
               value={statusFilter}
               onChange={(e) => onSelectStatusFilter(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+              className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
             >
-              <option value="همه" className="bg-[#181818] text-white">همه وضعیت‌ها</option>
+              <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه وضعیت‌ها</option>
               {NEGOTIATION_STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-[#181818] text-white">
+                <option key={opt.value} value={opt.value} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                   {opt.label}
                 </option>
               ))}
@@ -265,20 +265,20 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="جستجو در مدیر، برند، شماره یا شهر..."
-              className="h-9 w-52 sm:w-64 pl-8 pr-3 rounded-xl bg-[#282828] text-xs text-white placeholder-[#777] border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954]"
+              className="h-9 w-52 sm:w-64 pl-8 pr-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#777] border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954]"
             />
-            <Search className="w-3.5 h-3.5 text-[#777] absolute left-2.5 top-3 pointer-events-none" />
+            <Search className="w-3.5 h-3.5 text-slate-400 dark:text-[#777] absolute left-2.5 top-3 pointer-events-none" />
           </div>
 
           {/* View Mode Toggle: List vs Card Grid */}
-          <div className="flex items-center gap-1 bg-[#121212] p-1 rounded-xl border border-[#2c2c2c]">
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#121212] p-1 rounded-xl border border-slate-200 dark:border-[#2c2c2c]">
             <button
               type="button"
               onClick={() => setViewMode('table')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                 viewMode === 'table'
-                  ? 'bg-[#1DB954] text-black font-bold shadow-md'
-                  : 'text-[#888] hover:text-white'
+                  ? 'bg-emerald-500 dark:bg-[#1DB954] text-white dark:text-black font-bold shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white'
               }`}
               title="نمایش لیستی (جدولی - دسکتاپ)"
             >
@@ -288,10 +288,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             <button
               type="button"
               onClick={() => setViewMode('grid')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                 viewMode === 'grid'
-                  ? 'bg-[#1DB954] text-black font-bold shadow-md'
-                  : 'text-[#888] hover:text-white'
+                  ? 'bg-emerald-500 dark:bg-[#1DB954] text-white dark:text-black font-bold shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white'
               }`}
               title="نمایش کارتی (موبایل)"
             >
@@ -300,7 +300,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs text-[#888]">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-[#888]">
             <span>تعداد:</span>
             <select
               value={pageSize}
@@ -308,41 +308,41 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 setPageSize(Number(e.target.value));
                 setCurrentPage(1);
               }}
-              className="h-9 px-2 rounded-xl bg-[#282828] text-xs text-white border border-[#3e3e3e] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+              className="h-9 px-2 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
             >
-              <option value="15">۱۵</option>
-              <option value="30">۳۰</option>
-              <option value="60">۶۰</option>
-              <option value="100">۱۰۰</option>
+              <option value="15" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۱۵</option>
+              <option value="30" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۳۰</option>
+              <option value="60" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۶۰</option>
+              <option value="100" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۱۰۰</option>
             </select>
           </div>
 
-          <div className="text-xs text-[#888888] font-mono">
-            کل: <span className="text-[#1DB954] font-bold">{totalCount}</span> پرونده
+          <div className="text-xs text-slate-500 dark:text-[#888888] font-mono">
+            کل: <span className="text-emerald-600 dark:text-[#1DB954] font-bold">{toPersianDigits(totalCount)}</span> پرونده
           </div>
         </div>
       </div>
 
       {/* Customers Content: Table List or Card Grid */}
       {isLoadingPage && items.length === 0 ? (
-        <div className="p-16 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
-          <Loader2 className="w-8 h-8 text-[#1DB954] animate-spin mx-auto" />
-          <p className="text-xs text-[#A7A7A7]">در حال بارگذاری پرونده‌های مشتریان...</p>
+        <div className="p-16 text-center bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] space-y-3 shadow-xs">
+          <Loader2 className="w-8 h-8 text-emerald-600 dark:text-[#1DB954] animate-spin mx-auto" />
+          <p className="text-xs text-slate-500 dark:text-[#A7A7A7]">در حال بارگذاری پرونده‌های مشتریان...</p>
         </div>
       ) : items.length === 0 ? (
-        <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-4">
-          <div className="w-14 h-14 rounded-full bg-[#282828] flex items-center justify-center text-[#535353] mx-auto">
+        <div className="p-12 text-center bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] space-y-4 shadow-xs">
+          <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-[#282828] flex items-center justify-center text-slate-400 dark:text-[#535353] mx-auto">
             <Users className="w-7 h-7" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">مشتری با مشخصات فیلتر شده یافت نشد</h3>
-            <p className="text-xs text-[#A7A7A7] mt-1">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">مشتری با مشخصات فیلتر شده یافت نشد</h3>
+            <p className="text-xs text-slate-500 dark:text-[#A7A7A7] mt-1">
               می‌توانید فیلترها را تغییر داده یا مشتری جدیدی به سامانه اضافه نمایید.
             </p>
           </div>
           <button
             onClick={onOpenNewCustomerModal}
-            className="px-5 py-2 rounded-full bg-[#1DB954] text-black font-bold text-xs hover:bg-[#1ED760] transition-transform hover:scale-105"
+            className="px-5 py-2 rounded-full bg-[#1DB954] text-black font-bold text-xs hover:bg-[#1ED760] transition-transform hover:scale-105 cursor-pointer shadow-md shadow-[#1DB954]/20"
           >
             ثبت پرونده مشتری جدید
           </button>
@@ -350,11 +350,11 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       ) : (
         <div className={isLoadingPage ? 'opacity-50 pointer-events-none transition-opacity' : ''}>
           {/* DESKTOP TABLE LIST VIEW (Visible on md screens and above when viewMode is table) */}
-          <div className={`${viewMode === 'table' ? 'hidden md:block' : 'hidden'} bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden shadow-xl`}>
+          <div className={`${viewMode === 'table' ? 'hidden md:block' : 'hidden'} bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl overflow-hidden shadow-xs dark:shadow-xl`}>
             <div className="overflow-x-auto">
               <table className="w-full text-right border-collapse">
                 <thead>
-                  <tr className="bg-[#141414] border-b border-[#282828] text-[#888888] text-xs font-semibold">
+                  <tr className="bg-slate-50 dark:bg-[#141414] border-b border-slate-200 dark:border-[#282828] text-slate-500 dark:text-[#888888] text-xs font-semibold">
                     <th className="py-3.5 px-4">مدیر کسب‌وکار (عنوان اصلی) و نام برند</th>
                     <th className="py-3.5 px-4">وضعیت پرونده</th>
                     <th className="py-3.5 px-4">بازاریاب مسئول</th>
@@ -363,7 +363,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     <th className="py-3.5 px-4 text-left">عملیات</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#222222] text-xs text-[#CCCCCC]">
+                <tbody className="divide-y divide-slate-100 dark:divide-[#222222] text-xs text-slate-700 dark:text-[#CCCCCC]">
                   {items.map((c) => {
                     const timer = formatTimeRemaining(c.assignment_deadline);
                     const statusTheme = getStatusTheme(c.status);
@@ -388,16 +388,16 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       <tr
                         key={c.id}
                         onClick={() => onSelectCustomer(c)}
-                        className="hover:bg-[#202020] transition-colors cursor-pointer group"
+                        className="hover:bg-slate-50/80 dark:hover:bg-[#202020] transition-colors cursor-pointer group"
                       >
                         {/* Primary Title: Manager Name */}
                         <td className="py-3.5 px-4">
-                          <div className="font-bold text-sm text-white group-hover:text-[#1DB954] transition-colors flex items-center gap-1.5">
-                            <Building className="w-3.5 h-3.5 text-[#1DB954] flex-shrink-0" />
+                          <div className="font-bold text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-[#1DB954] transition-colors flex items-center gap-1.5">
+                            <Building className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />
                             <span>{c.manager_name || 'مدیریت نامشخص'}</span>
                           </div>
-                          <div className="text-[11px] text-[#888888] mt-0.5 flex items-center gap-1 flex-wrap">
-                            <span className="text-[#A7A7A7] font-semibold">برند/کسب‌وکار: {c.company_name}</span>
+                          <div className="text-[11px] text-slate-500 dark:text-[#888888] mt-0.5 flex items-center gap-1 flex-wrap">
+                            <span className="text-slate-700 dark:text-[#A7A7A7] font-semibold">برند/کسب‌وکار: {c.company_name}</span>
                             {c.business_type && <span>· {c.business_type}</span>}
                             {c.city && <span>· {c.city}</span>}
                           </div>
@@ -413,7 +413,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                         </td>
 
                         {/* Marketer */}
-                        <td className="py-3.5 px-4 whitespace-nowrap text-white font-medium">
+                        <td className="py-3.5 px-4 whitespace-nowrap text-slate-900 dark:text-white font-medium">
                           {c.assigned_marketer_name || 'تخصیص نیافته'}
                         </td>
 
@@ -430,7 +430,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                             {primaryPhone && (
                               <a
                                 href={`tel:${primaryPhone}`}
-                                className="w-7 h-7 rounded-full bg-[#242424] hover:bg-[#1DB954] hover:text-black text-[#A7A7A7] flex items-center justify-center transition-colors"
+                                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-emerald-500 hover:text-white dark:bg-[#242424] dark:hover:bg-[#1DB954] dark:hover:text-black text-slate-600 dark:text-[#A7A7A7] flex items-center justify-center transition-colors border border-slate-200 dark:border-transparent"
                                 title={`تماس با ${primaryPhone}`}
                               >
                                 <Phone className="w-3.5 h-3.5" />
@@ -445,7 +445,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                                 }
                                 target="_blank"
                                 rel="noreferrer"
-                                className="w-7 h-7 rounded-full bg-[#242424] hover:bg-[#229ED9] hover:text-white text-[#A7A7A7] flex items-center justify-center transition-colors"
+                                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-[#229ED9] hover:text-white dark:bg-[#242424] dark:hover:bg-[#229ED9] text-slate-600 dark:text-[#A7A7A7] flex items-center justify-center transition-colors border border-slate-200 dark:border-transparent"
                                 title="پیام در تلگرام"
                               >
                                 <Send className="w-3.5 h-3.5" />
@@ -456,7 +456,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                                 href={`https://instagram.com/${primaryInsta.replace(/^@/, '')}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="w-7 h-7 rounded-full bg-[#242424] hover:bg-[#E1306C] hover:text-white text-[#A7A7A7] flex items-center justify-center transition-colors"
+                                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-[#E1306C] hover:text-white dark:bg-[#242424] dark:hover:bg-[#E1306C] text-slate-600 dark:text-[#A7A7A7] flex items-center justify-center transition-colors border border-slate-200 dark:border-transparent"
                                 title="پیج اینستاگرام"
                               >
                                 <Instagram className="w-3.5 h-3.5" />
@@ -470,7 +470,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           <button
                             type="button"
                             onClick={() => onSelectCustomer(c)}
-                            className="px-3 py-1 rounded-lg bg-[#242424] hover:bg-[#1DB954] text-[#A7A7A7] hover:text-black font-bold text-xs transition-colors flex items-center gap-1 ml-auto"
+                            className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-emerald-500 hover:text-white dark:bg-[#242424] dark:hover:bg-[#1DB954] text-slate-700 dark:text-[#A7A7A7] dark:hover:text-black font-bold text-xs transition-colors flex items-center gap-1 ml-auto border border-slate-200 dark:border-transparent cursor-pointer shadow-xs"
                           >
                             <span>مشاهده</span>
                             <ChevronLeft className="w-3.5 h-3.5" />
@@ -494,19 +494,19 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               <div
                 key={c.id}
                 onClick={() => onSelectCustomer(c)}
-                className="bg-[#181818] hover:bg-[#202020] rounded-2xl p-5 border border-[#282828] hover:border-[#3e3e3e] transition-all cursor-pointer group flex flex-col justify-between space-y-4 relative"
+                className="bg-white hover:bg-slate-50/80 dark:bg-[#181818] dark:hover:bg-[#202020] rounded-2xl p-5 border border-slate-200 hover:border-slate-300 dark:border-[#282828] dark:hover:border-[#3e3e3e] shadow-xs transition-all cursor-pointer group flex flex-col justify-between space-y-4 relative"
               >
                 {/* Top: Header & Badges */}
                 <div>
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="min-w-0">
                       {/* Primary Title: Manager Name */}
-                      <h3 className="font-bold text-white text-base group-hover:text-[#1DB954] transition-colors truncate">
+                      <h3 className="font-bold text-slate-900 dark:text-white text-base group-hover:text-emerald-600 dark:group-hover:text-[#1DB954] transition-colors truncate">
                         {c.manager_name || 'مدیریت نامشخص'}
                       </h3>
                       {/* Subtitle: Business / Company Name */}
-                      <div className="text-xs text-[#A7A7A7] truncate mt-0.5">
-                        کسب‌وکار: <span className="text-white font-semibold">{c.company_name}</span> · {c.business_type || 'صنف نامشخص'} · {c.city}
+                      <div className="text-xs text-slate-500 dark:text-[#A7A7A7] truncate mt-0.5">
+                        کسب‌وکار: <span className="text-slate-900 dark:text-white font-semibold">{c.company_name}</span> · {c.business_type || 'صنف نامشخص'} · {c.city}
                       </div>
                     </div>
 
@@ -520,25 +520,25 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
                   {/* Interview Snippet */}
                   {c.interview_report && (
-                    <p className="text-xs text-[#B3B3B3] line-clamp-2 leading-relaxed bg-[#121212] p-2.5 rounded-lg border border-[#222]">
-                      <span className="text-[#1DB954] font-bold">مصاحبه: </span>
+                    <p className="text-xs text-slate-600 dark:text-[#B3B3B3] line-clamp-2 leading-relaxed bg-slate-50 dark:bg-[#121212] p-2.5 rounded-lg border border-slate-200 dark:border-[#222]">
+                      <span className="text-emerald-600 dark:text-[#1DB954] font-bold">مصاحبه: </span>
                       {c.interview_report}
                     </p>
                   )}
                 </div>
 
                 {/* Marketer & Deadline Timer */}
-                <div className="pt-3 border-t border-[#282828] space-y-2">
+                <div className="pt-3 border-t border-slate-100 dark:border-[#282828] space-y-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-[#A7A7A7]">بازاریاب مسئول:</span>
-                    <span className="font-semibold text-white">
+                    <span className="text-slate-500 dark:text-[#A7A7A7]">بازاریاب مسئول:</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">
                       {c.assigned_marketer_name || 'تخصیص نیافته'}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-[#A7A7A7] flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-[#1DB954]" />
+                    <span className="text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                       <span>مهلت پیگیری:</span>
                     </span>
                     <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono ${timer.badgeClass}`}>
@@ -572,7 +572,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                               <a
                                 href={`tel:${primaryPhone}`}
                                 onClick={(e) => e.stopPropagation()}
-                                className="w-7 h-7 rounded-full bg-[#282828] hover:bg-[#1DB954] hover:text-black text-[#B3B3B3] flex items-center justify-center transition-colors"
+                                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-emerald-500 hover:text-white dark:bg-[#282828] dark:hover:bg-[#1DB954] dark:hover:text-black text-slate-600 dark:text-[#B3B3B3] flex items-center justify-center transition-colors border border-slate-200 dark:border-transparent"
                                 title={`تماس با ${primaryPhone}`}
                               >
                                 <Phone className="w-3.5 h-3.5" />
@@ -588,7 +588,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className="w-7 h-7 rounded-full bg-[#282828] hover:bg-[#229ED9] hover:text-white text-[#B3B3B3] flex items-center justify-center transition-colors"
+                                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-[#229ED9] hover:text-white dark:bg-[#282828] dark:hover:bg-[#229ED9] text-slate-600 dark:text-[#B3B3B3] flex items-center justify-center transition-colors border border-slate-200 dark:border-transparent"
                                 title="ارسال پیام در تلگرام"
                               >
                                 <Send className="w-3.5 h-3.5" />
@@ -600,7 +600,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className="w-7 h-7 rounded-full bg-[#282828] hover:bg-[#E1306C] hover:text-white text-[#B3B3B3] flex items-center justify-center transition-colors"
+                                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-[#E1306C] hover:text-white dark:bg-[#282828] dark:hover:bg-[#E1306C] text-slate-600 dark:text-[#B3B3B3] flex items-center justify-center transition-colors border border-slate-200 dark:border-transparent"
                                 title="مشاهده پیج اینستاگرام"
                               >
                                 <Instagram className="w-3.5 h-3.5" />
@@ -611,7 +611,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       })()}
                     </div>
 
-                    <div className="text-xs text-[#1DB954] font-semibold group-hover:underline flex items-center gap-1">
+                    <div className="text-xs text-emerald-600 dark:text-[#1DB954] font-semibold group-hover:underline flex items-center gap-1">
                       <span>مشاهده پرونده</span>
                       <ChevronLeft className="w-3.5 h-3.5" />
                     </div>

@@ -140,23 +140,23 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
   // Render centered calendar dialog
   const modalCalendar = isOpen && !disabled && (
     <div
-      className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150"
+      className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-4 bg-black/60 dark:bg-black/75 backdrop-blur-sm animate-in fade-in duration-150"
       onClick={() => setIsOpen(false)}
       dir="rtl"
     >
       <div
-        className="w-full max-w-[340px] bg-[#181818] border border-[#333333] rounded-2xl shadow-2xl overflow-hidden p-4 sm:p-5 space-y-4 text-white scale-100 animate-in zoom-in-95 duration-150"
+        className="w-full max-w-[340px] bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#333333] rounded-2xl shadow-2xl overflow-hidden p-4 sm:p-5 space-y-4 text-slate-900 dark:text-white scale-100 animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Top Header */}
-        <div className="flex items-center justify-between border-b border-[#282828] pb-3">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#1DB954]/15 text-[#1DB954] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 dark:bg-[#1DB954]/15 dark:text-[#1DB954] flex items-center justify-center">
               <CalendarIcon className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-white">انتخاب تاریخ تقویم شمسی</h4>
-              <p className="text-[10px] text-[#A7A7A7]">
+              <h4 className="text-xs font-bold text-slate-900 dark:text-white">انتخاب تاریخ تقویم شمسی</h4>
+              <p className="text-[10px] text-slate-500 dark:text-[#A7A7A7]">
                 {label ? label : 'انتخاب روز و ماه مورد نظر'}
               </p>
             </div>
@@ -164,7 +164,7 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
           <button
             type="button"
             onClick={() => setIsOpen(false)}
-            className="w-7 h-7 rounded-full bg-[#282828] hover:bg-[#333333] flex items-center justify-center text-[#A7A7A7] hover:text-white transition-colors"
+            className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center text-slate-500 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -176,35 +176,35 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
             <button
               type="button"
               onClick={() => handleQuickSelect(0)}
-              className="px-2.5 py-1 rounded-full bg-[#242424] hover:bg-[#1DB954] hover:text-black text-[11px] font-bold text-[#d0d0d0] transition-colors shrink-0"
+              className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-emerald-500 hover:text-white dark:bg-[#242424] dark:hover:bg-[#1DB954] dark:hover:text-black text-[11px] font-bold text-slate-700 dark:text-[#d0d0d0] border border-slate-200 dark:border-transparent transition-colors shrink-0 cursor-pointer"
             >
               امروز
             </button>
             <button
               type="button"
               onClick={() => handleQuickSelect(1)}
-              className="px-2.5 py-1 rounded-full bg-[#242424] hover:bg-[#1DB954] hover:text-black text-[11px] font-bold text-[#d0d0d0] transition-colors shrink-0"
+              className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-emerald-500 hover:text-white dark:bg-[#242424] dark:hover:bg-[#1DB954] dark:hover:text-black text-[11px] font-bold text-slate-700 dark:text-[#d0d0d0] border border-slate-200 dark:border-transparent transition-colors shrink-0 cursor-pointer"
             >
               فردا
             </button>
             <button
               type="button"
               onClick={() => handleQuickSelect(3)}
-              className="px-2.5 py-1 rounded-full bg-[#242424] hover:bg-[#1DB954] hover:text-black text-[11px] font-bold text-[#d0d0d0] transition-colors shrink-0"
+              className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-emerald-500 hover:text-white dark:bg-[#242424] dark:hover:bg-[#1DB954] dark:hover:text-black text-[11px] font-bold text-slate-700 dark:text-[#d0d0d0] border border-slate-200 dark:border-transparent transition-colors shrink-0 cursor-pointer"
             >
               ۳ روز بعد
             </button>
             <button
               type="button"
               onClick={() => handleQuickSelect(7)}
-              className="px-2.5 py-1 rounded-full bg-[#242424] hover:bg-[#1DB954] hover:text-black text-[11px] font-bold text-[#d0d0d0] transition-colors shrink-0"
+              className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-emerald-500 hover:text-white dark:bg-[#242424] dark:hover:bg-[#1DB954] dark:hover:text-black text-[11px] font-bold text-slate-700 dark:text-[#d0d0d0] border border-slate-200 dark:border-transparent transition-colors shrink-0 cursor-pointer"
             >
               ۱ هفته بعد
             </button>
             <button
               type="button"
               onClick={() => handleQuickSelect(30)}
-              className="px-2.5 py-1 rounded-full bg-[#242424] hover:bg-[#1DB954] hover:text-black text-[11px] font-bold text-[#d0d0d0] transition-colors shrink-0"
+              className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-emerald-500 hover:text-white dark:bg-[#242424] dark:hover:bg-[#1DB954] dark:hover:text-black text-[11px] font-bold text-slate-700 dark:text-[#d0d0d0] border border-slate-200 dark:border-transparent transition-colors shrink-0 cursor-pointer"
             >
               ۱ ماه بعد
             </button>
@@ -212,11 +212,11 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
         )}
 
         {/* Month & Year Navigation Header */}
-        <div className="flex items-center justify-between gap-2 p-1 bg-[#121212] rounded-xl border border-[#262626]">
+        <div className="flex items-center justify-between gap-2 p-1 bg-slate-100 dark:bg-[#121212] rounded-xl border border-slate-200 dark:border-[#262626]">
           <button
             type="button"
             onClick={handleNextMonth}
-            className="w-8 h-8 rounded-lg bg-[#222222] hover:bg-[#2e2e2e] flex items-center justify-center text-white transition-colors"
+            className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 dark:bg-[#222222] dark:hover:bg-[#2e2e2e] flex items-center justify-center text-slate-700 dark:text-white border border-slate-200 dark:border-transparent transition-colors cursor-pointer shadow-xs"
             title="ماه بعد"
           >
             <ChevronRight className="w-4 h-4" />
@@ -226,10 +226,10 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
             <select
               value={viewMonth}
               onChange={(e) => setViewMonth(Number(e.target.value))}
-              className="bg-[#222222] text-xs font-bold text-white px-2.5 py-1.5 rounded-lg border border-[#333333] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+              className="bg-white dark:bg-[#222222] text-xs font-bold text-slate-900 dark:text-white px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-[#333333] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
             >
               {JALALI_MONTH_NAMES.map((name, idx) => (
-                <option key={name} value={idx + 1}>
+                <option key={name} value={idx + 1} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                   {name}
                 </option>
               ))}
@@ -238,10 +238,10 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
             <select
               value={viewYear}
               onChange={(e) => setViewYear(Number(e.target.value))}
-              className="bg-[#222222] text-xs font-mono font-bold text-white px-2.5 py-1.5 rounded-lg border border-[#333333] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+              className="bg-white dark:bg-[#222222] text-xs font-mono font-bold text-slate-900 dark:text-white px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-[#333333] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
             >
               {Array.from({ length: 15 }, (_, i) => today.jy - 5 + i).map((yr) => (
-                <option key={yr} value={yr}>
+                <option key={yr} value={yr} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                   {toPersianDigits(yr)}
                 </option>
               ))}
@@ -251,7 +251,7 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
           <button
             type="button"
             onClick={handlePrevMonth}
-            className="w-8 h-8 rounded-lg bg-[#222222] hover:bg-[#2e2e2e] flex items-center justify-center text-white transition-colors"
+            className="w-8 h-8 rounded-lg bg-white hover:bg-slate-200 dark:bg-[#222222] dark:hover:bg-[#2e2e2e] flex items-center justify-center text-slate-700 dark:text-white border border-slate-200 dark:border-transparent transition-colors cursor-pointer shadow-xs"
             title="ماه قبل"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -259,7 +259,7 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
         </div>
 
         {/* Weekday Labels (ش ی د س چ پ ج) */}
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-[#A7A7A7] py-1 border-b border-[#242424]">
+        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-slate-500 dark:text-[#A7A7A7] py-1 border-b border-slate-200 dark:border-[#242424]">
           {JALALI_WEEK_DAYS.map((wd) => (
             <div key={wd} className="py-0.5">
               {wd}
@@ -285,12 +285,12 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
                 key={`day-${day}`}
                 type="button"
                 onClick={() => handleSelectJalaliDay(day)}
-                className={`h-8 rounded-lg text-xs font-mono font-semibold flex items-center justify-center transition-all ${
+                className={`h-8 rounded-lg text-xs font-mono font-semibold flex items-center justify-center transition-all cursor-pointer ${
                   active
                     ? 'bg-[#1DB954] text-black font-bold shadow-md shadow-[#1DB954]/30 scale-105'
                     : isToday
-                    ? 'bg-[#282828] text-[#1DB954] border border-[#1DB954]/60 hover:bg-[#333]'
-                    : 'hover:bg-[#282828] text-white hover:text-[#1DB954]'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-400 hover:bg-emerald-100 dark:bg-[#282828] dark:text-[#1DB954] dark:border-[#1DB954]/60 dark:hover:bg-[#333]'
+                    : 'hover:bg-slate-100 text-slate-800 hover:text-emerald-600 dark:hover:bg-[#282828] dark:text-white dark:hover:text-[#1DB954]'
                 }`}
               >
                 {toPersianDigits(day)}
@@ -300,18 +300,18 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
         </div>
 
         {/* Footer Status & Actions */}
-        <div className="pt-3 border-t border-[#282828] flex items-center justify-between text-xs">
+        <div className="pt-3 border-t border-slate-200 dark:border-[#282828] flex items-center justify-between text-xs">
           <button
             type="button"
             onClick={() => handleQuickSelect(0)}
-            className="text-[11px] text-[#1DB954] hover:underline font-bold"
+            className="text-[11px] text-emerald-600 dark:text-[#1DB954] hover:underline font-bold cursor-pointer"
           >
             انتخاب تاریخ امروز ({toPersianDigits(today.str)})
           </button>
           <button
             type="button"
             onClick={() => setIsOpen(false)}
-            className="h-7 px-3 rounded-full border border-[#444] text-[11px] text-[#A7A7A7] hover:text-white"
+            className="h-7 px-3 rounded-full border border-slate-200 hover:bg-slate-100 dark:border-[#444] text-[11px] text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white cursor-pointer"
           >
             بستن
           </button>
@@ -323,10 +323,10 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
   return (
     <div className={`relative ${className}`}>
       {label && (
-        <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5 flex items-center justify-between">
+        <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5 flex items-center justify-between">
           <span>{label}</span>
           {inputValue && (
-            <span className="text-[11px] text-[#1DB954] font-mono">
+            <span className="text-[11px] text-emerald-600 dark:text-[#1DB954] font-mono">
               {toPersianDigits(inputValue)}
             </span>
           )}
@@ -336,22 +336,22 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
       {/* Input trigger box */}
       <div
         onClick={() => !disabled && setIsOpen(true)}
-        className={`w-full h-10 px-3 bg-[#282828] border rounded-md text-xs text-white flex items-center justify-between gap-2 transition-all select-none ${
+        className={`w-full h-10 px-3 bg-slate-50 dark:bg-[#282828] border rounded-md text-xs text-slate-900 dark:text-white flex items-center justify-between gap-2 transition-all select-none ${
           disabled
-            ? 'opacity-60 bg-[#202020] border-[#333] cursor-not-allowed'
+            ? 'opacity-60 bg-slate-100 dark:bg-[#202020] border-slate-200 dark:border-[#333] cursor-not-allowed'
             : isOpen
-            ? 'border-[#1DB954] ring-1 ring-[#1DB954] cursor-pointer'
-            : 'border-transparent hover:border-[#3e3e3e] cursor-pointer'
+            ? 'border-emerald-500 ring-1 ring-emerald-500 dark:border-[#1DB954] dark:ring-[#1DB954] cursor-pointer'
+            : 'border-slate-200 dark:border-transparent hover:border-slate-300 dark:hover:border-[#3e3e3e] cursor-pointer'
         }`}
       >
         <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap">
-          <CalendarIcon className="w-4 h-4 text-[#1DB954] shrink-0" />
+          <CalendarIcon className="w-4 h-4 text-emerald-600 dark:text-[#1DB954] shrink-0" />
           {inputValue ? (
-            <span className="font-mono text-white tracking-wide font-bold">
+            <span className="font-mono text-slate-900 dark:text-white tracking-wide font-bold">
               {toPersianDigits(inputValue)}
             </span>
           ) : (
-            <span className="text-[#777]">{placeholder}</span>
+            <span className="text-slate-400 dark:text-[#777]">{placeholder}</span>
           )}
         </div>
 
@@ -360,7 +360,7 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
             <button
               type="button"
               onClick={handleClear}
-              className="p-1 rounded hover:bg-[#383838] text-[#888] hover:text-white transition-colors"
+              className="p-1 rounded hover:bg-slate-200 dark:hover:bg-[#383838] text-slate-400 hover:text-slate-700 dark:text-[#888] dark:hover:text-white transition-colors cursor-pointer"
               title="پاک کردن تاریخ"
             >
               <X className="w-3.5 h-3.5" />

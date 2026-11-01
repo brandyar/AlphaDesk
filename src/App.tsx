@@ -1023,21 +1023,21 @@ export default function App() {
             <div
               className={`p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border ${
                 toast.type === 'success'
-                  ? 'bg-[#141414]/95 border-[#1DB954]/50 text-white shadow-[#1DB954]/10'
+                  ? 'bg-emerald-50 border-emerald-500/40 text-emerald-950 dark:bg-[#141414]/95 dark:border-[#1DB954]/50 dark:text-white shadow-emerald-500/10 dark:shadow-[#1DB954]/10'
                   : toast.type === 'error'
-                  ? 'bg-red-950/95 border-red-500/50 text-white shadow-red-500/20'
-                  : 'bg-[#222222]/95 border-[#444] text-white shadow-black/40'
+                  ? 'bg-rose-50 border-rose-500/40 text-rose-950 dark:bg-red-950/95 dark:border-red-500/50 dark:text-white shadow-rose-500/20 dark:shadow-red-500/20'
+                  : 'bg-white border-slate-200 text-slate-900 dark:bg-[#222222]/95 dark:border-[#444] dark:text-white shadow-slate-900/10 dark:shadow-black/40'
               } backdrop-blur-md`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                {toast.type === 'success' && <CheckCircle className="w-5 h-5 text-[#1DB954] flex-shrink-0" />}
-                {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />}
-                {toast.type === 'info' && <Info className="w-5 h-5 text-blue-400 flex-shrink-0" />}
+                {toast.type === 'success' && <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />}
+                {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-600 dark:text-red-400 flex-shrink-0" />}
+                {toast.type === 'info' && <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />}
                 <span className="text-xs font-semibold leading-relaxed truncate">{toast.message}</span>
               </div>
               <button
                 onClick={() => setToast(null)}
-                className="text-[#888] hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors flex-shrink-0"
+                className="text-slate-400 hover:text-slate-700 dark:text-[#888] dark:hover:text-white p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex-shrink-0 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1049,7 +1049,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-[#121212] text-white overflow-hidden font-sans relative">
+    <div className="flex h-screen bg-slate-50 dark:bg-[#121212] text-slate-900 dark:text-white overflow-hidden font-sans relative">
       {/* Top glowing progress bar during tab switching */}
       {isTabPending && (
         <div className="fixed top-0 left-0 right-0 h-1 z-50 overflow-hidden bg-black/40 pointer-events-none">
@@ -1130,12 +1130,12 @@ export default function App() {
         />
 
         {/* Dynamic Main View */}
-        <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 lg:p-8 pb-24 lg:pb-8 relative">
+        <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 lg:p-8 pb-24 lg:pb-8 relative bg-slate-50 dark:bg-[#121212]">
           {/* Subtle graceful view transition overlay during heavy tab mounting */}
           {isTabPending && (
-            <div className="absolute inset-0 bg-[#121212]/50 backdrop-blur-[2px] z-30 flex flex-col items-center justify-center pointer-events-none transition-all">
-              <div className="bg-[#181818]/95 px-5 py-3 rounded-2xl border border-[#282828] shadow-2xl flex items-center gap-3 text-xs text-white">
-                <div className="w-4 h-4 rounded-full border-2 border-[#1DB954] border-t-transparent animate-spin" />
+            <div className="absolute inset-0 bg-white/60 dark:bg-[#121212]/50 backdrop-blur-[2px] z-30 flex flex-col items-center justify-center pointer-events-none transition-all">
+              <div className="bg-white/95 dark:bg-[#181818]/95 px-5 py-3 rounded-2xl border border-slate-200 dark:border-[#282828] shadow-2xl flex items-center gap-3 text-xs text-slate-900 dark:text-white">
+                <div className="w-4 h-4 rounded-full border-2 border-emerald-500 dark:border-[#1DB954] border-t-transparent animate-spin" />
                 <span className="font-bold">در حال بارگذاری صفحه...</span>
               </div>
             </div>
@@ -1146,8 +1146,8 @@ export default function App() {
               <DashboardSkeleton />
             ) : (
               <div className="flex flex-col items-center justify-center h-64 space-y-3">
-                <div className="w-8 h-8 rounded-full border-2 border-[#1DB954] border-t-transparent animate-spin" />
-                <div className="text-xs text-[#A7A7A7]">در حال بارگذاری اطلاعات سامانه...</div>
+                <div className="w-8 h-8 rounded-full border-2 border-emerald-500 dark:border-[#1DB954] border-t-transparent animate-spin" />
+                <div className="text-xs text-slate-500 dark:text-[#A7A7A7]">در حال بارگذاری اطلاعات سامانه...</div>
               </div>
             )
           ) : (
@@ -1346,11 +1346,11 @@ export default function App() {
         </main>
 
         {/* Mobile Bottom Navigation Bar (Phone-friendly) */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 h-16 bg-[#0c0c0c]/95 backdrop-blur-md border-t border-[#282828] flex items-center justify-around px-1 select-none">
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 h-16 bg-white/95 dark:bg-[#0c0c0c]/95 backdrop-blur-md border-t border-slate-200 dark:border-[#282828] flex items-center justify-around px-1 select-none shadow-lg">
           <button
             onClick={() => handleNavigateToTab('dashboard')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
-              activeTab === 'dashboard' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors cursor-pointer ${
+              activeTab === 'dashboard' ? 'text-emerald-600 dark:text-[#1DB954] font-bold' : 'text-slate-500 dark:text-[#888888] hover:text-slate-800 dark:hover:text-white'
             }`}
           >
             <LayoutDashboard className="w-4 h-4 mb-0.5" />
@@ -1359,8 +1359,8 @@ export default function App() {
 
           <button
             onClick={() => handleNavigateToTab('customers')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors relative ${
-              activeTab === 'customers' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors relative cursor-pointer ${
+              activeTab === 'customers' ? 'text-emerald-600 dark:text-[#1DB954] font-bold' : 'text-slate-500 dark:text-[#888888] hover:text-slate-800 dark:hover:text-white'
             }`}
           >
             <div className="relative">
@@ -1374,14 +1374,14 @@ export default function App() {
 
           <button
             onClick={() => handleNavigateToTab('free_customers')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors relative ${
-              activeTab === 'free_customers' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors relative cursor-pointer ${
+              activeTab === 'free_customers' ? 'text-emerald-600 dark:text-[#1DB954] font-bold' : 'text-slate-500 dark:text-[#888888] hover:text-slate-800 dark:hover:text-white'
             }`}
           >
             <div className="relative">
               <Unlock className="w-4 h-4 mb-0.5" />
               {freeCustomersCount > 0 && (
-                <span className="absolute -top-1 -right-2 px-1 py-0.2 rounded-full bg-[#1DB954] text-black font-mono font-bold text-[8px]">
+                <span className="absolute -top-1 -right-2 px-1 py-0.2 rounded-full bg-emerald-500 dark:bg-[#1DB954] text-white dark:text-black font-mono font-bold text-[8px]">
                   {freeCustomersCount}
                 </span>
               )}
@@ -1391,8 +1391,8 @@ export default function App() {
 
           <button
             onClick={() => handleNavigateToTab('reports')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
-              activeTab === 'reports' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors cursor-pointer ${
+              activeTab === 'reports' ? 'text-emerald-600 dark:text-[#1DB954] font-bold' : 'text-slate-500 dark:text-[#888888] hover:text-slate-800 dark:hover:text-white'
             }`}
           >
             <MessageSquareText className="w-4 h-4 mb-0.5" />
@@ -1401,8 +1401,8 @@ export default function App() {
 
           <button
             onClick={() => handleNavigateToTab('analytics')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
-              activeTab === 'analytics' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors cursor-pointer ${
+              activeTab === 'analytics' ? 'text-emerald-600 dark:text-[#1DB954] font-bold' : 'text-slate-500 dark:text-[#888888] hover:text-slate-800 dark:hover:text-white'
             }`}
           >
             <BarChart3 className="w-4 h-4 mb-0.5" />
@@ -1411,8 +1411,8 @@ export default function App() {
 
           <button
             onClick={() => handleNavigateToTab('cold_leads')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
-              activeTab === 'cold_leads' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors cursor-pointer ${
+              activeTab === 'cold_leads' ? 'text-emerald-600 dark:text-[#1DB954] font-bold' : 'text-slate-500 dark:text-[#888888] hover:text-slate-800 dark:hover:text-white'
             }`}
           >
             <PhoneCall className="w-4 h-4 mb-0.5" />
@@ -1421,8 +1421,8 @@ export default function App() {
 
           <button
             onClick={() => handleNavigateToTab('admin_reports')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
-              activeTab === 'admin_reports' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors cursor-pointer ${
+              activeTab === 'admin_reports' ? 'text-emerald-600 dark:text-[#1DB954] font-bold' : 'text-slate-500 dark:text-[#888888] hover:text-slate-800 dark:hover:text-white'
             }`}
           >
             <ClipboardCheck className="w-4 h-4 mb-0.5" />
@@ -1430,8 +1430,8 @@ export default function App() {
           </button>
           <button
             onClick={() => handleNavigateToTab('personal_portal', 'profile')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors ${
-              activeTab === 'personal_portal' ? 'text-[#1DB954] font-bold' : 'text-[#888888]'
+            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors cursor-pointer ${
+              activeTab === 'personal_portal' ? 'text-emerald-600 dark:text-[#1DB954] font-bold' : 'text-slate-500 dark:text-[#888888] hover:text-slate-800 dark:hover:text-white'
             }`}
           >
             <User className="w-4 h-4 mb-0.5" />
@@ -1570,21 +1570,21 @@ export default function App() {
           <div
             className={`p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border ${
               toast.type === 'success'
-                ? 'bg-[#141414]/95 border-[#1DB954]/50 text-white shadow-[#1DB954]/10'
+                ? 'bg-emerald-50 border-emerald-500/40 text-emerald-950 dark:bg-[#141414]/95 dark:border-[#1DB954]/50 dark:text-white shadow-emerald-500/10 dark:shadow-[#1DB954]/10'
                 : toast.type === 'error'
-                ? 'bg-red-950/95 border-red-500/50 text-white shadow-red-500/20'
-                : 'bg-[#222222]/95 border-[#444] text-white shadow-black/40'
+                ? 'bg-rose-50 border-rose-500/40 text-rose-950 dark:bg-red-950/95 dark:border-red-500/50 dark:text-white shadow-rose-500/20 dark:shadow-red-500/20'
+                : 'bg-white border-slate-200 text-slate-900 dark:bg-[#222222]/95 dark:border-[#444] dark:text-white shadow-slate-900/10 dark:shadow-black/40'
             } backdrop-blur-md`}
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              {toast.type === 'success' && <CheckCircle className="w-5 h-5 text-[#1DB954] flex-shrink-0" />}
-              {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />}
-              {toast.type === 'info' && <Info className="w-5 h-5 text-blue-400 flex-shrink-0" />}
+              {toast.type === 'success' && <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />}
+              {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-rose-600 dark:text-red-400 flex-shrink-0" />}
+              {toast.type === 'info' && <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />}
               <span className="text-xs font-semibold leading-relaxed truncate">{toast.message}</span>
             </div>
             <button
               onClick={() => setToast(null)}
-              className="text-[#888] hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors flex-shrink-0"
+              className="text-slate-400 hover:text-slate-700 dark:text-[#888] dark:hover:text-white p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex-shrink-0 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>

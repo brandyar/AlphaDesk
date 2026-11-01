@@ -224,7 +224,7 @@ export function formatTimeRemaining(deadlineIso?: string | null): {
   badgeClass: string;
 } {
   if (!deadlineIso) {
-    return { text: 'بدون مهلت', isExpired: false, hoursLeft: 9999, badgeClass: 'text-[#A7A7A7] bg-[#282828]' };
+    return { text: 'بدون مهلت', isExpired: false, hoursLeft: 9999, badgeClass: 'text-slate-500 bg-slate-100 border border-slate-200 dark:text-[#A7A7A7] dark:bg-[#282828] dark:border-transparent' };
   }
 
   const now = new Date().getTime();
@@ -236,7 +236,7 @@ export function formatTimeRemaining(deadlineIso?: string | null): {
       text: 'مهلت منقضی شده!',
       isExpired: true,
       hoursLeft: 0,
-      badgeClass: 'text-[#E22134] bg-[#E22134]/15 border border-[#E22134]/30 animate-pulse',
+      badgeClass: 'text-rose-700 bg-rose-50 border border-rose-200 dark:text-[#E22134] dark:bg-[#E22134]/15 dark:border-[#E22134]/30 animate-pulse font-bold',
     };
   }
 
@@ -248,21 +248,21 @@ export function formatTimeRemaining(deadlineIso?: string | null): {
       text: `${toPersianDigits(days)} روز باقی‌مانده`,
       isExpired: false,
       hoursLeft: days * 24 + hours,
-      badgeClass: 'text-[#1DB954] bg-[#1DB954]/10 border border-[#1DB954]/20',
+      badgeClass: 'text-emerald-700 bg-emerald-50 border border-emerald-200 dark:text-[#1DB954] dark:bg-[#1DB954]/10 dark:border-[#1DB954]/20',
     };
   } else if (days >= 1) {
     return {
       text: `${toPersianDigits(days)} روز و ${toPersianDigits(hours)} ساعت`,
       isExpired: false,
       hoursLeft: days * 24 + hours,
-      badgeClass: 'text-[#F59B23] bg-[#F59B23]/10 border border-[#F59B23]/20',
+      badgeClass: 'text-amber-700 bg-amber-50 border border-amber-200 dark:text-[#F59B23] dark:bg-[#F59B23]/10 dark:border-[#F59B23]/20',
     };
   } else {
     return {
       text: `${toPersianDigits(hours)} ساعت باقی‌مانده`,
       isExpired: false,
       hoursLeft: hours,
-      badgeClass: 'text-[#F59B23] bg-[#F59B23]/20 border border-[#F59B23]/40 font-bold',
+      badgeClass: 'text-amber-800 bg-amber-100 border border-amber-300 dark:text-[#F59B23] dark:bg-[#F59B23]/20 dark:border-[#F59B23]/40 font-bold',
     };
   }
 }
@@ -307,22 +307,22 @@ export function getStatusTheme(status: NegotiationStatus | string): {
   switch (status) {
     case 'قرارداد / فاکتور':
     case 'قرارداد':
-      return { color: 'text-[#1DB954]', bg: 'bg-[#1DB954]/10 border-[#1DB954]/30', dot: 'bg-[#1DB954]' };
+      return { color: 'text-emerald-700 dark:text-[#1DB954]', bg: 'bg-emerald-50 border-emerald-200 dark:bg-[#1DB954]/10 dark:border-[#1DB954]/30', dot: 'bg-emerald-500 dark:bg-[#1DB954]' };
     case 'پیش نویس قرارداد':
     case 'پیگیری قرارداد':
-      return { color: 'text-[#1ED760]', bg: 'bg-[#1ED760]/10 border-[#1ED760]/30', dot: 'bg-[#1ED760]' };
+      return { color: 'text-emerald-700 dark:text-[#1ED760]', bg: 'bg-emerald-50 border-emerald-200 dark:bg-[#1ED760]/10 dark:border-[#1ED760]/30', dot: 'bg-emerald-500 dark:bg-[#1ED760]' };
     case 'پیگیری قبل از انقضا':
-      return { color: 'text-[#F59B23]', bg: 'bg-[#F59B23]/10 border-[#F59B23]/30', dot: 'bg-[#F59B23]' };
+      return { color: 'text-amber-700 dark:text-[#F59B23]', bg: 'bg-amber-50 border-amber-200 dark:bg-[#F59B23]/10 dark:border-[#F59B23]/30', dot: 'bg-amber-500 dark:bg-[#F59B23]' };
     case 'پیگیری بلند مدت':
-      return { color: 'text-[#B3B3B3]', bg: 'bg-[#282828] border-[#333333]', dot: 'bg-[#B3B3B3]' };
+      return { color: 'text-slate-600 dark:text-[#B3B3B3]', bg: 'bg-slate-100 border-slate-200 dark:bg-[#282828] dark:border-[#333333]', dot: 'bg-slate-400 dark:bg-[#B3B3B3]' };
     case 'نمیخواد':
     case 'پاسخ نمیدهد':
-      return { color: 'text-[#E22134]', bg: 'bg-[#E22134]/10 border-[#E22134]/30', dot: 'bg-[#E22134]' };
+      return { color: 'text-rose-700 dark:text-[#E22134]', bg: 'bg-rose-50 border-rose-200 dark:bg-[#E22134]/10 dark:border-[#E22134]/30', dot: 'bg-rose-500 dark:bg-[#E22134]' };
     case 'لیست سیاه':
-      return { color: 'text-red-400', bg: 'bg-red-950/40 border-red-800', dot: 'bg-red-500' };
+      return { color: 'text-rose-800 dark:text-red-400', bg: 'bg-rose-100 border-rose-300 dark:bg-red-950/40 dark:border-red-800', dot: 'bg-rose-600 dark:bg-red-500' };
     case 'تماس برقرار نشده':
     default:
-      return { color: 'text-[#A7A7A7]', bg: 'bg-[#282828] border-[#333333]', dot: 'bg-[#535353]' };
+      return { color: 'text-slate-600 dark:text-[#A7A7A7]', bg: 'bg-slate-100 border-slate-200 dark:bg-[#282828] dark:border-[#333333]', dot: 'bg-slate-400 dark:bg-[#535353]' };
   }
 }
 
@@ -404,15 +404,15 @@ export const NEGOTIATION_STATUS_OPTIONS: { value: string; label: string }[] = [
 export function getLeadStatusTheme(status: LeadStatus): { color: string; bg: string } {
   switch (status) {
     case 'تبدیل شده به مشتری':
-      return { color: 'text-[#1DB954]', bg: 'bg-[#1DB954]/10 border border-[#1DB954]/30' };
+      return { color: 'text-emerald-700 dark:text-[#1DB954]', bg: 'bg-emerald-50 border border-emerald-200 dark:bg-[#1DB954]/10 dark:border-[#1DB954]/30' };
     case 'در حال بررسی':
-      return { color: 'text-[#F59B23]', bg: 'bg-[#F59B23]/10 border border-[#F59B23]/30' };
+      return { color: 'text-amber-700 dark:text-[#F59B23]', bg: 'bg-amber-50 border border-amber-200 dark:bg-[#F59B23]/10 dark:border-[#F59B23]/30' };
     case 'تماس نگرفته':
-      return { color: 'text-[#B3B3B3]', bg: 'bg-[#282828] border border-[#333333]' };
+      return { color: 'text-slate-600 dark:text-[#B3B3B3]', bg: 'bg-slate-100 border border-slate-200 dark:bg-[#282828] dark:border-[#333333]' };
     case 'پاسخ نداد':
     case 'شماره نامعتبر':
     default:
-      return { color: 'text-[#E22134]', bg: 'bg-[#E22134]/10 border border-[#E22134]/30' };
+      return { color: 'text-rose-700 dark:text-[#E22134]', bg: 'bg-rose-50 border border-rose-200 dark:bg-[#E22134]/10 dark:border-[#E22134]/30' };
   }
 }
 

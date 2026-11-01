@@ -121,14 +121,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Status breakdown for progress bars
   const statusStats = [
-    { label: 'قرارداد / فاکتور', count: contractsWonCount, color: 'bg-[#1DB954]', text: 'text-[#1DB954]' },
-    { label: 'در حال پیگیری و مذاکره', count: inNegotiationCount, color: 'bg-blue-500', text: 'text-blue-400' },
-    { label: 'مهلت‌های منقضی‌شده', count: expiredCustomersCount, color: 'bg-rose-500', text: 'text-rose-400' },
+    { label: 'قرارداد / فاکتور', count: contractsWonCount, color: 'bg-[#1DB954]', text: 'text-emerald-600 dark:text-[#1DB954]' },
+    { label: 'در حال پیگیری و مذاکره', count: inNegotiationCount, color: 'bg-blue-500', text: 'text-blue-600 dark:text-blue-400' },
+    { label: 'مهلت‌های منقضی‌شده', count: expiredCustomersCount, color: 'bg-rose-500', text: 'text-rose-600 dark:text-rose-400' },
     {
       label: 'سایر وضعیت‌ها',
       count: Math.max(0, totalCustomersCount - contractsWonCount - inNegotiationCount - expiredCustomersCount),
       color: 'bg-amber-500',
-      text: 'text-amber-400',
+      text: 'text-amber-600 dark:text-amber-400',
     },
   ];
 
@@ -138,8 +138,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* 1. TOP 4 QUICK ACCESS ACTION BLOCKS                           */}
       {/* ------------------------------------------------------------- */}
       <div>
-        <div className="text-xs font-bold text-[#A7A7A7] mb-3 flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5 text-[#1DB954]" />
+        <div className="text-xs font-bold text-slate-500 dark:text-[#A7A7A7] mb-3 flex items-center gap-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
           <span>دسترسی سریع و اقدامات فوری</span>
         </div>
 
@@ -147,18 +147,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* Action 1: Add New Customer */}
           <button
             onClick={onOpenNewCustomer}
-            className="group text-right p-4.5 rounded-2xl bg-gradient-to-br from-[#181818] to-[#141414] hover:from-[#222222] hover:to-[#1a1a1a] border border-[#282828] hover:border-[#1DB954]/50 shadow-lg hover:shadow-[#1DB954]/10 transition-all hover:scale-[1.02] flex items-center justify-between"
+            className="group text-right p-4.5 rounded-2xl bg-white dark:bg-gradient-to-br dark:from-[#181818] dark:to-[#141414] hover:bg-slate-50 dark:hover:from-[#222222] dark:hover:to-[#1a1a1a] border border-slate-200 dark:border-[#282828] hover:border-emerald-500/50 dark:hover:border-[#1DB954]/50 shadow-sm dark:shadow-lg hover:shadow-emerald-500/10 dark:hover:shadow-[#1DB954]/10 transition-all hover:scale-[1.02] flex items-center justify-between"
           >
             <div className="space-y-1">
-              <div className="font-extrabold text-sm text-white group-hover:text-[#1DB954] transition-colors flex items-center gap-1.5">
+              <div className="font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-[#1DB954] transition-colors flex items-center gap-1.5">
                 <span>افزودن مشتری جدید</span>
-                <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-[#1DB954]" />
+                <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-emerald-600 dark:text-[#1DB954]" />
               </div>
-              <p className="text-[11px] text-[#888] group-hover:text-[#B3B3B3] transition-colors">
+              <p className="text-[11px] text-slate-500 dark:text-[#888] group-hover:text-slate-700 dark:group-hover:text-[#B3B3B3] transition-colors">
                 ثبت پرونده و شماره‌های مدیریت
               </p>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954] group-hover:bg-[#1DB954] group-hover:text-black transition-all flex-shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-[#1DB954]/15 border border-emerald-200 dark:border-[#1DB954]/30 flex items-center justify-center text-emerald-600 dark:text-[#1DB954] group-hover:bg-emerald-600 dark:group-hover:bg-[#1DB954] group-hover:text-white dark:group-hover:text-black transition-all flex-shrink-0">
               <UserPlus className="w-5 h-5 stroke-[2.5]" />
             </div>
           </button>
@@ -166,18 +166,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* Action 2: Quick Add Lead */}
           <button
             onClick={onOpenNewLead}
-            className="group text-right p-4.5 rounded-2xl bg-gradient-to-br from-[#181818] to-[#141414] hover:from-[#222222] hover:to-[#1a1a1a] border border-[#282828] hover:border-blue-500/50 shadow-lg hover:shadow-blue-500/10 transition-all hover:scale-[1.02] flex items-center justify-between"
+            className="group text-right p-4.5 rounded-2xl bg-white dark:bg-gradient-to-br dark:from-[#181818] dark:to-[#141414] hover:bg-slate-50 dark:hover:from-[#222222] dark:hover:to-[#1a1a1a] border border-slate-200 dark:border-[#282828] hover:border-blue-500/50 shadow-sm dark:shadow-lg hover:shadow-blue-500/10 transition-all hover:scale-[1.02] flex items-center justify-between"
           >
             <div className="space-y-1">
-              <div className="font-extrabold text-sm text-white group-hover:text-blue-400 transition-colors flex items-center gap-1.5">
+              <div className="font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex items-center gap-1.5">
                 <span>افزودن سریع شماره</span>
-                <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-blue-400" />
+                <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-blue-600 dark:text-blue-400" />
               </div>
-              <p className="text-[11px] text-[#888] group-hover:text-[#B3B3B3] transition-colors">
+              <p className="text-[11px] text-slate-500 dark:text-[#888] group-hover:text-slate-700 dark:group-hover:text-[#B3B3B3] transition-colors">
                 ثبت در بانک شماره‌های اولیه
               </p>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400 group-hover:bg-blue-500 group-hover:text-black transition-all flex-shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-blue-50 dark:bg-blue-500/15 border border-blue-200 dark:border-blue-500/30 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 dark:group-hover:bg-blue-500 group-hover:text-white dark:group-hover:text-black transition-all flex-shrink-0">
               <PhoneCall className="w-5 h-5 stroke-[2.5]" />
             </div>
           </button>
@@ -188,18 +188,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               if (onOpenAddReport) onOpenAddReport();
               else onNavigateToTab('reports');
             }}
-            className="group text-right p-4.5 rounded-2xl bg-gradient-to-br from-[#181818] to-[#141414] hover:from-[#222222] hover:to-[#1a1a1a] border border-[#282828] hover:border-amber-500/50 shadow-lg hover:shadow-amber-500/10 transition-all hover:scale-[1.02] flex items-center justify-between"
+            className="group text-right p-4.5 rounded-2xl bg-white dark:bg-gradient-to-br dark:from-[#181818] dark:to-[#141414] hover:bg-slate-50 dark:hover:from-[#222222] dark:hover:to-[#1a1a1a] border border-slate-200 dark:border-[#282828] hover:border-amber-500/50 shadow-sm dark:shadow-lg hover:shadow-amber-500/10 transition-all hover:scale-[1.02] flex items-center justify-between"
           >
             <div className="space-y-1">
-              <div className="font-extrabold text-sm text-white group-hover:text-amber-400 transition-colors flex items-center gap-1.5">
+              <div className="font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors flex items-center gap-1.5">
                 <span>ثبت گزارش مذاکره</span>
-                <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-amber-400" />
+                <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600 dark:text-amber-400" />
               </div>
-              <p className="text-[11px] text-[#888] group-hover:text-[#B3B3B3] transition-colors">
+              <p className="text-[11px] text-slate-500 dark:text-[#888] group-hover:text-slate-700 dark:group-hover:text-[#B3B3B3] transition-colors">
                 ثبت مکالمه، قرارداد یا فاکتور
               </p>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:bg-amber-500 group-hover:text-black transition-all flex-shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400 group-hover:bg-amber-600 dark:group-hover:bg-amber-500 group-hover:text-white dark:group-hover:text-black transition-all flex-shrink-0">
               <MessageSquarePlus className="w-5 h-5 stroke-[2.5]" />
             </div>
           </button>
@@ -207,18 +207,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* Action 4: Customers Directory */}
           <button
             onClick={() => onNavigateToTab('customers')}
-            className="group text-right p-4.5 rounded-2xl bg-gradient-to-br from-[#181818] to-[#141414] hover:from-[#222222] hover:to-[#1a1a1a] border border-[#282828] hover:border-purple-500/50 shadow-lg hover:shadow-purple-500/10 transition-all hover:scale-[1.02] flex items-center justify-between"
+            className="group text-right p-4.5 rounded-2xl bg-white dark:bg-gradient-to-br dark:from-[#181818] dark:to-[#141414] hover:bg-slate-50 dark:hover:from-[#222222] dark:hover:to-[#1a1a1a] border border-slate-200 dark:border-[#282828] hover:border-purple-500/50 shadow-sm dark:shadow-lg hover:shadow-purple-500/10 transition-all hover:scale-[1.02] flex items-center justify-between"
           >
             <div className="space-y-1">
-              <div className="font-extrabold text-sm text-white group-hover:text-purple-400 transition-colors flex items-center gap-1.5">
+              <div className="font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors flex items-center gap-1.5">
                 <span>لیست مشتریان</span>
-                <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-purple-400" />
+                <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-purple-600 dark:text-purple-400" />
               </div>
-              <p className="text-[11px] text-[#888] group-hover:text-[#B3B3B3] transition-colors">
+              <p className="text-[11px] text-slate-500 dark:text-[#888] group-hover:text-slate-700 dark:group-hover:text-[#B3B3B3] transition-colors">
                 مدیریت پرونده‌ها و مهلت‌ها
               </p>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:bg-purple-500 group-hover:text-black transition-all flex-shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-purple-50 dark:bg-purple-500/15 border border-purple-200 dark:border-purple-500/30 flex items-center justify-center text-purple-600 dark:text-purple-400 group-hover:bg-purple-600 dark:group-hover:bg-purple-500 group-hover:text-white dark:group-hover:text-black transition-all flex-shrink-0">
               <FolderOpen className="w-5 h-5 stroke-[2.5]" />
             </div>
           </button>
@@ -232,39 +232,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 1: Total Contract Volume */}
         <div
           onClick={() => onNavigateToTab('analytics')}
-          className="p-5 rounded-2xl bg-[#181818] hover:bg-[#202020] border border-[#282828] transition-all group"
+          className="p-5 rounded-2xl bg-white dark:bg-[#181818] hover:bg-slate-50 dark:hover:bg-[#202020] border border-slate-200 dark:border-[#282828] transition-all group cursor-pointer shadow-sm"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs text-[#A7A7A7] font-semibold">ارزش کل قراردادها</span>
-            <div className="w-8 h-8 rounded-lg bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954]">
+            <span className="text-xs text-slate-500 dark:text-[#A7A7A7] font-semibold">ارزش کل قراردادها</span>
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-[#1DB954]/15 border border-emerald-200 dark:border-[#1DB954]/30 flex items-center justify-center text-emerald-600 dark:text-[#1DB954]">
               <DollarSign className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-[#1DB954] font-mono mt-3">
+          <div className="text-2xl font-black text-emerald-600 dark:text-[#1DB954] font-mono mt-3">
             {formatToman(totalContractRevenue)}
           </div>
-          <div className="text-[11px] text-[#A7A7A7] mt-2 flex items-center justify-between">
+          <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] mt-2 flex items-center justify-between">
             <span>مجموع فاکتورهای موفق</span>
-            <span className="text-white font-bold">{toPersianDigits(contractsWonCount)} فقره</span>
+            <span className="text-slate-900 dark:text-white font-bold">{toPersianDigits(contractsWonCount)} فقره</span>
           </div>
         </div>
 
         {/* Card 2: Total Customers & Pipeline */}
         <div
           onClick={() => onNavigateToTab('customers')}
-          className="p-5 rounded-2xl bg-[#181818] hover:bg-[#202020] border border-[#282828] transition-all group"
+          className="p-5 rounded-2xl bg-white dark:bg-[#181818] hover:bg-slate-50 dark:hover:bg-[#202020] border border-slate-200 dark:border-[#282828] transition-all group cursor-pointer shadow-sm"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs text-[#A7A7A7] font-semibold">کل پرونده‌های مشتریان</span>
-            <div className="w-8 h-8 rounded-lg bg-[#282828] flex items-center justify-center text-white">
-              <Users className="w-4 h-4 text-[#1DB954]" />
+            <span className="text-xs text-slate-500 dark:text-[#A7A7A7] font-semibold">کل پرونده‌های مشتریان</span>
+            <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-[#282828] flex items-center justify-center text-slate-800 dark:text-white">
+              <Users className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
             </div>
           </div>
-          <div className="text-3xl font-black text-white font-mono mt-3">
+          <div className="text-3xl font-black text-slate-900 dark:text-white font-mono mt-3">
             {toPersianDigits(totalCustomersCount)}
           </div>
-          <div className="text-[11px] text-[#A7A7A7] mt-2 flex items-center gap-1">
-            <span className="text-[#1DB954] font-bold">{toPersianDigits(inNegotiationCount)}</span>
+          <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] mt-2 flex items-center gap-1">
+            <span className="text-emerald-600 dark:text-[#1DB954] font-bold">{toPersianDigits(inNegotiationCount)}</span>
             <span>مشتری در مرحله پیش‌نویس/پیگیری</span>
           </div>
         </div>
@@ -272,22 +272,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 3: Expired Marketer Allocations */}
         <div
           onClick={() => onNavigateToTab('customers')}
-          className={`p-5 rounded-2xl border transition-all group ${
+          className={`p-5 rounded-2xl border transition-all group cursor-pointer shadow-sm ${
             expiredCustomersCount > 0
-              ? 'bg-[#E22134]/10 border-[#E22134]/40 hover:bg-[#E22134]/15'
-              : 'bg-[#181818] border-[#282828] hover:bg-[#202020]'
+              ? 'bg-rose-50 dark:bg-[#E22134]/10 border-rose-200 dark:border-[#E22134]/40 hover:bg-rose-100/60 dark:hover:bg-[#E22134]/15'
+              : 'bg-white dark:bg-[#181818] border-slate-200 dark:border-[#282828] hover:bg-slate-50 dark:hover:bg-[#202020]'
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs text-[#A7A7A7] font-semibold">مهلت‌های منقضی شده</span>
-            <div className="w-8 h-8 rounded-lg bg-[#E22134]/20 flex items-center justify-center text-[#E22134]">
+            <span className="text-xs text-slate-500 dark:text-[#A7A7A7] font-semibold">مهلت‌های منقضی شده</span>
+            <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-[#E22134]/20 flex items-center justify-center text-rose-600 dark:text-[#E22134]">
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-3xl font-black text-[#E22134] font-mono mt-3">
+          <div className="text-3xl font-black text-rose-600 dark:text-[#E22134] font-mono mt-3">
             {toPersianDigits(expiredCustomersCount)}
           </div>
-          <div className="text-[11px] text-[#A7A7A7] mt-2">
+          <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] mt-2">
             {expiredCustomers.length > 0
               ? 'نیازمند تخصیص مجدد به بازاریاب دیگر'
               : 'همه پرونده‌ها در مهلت قانونی هستند'}
@@ -297,19 +297,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 4: Average Score & Negotiation Quality */}
         <div
           onClick={() => onNavigateToTab('reports')}
-          className="p-5 rounded-2xl bg-[#181818] hover:bg-[#202020] border border-[#282828] transition-all group"
+          className="p-5 rounded-2xl bg-white dark:bg-[#181818] hover:bg-slate-50 dark:hover:bg-[#202020] border border-slate-200 dark:border-[#282828] transition-all group cursor-pointer shadow-sm"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs text-[#A7A7A7] font-semibold">کیفیت مذاکرات ثبت‌شده</span>
-            <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <span className="text-xs text-slate-500 dark:text-[#A7A7A7] font-semibold">کیفیت مذاکرات ثبت‌شده</span>
+            <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
               <Star className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-3xl font-black text-amber-400 font-mono mt-3 flex items-baseline gap-1">
+          <div className="text-3xl font-black text-amber-600 dark:text-amber-400 font-mono mt-3 flex items-baseline gap-1">
             <span>{toPersianDigits(avgScore)}</span>
-            <span className="text-xs text-[#888] font-normal">از ۱۰</span>
+            <span className="text-xs text-slate-400 dark:text-[#888] font-normal">از ۱۰</span>
           </div>
-          <div className="text-[11px] text-[#A7A7A7] mt-2">
+          <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] mt-2">
             بر اساس {toPersianDigits(summary?.total_reports_count ?? reports.length)} گزارش مذاکره و تماس
           </div>
         </div>
@@ -318,19 +318,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* ------------------------------------------------------------- */}
       {/* 3. MAIN DASHBOARD CONTENT GRID (2 COLUMNS)                    */}
       {/* ------------------------------------------------------------- */}
+      {/* 3. MAIN DASHBOARD CONTENT GRID (2 COLUMNS)                    */}
+      {/* ------------------------------------------------------------- */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column (2/3 width): Pipeline Breakdown & Urgent Followups */}
         <div className="lg:col-span-2 space-y-6">
           {/* Sales Pipeline & Conversion Progress Card */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-[#181818] border border-[#282828] space-y-4">
-            <div className="flex items-center justify-between border-b border-[#282828] pb-3">
-              <div className="flex items-center gap-2 font-bold text-sm text-white">
-                <Activity className="w-4 h-4 text-[#1DB954]" />
+          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] space-y-4 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
+              <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-white">
+                <Activity className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                 <span>وضعیت توزیع فرآیند فروش و پایپ‌لاین مشتریان</span>
               </div>
               <button
                 onClick={() => onNavigateToTab('analytics')}
-                className="text-xs text-[#1DB954] hover:underline flex items-center gap-1 font-semibold"
+                className="text-xs text-emerald-600 dark:text-[#1DB954] hover:underline flex items-center gap-1 font-semibold"
               >
                 <span>مشاهده تحلیل‌ها</span>
                 <ChevronLeft className="w-3.5 h-3.5" />
@@ -339,7 +341,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             {/* Combined Segment Bar */}
             <div className="space-y-2">
-              <div className="h-3.5 rounded-full bg-[#121212] overflow-hidden flex border border-[#2c2c2c] p-0.5 gap-0.5">
+              <div className="h-3.5 rounded-full bg-slate-100 dark:bg-[#121212] overflow-hidden flex border border-slate-200 dark:border-[#2c2c2c] p-0.5 gap-0.5">
                 {statusStats.map((st, i) => {
                   const pct = Math.round((st.count / totalCustomersCount) * 100);
                   if (pct === 0) return null;
@@ -359,14 +361,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {statusStats.map((st, i) => {
                   const pct = Math.round((st.count / totalCustomersCount) * 100);
                   return (
-                    <div key={i} className="p-2.5 rounded-xl bg-[#121212] border border-[#222]">
-                      <div className="flex items-center gap-1.5 text-[11px] text-[#A7A7A7]">
+                    <div key={i} className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#222]">
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-[#A7A7A7]">
                         <span className={`w-2 h-2 rounded-full ${st.color}`} />
                         <span className="truncate">{st.label}</span>
                       </div>
                       <div className="mt-1 flex items-baseline justify-between font-mono">
                         <span className={`text-sm font-bold ${st.text}`}>{toPersianDigits(st.count)}</span>
-                        <span className="text-[10px] text-[#777]">({toPersianDigits(pct)}٪)</span>
+                        <span className="text-[10px] text-slate-400 dark:text-[#777]">({toPersianDigits(pct)}٪)</span>
                       </div>
                     </div>
                   );
@@ -376,22 +378,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* Urgent Scheduled Followups Section */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-[#181818] border border-[#282828] space-y-4">
-            <div className="flex items-center justify-between border-b border-[#282828] pb-3">
-              <div className="flex items-center gap-2 font-bold text-sm text-white">
-                <Calendar className="w-4 h-4 text-[#1DB954]" />
+          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] space-y-4 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
+              <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-white">
+                <Calendar className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                 <span>موعدهای پیگیری نزدیک و برنامه‌ریزی شده</span>
               </div>
               <button
                 onClick={() => onNavigateToTab('reports')}
-                className="text-xs text-[#1DB954] hover:underline"
+                className="text-xs text-emerald-600 dark:text-[#1DB954] hover:underline"
               >
                 مشاهده همه
               </button>
             </div>
 
             {upcomingFollowups.length === 0 ? (
-              <div className="p-6 text-center text-xs text-[#A7A7A7]">
+              <div className="p-6 text-center text-xs text-slate-500 dark:text-[#A7A7A7]">
                 هیچ موعد پیگیری برنامه‌ریزی شده‌ای وجود ندارد.
               </div>
             ) : (
@@ -402,11 +404,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div
                       key={c.id}
                       onClick={() => onSelectCustomer(c)}
-                      className="p-3 bg-[#121212] hover:bg-[#1a1a1a] rounded-xl border border-[#282828] hover:border-[#383838] flex items-center justify-between gap-3 transition-colors"
+                      className="p-3 bg-slate-50 dark:bg-[#121212] hover:bg-slate-100 dark:hover:bg-[#1a1a1a] rounded-xl border border-slate-200 dark:border-[#282828] hover:border-slate-300 dark:hover:border-[#383838] flex items-center justify-between gap-3 transition-colors cursor-pointer"
                     >
                       <div className="min-w-0">
-                        <div className="font-bold text-xs text-white truncate">{c.company_name}</div>
-                        <div className="text-[11px] text-[#A7A7A7] mt-0.5">
+                        <div className="font-bold text-xs text-slate-900 dark:text-white truncate">{c.company_name}</div>
+                        <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] mt-0.5">
                           مذاکره‌کننده: {c.assigned_marketer_name} · {c.city || c.province || 'تهران'}
                         </div>
                       </div>
@@ -417,7 +419,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         >
                           {c.status}
                         </span>
-                        <span className="text-xs text-white font-mono bg-[#222] px-2.5 py-1 rounded-lg border border-[#333]">
+                        <span className="text-xs text-slate-800 dark:text-white font-mono bg-slate-200/80 dark:bg-[#222] px-2.5 py-1 rounded-lg border border-slate-300 dark:border-[#333]">
                           {formatPersianDate(c.next_followup_date)}
                         </span>
                       </div>
@@ -429,15 +431,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* Recent Activity Feed */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-[#181818] border border-[#282828] space-y-4">
-            <div className="flex items-center justify-between border-b border-[#282828] pb-3">
-              <div className="flex items-center gap-2 font-bold text-sm text-white">
-                <Clock className="w-4 h-4 text-[#1DB954]" />
+          <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] space-y-4 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
+              <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-white">
+                <Clock className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                 <span>آخرین گزارش‌های مذاکره ثبت شده</span>
               </div>
               <button
                 onClick={() => onNavigateToTab('reports')}
-                className="text-xs text-[#1DB954] hover:underline"
+                className="text-xs text-emerald-600 dark:text-[#1DB954] hover:underline"
               >
                 مشاهده همه ({toPersianDigits(summary?.total_reports_count ?? reports.length)})
               </button>
@@ -449,17 +451,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 return (
                   <div
                     key={r.id}
-                    className="p-3 bg-[#121212] rounded-xl border border-[#222] text-xs space-y-1.5"
+                    className="p-3 bg-slate-50 dark:bg-[#121212] rounded-xl border border-slate-200 dark:border-[#222] text-xs space-y-1.5"
                   >
-                    <div className="flex items-center justify-between text-[#A7A7A7]">
-                      <span className="font-bold text-white">
+                    <div className="flex items-center justify-between text-slate-500 dark:text-[#A7A7A7]">
+                      <span className="font-bold text-slate-900 dark:text-white">
                         {customer?.company_name || 'مشتری'} (توسط {r.negotiator_name})
                       </span>
-                      <span className="font-mono text-[11px] text-[#1DB954]">
+                      <span className="font-mono text-[11px] text-emerald-600 dark:text-[#1DB954]">
                         امتیاز: {toPersianDigits(r.negotiation_score || 0)}/۱۰
                       </span>
                     </div>
-                    <p className="text-[#B3B3B3] line-clamp-1">{r.report_text}</p>
+                    <p className="text-slate-600 dark:text-[#B3B3B3] line-clamp-1">{r.report_text}</p>
                   </div>
                 );
               })}
@@ -471,8 +473,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="space-y-6">
           {/* Urgent Expiring Warning Block */}
           {urgentExpiringCustomers.length > 0 && (
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-[#E22134]/15 to-[#181818] border border-[#E22134]/40 space-y-3">
-              <div className="flex items-center gap-2 font-bold text-xs text-[#E22134]">
+            <div className="p-5 rounded-2xl bg-gradient-to-br from-rose-50 to-white dark:from-[#E22134]/15 dark:to-[#181818] border border-rose-200 dark:border-[#E22134]/40 space-y-3 shadow-sm">
+              <div className="flex items-center gap-2 font-bold text-xs text-rose-600 dark:text-[#E22134]">
                 <ShieldAlert className="w-4 h-4" />
                 <span>هشدار انقضای مهلت پیگیری (&lt; ۳ روز)</span>
               </div>
@@ -482,13 +484,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div
                     key={c.id}
                     onClick={() => onSelectCustomer(c)}
-                    className="p-2.5 bg-[#121212]/90 hover:bg-[#181818] rounded-xl border border-[#E22134]/30 flex items-center justify-between text-xs transition-colors"
+                    className="p-2.5 bg-white/90 dark:bg-[#121212]/90 hover:bg-slate-50 dark:hover:bg-[#181818] rounded-xl border border-rose-200 dark:border-[#E22134]/30 flex items-center justify-between text-xs transition-colors cursor-pointer"
                   >
                     <div className="truncate">
-                      <div className="font-bold text-white truncate">{c.company_name}</div>
-                      <div className="text-[10px] text-[#A7A7A7]">{c.assigned_marketer_name}</div>
+                      <div className="font-bold text-slate-900 dark:text-white truncate">{c.company_name}</div>
+                      <div className="text-[10px] text-slate-500 dark:text-[#A7A7A7]">{c.assigned_marketer_name}</div>
                     </div>
-                    <span className="text-[10px] text-rose-400 font-mono font-bold whitespace-nowrap mr-2">
+                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-mono font-bold whitespace-nowrap mr-2">
                       {formatTimeRemaining(c.assignment_deadline).text}
                     </span>
                   </div>
@@ -498,71 +500,71 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
 
           {/* Quick Personnel Services Card */}
-          <div className="p-5 rounded-2xl bg-[#181818] border border-[#282828] space-y-4">
-            <div className="flex items-center justify-between border-b border-[#282828] pb-3">
-              <div className="flex items-center gap-2 font-bold text-xs text-white">
-                <CalendarDays className="w-4 h-4 text-[#1DB954]" />
+          <div className="p-5 rounded-2xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] space-y-4 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
+              <div className="flex items-center gap-2 font-bold text-xs text-slate-900 dark:text-white">
+                <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                 <span>امور پرسنلی و درخواست‌ها</span>
               </div>
               <button
                 onClick={() => onNavigateToTab('personal_portal', 'leave')}
-                className="text-[11px] text-[#1DB954] hover:underline"
+                className="text-[11px] text-emerald-600 dark:text-[#1DB954] hover:underline"
               >
                 پنل پرسنلی
               </button>
             </div>
 
-            <p className="text-[11px] text-[#A7A7A7] leading-relaxed">
+            <p className="text-[11px] text-slate-500 dark:text-[#A7A7A7] leading-relaxed">
               ثبت مستقیم مرخصی ساعتی و روزانه یا درخواست مساعده مالی با محاسبه خودکار و تاییدیه سریع مدیریت.
             </p>
 
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
                 onClick={() => onNavigateToTab('personal_portal', 'leave')}
-                className="p-3 bg-[#121212] hover:bg-[#1c1c1c] rounded-xl border border-[#282828] text-right space-y-1 transition-colors"
+                className="p-3 bg-slate-50 dark:bg-[#121212] hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-xl border border-slate-200 dark:border-[#282828] text-right space-y-1 transition-colors"
               >
-                <div className="flex items-center gap-1.5 text-blue-400 font-bold">
+                <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-bold">
                   <CalendarDays className="w-3.5 h-3.5" />
                   <span>ثبت مرخصی</span>
                 </div>
-                <div className="text-[10px] text-[#777]">روزانه و ساعتی</div>
+                <div className="text-[10px] text-slate-400 dark:text-[#777]">روزانه و ساعتی</div>
               </button>
 
               <button
                 onClick={() => onNavigateToTab('personal_portal', 'advance')}
-                className="p-3 bg-[#121212] hover:bg-[#1c1c1c] rounded-xl border border-[#282828] text-right space-y-1 transition-colors"
+                className="p-3 bg-slate-50 dark:bg-[#121212] hover:bg-slate-100 dark:hover:bg-[#1c1c1c] rounded-xl border border-slate-200 dark:border-[#282828] text-right space-y-1 transition-colors"
               >
-                <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold">
                   <Wallet className="w-3.5 h-3.5" />
                   <span>ثبت مساعده</span>
                 </div>
-                <div className="text-[10px] text-[#777]">حقوق و واریزی</div>
+                <div className="text-[10px] text-slate-400 dark:text-[#777]">حقوق و واریزی</div>
               </button>
             </div>
           </div>
 
           {/* System & Cloud Status */}
-          <div className="p-5 rounded-2xl bg-[#181818] border border-[#282828] space-y-3 text-xs">
+          <div className="p-5 rounded-2xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] space-y-3 text-xs shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-white">وضعیت ارتباط و همگام‌سازی</span>
-              <span className="inline-flex items-center gap-1 text-[11px] text-[#1DB954] font-bold">
-                <span className="w-2 h-2 rounded-full bg-[#1DB954] animate-pulse" />
+              <span className="font-bold text-slate-900 dark:text-white">وضعیت ارتباط و همگام‌سازی</span>
+              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-[#1DB954] font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-[#1DB954] animate-pulse" />
                 <span>برخط و پایدار</span>
               </span>
             </div>
 
-            <div className="p-3 rounded-xl bg-[#121212] border border-[#222] text-[11px] text-[#888] space-y-1">
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#222] text-[11px] text-slate-500 dark:text-[#888] space-y-1">
               <div className="flex justify-between">
                 <span>تعداد کارشناسان فعال:</span>
-                <span className="text-white font-bold">{toPersianDigits(personnelList.length)} نفر</span>
+                <span className="text-slate-900 dark:text-white font-bold">{toPersianDigits(personnelList.length)} نفر</span>
               </div>
               <div className="flex justify-between">
                 <span>بانک لیدهای سرد:</span>
-                <span className="text-white font-bold">{toPersianDigits(coldLeads.length)} شماره</span>
+                <span className="text-slate-900 dark:text-white font-bold">{toPersianDigits(coldLeads.length)} شماره</span>
               </div>
               <div className="flex justify-between">
                 <span>کل گزارشات ثبت‌شده:</span>
-                <span className="text-[#1DB954] font-bold">{toPersianDigits(reports.length)} گزارش</span>
+                <span className="text-emerald-600 dark:text-[#1DB954] font-bold">{toPersianDigits(reports.length)} گزارش</span>
               </div>
             </div>
           </div>
@@ -577,18 +579,18 @@ export const DashboardSkeleton: React.FC = () => {
     <div className="space-y-6 animate-pulse select-none">
       {/* 1. Quick Access Skeletons */}
       <div>
-        <div className="h-4 w-44 bg-[#282828] rounded mb-3" />
+        <div className="h-4 w-44 bg-slate-200 dark:bg-[#282828] rounded mb-3" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           {[1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="p-4.5 rounded-2xl bg-[#181818] border border-[#282828] flex items-center justify-between"
+              className="p-4.5 rounded-2xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] flex items-center justify-between shadow-sm"
             >
               <div className="space-y-2">
-                <div className="h-4 w-28 bg-[#282828] rounded" />
-                <div className="h-3 w-36 bg-[#222222] rounded" />
+                <div className="h-4 w-28 bg-slate-200 dark:bg-[#282828] rounded" />
+                <div className="h-3 w-36 bg-slate-100 dark:bg-[#222222] rounded" />
               </div>
-              <div className="w-11 h-11 rounded-xl bg-[#282828]" />
+              <div className="w-11 h-11 rounded-xl bg-slate-200 dark:bg-[#282828]" />
             </div>
           ))}
         </div>
@@ -597,27 +599,27 @@ export const DashboardSkeleton: React.FC = () => {
       {/* 2. Analytical KPI Skeletons */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="p-5 rounded-2xl bg-[#181818] border border-[#282828] space-y-3">
+          <div key={i} className="p-5 rounded-2xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] space-y-3 shadow-sm">
             <div className="flex items-center justify-between">
-              <div className="h-3 w-24 bg-[#282828] rounded" />
-              <div className="w-8 h-8 rounded-lg bg-[#282828]" />
+              <div className="h-3 w-24 bg-slate-200 dark:bg-[#282828] rounded" />
+              <div className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-[#282828]" />
             </div>
-            <div className="h-7 w-32 bg-[#282828] rounded" />
-            <div className="h-3 w-40 bg-[#222222] rounded" />
+            <div className="h-7 w-32 bg-slate-200 dark:bg-[#282828] rounded" />
+            <div className="h-3 w-40 bg-slate-100 dark:bg-[#222222] rounded" />
           </div>
         ))}
       </div>
 
       {/* 3. Pipeline Progress Bar Skeleton */}
-      <div className="p-5 rounded-2xl bg-[#181818] border border-[#282828] space-y-3">
+      <div className="p-5 rounded-2xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] space-y-3 shadow-sm">
         <div className="flex items-center justify-between">
-          <div className="h-4 w-48 bg-[#282828] rounded" />
-          <div className="h-3 w-20 bg-[#282828] rounded" />
+          <div className="h-4 w-48 bg-slate-200 dark:bg-[#282828] rounded" />
+          <div className="h-3 w-20 bg-slate-200 dark:bg-[#282828] rounded" />
         </div>
-        <div className="h-3.5 w-full bg-[#282828] rounded-full" />
+        <div className="h-3.5 w-full bg-slate-200 dark:bg-[#282828] rounded-full" />
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-4 bg-[#222222] rounded" />
+            <div key={i} className="h-4 bg-slate-100 dark:bg-[#222222] rounded" />
           ))}
         </div>
       </div>
@@ -625,11 +627,11 @@ export const DashboardSkeleton: React.FC = () => {
       {/* 4. Feeds and Urgent Followups Skeletons */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {[1, 2].map((i) => (
-          <div key={i} className="p-5 rounded-2xl bg-[#181818] border border-[#282828] space-y-3">
-            <div className="h-4 w-36 bg-[#282828] rounded" />
+          <div key={i} className="p-5 rounded-2xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] space-y-3 shadow-sm">
+            <div className="h-4 w-36 bg-slate-200 dark:bg-[#282828] rounded" />
             <div className="space-y-2.5">
               {[1, 2, 3].map((j) => (
-                <div key={j} className="h-16 bg-[#202020] rounded-xl" />
+                <div key={j} className="h-16 bg-slate-100 dark:bg-[#202020] rounded-xl" />
               ))}
             </div>
           </div>

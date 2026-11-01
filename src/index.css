@@ -1,24 +1,70 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: 'Vazirmatn', sans-serif;
+  --color-bg-app: var(--bg-app);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-input: var(--bg-input);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-accent-green: var(--accent-green);
+  --color-accent-green-hover: var(--accent-green-hover);
+  --color-accent-green-soft: var(--accent-green-soft);
 }
 
 @layer base {
+  /* Light mode token definitions */
   :root {
     font-family: 'Vazirmatn', sans-serif !important;
+    --bg-app: #F8FAFC;
+    --bg-surface: #FFFFFF;
+    --bg-elevated: #F1F5F9;
+    --bg-input: #FFFFFF;
+    --border-subtle: #E2E8F0;
+    --border-strong: #CBD5E1;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #94A3B8;
+    --accent-green: #16A34A;
+    --accent-green-hover: #15803D;
+    --accent-green-soft: rgba(22, 163, 74, 0.12);
+    color-scheme: light;
+  }
+
+  /* Dark mode token definitions (Spotify-dark design language) */
+  .dark, :root:not(.light) {
+    --bg-app: #121212;
+    --bg-surface: #181818;
+    --bg-elevated: #222222;
+    --bg-input: #282828;
+    --border-subtle: #282828;
+    --border-strong: #3E3E3E;
+    --text-primary: #FFFFFF;
+    --text-secondary: #B3B3B3;
+    --text-muted: #777777;
+    --accent-green: #1DB954;
+    --accent-green-hover: #1ED760;
+    --accent-green-soft: rgba(29, 185, 84, 0.15);
     color-scheme: dark;
   }
 
   * {
     font-family: 'Vazirmatn', sans-serif !important;
+    box-sizing: border-box;
   }
 
   body {
     font-family: 'Vazirmatn', sans-serif !important;
-    background-color: #121212;
-    color: #FFFFFF;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
     overflow-x: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   input, button, select, textarea {
@@ -63,19 +109,19 @@
     cursor: pointer !important;
   }
 
-  /* Custom scrollbar for dark Spotify-like interface */
+  /* Custom scrollbar matching active theme tokens */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #121212;
+    background: var(--bg-app);
   }
   ::-webkit-scrollbar-thumb {
-    background: #282828;
+    background: var(--border-strong);
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #535353;
+    background: var(--text-muted);
   }
 }

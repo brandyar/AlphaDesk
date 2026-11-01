@@ -1211,22 +1211,22 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {/* ------------------------------------------------------------- */}
       {/* 1. TOP HEADER & SUB-MENUS                                     */}
       {/* ------------------------------------------------------------- */}
-      <div className="bg-[#121212] border border-[#282828] rounded-2xl p-3.5 sm:p-6 shadow-xl space-y-3.5 sm:space-y-4">
+      <div className="bg-white dark:bg-[#121212] border border-slate-200 dark:border-[#282828] rounded-2xl p-3.5 sm:p-6 shadow-sm dark:shadow-xl space-y-3.5 sm:space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-2xl bg-gradient-to-br from-[#1DB954] to-[#14833b] text-black font-black text-lg sm:text-xl flex items-center justify-center shadow-lg shadow-[#1DB954]/20 overflow-hidden border-2 border-[#1DB954] flex-shrink-0">
-              <Users2 className="w-5 sm:w-6 h-5 sm:h-6 text-black stroke-[2.5]" />
+            <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-[#1DB954] dark:to-[#14833b] text-white dark:text-black font-black text-lg sm:text-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 dark:shadow-[#1DB954]/20 overflow-hidden border-2 border-emerald-500 dark:border-[#1DB954] flex-shrink-0">
+              <Users2 className="w-5 sm:w-6 h-5 sm:h-6 text-white dark:text-black stroke-[2.5]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-2xl font-black text-white tracking-tight">
+                <h1 className="text-base sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                   مدیریت همکاران و دسترسی‌ها
                 </h1>
-                <span className="text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold border border-[#1DB954]/30">
+                <span className="text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-0.5 rounded-full bg-emerald-500/15 dark:bg-[#1DB954]/15 text-emerald-700 dark:text-[#1DB954] font-bold border border-emerald-500/30 dark:border-[#1DB954]/30">
                   پنل مدیریت
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-[#A7A7A7] mt-0.5">
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-[#A7A7A7] mt-0.5">
                 تعریف پرسنل، چند راه تماس، تمدید مهلت و تنظیم ریز دسترسی‌ها
               </p>
             </div>
@@ -1235,23 +1235,23 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           {(isAdmin || currentPersonnel?.role === 'admin') && (
             <button
               onClick={() => setIsLogoutAllModalOpen(true)}
-              className="flex items-center gap-1.5 sm:gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/30 shadow-md shadow-red-950/30"
+              className="flex items-center gap-1.5 sm:gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 border border-red-500/30 shadow-md shadow-red-950/10 dark:shadow-red-950/30"
               title="خروج و لغو نشست کاری تمامی کاربران لاگین‌شده در سامانه"
             >
-              <LogOut className="w-4 h-4 text-red-400" />
+              <LogOut className="w-4 h-4 text-red-600 dark:text-red-400" />
               <span>خروج همگانی کاربران</span>
             </button>
           )}
         </div>
 
         {/* Sub-menu Tabs */}
-        <div className="flex items-center gap-1.5 sm:gap-2 border-t border-[#222] pt-3 overflow-x-auto scrollbar-none whitespace-nowrap pb-1">
+        <div className="flex items-center gap-1.5 sm:gap-2 border-t border-slate-200 dark:border-[#222] pt-3 overflow-x-auto scrollbar-none whitespace-nowrap pb-1">
           <button
             onClick={() => setActiveSubTab('new_colleague')}
             className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${
               activeSubTab === 'new_colleague'
-                ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
             }`}
           >
             <UserPlus className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
@@ -1262,8 +1262,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             onClick={() => setActiveSubTab('colleagues_list')}
             className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${
               activeSubTab === 'colleagues_list'
-                ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
             }`}
           >
             <Users2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
@@ -1274,8 +1274,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             onClick={() => setActiveSubTab('extend_ownership')}
             className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${
               activeSubTab === 'extend_ownership'
-                ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
             }`}
           >
             <Clock className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
@@ -1286,8 +1286,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             onClick={() => setActiveSubTab('switch_ownership')}
             className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 ${
               activeSubTab === 'switch_ownership'
-                ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
             }`}
           >
             <ArrowLeftRight className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
@@ -1298,8 +1298,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             onClick={() => setActiveSubTab('leave_approvals')}
             className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 relative ${
               activeSubTab === 'leave_approvals'
-                ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
             }`}
           >
             <CalendarCheck className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
@@ -1322,8 +1322,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               onClick={() => setActiveSubTab('import_data')}
               className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 relative ${
                 activeSubTab === 'import_data'
-                  ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                  : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                  ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                  : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
               }`}
             >
               <Database className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
@@ -1332,7 +1332,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
                   activeSubTab === 'import_data'
                     ? 'bg-black text-[#1DB954]'
-                    : 'bg-[#1DB954]/20 text-[#1DB954]'
+                    : 'bg-emerald-500/20 text-emerald-700 dark:text-[#1DB954]'
                 }`}
               >
                 جدید
@@ -1345,17 +1345,17 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               onClick={() => setActiveSubTab('sms_settings')}
               className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all flex-shrink-0 relative ${
                 activeSubTab === 'sms_settings'
-                  ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                  : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                  ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                  : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
               }`}
             >
-              <MessageSquareText className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-emerald-400" />
+              <MessageSquareText className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-emerald-600 dark:text-emerald-400" />
               <span>تنظیمات پیامک (IPPanel)</span>
               <span
                 className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
                   activeSubTab === 'sms_settings'
                     ? 'bg-black text-[#1DB954]'
-                    : 'bg-emerald-500/20 text-emerald-400'
+                    : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
                 }`}
               >
                 پترن‌ها

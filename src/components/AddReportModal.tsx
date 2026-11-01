@@ -113,21 +113,21 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#181818] border border-[#282828] w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-8 max-h-[95vh] flex flex-col">
-        <div className="p-4 sm:p-5 bg-[#121212] border-b border-[#282828] flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-8 max-h-[95vh] flex flex-col text-slate-900 dark:text-white">
+        <div className="p-4 sm:p-5 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-[#1DB954]/15 text-[#1DB954] flex items-center justify-center border border-[#1DB954]/30 flex-shrink-0">
+            <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-[#1DB954]/15 text-emerald-700 dark:text-[#1DB954] flex items-center justify-center border border-emerald-300 dark:border-[#1DB954]/30 flex-shrink-0">
               <MessageSquareText className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">ثبت گزارش مذاکره و پیگیری مشتری</h3>
-              <p className="text-[11px] text-[#A7A7A7]">گزارش پیگیری‌ها و تغییر وضعیت مرحله مشتری</p>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">ثبت گزارش مذاکره و پیگیری مشتری</h3>
+              <p className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">گزارش پیگیری‌ها و تغییر وضعیت مرحله مشتری</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#282828] hover:bg-[#333333] flex items-center justify-center text-[#B3B3B3] hover:text-white"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -136,8 +136,8 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {/* Customer Selection */}
           <div>
-            <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-              انتخاب مشتری <span className="text-[#E22134]">*</span>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
+              انتخاب مشتری <span className="text-red-500 dark:text-[#E22134]">*</span>
             </label>
             <select
               value={customerId}
@@ -148,7 +148,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                   setNegotiationPhone(c.mobile_numbers[0]);
                 }
               }}
-              className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white border border-transparent focus:border-[#1DB954] focus:outline-none"
+              className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
             >
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -162,13 +162,13 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
             {/* Negotiator Name - ONLY for Admin */}
             {userIsAdmin && (
               <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                   مذاکره‌کننده (ویژه مدیر)
                 </label>
                 <select
                   value={negotiatorName}
                   onChange={(e) => setNegotiatorName(e.target.value)}
-                  className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                  className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
                 >
                   {personnelList.map((p) => (
                     <option key={p.id} value={p.name}>
@@ -181,7 +181,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
 
             {/* Negotiation Phone */}
             <div>
-              <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                 شماره تماس مذاکره
               </label>
               <input
@@ -190,7 +190,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                 value={negotiationPhone}
                 onChange={(e) => setNegotiationPhone(e.target.value)}
                 placeholder="0912..."
-                className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
               />
             </div>
           </div>
@@ -198,13 +198,13 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Negotiation Status */}
             <div>
-              <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                 وضعیت مذاکره
               </label>
               <select
                 value={negotiationStatus}
                 onChange={(e) => setNegotiationStatus(e.target.value as NegotiationStatus)}
-                className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
               >
                 <option value="تماس برقرار نشده">تماس برقرار نشده</option>
                 <option value="پاسخ نمیدهد">پاسخ نمیدهد</option>
@@ -220,8 +220,8 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
 
             {/* Negotiation Score */}
             <div>
-              <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                امتیاز مذاکره: <span className="text-[#1DB954] font-bold font-mono">{negotiationScore}</span>/10
+              <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
+                امتیاز مذاکره: <span className="text-emerald-700 dark:text-[#1DB954] font-bold font-mono">{negotiationScore}</span>/10
               </label>
               <input
                 type="range"
@@ -229,7 +229,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                 max={10}
                 value={negotiationScore}
                 onChange={(e) => setNegotiationScore(Number(e.target.value))}
-                className="w-full accent-[#1DB954] mt-2"
+                className="w-full accent-emerald-600 dark:accent-[#1DB954] mt-2"
               />
             </div>
 
@@ -245,8 +245,8 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
 
           {/* Dedicated Contract / Invoice Section when status is 'قرارداد / فاکتور' */}
           {isContractStatus && (
-            <div className="p-4 rounded-2xl bg-[#1DB954]/10 border border-[#1DB954]/30 space-y-3.5 animate-in fade-in duration-200">
-              <div className="flex items-center gap-2 text-xs font-bold text-[#1DB954] border-b border-[#1DB954]/20 pb-2">
+            <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-[#1DB954]/10 border border-emerald-300 dark:border-[#1DB954]/30 space-y-3.5 animate-in fade-in duration-200">
+              <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 dark:text-[#1DB954] border-b border-emerald-200 dark:border-[#1DB954]/20 pb-2">
                 <FileCheck2 className="w-4 h-4" />
                 <span>اطلاعات تکمیلی قرارداد / فاکتور صادر شده</span>
               </div>
@@ -254,8 +254,8 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 {/* Contract / Invoice Number */}
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1 flex items-center gap-1">
-                    <Hash className="w-3 h-3 text-[#1DB954]" />
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1 flex items-center gap-1">
+                    <Hash className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
                     <span>شماره قرارداد / فاکتور</span>
                   </label>
                   <input
@@ -264,7 +264,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                     value={contractNumber}
                     onChange={(e) => setContractNumber(e.target.value)}
                     placeholder="مثلاً: CNT-1403/102 یا 89201"
-                    className="w-full h-9 px-3 bg-[#181818] rounded-lg text-xs text-white border border-[#2a2a2a] focus:border-[#1DB954] focus:outline-none font-mono"
+                    className="w-full h-9 px-3 bg-white dark:bg-[#181818] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2a2a2a] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono"
                   />
                 </div>
 
@@ -279,13 +279,13 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
 
                 {/* Final Amount (Toman) */}
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1 flex items-center justify-between">
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1 flex items-center justify-between">
                     <span className="flex items-center gap-1">
-                      <DollarSign className="w-3 h-3 text-[#1DB954]" />
+                      <DollarSign className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
                       <span>مبلغ نهایی (تومان)</span>
                     </span>
                     {contractAmount && (
-                      <span className="text-[10px] text-[#1DB954] font-mono font-bold">
+                      <span className="text-[10px] text-emerald-700 dark:text-[#1DB954] font-mono font-bold">
                         {formatToman(contractAmount)}
                       </span>
                     )}
@@ -296,15 +296,15 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                     value={contractAmount}
                     onChange={(e) => handleAmountChange(e.target.value)}
                     placeholder="مثلاً: 25,000,000"
-                    className="w-full h-9 px-3 bg-[#181818] rounded-lg text-xs text-white border border-[#2a2a2a] focus:border-[#1DB954] focus:outline-none font-mono font-bold text-left"
+                    className="w-full h-9 px-3 bg-white dark:bg-[#181818] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2a2a2a] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono font-bold text-left"
                   />
                 </div>
               </div>
 
               {/* Contract / Invoice Items */}
               <div>
-                <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1 flex items-center gap-1">
-                  <PackageCheck className="w-3 h-3 text-[#1DB954]" />
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1 flex items-center gap-1">
+                  <PackageCheck className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
                   <span>آیتم‌ها و اقلام قرارداد / فاکتور</span>
                 </label>
                 <input
@@ -312,7 +312,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                   value={contractItems}
                   onChange={(e) => setContractItems(e.target.value)}
                   placeholder="شرح اقلام و خدمات (مثلاً: طراحی سایت فروشگاهی + درگاه پرداخت + هاست و پشتیبانی ۱ ساله)..."
-                  className="w-full h-9 px-3 bg-[#181818] rounded-lg text-xs text-white border border-[#2a2a2a] focus:border-[#1DB954] focus:outline-none"
+                  className="w-full h-9 px-3 bg-white dark:bg-[#181818] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2a2a2a] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
                 />
               </div>
             </div>
@@ -320,8 +320,8 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
 
           {/* Report Text */}
           <div>
-            <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-              متن گزارش مذاکره <span className="text-[#E22134]">*</span>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
+              متن گزارش مذاکره <span className="text-red-500 dark:text-[#E22134]">*</span>
             </label>
             <textarea
               rows={4}
@@ -329,16 +329,16 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
               value={reportText}
               onChange={(e) => setReportText(e.target.value)}
               placeholder="شرح دقیق مکالمه، پاسخ مشتری، نیازها و بندهای مورد مذاکره..."
-              className="w-full p-3 bg-[#282828] rounded-md text-xs text-white resize-none focus:outline-none focus:ring-1 focus:ring-[#1DB954] leading-relaxed"
+              className="w-full p-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"
             />
           </div>
 
           {/* Actions */}
-          <div className="pt-4 border-t border-[#282828] flex items-center justify-end gap-3">
+          <div className="pt-4 border-t border-slate-200 dark:border-[#282828] flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="h-10 px-5 rounded-full border border-[#535353] hover:border-white text-xs font-semibold text-[#B3B3B3] hover:text-white transition-colors"
+              className="h-10 px-5 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#535353] dark:hover:border-white text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-[#B3B3B3] dark:hover:text-white transition-colors"
             >
               انصراف
             </button>

@@ -333,20 +333,20 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
       {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
             <span>گزارش عملکرد روزانه پرسنل</span>
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold">
+            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-[#1DB954] font-bold">
               {toPersianDigits(totalCount)} گزارش ثبت شده
             </span>
           </h2>
-          <p className="text-xs text-[#A7A7A7] mt-1">
+          <p className="text-xs text-slate-500 dark:text-[#A7A7A7] mt-1">
             ثبت و رصد ساعت‌به‌ساعت (ساعت ۹ الی ۲۰)، آمار تماس‌ها، جذب مشتریان و اهداف روز کاری بعد
           </p>
         </div>
 
         <button
           onClick={handleOpenAddModal}
-          className="h-10 px-5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex items-center gap-1.5 cursor-pointer"
+          className="h-10 px-5 rounded-full bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ED760] text-white dark:text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-emerald-500/20 dark:shadow-[#1DB954]/20 flex items-center gap-1.5 cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[3]" />
           <span>ثبت گزارش عملکرد امروز</span>
@@ -355,38 +355,38 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
 
       {/* KPI Stats Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 rounded-2xl bg-[#181818] border border-[#282828] flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] shadow-sm flex items-center justify-between">
           <div>
-            <div className="text-xs text-[#A7A7A7]">مجموع تماس‌های گرفته شده</div>
-            <div className="text-2xl font-black text-white font-mono mt-1">
+            <div className="text-xs text-slate-500 dark:text-[#A7A7A7]">مجموع تماس‌های گرفته شده</div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono mt-1">
               {toPersianDigits(totalCalls)}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-[#282828] flex items-center justify-center text-[#1DB954]">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-[#282828] flex items-center justify-center text-emerald-600 dark:text-[#1DB954]">
             <PhoneCall className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#181818] border border-[#282828] flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] shadow-sm flex items-center justify-between">
           <div>
-            <div className="text-xs text-[#A7A7A7]">تماس‌های موفق و مذاکره شده</div>
-            <div className="text-2xl font-black text-white font-mono mt-1">
+            <div className="text-xs text-slate-500 dark:text-[#A7A7A7]">تماس‌های موفق و مذاکره شده</div>
+            <div className="text-2xl font-black text-slate-900 dark:text-white font-mono mt-1">
               {toPersianDigits(totalSuccess)}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-[#282828] flex items-center justify-center text-[#1ED760]">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-[#282828] flex items-center justify-center text-emerald-600 dark:text-[#1ED760]">
             <CheckCircle className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#181818] border border-[#282828] flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] shadow-sm flex items-center justify-between">
           <div>
-            <div className="text-xs text-[#A7A7A7]">مشتریان جذب یا نهایی شده</div>
-            <div className="text-2xl font-black text-[#1DB954] font-mono mt-1">
+            <div className="text-xs text-slate-500 dark:text-[#A7A7A7]">مشتریان جذب یا نهایی شده</div>
+            <div className="text-2xl font-black text-emerald-600 dark:text-[#1DB954] font-mono mt-1">
               {toPersianDigits(totalConverted)}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954]">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-[#1DB954]">
             <Award className="w-5 h-5" />
           </div>
         </div>
@@ -395,14 +395,14 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
       {/* Reports Feed */}
       <div className={`space-y-3 ${isLoadingPage ? 'opacity-50 pointer-events-none transition-opacity' : ''}`}>
         {isLoadingPage && items.length === 0 ? (
-          <div className="p-16 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
-            <Loader2 className="w-8 h-8 text-[#1DB954] animate-spin mx-auto" />
-            <p className="text-xs text-[#A7A7A7]">در حال بارگذاری گزارش‌های اداری...</p>
+          <div className="p-16 text-center bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] space-y-3">
+            <Loader2 className="w-8 h-8 text-emerald-600 dark:text-[#1DB954] animate-spin mx-auto" />
+            <p className="text-xs text-slate-500 dark:text-[#A7A7A7]">در حال بارگذاری گزارش‌های اداری...</p>
           </div>
         ) : items.length === 0 ? (
-          <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
-            <ClipboardCheck className="w-10 h-10 text-[#535353] mx-auto" />
-            <p className="text-xs text-[#A7A7A7]">هنوز هیچ گزارش اداری ثبت نشده است.</p>
+          <div className="p-12 text-center bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] space-y-3">
+            <ClipboardCheck className="w-10 h-10 text-slate-400 dark:text-[#535353] mx-auto" />
+            <p className="text-xs text-slate-500 dark:text-[#A7A7A7]">هنوز هیچ گزارش اداری ثبت نشده است.</p>
           </div>
         ) : (
           items.map((report) => {
@@ -414,7 +414,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
             return (
               <div
                 key={report.id}
-                className="bg-[#181818] hover:bg-[#1a1a1a] rounded-2xl border border-[#282828] hover:border-[#383838] transition-all overflow-hidden"
+                className="bg-white dark:bg-[#181818] hover:bg-slate-50 dark:hover:bg-[#1a1a1a] rounded-2xl border border-slate-200 dark:border-[#282828] hover:border-slate-300 dark:hover:border-[#383838] transition-all overflow-hidden shadow-sm"
               >
                 {/* Collapsed Main Bar (Always Visible) */}
                 <div
@@ -423,21 +423,21 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                 >
                   {/* Right side: Personnel avatar + Name + Date + Status Badge */}
                   <div className="flex items-center gap-3 min-w-[200px]">
-                    <div className="w-9 h-9 rounded-full bg-[#242424] border border-[#333] flex items-center justify-center text-[#1DB954] font-bold text-xs shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-[#242424] border border-slate-200 dark:border-[#333] flex items-center justify-center text-emerald-600 dark:text-[#1DB954] font-bold text-xs shrink-0">
                       {report.personnel_name.charAt(0)}
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm text-white">{report.personnel_name}</span>
-                        <span className="text-[11px] font-mono text-[#1DB954] bg-[#1DB954]/10 px-2 py-0.5 rounded-full">
+                        <span className="font-bold text-sm text-slate-900 dark:text-white">{report.personnel_name}</span>
+                        <span className="text-[11px] font-mono text-emerald-700 dark:text-[#1DB954] bg-emerald-50 dark:bg-[#1DB954]/10 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-transparent">
                           {formatPersianDate(report.report_date)}
                         </span>
                         {/* Status Badge: draft vs submitted */}
                         <span
                           className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
                             isDraft
-                              ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                              : 'bg-[#1DB954]/15 text-[#1DB954] border-[#1DB954]/30'
+                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30'
+                              : 'bg-emerald-500/15 text-emerald-700 dark:text-[#1DB954] border-emerald-500/30'
                           }`}
                         >
                           {isDraft ? (
@@ -453,7 +453,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                           )}
                         </span>
                       </div>
-                      <div className="text-xs text-[#888] mt-0.5 flex items-center gap-2">
+                      <div className="text-xs text-slate-500 dark:text-[#888] mt-0.5 flex items-center gap-2">
                         <span>ثبت: {formatPersianDateTime(report.date_created)}</span>
                         {hourlyItems.length > 0 && (
                           <span>· {toPersianDigits(hourlyItems.length)} بازه ساعتی</span>
@@ -466,13 +466,13 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                   <div className="flex items-center gap-2 sm:gap-3">
                     {/* KPI Badges */}
                     <div className="hidden sm:flex items-center gap-2 text-xs">
-                      <span className="px-2.5 py-1 rounded-lg bg-[#222222] text-white font-mono">
-                        تماس‌ها: <strong className="text-[#1DB954]">{toPersianDigits(report.calls_count)}</strong>
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-[#222222] text-slate-900 dark:text-white font-mono border border-slate-200 dark:border-transparent">
+                        تماس‌ها: <strong className="text-emerald-600 dark:text-[#1DB954]">{toPersianDigits(report.calls_count)}</strong>
                       </span>
-                      <span className="px-2.5 py-1 rounded-lg bg-[#222222] text-white font-mono">
-                        موفق: <strong className="text-[#1ED760]">{toPersianDigits(report.successful_contacts)}</strong>
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-[#222222] text-slate-900 dark:text-white font-mono border border-slate-200 dark:border-transparent">
+                        موفق: <strong className="text-emerald-600 dark:text-[#1ED760]">{toPersianDigits(report.successful_contacts)}</strong>
                       </span>
-                      <span className="px-2.5 py-1 rounded-lg bg-[#1DB954]/15 text-[#1DB954] font-mono font-bold">
+                      <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-[#1DB954] font-mono font-bold border border-emerald-500/30">
                         جذب: {toPersianDigits(report.leads_converted)}
                       </span>
                     </div>
@@ -485,7 +485,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                           e.stopPropagation();
                           handleOpenEditModal(report);
                         }}
-                        className="h-8 px-3 rounded-full text-xs font-bold bg-[#242424] text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 flex items-center gap-1 transition-colors cursor-pointer"
+                        className="h-8 px-3 rounded-full text-xs font-bold bg-slate-100 dark:bg-[#242424] text-amber-700 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/30 flex items-center gap-1 transition-colors cursor-pointer"
                         title="ویرایش پیش‌نویس گزارش"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -493,10 +493,10 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                       </button>
                     ) : (
                       <div
-                        className="h-8 px-2.5 rounded-full text-[11px] font-medium bg-[#1c1c1c] text-[#888] border border-[#2a2a2a] flex items-center gap-1 select-none"
+                        className="h-8 px-2.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-[#1c1c1c] text-slate-500 dark:text-[#888] border border-slate-200 dark:border-[#2a2a2a] flex items-center gap-1 select-none"
                         title="این گزارش ثبت نهایی شده و غیرقابل ویرایش است"
                       >
-                        <Lock className="w-3 h-3 text-[#777]" />
+                        <Lock className="w-3 h-3 text-slate-400 dark:text-[#777]" />
                         <span className="hidden sm:inline">ثبت نهایی</span>
                       </div>
                     )}
@@ -510,8 +510,8 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                       }}
                       className={`h-8 px-3 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border ${
                         isExpanded
-                          ? 'bg-[#1DB954] text-black border-[#1DB954]'
-                          : 'bg-[#242424] text-[#d0d0d0] hover:text-white hover:bg-[#303030] border-[#383838]'
+                          ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] text-white dark:text-black border-emerald-600 dark:border-[#1DB954]'
+                          : 'bg-slate-100 dark:bg-[#242424] text-slate-700 dark:text-[#d0d0d0] hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-[#303030] border-slate-200 dark:border-[#383838]'
                       }`}
                     >
                       <span>{isExpanded ? 'بستن جزئیات' : 'مشاهده جزئیات'}</span>
@@ -525,25 +525,25 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                 </div>
 
                 {/* Mobile Metrics Bar (if screen is small and not expanded) */}
-                <div className="sm:hidden px-4 pb-3 flex items-center gap-2 text-[11px] border-t border-[#222] pt-2">
-                  <span className="px-2 py-0.5 rounded bg-[#222] text-white font-mono">
-                    تماس: <strong className="text-[#1DB954]">{toPersianDigits(report.calls_count)}</strong>
+                <div className="sm:hidden px-4 pb-3 flex items-center gap-2 text-[11px] border-t border-slate-200 dark:border-[#222] pt-2">
+                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-[#222] text-slate-900 dark:text-white font-mono">
+                    تماس: <strong className="text-emerald-600 dark:text-[#1DB954]">{toPersianDigits(report.calls_count)}</strong>
                   </span>
-                  <span className="px-2 py-0.5 rounded bg-[#222] text-white font-mono">
-                    موفق: <strong className="text-[#1ED760]">{toPersianDigits(report.successful_contacts)}</strong>
+                  <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-[#222] text-slate-900 dark:text-white font-mono">
+                    موفق: <strong className="text-emerald-600 dark:text-[#1ED760]">{toPersianDigits(report.successful_contacts)}</strong>
                   </span>
-                  <span className="px-2 py-0.5 rounded bg-[#1DB954]/15 text-[#1DB954] font-mono font-bold">
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-[#1DB954] font-mono font-bold">
                     جذب: {toPersianDigits(report.leads_converted)}
                   </span>
                 </div>
 
                 {/* Expandable Sliding Details Section */}
                 {isExpanded && (
-                  <div className="p-4 sm:p-5 pt-0 border-t border-[#242424] space-y-4 animate-in fade-in duration-200 bg-[#141414]">
+                  <div className="p-4 sm:p-5 pt-0 border-t border-slate-200 dark:border-[#242424] space-y-4 animate-in fade-in duration-200 bg-slate-50 dark:bg-[#141414]">
                     {/* Hourly Logs Breakdown */}
                     {hourlyItems.length > 0 && (
-                      <div className="p-4 rounded-xl bg-[#181818] border border-[#2a2a2a] space-y-3 mt-4">
-                        <div className="text-xs font-bold text-[#1DB954] flex items-center gap-1.5">
+                      <div className="p-4 rounded-xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#2a2a2a] space-y-3 mt-4">
+                        <div className="text-xs font-bold text-emerald-600 dark:text-[#1DB954] flex items-center gap-1.5">
                           <Clock className="w-4 h-4" />
                           <span>گزارش عملکرد ساعت‌به‌ساعت ({toPersianDigits(hourlyItems.length)} بازه کاری ثبت شده):</span>
                         </div>
@@ -552,12 +552,12 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                           {hourlyItems.map((h, idx) => (
                             <div
                               key={idx}
-                              className="p-2.5 rounded-xl bg-[#121212] border border-[#282828] flex flex-col gap-1"
+                              className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] flex flex-col gap-1"
                             >
-                              <span className="text-[11px] font-bold text-[#1ED760] font-mono bg-[#1ED760]/10 px-2 py-0.5 rounded w-fit">
+                              <span className="text-[11px] font-bold text-emerald-700 dark:text-[#1ED760] font-mono bg-emerald-500/10 px-2 py-0.5 rounded w-fit">
                                 {h.slot}
                               </span>
-                              <p className="text-xs text-[#ddd] leading-relaxed pr-1 whitespace-pre-wrap">
+                              <p className="text-xs text-slate-800 dark:text-[#ddd] leading-relaxed pr-1 whitespace-pre-wrap">
                                 {h.activity}
                               </p>
                             </div>
@@ -569,10 +569,10 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                     {/* Tasks Summary */}
                     {report.tasks_summary && (
                       <div className="space-y-1.5">
-                        <span className="text-xs font-bold text-white block">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block">
                           خلاصه و یادداشت تکمیلی عملکرد:
                         </span>
-                        <p className="text-xs text-[#d1d1d1] leading-relaxed bg-[#181818] p-3.5 rounded-xl border border-[#282828] whitespace-pre-wrap">
+                        <p className="text-xs text-slate-800 dark:text-[#d1d1d1] leading-relaxed bg-white dark:bg-[#181818] p-3.5 rounded-xl border border-slate-200 dark:border-[#282828] whitespace-pre-wrap">
                           {report.tasks_summary}
                         </p>
                       </div>
@@ -581,22 +581,22 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                     {/* Challenges & Tomorrow */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                       {report.challenges ? (
-                        <div className="p-3.5 rounded-xl bg-[#181818] border border-[#282828] space-y-1">
-                          <span className="font-bold text-[#F59B23] flex items-center gap-1">
+                        <div className="p-3.5 rounded-xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] space-y-1">
+                          <span className="font-bold text-amber-600 dark:text-[#F59B23] flex items-center gap-1">
                             <AlertCircle className="w-3.5 h-3.5" />
                             <span>چالش‌ها و موانع:</span>
                           </span>
-                          <p className="text-[#B3B3B3] leading-relaxed">{report.challenges}</p>
+                          <p className="text-slate-600 dark:text-[#B3B3B3] leading-relaxed">{report.challenges}</p>
                         </div>
                       ) : null}
 
                       {report.tomorrow_plan ? (
-                        <div className="p-3.5 rounded-xl bg-[#181818] border border-[#282828] space-y-1">
-                          <span className="font-bold text-[#1DB954] flex items-center gap-1">
+                        <div className="p-3.5 rounded-xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] space-y-1">
+                          <span className="font-bold text-emerald-600 dark:text-[#1DB954] flex items-center gap-1">
                             <Clock className="w-3.5 h-3.5" />
                             <span>برنامه کاری فردا:</span>
                           </span>
-                          <p className="text-[#B3B3B3] leading-relaxed">{report.tomorrow_plan}</p>
+                          <p className="text-slate-600 dark:text-[#B3B3B3] leading-relaxed">{report.tomorrow_plan}</p>
                         </div>
                       ) : null}
                     </div>
@@ -622,18 +622,18 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
 
       {/* Add / Edit Admin Report Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-[#181818] border border-[#282828] w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-6 max-h-[95vh] flex flex-col">
-            <div className="p-4 sm:p-5 bg-[#121212] border-b border-[#282828] flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 dark:bg-black/85 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-6 max-h-[95vh] flex flex-col">
+            <div className="p-4 sm:p-5 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-[#1DB954]/15 text-[#1DB954] flex items-center justify-center flex-shrink-0">
+                <div className="w-9 h-9 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-[#1DB954] flex items-center justify-center flex-shrink-0">
                   <ClipboardCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                     {editingReport ? 'ویرایش گزارش عملکرد روزانه' : 'ثبت گزارش عملکرد روزانه پرسنل'}
                   </h3>
-                  <p className="text-[11px] text-[#A7A7A7]">
+                  <p className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">
                     ثبت کارکرد ساعت به ساعت (۹ الی ۲۰)، آمار تماس‌ها و وظایف روزانه
                   </p>
                 </div>
@@ -643,7 +643,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                   setShowAddModal(false);
                   setEditingReport(null);
                 }}
-                className="w-8 h-8 rounded-full bg-[#282828] hover:bg-[#333333] flex items-center justify-center text-[#A7A7A7] hover:text-white cursor-pointer"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center text-slate-500 dark:text-[#A7A7A7] hover:text-slate-900 dark:hover:text-white cursor-pointer"
               >
                 ✕
               </button>
@@ -651,15 +651,15 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
 
             <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
               {modalError && (
-                <div className="p-3 bg-red-950/80 border border-red-500/50 rounded-xl text-red-300 text-xs flex items-center justify-between gap-2 animate-in fade-in">
+                <div className="p-3 bg-red-50 dark:bg-red-950/80 border border-red-200 dark:border-red-500/50 rounded-xl text-red-700 dark:text-red-300 text-xs flex items-center justify-between gap-2 animate-in fade-in">
                   <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                    <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
                     <span>{modalError}</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setModalError(null)}
-                    className="text-red-400 hover:text-white text-xs px-1"
+                    className="text-red-500 hover:text-red-700 dark:hover:text-white text-xs px-1"
                   >
                     ✕
                   </button>
@@ -669,13 +669,13 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
               <div className={`grid gap-4 ${userIsAdmin ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
                 {userIsAdmin && (
                   <div>
-                    <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                       نام پرسنل (ویژه مدیر)
                     </label>
                     <select
                       value={personnelId}
                       onChange={(e) => setPersonnelId(e.target.value)}
-                      className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none"
+                      className="w-full h-10 px-3 bg-slate-50 dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954]"
                     >
                       {personnelList.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -695,9 +695,9 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
               </div>
 
               {/* Counters */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-[#121212] border border-[#282828]">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828]">
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1">
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-[#B3B3B3] mb-1">
                     تعداد کل تماس‌ها
                   </label>
                   <input
@@ -705,11 +705,11 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                     min={0}
                     value={callsCount}
                     onChange={(e) => setCallsCount(Number(e.target.value))}
-                    className="w-full h-9 px-3 bg-[#282828] rounded font-mono text-center text-xs text-white"
+                    className="w-full h-9 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-lg font-mono text-center text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1">
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-[#B3B3B3] mb-1">
                     تماس‌های موفق
                   </label>
                   <input
@@ -717,11 +717,11 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                     min={0}
                     value={successfulContacts}
                     onChange={(e) => setSuccessfulContacts(Number(e.target.value))}
-                    className="w-full h-9 px-3 bg-[#282828] rounded font-mono text-center text-xs text-white"
+                    className="w-full h-9 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-lg font-mono text-center text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1">
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-[#B3B3B3] mb-1">
                     مشتریان جذب شده
                   </label>
                   <input
@@ -729,19 +729,19 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                     min={0}
                     value={leadsConverted}
                     onChange={(e) => setLeadsConverted(Number(e.target.value))}
-                    className="w-full h-9 px-3 bg-[#282828] rounded font-mono text-center text-xs text-[#1DB954]"
+                    className="w-full h-9 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-lg font-mono text-center text-xs text-emerald-600 dark:text-[#1DB954] font-bold focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954]"
                   />
                 </div>
               </div>
 
               {/* Hourly Work Logs Section (ساعت ۹ الی ۲۰) */}
-              <div className="p-4 rounded-2xl bg-[#121212] border border-[#282828] space-y-3">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-white flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-[#1DB954]" />
+                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                     <span>ثبت گزارش ساعت به ساعت (ساعت ۹ الی ۲۰)</span>
                   </div>
-                  <span className="text-[11px] text-[#A7A7A7]">
+                  <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">
                     بازه کاری مورد نظر خود را تکمیل کنید
                   </span>
                 </div>
@@ -750,11 +750,11 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                   {DEFAULT_HOURLY_SLOTS.map((slot) => (
                     <div
                       key={slot}
-                      className="p-2.5 rounded-xl bg-[#1a1a1a] border border-[#2c2c2c] hover:border-[#3a3a3a] transition-colors flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3"
+                      className="p-2.5 rounded-xl bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2c2c2c] hover:border-slate-300 dark:hover:border-[#3a3a3a] transition-colors flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3"
                     >
                       <div className="sm:w-36 shrink-0">
-                        <span className="text-xs font-bold text-[#1DB954] font-mono flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-[#1DB954]" />
+                        <span className="text-xs font-bold text-emerald-600 dark:text-[#1DB954] font-mono flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-600 dark:bg-[#1DB954]" />
                           <span>{slot} :</span>
                         </span>
                       </div>
@@ -763,7 +763,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                         value={hourlyLogs[slot] || ''}
                         onChange={(e) => handleHourlyChange(slot, e.target.value)}
                         placeholder={`شرح فعالیت ${slot} (تماس‌ها، جلسات، پیگیری...)...`}
-                        className="w-full h-8 px-3 bg-[#282828] rounded text-xs text-white placeholder:text-[#666] focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                        className="w-full h-8 px-3 bg-slate-50 dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-lg text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-[#666] focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:focus:ring-[#1DB954]"
                       />
                     </div>
                   ))}
@@ -772,9 +772,9 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
 
               {/* Tasks Summary */}
               <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5 flex items-center justify-between">
                   <span>خلاصه و یادداشت تکمیلی اقدامات روزانه</span>
-                  <span className="text-[10px] text-[#777]">
+                  <span className="text-[10px] text-slate-400 dark:text-[#777]">
                     (اختیاری - در صورت عدم ورود، از لاگ‌های ساعتی تولید می‌شود)
                   </span>
                 </label>
@@ -783,13 +783,13 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                   value={tasksSummary}
                   onChange={(e) => setTasksSummary(e.target.value)}
                   placeholder="یادداشت کلی عملکرد، هماهنگی‌های کلیدی، دستاوردها..."
-                  className="w-full p-3 bg-[#282828] rounded-md text-xs text-white resize-none focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                  className="w-full p-3 bg-slate-50 dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-xl text-xs text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:focus:ring-[#1DB954]"
                 />
               </div>
 
               {/* Challenges */}
               <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                   چالش‌ها، موانع یا نیازمندی‌ها
                 </label>
                 <input
@@ -797,13 +797,13 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                   value={challenges}
                   onChange={(e) => setChallenges(e.target.value)}
                   placeholder="موانع سیستمی، نیاز به مجوز مدیریت، مشکلات با مشتریان..."
-                  className="w-full h-9 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none"
+                  className="w-full h-9 px-3 bg-slate-50 dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:focus:ring-[#1DB954]"
                 />
               </div>
 
               {/* Tomorrow Plan */}
               <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                   برنامه کاری فردا
                 </label>
                 <input
@@ -811,19 +811,19 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                   value={tomorrowPlan}
                   onChange={(e) => setTomorrowPlan(e.target.value)}
                   placeholder="مشتریانی که باید تماس گرفته شوند، قراردادهایی که باید بسته شوند..."
-                  className="w-full h-9 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none"
+                  className="w-full h-9 px-3 bg-slate-50 dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:focus:ring-[#1DB954]"
                 />
               </div>
 
               {/* Submit Buttons (Draft vs Submitted) */}
-              <div className="pt-4 border-t border-[#282828] flex flex-wrap items-center justify-between gap-3">
+              <div className="pt-4 border-t border-slate-200 dark:border-[#282828] flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => {
                     setShowAddModal(false);
                     setEditingReport(null);
                   }}
-                  className="h-9 px-4 rounded-full border border-[#535353] text-xs text-[#B3B3B3] hover:text-white cursor-pointer"
+                  className="h-9 px-4 rounded-full border border-slate-300 dark:border-[#535353] text-xs text-slate-600 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#282828] cursor-pointer"
                 >
                   انصراف
                 </button>
@@ -834,7 +834,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                     type="button"
                     disabled={submitting}
                     onClick={() => handleSubmit('draft')}
-                    className="h-9 px-4 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                    className="h-9 px-4 rounded-full bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-700 dark:text-amber-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
                   >
                     {submitting ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -849,7 +849,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                     type="button"
                     disabled={submitting}
                     onClick={() => handleSubmit('submitted')}
-                    className="h-9 px-5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                    className="h-9 px-5 rounded-full bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ED760] text-white dark:text-black font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
                   >
                     {submitting ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />

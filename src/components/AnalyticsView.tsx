@@ -678,22 +678,22 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-200">
       {/* 1. TOP HEADER & TITLE & PERSONNEL SEARCH FILTER */}
-      <div className="bg-[#121212] border border-[#282828] rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+      <div className="bg-white dark:bg-[#121212] border border-slate-200 dark:border-[#282828] rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#1DB954] to-[#14833b] text-black flex items-center justify-center shadow-lg shadow-[#1DB954]/20 flex-shrink-0">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 dark:from-[#1DB954] dark:to-[#14833b] text-white dark:text-black flex items-center justify-center shadow-lg shadow-emerald-500/20 dark:shadow-[#1DB954]/20 flex-shrink-0">
               <BarChart3 className="w-6 h-6 stroke-[2.5]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
                   گزارشات نموداری
                 </h1>
-                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold border border-[#1DB954]/30 font-mono">
+                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-[#1DB954] font-bold border border-emerald-500/30 font-mono">
                   LIVE ANALYTICS
                 </span>
               </div>
-              <p className="text-xs text-[#A7A7A7] mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-[#A7A7A7] mt-0.5">
                 {userIsAdmin
                   ? 'پایش هوشمند عملکرد روزانه، بررسی تعاملات با مشتریان و تحلیل جامع دوره‌ای تیم فروش'
                   : 'پایش و آنالیز نموداری عملکرد اختصاصی و پرونده‌های تحت پیگیری شما'}
@@ -705,19 +705,19 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           {userIsAdmin ? (
             <div className="flex items-center gap-2">
               <div className="relative">
-                <div className="flex items-center gap-2 bg-[#181818] border border-[#333] hover:border-[#1DB954] rounded-xl px-3 py-1.5 transition-all shadow-inner">
-                  <User className="w-4 h-4 text-[#1DB954]" />
-                  <span className="text-xs text-[#888]">کارشناس:</span>
+                <div className="flex items-center gap-2 bg-slate-50 dark:bg-[#181818] border border-slate-300 dark:border-[#333] hover:border-emerald-600 dark:hover:border-[#1DB954] rounded-xl px-3 py-1.5 transition-all shadow-inner">
+                  <User className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
+                  <span className="text-xs text-slate-500 dark:text-[#888]">کارشناس:</span>
                   <select
                     value={selectedPersonnelId}
                     onChange={(e) => setSelectedPersonnelId(e.target.value)}
-                    className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer pr-1"
+                    className="bg-transparent text-xs font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer pr-1"
                   >
-                    <option value="all" className="bg-[#181818] text-white">
+                    <option value="all" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                       📊 همه پرسنل (کل تیم)
                     </option>
                     {filteredPersonnelOptions.map((p) => (
-                      <option key={p.id} value={p.id} className="bg-[#181818] text-white">
+                      <option key={p.id} value={p.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                         {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
                       </option>
                     ))}
@@ -732,25 +732,25 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   value={personnelSearch}
                   onChange={(e) => setPersonnelSearch(e.target.value)}
                   placeholder="جستجوی کارشناس..."
-                  className="w-36 lg:w-44 h-9 px-3 pr-8 rounded-xl bg-[#181818] text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none"
+                  className="w-36 lg:w-44 h-9 px-3 pr-8 rounded-xl bg-slate-50 dark:bg-[#181818] text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#333] focus:border-emerald-600 dark:focus:border-[#1DB954] focus:outline-none"
                 />
-                <Search className="w-3.5 h-3.5 text-[#777] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-3.5 h-3.5 text-slate-400 dark:text-[#777] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#1DB954]/10 border border-[#1DB954]/30 text-xs text-white">
-              <ShieldCheck className="w-4 h-4 text-[#1DB954]" />
-              <span className="text-[#A7A7A7]">کارشناس:</span>
-              <span className="font-bold text-[#1DB954]">
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-slate-900 dark:text-white">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
+              <span className="text-slate-500 dark:text-[#A7A7A7]">کارشناس:</span>
+              <span className="font-bold text-emerald-600 dark:text-[#1DB954]">
                 {currentPersonnel?.name || currentUser?.name || 'کارشناس پیگیری'}
               </span>
-              <span className="text-[10px] text-[#777] font-mono mr-1">(دسترسی اختصاصی)</span>
+              <span className="text-[10px] text-slate-400 dark:text-[#777] font-mono mr-1">(دسترسی اختصاصی)</span>
             </div>
           )}
         </div>
 
         {/* Navigation Tabs (3 Main Sections) */}
-        <div className="flex items-center gap-2 border-t border-[#222] pt-4 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-2 border-t border-slate-200 dark:border-[#222] pt-4 overflow-x-auto no-scrollbar">
           <button
             onClick={() => {
               setActiveTab('daily_reports');
@@ -758,8 +758,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === 'daily_reports'
-                ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-500/25 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
             }`}
           >
             <Activity className="w-4 h-4" />
@@ -773,8 +773,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === 'daily_customers'
-                ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-500/25 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
             }`}
           >
             <Users className="w-4 h-4" />
@@ -788,8 +788,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === 'periodic'
-                ? 'bg-[#1DB954] text-black shadow-lg shadow-[#1DB954]/25 scale-[1.02]'
-                : 'bg-[#181818] hover:bg-[#222] text-[#B3B3B3] hover:text-white border border-[#282828]'
+                ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-500/25 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
             }`}
           >
             <PieChart className="w-4 h-4" />

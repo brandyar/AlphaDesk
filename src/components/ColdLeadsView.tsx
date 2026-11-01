@@ -324,16 +324,16 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
       {/* Title & Action Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954]">
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-[#1DB954]">
               <PhoneCall className="w-5 h-5 stroke-[2.5]" />
             </div>
             <span>بانک شماره‌های اولیه</span>
-            <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] font-bold border border-[#1DB954]/30">
+            <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-[#1DB954] font-bold border border-emerald-500/30">
               {toPersianDigits(filteredLeads.length)} شماره
             </span>
           </h2>
-          <p className="text-xs text-[#A7A7A7] mt-1">
+          <p className="text-xs text-slate-500 dark:text-[#A7A7A7] mt-1">
             {userIsAdmin
               ? 'مخزن جامع شماره‌های خام ورودی سیستم، با قابلیت تخصیص تکی و گروهی به کارشناسان فروش'
               : 'شماره‌های ثبت‌شده و اختصاص‌یافته به شما جهت تماس اولیه و تبدیل به پرونده مشتری'}
@@ -342,13 +342,13 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
 
         <div className="flex items-center gap-2">
           {/* View Toggle (Grid / Table) */}
-          <div className="flex items-center bg-[#181818] p-1 rounded-xl border border-[#282828]">
+          <div className="flex items-center bg-slate-100 dark:bg-[#181818] p-1 rounded-xl border border-slate-200 dark:border-[#282828]">
             <button
               onClick={() => setViewMode('grid')}
               className={`p-1.5 rounded-lg transition-colors ${
                 viewMode === 'grid'
-                  ? 'bg-[#1DB954] text-black shadow-sm'
-                  : 'text-[#888] hover:text-white'
+                  ? 'bg-white dark:bg-[#1DB954] text-emerald-700 dark:text-black shadow-sm font-bold'
+                  : 'text-slate-400 dark:text-[#888] hover:text-slate-700 dark:hover:text-white'
               }`}
               title="نمای کارتی"
             >
@@ -358,8 +358,8 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
               onClick={() => setViewMode('table')}
               className={`p-1.5 rounded-lg transition-colors ${
                 viewMode === 'table'
-                  ? 'bg-[#1DB954] text-black shadow-sm'
-                  : 'text-[#888] hover:text-white'
+                  ? 'bg-white dark:bg-[#1DB954] text-emerald-700 dark:text-black shadow-sm font-bold'
+                  : 'text-slate-400 dark:text-[#888] hover:text-slate-700 dark:hover:text-white'
               }`}
               title="نمای لیستی / جدولی"
             >
@@ -369,7 +369,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
 
           <button
             onClick={() => setShowAddForm(!showAddForm)}
-            className="h-10 px-4 rounded-xl bg-[#1DB954] hover:bg-[#1ED760] text-black font-extrabold text-xs flex items-center gap-2 transition-all hover:scale-[1.02] shadow-lg shadow-[#1DB954]/20 flex-shrink-0"
+            className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 dark:bg-[#1DB954] dark:hover:bg-[#1ED760] text-white dark:text-black font-extrabold text-xs flex items-center gap-2 transition-all hover:scale-[1.02] shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/20 flex-shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>افزودن شماره جدید</span>
@@ -381,17 +381,17 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
       {showAddForm && (
         <form
           onSubmit={handleCreateLead}
-          className="p-5 sm:p-6 rounded-2xl bg-[#181818] border border-[#1DB954]/40 shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-2 duration-200"
+          className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#181818] border border-emerald-500/40 shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-2 duration-200"
         >
-          <div className="flex items-center justify-between border-b border-[#282828] pb-3">
-            <div className="text-xs font-bold text-white flex items-center gap-2">
-              <PhoneCall className="w-4 h-4 text-[#1DB954]" />
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
+            <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <PhoneCall className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
               <span>ثبت سریع شماره جدید در مخزن شماره‌های اولیه</span>
             </div>
             <button
               type="button"
               onClick={() => setShowAddForm(false)}
-              className="text-xs text-[#A7A7A7] hover:text-white flex items-center gap-1"
+              className="text-xs text-slate-400 dark:text-[#A7A7A7] hover:text-slate-700 dark:hover:text-white flex items-center gap-1"
             >
               <X className="w-4 h-4" />
               <span>بستن</span>
@@ -401,8 +401,8 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
             {/* Phone Number */}
             <div>
-              <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1">
-                شماره موبایل / ثابت <span className="text-[#E22134]">*</span>
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">
+                شماره موبایل / ثابت <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
@@ -411,13 +411,13 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 placeholder="09121234567"
-                className="w-full h-9 px-3 bg-[#121212] rounded-xl text-xs text-white focus:outline-none focus:border-[#1DB954] border border-[#2c2c2c] font-mono"
+                className="w-full h-9 px-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954] border border-slate-300 dark:border-[#2c2c2c] font-mono"
               />
             </div>
 
             {/* Contact Name */}
             <div>
-              <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1">
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">
                 نام مخاطب یا فروشگاه (اختیاری)
               </label>
               <input
@@ -425,50 +425,50 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                 value={contactName}
                 onChange={(e) => setContactName(e.target.value)}
                 placeholder="مثال: آقای کریمی (تولیدی کیف)"
-                className="w-full h-9 px-3 bg-[#121212] rounded-xl text-xs text-white focus:outline-none focus:border-[#1DB954] border border-[#2c2c2c]"
+                className="w-full h-9 px-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954] border border-slate-300 dark:border-[#2c2c2c]"
               />
             </div>
 
             {/* Source */}
             <div>
-              <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1">
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">
                 منبع دریافت شماره
               </label>
               <select
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
-                className="w-full h-9 px-2.5 bg-[#121212] rounded-xl text-xs text-white focus:outline-none focus:border-[#1DB954] border border-[#2c2c2c]"
+                className="w-full h-9 px-2.5 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954] border border-slate-300 dark:border-[#2c2c2c]"
               >
-                <option value="دایرکت اینستاگرام">دایرکت اینستاگرام</option>
-                <option value="فرم سایت / لندینگ">فرم سایت / لندینگ</option>
-                <option value="معرفی مشتریان">معرفی مشتریان قبلی</option>
-                <option value="تبلیغات پیامکی">تبلیغات پیامکی</option>
-                <option value="نمایشگاه و رویداد">نمایشگاه و رویداد</option>
-                <option value="جستجوی مارکت / وب">جستجوی وب / دیوار / شیپور</option>
-                <option value="ورود دستی">ورود دستی</option>
+                <option value="دایرکت اینستاگرام" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">دایرکت اینستاگرام</option>
+                <option value="فرم سایت / لندینگ" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">فرم سایت / لندینگ</option>
+                <option value="معرفی مشتریان" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">معرفی مشتریان قبلی</option>
+                <option value="تبلیغات پیامکی" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">تبلیغات پیامکی</option>
+                <option value="نمایشگاه و رویداد" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">نمایشگاه و رویداد</option>
+                <option value="جستجوی مارکت / وب" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">جستجوی وب / دیوار / شیپور</option>
+                <option value="ورود دستی" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">ورود دستی</option>
               </select>
             </div>
 
             {/* Assigned Marketer */}
             <div>
-              <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1">
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">
                 بازاریاب مسئول
               </label>
               {userIsAdmin ? (
                 <select
                   value={assignedTo}
                   onChange={(e) => setAssignedTo(e.target.value)}
-                  className="w-full h-9 px-2.5 bg-[#121212] rounded-xl text-xs text-white focus:outline-none focus:border-[#1DB954] border border-[#2c2c2c]"
+                  className="w-full h-9 px-2.5 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954] border border-slate-300 dark:border-[#2c2c2c]"
                 >
-                  <option value="">-- بدون تخصیص (عمومی) --</option>
+                  <option value="" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">-- بدون تخصیص (عمومی) --</option>
                   {personnelList.map((p) => (
-                    <option key={p.id} value={p.id}>
+                    <option key={p.id} value={p.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                       {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
                     </option>
                   ))}
                 </select>
               ) : (
-                <div className="w-full h-9 px-3 bg-[#121212] rounded-xl text-xs text-[#1DB954] border border-[#2c2c2c] flex items-center font-bold">
+                <div className="w-full h-9 px-3 bg-slate-100 dark:bg-[#121212] rounded-xl text-xs text-emerald-700 dark:text-[#1DB954] border border-slate-300 dark:border-[#2c2c2c] flex items-center font-bold">
                   {currentPersonnel?.name || currentUser?.name || 'شما'}
                 </div>
               )}
@@ -477,7 +477,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
 
           {/* Notes */}
           <div>
-            <label className="block text-[11px] font-semibold text-[#B3B3B3] mb-1">
+            <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">
               یادداشت یا توضیحات اولیه
             </label>
             <input
@@ -485,7 +485,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="مثال: سوال در مورد تعرفه همکاری داشتند، قبل از ظهر تماس گرفته شود..."
-              className="w-full h-9 px-3 bg-[#121212] rounded-xl text-xs text-white focus:outline-none focus:border-[#1DB954] border border-[#2c2c2c]"
+              className="w-full h-9 px-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954] border border-slate-300 dark:border-[#2c2c2c]"
             />
           </div>
 
@@ -493,14 +493,14 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
             <button
               type="button"
               onClick={() => setShowAddForm(false)}
-              className="h-8 px-4 rounded-xl border border-[#333] text-xs text-[#B3B3B3] hover:text-white"
+              className="h-8 px-4 rounded-xl border border-slate-300 dark:border-[#333] text-xs text-slate-600 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white"
             >
               انصراف
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="h-8 px-6 rounded-xl bg-[#1DB954] hover:bg-[#1ED760] text-black font-extrabold text-xs shadow-md"
+              className="h-8 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-500 dark:bg-[#1DB954] dark:hover:bg-[#1ED760] text-white dark:text-black font-extrabold text-xs shadow-md"
             >
               {submitting ? 'در حال ثبت...' : 'ذخیره در بانک شماره‌ها'}
             </button>
@@ -509,7 +509,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
       )}
 
       {/* Filter & Toolbar Row */}
-      <div className="p-3.5 sm:p-4 bg-[#181818] rounded-2xl border border-[#282828] flex flex-wrap items-center justify-between gap-3">
+      <div className="p-3.5 sm:p-4 bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 flex-1 min-w-[240px]">
           <div className="relative flex-1 max-w-sm">
             <input
@@ -517,24 +517,24 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="جستجو در شماره، نام، منبع، بازاریاب..."
-              className="w-full h-9 bg-[#121212] rounded-xl pl-3 pr-9 text-xs text-white placeholder-[#777] focus:outline-none focus:border-[#1DB954] border border-[#2c2c2c]"
+              className="w-full h-9 bg-slate-50 dark:bg-[#121212] rounded-xl pl-3 pr-9 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#777] focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954] border border-slate-300 dark:border-[#2c2c2c]"
             />
-            <Search className="w-3.5 h-3.5 text-[#777] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-3.5 h-3.5 text-slate-400 dark:text-[#777] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
 
           {/* Admin Marketer Filter */}
           {userIsAdmin && (
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-[#888] hidden sm:inline">بازاریاب:</span>
+              <span className="text-xs text-slate-500 dark:text-[#888] hidden sm:inline">بازاریاب:</span>
               <select
                 value={marketerFilter}
                 onChange={(e) => setMarketerFilter(e.target.value)}
-                className="h-9 px-3 rounded-xl bg-[#121212] text-xs text-white border border-[#2c2c2c] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+                className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#121212] text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2c2c2c] focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954] cursor-pointer"
               >
-                <option value="همه">همه بازاریابان</option>
-                <option value="unassigned">تخصیص نیافته</option>
+                <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه بازاریابان</option>
+                <option value="unassigned" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">تخصیص نیافته</option>
                 {personnelList.map((p) => (
-                  <option key={p.id} value={p.id}>
+                  <option key={p.id} value={p.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                     {p.name}
                   </option>
                 ))}
@@ -545,17 +545,17 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-[#888] hidden sm:inline">وضعیت:</span>
+            <span className="text-xs text-slate-500 dark:text-[#888] hidden sm:inline">وضعیت:</span>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-[#121212] text-xs text-white border border-[#2c2c2c] focus:outline-none focus:border-[#1DB954] cursor-pointer"
+              className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#121212] text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2c2c2c] focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954] cursor-pointer"
             >
-              <option value="همه">همه وضعیت‌ها</option>
+              <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه وضعیت‌ها</option>
               {leadStatuses
                 .filter((st) => st !== 'همه')
                 .map((st) => (
-                  <option key={st} value={st}>
+                  <option key={st} value={st} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                     {st}
                   </option>
                 ))}
@@ -566,7 +566,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
           {userIsAdmin && items.length > 0 && (
             <button
               onClick={handleSelectAllLeads}
-              className="text-xs text-[#1DB954] hover:underline font-bold px-2 py-1"
+              className="text-xs text-emerald-600 dark:text-[#1DB954] hover:underline font-bold px-2 py-1"
             >
               {selectedLeadIds.length === items.length
                 ? 'لغو انتخاب همه'
@@ -578,23 +578,23 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
 
       {/* Floating Sticky Bulk Assignment Bar for Admin */}
       {userIsAdmin && selectedLeadIds.length > 0 && (
-        <div className="sticky top-20 z-30 p-3.5 bg-gradient-to-r from-[#181818] to-[#202020] border-2 border-[#1DB954] rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-3 animate-in slide-in-from-top-2">
+        <div className="sticky top-20 z-30 p-3.5 bg-gradient-to-r from-slate-100 to-slate-200 dark:from-[#181818] dark:to-[#202020] border-2 border-emerald-600 dark:border-[#1DB954] rounded-2xl shadow-2xl flex flex-wrap items-center justify-between gap-3 animate-in slide-in-from-top-2">
           <div className="flex items-center gap-2.5">
-            <span className="w-6 h-6 rounded-full bg-[#1DB954] text-black font-extrabold text-xs flex items-center justify-center font-mono">
+            <span className="w-6 h-6 rounded-full bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black font-extrabold text-xs flex items-center justify-center font-mono">
               {toPersianDigits(selectedLeadIds.length)}
             </span>
-            <span className="text-xs font-bold text-white">شماره انتخاب شده جهت واگذاری</span>
+            <span className="text-xs font-bold text-slate-900 dark:text-white">شماره انتخاب شده جهت واگذاری</span>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <select
               value={bulkTargetMarketerId}
               onChange={(e) => setBulkTargetMarketerId(e.target.value)}
-              className="h-9 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#444] focus:border-[#1DB954] focus:outline-none"
+              className="h-9 px-3 bg-white dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#444] focus:border-emerald-600 dark:focus:border-[#1DB954] focus:outline-none"
             >
-              <option value="">-- انتخاب بازاریاب مقصد --</option>
+              <option value="" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">-- انتخاب بازاریاب مقصد --</option>
               {personnelList.map((p) => (
-                <option key={p.id} value={p.id}>
+                <option key={p.id} value={p.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                   {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
                 </option>
               ))}
@@ -603,10 +603,10 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
             <button
               onClick={handleExecuteBulkAssign}
               disabled={isBulkAssigning || !bulkTargetMarketerId}
-              className="h-9 px-4 rounded-xl bg-[#1DB954] hover:bg-[#1ED760] disabled:opacity-40 text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5"
+              className="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 dark:bg-[#1DB954] dark:hover:bg-[#1ED760] disabled:opacity-40 text-white dark:text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5"
             >
               {isBulkAssigning ? (
-                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-white dark:border-black border-t-transparent rounded-full animate-spin" />
               ) : (
                 <ArrowLeftRight className="w-4 h-4 stroke-[2.5]" />
               )}
@@ -615,7 +615,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
 
             <button
               onClick={() => setSelectedLeadIds([])}
-              className="h-9 px-3 rounded-xl bg-[#282828] text-xs text-[#B3B3B3] hover:text-white"
+              className="h-9 px-3 rounded-xl bg-slate-200 dark:bg-[#282828] text-xs text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white"
             >
               لغو
             </button>
@@ -625,14 +625,14 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
 
       {/* Main Content: Grid View or Table/List View */}
       {isLoadingPage && items.length === 0 ? (
-        <div className="p-16 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
-          <Loader2 className="w-8 h-8 text-[#1DB954] animate-spin mx-auto" />
-          <p className="text-xs text-[#A7A7A7]">در حال بارگذاری شماره‌های اولیه...</p>
+        <div className="p-16 text-center bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] space-y-3">
+          <Loader2 className="w-8 h-8 text-emerald-600 dark:text-[#1DB954] animate-spin mx-auto" />
+          <p className="text-xs text-slate-500 dark:text-[#A7A7A7]">در حال بارگذاری شماره‌های اولیه...</p>
         </div>
       ) : items.length === 0 ? (
-        <div className="p-12 text-center bg-[#181818] rounded-2xl border border-[#282828] space-y-3">
-          <PhoneCall className="w-10 h-10 text-[#535353] mx-auto" />
-          <p className="text-xs text-[#A7A7A7]">هیچ شماره‌ای مطابق جستجو و فیلتر یافت نشد.</p>
+        <div className="p-12 text-center bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] space-y-3">
+          <PhoneCall className="w-10 h-10 text-slate-400 dark:text-[#535353] mx-auto" />
+          <p className="text-xs text-slate-500 dark:text-[#A7A7A7]">هیچ شماره‌ای مطابق جستجو و فیلتر یافت نشد.</p>
         </div>
       ) : viewMode === 'grid' ? (
         /* ------------------------------------------------------------- */
@@ -647,8 +647,8 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
             return (
               <div
                 key={lead.id}
-                className={`bg-[#181818] hover:bg-[#1d1d1d] rounded-2xl p-4 sm:p-5 border transition-all space-y-3.5 flex flex-col justify-between ${
-                  isSelected ? 'border-[#1DB954] bg-[#1DB954]/5 shadow-lg shadow-[#1DB954]/10' : 'border-[#282828] hover:border-[#383838]'
+                className={`bg-white dark:bg-[#181818] hover:bg-slate-50 dark:hover:bg-[#1d1d1d] rounded-2xl p-4 sm:p-5 border transition-all space-y-3.5 flex flex-col justify-between ${
+                  isSelected ? 'border-emerald-500 bg-emerald-500/5 dark:bg-[#1DB954]/5 shadow-lg shadow-emerald-500/10' : 'border-slate-200 dark:border-[#282828] hover:border-slate-300 dark:hover:border-[#383838]'
                 }`}
               >
                 <div>
@@ -660,15 +660,15 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => handleToggleSelectLead(lead.id)}
-                          className="w-4 h-4 rounded text-[#1DB954] accent-[#1DB954] cursor-pointer flex-shrink-0"
+                          className="w-4 h-4 rounded text-emerald-600 dark:text-[#1DB954] accent-emerald-600 dark:accent-[#1DB954] cursor-pointer flex-shrink-0"
                         />
                       )}
-                      <span className="font-mono text-base font-black text-white tracking-wide truncate" dir="ltr">
+                      <span className="font-mono text-base font-black text-slate-900 dark:text-white tracking-wide truncate" dir="ltr">
                         {lead.phone_number}
                       </span>
                       <button
                         onClick={() => copyToClipboard(lead.phone_number)}
-                        className="p-1 text-[#888] hover:text-white transition-colors flex-shrink-0"
+                        className="p-1 text-slate-400 dark:text-[#888] hover:text-slate-700 dark:hover:text-white transition-colors flex-shrink-0"
                         title="کپی شماره"
                       >
                         <Copy className="w-3.5 h-3.5" />
@@ -681,32 +681,32 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                   </div>
 
                   {/* Contact Name & Source */}
-                  <div className="flex items-center gap-2 text-xs text-[#B3B3B3] mb-1.5">
+                  <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-[#B3B3B3] mb-1.5">
                     {lead.contact_name ? (
-                      <span className="font-bold text-white truncate">{lead.contact_name}</span>
+                      <span className="font-bold text-slate-900 dark:text-white truncate">{lead.contact_name}</span>
                     ) : (
-                      <span className="text-[#666]">نام اولیه نامشخص</span>
+                      <span className="text-slate-400 dark:text-[#666]">نام اولیه نامشخص</span>
                     )}
                     <span>·</span>
-                    <span className="text-[#888] bg-[#121212] px-2 py-0.5 rounded-md border border-[#242424] text-[11px] whitespace-nowrap">
+                    <span className="text-slate-500 dark:text-[#888] bg-slate-100 dark:bg-[#121212] px-2 py-0.5 rounded-md border border-slate-200 dark:border-[#242424] text-[11px] whitespace-nowrap">
                       {lead.source}
                     </span>
                   </div>
 
                   {/* Notes */}
                   {lead.notes && (
-                    <p className="text-xs text-[#B3B3B3] bg-[#121212] p-2.5 rounded-xl border border-[#242424] mt-2 line-clamp-2 leading-relaxed">
+                    <p className="text-xs text-slate-600 dark:text-[#B3B3B3] bg-slate-50 dark:bg-[#121212] p-2.5 rounded-xl border border-slate-200 dark:border-[#242424] mt-2 line-clamp-2 leading-relaxed">
                       {lead.notes}
                     </p>
                   )}
                 </div>
 
                 {/* Footer Section */}
-                <div className="pt-3 border-t border-[#242424] space-y-2.5">
+                <div className="pt-3 border-t border-slate-200 dark:border-[#242424] space-y-2.5">
                   {/* Marketer Assignment Badge & Quick Switch */}
-                  <div className="flex items-center justify-between text-xs text-[#888]">
+                  <div className="flex items-center justify-between text-xs text-slate-500 dark:text-[#888]">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <User className="w-3.5 h-3.5 text-[#1DB954] flex-shrink-0" />
+                      <User className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />
                       <span className="text-[11px] whitespace-nowrap">بازاریاب:</span>
                       {userIsAdmin && onUpdateLeadAssignedTo ? (
                         <select
@@ -716,21 +716,21 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                             await onUpdateLeadAssignedTo(lead.id, newId);
                             showToast?.('بازاریاب مسئول این شماره تغییر یافت.', 'success');
                           }}
-                          className="bg-[#121212] border border-[#333] hover:border-[#1DB954] text-white font-bold text-[11px] rounded-lg px-2 py-0.5 cursor-pointer focus:outline-none truncate max-w-[140px]"
+                          className="bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#333] hover:border-emerald-600 dark:hover:border-[#1DB954] text-slate-900 dark:text-white font-bold text-[11px] rounded-lg px-2 py-0.5 cursor-pointer focus:outline-none truncate max-w-[140px]"
                         >
-                          <option value="">تخصیص نیافته</option>
+                          <option value="" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">تخصیص نیافته</option>
                           {personnelList.map((p) => (
-                            <option key={p.id} value={p.id}>
+                            <option key={p.id} value={p.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                               {p.name}
                             </option>
                           ))}
                         </select>
                       ) : (
-                        <span className="font-bold text-white text-[11px] truncate">{marketerName}</span>
+                        <span className="font-bold text-slate-900 dark:text-white text-[11px] truncate">{marketerName}</span>
                       )}
                     </div>
 
-                    <span className="text-[10px] text-[#777] font-mono whitespace-nowrap flex-shrink-0">
+                    <span className="text-[10px] text-slate-400 dark:text-[#777] font-mono whitespace-nowrap flex-shrink-0">
                       {formatPersianDateTime(lead.date_created)}
                     </span>
                   </div>
@@ -740,9 +740,9 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                     {/* Direct Call Button */}
                     <a
                       href={`tel:${lead.phone_number}`}
-                      className="inline-flex items-center gap-1 h-8 px-2.5 rounded-xl bg-[#242424] hover:bg-[#303030] text-white text-xs font-bold transition-colors whitespace-nowrap flex-shrink-0"
+                      className="inline-flex items-center gap-1 h-8 px-2.5 rounded-xl bg-slate-100 dark:bg-[#242424] hover:bg-slate-200 dark:hover:bg-[#303030] text-slate-800 dark:text-white text-xs font-bold transition-colors whitespace-nowrap flex-shrink-0"
                     >
-                      <Phone className="w-3.5 h-3.5 text-[#1DB954] flex-shrink-0" />
+                      <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />
                       <span>تماس</span>
                     </a>
 
@@ -750,20 +750,20 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                     <select
                       value={lead.status}
                       onChange={(e) => onUpdateLeadStatus(lead.id, e.target.value as LeadStatus)}
-                      className="h-8 px-2 rounded-xl bg-[#121212] text-[11px] text-white border border-[#2c2c2c] focus:outline-none cursor-pointer flex-1 min-w-[105px] max-w-[130px] truncate"
+                      className="h-8 px-2 rounded-xl bg-slate-50 dark:bg-[#121212] text-[11px] text-slate-900 dark:text-white border border-slate-300 dark:border-[#2c2c2c] focus:outline-none cursor-pointer flex-1 min-w-[105px] max-w-[130px] truncate"
                     >
-                      <option value="تماس نگرفته">تماس نگرفته</option>
-                      <option value="در حال بررسی">در حال بررسی</option>
-                      <option value="پاسخ نداد">پاسخ نداد</option>
-                      <option value="شماره نامعتبر">شماره نامعتبر</option>
-                      <option value="تبدیل شده به مشتری">تبدیل شده به مشتری</option>
+                      <option value="تماس نگرفته" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">تماس نگرفته</option>
+                      <option value="در حال بررسی" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">در حال بررسی</option>
+                      <option value="پاسخ نداد" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">پاسخ نداد</option>
+                      <option value="شماره نامعتبر" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">شماره نامعتبر</option>
+                      <option value="تبدیل شده به مشتری" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">تبدیل شده به مشتری</option>
                     </select>
 
                     {/* Convert to full customer button */}
                     {lead.status !== 'تبدیل شده به مشتری' && (
                       <button
                         onClick={() => onConvertToCustomer(lead)}
-                        className="inline-flex items-center gap-1 h-8 px-3 rounded-xl bg-[#1DB954] hover:bg-[#1ED760] text-black text-xs font-black transition-transform hover:scale-105 shadow-sm whitespace-nowrap flex-shrink-0"
+                        className="inline-flex items-center gap-1 h-8 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 dark:bg-[#1DB954] dark:hover:bg-[#1ED760] text-white dark:text-black text-xs font-black transition-transform hover:scale-105 shadow-sm whitespace-nowrap flex-shrink-0"
                         title="ایجاد پرونده کامل مشتری با این شماره"
                       >
                         <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
@@ -780,7 +780,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                             showToast?.('شماره با موفقیت حذف شد.', 'info');
                           }
                         }}
-                        className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/15 transition-colors flex-shrink-0"
+                        className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/15 transition-colors flex-shrink-0"
                         title="حذف شماره"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -796,10 +796,10 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
         /* ------------------------------------------------------------- */
         /* 2. TABLE / LIST VIEW (نمای لیستی / جدولی)                     */
         /* ------------------------------------------------------------- */
-        <div className="bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden shadow-xl">
+        <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl overflow-hidden shadow-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs">
-              <thead className="bg-[#121212] text-[#888] font-bold border-b border-[#282828]">
+              <thead className="bg-slate-50 dark:bg-[#121212] text-slate-600 dark:text-[#888] font-bold border-b border-slate-200 dark:border-[#282828]">
                 <tr>
                   {userIsAdmin && (
                     <th className="p-3.5 w-10 text-center">
@@ -807,7 +807,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                         type="checkbox"
                         checked={selectedLeadIds.length === filteredLeads.length && filteredLeads.length > 0}
                         onChange={handleSelectAllLeads}
-                        className="w-4 h-4 rounded text-[#1DB954] accent-[#1DB954] cursor-pointer"
+                        className="w-4 h-4 rounded text-emerald-600 dark:text-[#1DB954] accent-emerald-600 dark:accent-[#1DB954] cursor-pointer"
                       />
                     </th>
                   )}
@@ -820,7 +820,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                   <th className="p-3.5 text-center">اقدامات</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#222]">
+              <tbody className="divide-y divide-slate-200 dark:divide-[#222]">
                 {items.map((lead) => {
                   const statusTheme = getLeadStatusTheme(lead.status);
                   const isSelected = selectedLeadIds.includes(lead.id);
@@ -829,8 +829,8 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                   return (
                     <tr
                       key={lead.id}
-                      className={`hover:bg-[#202020] transition-colors ${
-                        isSelected ? 'bg-[#1DB954]/5' : ''
+                      className={`hover:bg-slate-50 dark:hover:bg-[#202020] transition-colors ${
+                        isSelected ? 'bg-emerald-50 dark:bg-[#1DB954]/5' : ''
                       }`}
                     >
                       {userIsAdmin && (
@@ -839,32 +839,32 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => handleToggleSelectLead(lead.id)}
-                            className="w-4 h-4 rounded text-[#1DB954] accent-[#1DB954] cursor-pointer"
+                            className="w-4 h-4 rounded text-emerald-600 dark:text-[#1DB954] accent-emerald-600 dark:accent-[#1DB954] cursor-pointer"
                           />
                         </td>
                       )}
-                      <td className="p-3.5 font-mono font-bold text-white whitespace-nowrap">
+                      <td className="p-3.5 font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <span dir="ltr">{lead.phone_number}</span>
                           <button
                             onClick={() => copyToClipboard(lead.phone_number)}
-                            className="p-1 text-[#777] hover:text-white"
+                            className="p-1 text-slate-400 dark:text-[#777] hover:text-slate-700 dark:hover:text-white"
                             title="کپی شماره"
                           >
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
-                      <td className="p-3.5 text-white font-semibold whitespace-nowrap">
-                        {lead.contact_name || <span className="text-[#666]">نامشخص</span>}
+                      <td className="p-3.5 text-slate-900 dark:text-white font-semibold whitespace-nowrap">
+                        {lead.contact_name || <span className="text-slate-400 dark:text-[#666]">نامشخص</span>}
                         {lead.notes && (
-                          <div className="text-[11px] text-[#777] font-normal truncate max-w-xs mt-0.5">
+                          <div className="text-[11px] text-slate-500 dark:text-[#777] font-normal truncate max-w-xs mt-0.5">
                             {lead.notes}
                           </div>
                         )}
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
-                        <span className="bg-[#121212] px-2 py-0.5 rounded text-[11px] text-[#888] border border-[#282828]">
+                        <span className="bg-slate-100 dark:bg-[#121212] px-2 py-0.5 rounded text-[11px] text-slate-600 dark:text-[#888] border border-slate-200 dark:border-[#282828]">
                           {lead.source}
                         </span>
                       </td>
@@ -874,11 +874,11 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                           onChange={(e) => onUpdateLeadStatus(lead.id, e.target.value as LeadStatus)}
                           className={`h-7 px-2 rounded-lg text-[11px] font-bold border ${statusTheme.bg} ${statusTheme.color} focus:outline-none cursor-pointer`}
                         >
-                          <option value="تماس نگرفته">تماس نگرفته</option>
-                          <option value="در حال بررسی">در حال بررسی</option>
-                          <option value="پاسخ نداد">پاسخ نداد</option>
-                          <option value="شماره نامعتبر">شماره نامعتبر</option>
-                          <option value="تبدیل شده به مشتری">تبدیل شده به مشتری</option>
+                          <option value="تماس نگرفته" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">تماس نگرفته</option>
+                          <option value="در حال بررسی" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">در حال بررسی</option>
+                          <option value="پاسخ نداد" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">پاسخ نداد</option>
+                          <option value="شماره نامعتبر" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">شماره نامعتبر</option>
+                          <option value="تبدیل شده به مشتری" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">تبدیل شده به مشتری</option>
                         </select>
                       </td>
                       <td className="p-3.5 whitespace-nowrap">
@@ -890,36 +890,36 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                               await onUpdateLeadAssignedTo(lead.id, newId);
                               showToast?.('بازاریاب تغییر یافت.', 'success');
                             }}
-                            className="bg-[#121212] border border-[#333] hover:border-[#1DB954] text-white font-bold text-[11px] rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
+                            className="bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#333] hover:border-emerald-600 dark:hover:border-[#1DB954] text-slate-900 dark:text-white font-bold text-[11px] rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
                           >
-                            <option value="">تخصیص نیافته</option>
+                            <option value="" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">تخصیص نیافته</option>
                             {personnelList.map((p) => (
-                              <option key={p.id} value={p.id}>
+                              <option key={p.id} value={p.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                                 {p.name}
                               </option>
                             ))}
                           </select>
                         ) : (
-                          <span className="font-bold text-white text-xs">{marketerName}</span>
+                          <span className="font-bold text-slate-900 dark:text-white text-xs">{marketerName}</span>
                         )}
                       </td>
-                      <td className="p-3.5 text-[#777] font-mono text-[11px] whitespace-nowrap">
+                      <td className="p-3.5 text-slate-500 dark:text-[#777] font-mono text-[11px] whitespace-nowrap">
                         {formatPersianDateTime(lead.date_created)}
                       </td>
                       <td className="p-3.5 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           <a
                             href={`tel:${lead.phone_number}`}
-                            className="p-1.5 rounded-lg bg-[#242424] hover:bg-[#303030] text-white transition-colors"
+                            className="p-1.5 rounded-lg bg-slate-100 dark:bg-[#242424] hover:bg-slate-200 dark:hover:bg-[#303030] text-slate-800 dark:text-white transition-colors"
                             title="تماس مستقیم"
                           >
-                            <Phone className="w-3.5 h-3.5 text-[#1DB954]" />
+                            <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                           </a>
 
                           {lead.status !== 'تبدیل شده به مشتری' && (
                             <button
                               onClick={() => onConvertToCustomer(lead)}
-                              className="px-2.5 py-1 rounded-lg bg-[#1DB954] hover:bg-[#1ED760] text-black font-extrabold text-[11px] flex items-center gap-1 transition-transform hover:scale-105"
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 dark:bg-[#1DB954] dark:hover:bg-[#1ED760] text-white dark:text-black font-extrabold text-[11px] flex items-center gap-1 transition-transform hover:scale-105"
                               title="ثبت پرونده مشتری"
                             >
                               <Sparkles className="w-3 h-3" />
@@ -935,7 +935,7 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
                                   showToast?.('شماره حذف شد.', 'info');
                                 }
                               }}
-                              className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/15 transition-colors"
+                              className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/15 transition-colors"
                               title="حذف شماره"
                             >
                               <Trash2 className="w-3.5 h-3.5" />

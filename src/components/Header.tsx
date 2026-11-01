@@ -16,9 +16,14 @@ import {
   Building2,
   Layers,
   Check,
+  Sun,
+  Moon,
+  Laptop,
 } from 'lucide-react';
 import { Personnel, AuthUser, Tenant } from '../types';
 import { getAvatarUrl, getUserAllowedTenants } from '../utils';
+import { ThemeToggle } from './ThemeToggle';
+import { useTheme } from '../context/ThemeContext';
 
 interface HeaderProps {
   searchQuery: string;
@@ -65,6 +70,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isOrgMenuOpen, setIsOrgMenuOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   const isGlobalAdmin = Boolean(
     currentUser?.is_admin &&
@@ -134,12 +140,12 @@ export const Header: React.FC<HeaderProps> = ({
 
 
   return (
-    <header className="h-16 sm:h-18 bg-[#121212] border-b border-[#282828] sticky top-0 z-30 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 select-none">
+    <header className="h-16 sm:h-18 bg-white dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] sticky top-0 z-30 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 select-none shadow-xs transition-colors">
       {/* Mobile Hamburger */}
       <div className="flex items-center gap-2">
         <button
           onClick={onToggleMobileMenu}
-          className="lg:hidden p-2 rounded-xl bg-[#1e1e1e] hover:bg-[#282828] text-white hover:text-[#1DB954] focus:outline-none transition-colors border border-[#2e2e2e]"
+          className="lg:hidden p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#1e1e1e] dark:hover:bg-[#282828] text-slate-700 hover:text-slate-900 dark:text-white dark:hover:text-[#1DB954] focus:outline-none transition-colors border border-slate-200 dark:border-[#2e2e2e]"
           aria-label={isMobileMenuOpen ? 'بستن منو' : 'باز کردن منو'}
           title="منوی اصلی"
         >
@@ -154,13 +160,13 @@ export const Header: React.FC<HeaderProps> = ({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="جستجو در نام، مدیر، شهر..."
-          className="w-full h-10 sm:h-11 bg-[#282828] rounded-full pl-3 sm:pl-4 pr-9 sm:pr-11 text-xs sm:text-sm text-white placeholder-[#888888] focus:outline-none focus:ring-1 focus:ring-white transition-all truncate"
+          className="w-full h-10 sm:h-11 bg-slate-100 dark:bg-[#282828] rounded-full pl-3 sm:pl-4 pr-9 sm:pr-11 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#888888] border border-slate-200 dark:border-transparent focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-white transition-all truncate"
         />
-        <Search className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-[#A7A7A7] absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <Search className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-slate-400 dark:text-[#A7A7A7] absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
         {searchQuery && (
           <button
             onClick={() => onSearchChange('')}
-            className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-[10px] sm:text-xs text-[#A7A7A7] hover:text-white"
+            className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-[10px] sm:text-xs text-slate-400 hover:text-slate-700 dark:text-[#A7A7A7] dark:hover:text-white"
           >
             پاک کردن
           </button>
@@ -168,15 +174,18 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Action Controls & User Profile */}
-      <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+      <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
+        {/* Quick Action: Theme Mode Toggle */}
+        <ThemeToggle />
+
         {/* Quick Action: New Lead (Icon only) */}
         <button
           onClick={onOpenNewLead}
-          className="w-8 sm:w-9 h-8 sm:h-9 rounded-full bg-[#282828] hover:bg-[#333333] text-white border border-[#3e3e3e] flex items-center justify-center transition-all hover:scale-105"
+          className="w-8 sm:w-9 h-8 sm:h-9 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#282828] dark:hover:bg-[#333333] text-slate-700 dark:text-white border border-slate-200 dark:border-[#3e3e3e] flex items-center justify-center transition-all hover:scale-105 shadow-xs"
           title="افزودن شماره"
           aria-label="افزودن شماره"
         >
-          <PhoneCall className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-[#1DB954]" />
+          <PhoneCall className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-emerald-600 dark:text-[#1DB954]" />
         </button>
 
         {/* Quick Action: New Customer (Icon only) */}
@@ -207,14 +216,14 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="relative">
             <button
               onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-              className="flex items-center gap-1.5 sm:gap-2 pl-2 pr-1.5 py-1 bg-[#181818] hover:bg-[#222222] border border-[#282828] rounded-full transition-colors cursor-pointer group"
+              className="flex items-center gap-1.5 sm:gap-2 pl-2 pr-1.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-[#181818] dark:hover:bg-[#222222] border border-slate-200 dark:border-[#282828] rounded-full transition-colors cursor-pointer group"
               title="حساب کاربری و سازمان"
             >
               <div
                 className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-sm overflow-hidden ${
                   isAdmin
                     ? 'bg-[#1DB954] text-black'
-                    : 'bg-[#282828] text-[#1DB954] border border-[#3e3e3e]'
+                    : 'bg-emerald-100 text-emerald-800 dark:bg-[#282828] dark:text-[#1DB954] border border-emerald-200 dark:border-[#3e3e3e]'
                 }`}
               >
                 {(currentPersonnel?.avatar || currentUser?.avatar) ? (
@@ -239,15 +248,15 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
 
               <div className="hidden md:flex flex-col text-right leading-tight pr-0.5">
-                <span className="text-xs font-bold text-white max-w-[110px] truncate">
+                <span className="text-xs font-bold text-slate-900 dark:text-white max-w-[110px] truncate">
                   {displayName}
                 </span>
-                <span className={`text-[10px] ${isAdmin ? 'text-[#1DB954]' : 'text-[#888888]'}`}>
+                <span className={`text-[10px] ${isAdmin ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-500 dark:text-[#888888]'}`}>
                   {isAdmin ? 'مدیر سیستم' : activeTenantName}
                 </span>
               </div>
 
-              <ChevronDown className="w-3 h-3 text-[#777777] group-hover:text-white transition-colors" />
+              <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-700 dark:text-[#777777] dark:group-hover:text-white transition-colors" />
             </button>
 
             {/* Dropdown Menu */}
@@ -257,21 +266,21 @@ export const Header: React.FC<HeaderProps> = ({
                   className="fixed inset-0 z-40"
                   onClick={() => setIsProfileMenuOpen(false)}
                 />
-                <div className="absolute left-0 mt-2 w-64 bg-[#181818] border border-[#2e2e2e] rounded-2xl shadow-2xl shadow-black/80 py-2 z-50 animate-fade-in text-right">
-                  <div className="px-3.5 py-2 border-b border-[#282828]">
-                    <div className="text-xs font-bold text-white truncate">{displayName}</div>
-                    <div className="text-[11px] text-[#777777] truncate font-mono" dir="ltr">
+                <div className="absolute left-0 mt-2 w-64 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#2e2e2e] rounded-2xl shadow-2xl shadow-slate-900/10 dark:shadow-black/80 py-2 z-50 animate-fade-in text-right">
+                  <div className="px-3.5 py-2 border-b border-slate-200 dark:border-[#282828]">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white truncate">{displayName}</div>
+                    <div className="text-[11px] text-slate-500 dark:text-[#777777] truncate font-mono" dir="ltr">
                       {currentUser.email}
                     </div>
                     <div className="mt-1.5 flex items-center gap-1">
                       {isAdmin ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#1DB954]/15 border border-[#1DB954]/30 text-[#1DB954] text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-[#1DB954] text-[10px] font-bold">
                           <ShieldCheck className="w-3 h-3" />
                           <span>مدیر سیستم (دسترسی کامل)</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#333333] border border-[#444444] text-white text-[10px]">
-                          <UserCheck className="w-3 h-3 text-[#1DB954]" />
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#333333] border border-slate-200 dark:border-[#444444] text-slate-800 dark:text-white text-[10px]">
+                          <UserCheck className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
                           <span>کارشناس فروش</span>
                         </span>
                       )}
@@ -279,14 +288,14 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
 
                   {/* Active Organization & Switcher */}
-                  <div className="px-3.5 py-2 border-b border-[#282828] space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px] text-[#777777] font-medium">
+                  <div className="px-3.5 py-2 border-b border-slate-200 dark:border-[#282828] space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-[#777777] font-medium">
                       <span className="flex items-center gap-1.5">
-                        <Building2 className="w-3.5 h-3.5 text-[#1DB954]" />
+                        <Building2 className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                         <span>سازمان فعال:</span>
                       </span>
                       {canSwitchTenants && (
-                        <span className="text-[9px] font-mono text-[#1DB954]">
+                        <span className="text-[9px] font-mono text-emerald-600 dark:text-[#1DB954]">
                           {userAllowedTenants.length} سازمان
                         </span>
                       )}
@@ -299,23 +308,23 @@ export const Header: React.FC<HeaderProps> = ({
                         onChange={(e) => {
                           onSelectTenant?.(e.target.value);
                         }}
-                        className="w-full bg-[#121212] border border-[#282828] rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#1DB954] cursor-pointer"
+                        className="w-full bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] rounded-lg px-2 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
                       >
                         {isAdmin && (
-                          <option value="all" className="bg-[#181818] text-[#1DB954] font-bold">
+                          <option value="all" className="bg-white dark:bg-[#181818] text-emerald-600 dark:text-[#1DB954] font-bold">
                             همه سازمان‌ها (تجمیعی)
                           </option>
                         )}
                         {userAllowedTenants.map((t) => (
-                          <option key={t.id} value={t.id} className="bg-[#181818] text-white">
+                          <option key={t.id} value={t.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                             {t.name}
                           </option>
                         ))}
                       </select>
                     ) : (
-                      <div className="text-xs font-bold text-white bg-[#121212] px-2.5 py-1.5 rounded-lg border border-[#282828] flex items-center justify-between">
+                      <div className="text-xs font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-[#121212] px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-[#282828] flex items-center justify-between">
                         <span className="truncate">{activeTenantName}</span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#1DB954]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-[#1DB954]" />
                       </div>
                     )}
 
@@ -326,17 +335,64 @@ export const Header: React.FC<HeaderProps> = ({
                           setIsProfileMenuOpen(false);
                           onOpenTenantsManagement();
                         }}
-                        className="w-full mt-1 px-2.5 py-1.5 text-[11px] text-[#A7A7A7] hover:text-white hover:bg-[#282828] rounded-lg flex items-center justify-between transition-colors border border-[#282828] cursor-pointer"
+                        className="w-full mt-1 px-2.5 py-1.5 text-[11px] text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#A7A7A7] dark:hover:text-white dark:hover:bg-[#282828] rounded-lg flex items-center justify-between transition-colors border border-slate-200 dark:border-[#282828] cursor-pointer"
                       >
                         <span className="flex items-center gap-1.5">
-                          <Layers className="w-3 h-3 text-[#888]" />
+                          <Layers className="w-3 h-3 text-slate-400 dark:text-[#888]" />
                           <span>مدیریت سازمان‌ها و شعب</span>
                         </span>
-                        <span className="text-[10px] text-[#777]">⚙</span>
+                        <span className="text-[10px] text-slate-400 dark:text-[#777]">⚙</span>
                       </button>
                     )}
                   </div>
 
+                  {/* Theme Mode Selector */}
+                  <div className="px-3.5 py-2 border-b border-slate-200 dark:border-[#282828] space-y-1.5">
+                    <div className="text-[10px] text-slate-500 dark:text-[#777777] font-medium flex items-center justify-between">
+                      <span>حالت نمایش:</span>
+                      <span className="text-[10px] text-emerald-600 dark:text-[#1DB954] font-medium">
+                        {theme === 'dark' ? 'تیره (شب)' : theme === 'light' ? 'روشن (روز)' : 'خودکار'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 bg-slate-100 dark:bg-[#121212] p-1 rounded-xl border border-slate-200 dark:border-[#282828]">
+                      <button
+                        type="button"
+                        onClick={() => setTheme('light')}
+                        className={`py-1 px-1.5 rounded-lg text-[10px] flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                          theme === 'light'
+                            ? 'bg-white text-slate-900 font-bold shadow-xs border border-slate-200 dark:border-transparent'
+                            : 'text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white'
+                        }`}
+                      >
+                        <Sun className="w-3 h-3 text-amber-500" />
+                        <span>روشن</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTheme('dark')}
+                        className={`py-1 px-1.5 rounded-lg text-[10px] flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                          theme === 'dark'
+                            ? 'bg-white text-slate-900 dark:bg-[#282828] dark:text-white font-bold shadow-xs border border-slate-200 dark:border-[#3e3e3e]'
+                            : 'text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white'
+                        }`}
+                      >
+                        <Moon className="w-3 h-3 text-blue-400" />
+                        <span>تیره</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTheme('system')}
+                        className={`py-1 px-1.5 rounded-lg text-[10px] flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                          theme === 'system'
+                            ? 'bg-white text-slate-900 dark:bg-[#282828] dark:text-white font-bold shadow-xs border border-slate-200 dark:border-[#3e3e3e]'
+                            : 'text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white'
+                        }`}
+                      >
+                        <Laptop className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
+                        <span>خودکار</span>
+                      </button>
+                    </div>
+                  </div>
 
                   <div className="px-1 pt-1 space-y-0.5">
                     {onNavigateToPortal && (
@@ -346,9 +402,9 @@ export const Header: React.FC<HeaderProps> = ({
                             setIsProfileMenuOpen(false);
                             onNavigateToPortal('profile');
                           }}
-                          className="w-full px-3 py-2 text-xs text-[#ccc] hover:text-white hover:bg-[#282828] rounded-xl flex items-center gap-2 transition-colors"
+                          className="w-full px-3 py-2 text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-100 dark:text-[#ccc] dark:hover:text-white dark:hover:bg-[#282828] rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
                         >
-                          <UserCheck className="w-3.5 h-3.5 text-[#1DB954]" />
+                          <UserCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                           <span>پروفایل و تغییر رمز</span>
                         </button>
 
@@ -357,9 +413,9 @@ export const Header: React.FC<HeaderProps> = ({
                             setIsProfileMenuOpen(false);
                             onNavigateToPortal('leave');
                           }}
-                          className="w-full px-3 py-2 text-xs text-[#ccc] hover:text-white hover:bg-[#282828] rounded-xl flex items-center gap-2 transition-colors"
+                          className="w-full px-3 py-2 text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-100 dark:text-[#ccc] dark:hover:text-white dark:hover:bg-[#282828] rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
                         >
-                          <CalendarDays className="w-3.5 h-3.5 text-blue-400" />
+                          <CalendarDays className="w-3.5 h-3.5 text-blue-500" />
                           <span>درخواست‌های مرخصی</span>
                         </button>
 
@@ -368,9 +424,9 @@ export const Header: React.FC<HeaderProps> = ({
                             setIsProfileMenuOpen(false);
                             onNavigateToPortal('advance');
                           }}
-                          className="w-full px-3 py-2 text-xs text-[#ccc] hover:text-white hover:bg-[#282828] rounded-xl flex items-center gap-2 transition-colors"
+                          className="w-full px-3 py-2 text-xs text-slate-700 hover:text-slate-900 hover:bg-slate-100 dark:text-[#ccc] dark:hover:text-white dark:hover:bg-[#282828] rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
                         >
-                          <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                          <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
                           <span>درخواست‌های مساعده</span>
                         </button>
                       </>
@@ -381,9 +437,9 @@ export const Header: React.FC<HeaderProps> = ({
                         setIsProfileMenuOpen(false);
                         onOpenAuthModal();
                       }}
-                      className="w-full px-3 py-2 text-xs text-[#A7A7A7] hover:text-white hover:bg-[#282828] rounded-xl flex items-center gap-2 transition-colors"
+                      className="w-full px-3 py-2 text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#A7A7A7] dark:hover:text-white dark:hover:bg-[#282828] rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
                     >
-                      <Sparkles className="w-3.5 h-3.5 text-[#1DB954]" />
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                       <span>تغییر حساب / ورود دیگر</span>
                     </button>
 
@@ -392,7 +448,7 @@ export const Header: React.FC<HeaderProps> = ({
                         setIsProfileMenuOpen(false);
                         onLogout();
                       }}
-                      className="w-full px-3 py-2 text-xs text-[#E22134] hover:bg-[#E22134]/15 rounded-xl flex items-center gap-2 transition-colors font-medium mt-0.5"
+                      className="w-full px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 dark:text-[#E22134] dark:hover:bg-[#E22134]/15 rounded-xl flex items-center gap-2 transition-colors font-medium mt-0.5 cursor-pointer"
                     >
                       <LogOut className="w-3.5 h-3.5" />
                       <span>خروج از حساب</span>

@@ -222,31 +222,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Main Sidebar Element */}
       <aside
-        className={`fixed top-0 bottom-0 right-0 z-50 w-72 max-w-[85vw] bg-[#000000] h-screen flex flex-col border-l border-[#282828] select-none transition-transform duration-300 ease-in-out lg:static lg:w-64 lg:h-screen lg:flex-shrink-0 lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 right-0 z-50 w-72 max-w-[85vw] bg-white dark:bg-[#000000] h-screen flex flex-col border-l border-slate-200 dark:border-[#282828] select-none transition-transform duration-300 ease-in-out lg:static lg:w-64 lg:h-screen lg:flex-shrink-0 lg:translate-x-0 ${
           isOpenMobile ? 'translate-x-0 shadow-2xl' : 'translate-x-full lg:translate-x-0'
         }`}
       >
         {/* Brand Header */}
-        <div className="p-4 sm:p-6 pb-4 flex items-center justify-between border-b border-[#181818] lg:border-none">
+        <div className="p-4 sm:p-6 pb-4 flex items-center justify-between border-b border-slate-200 dark:border-[#181818] lg:border-none">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-[#1DB954] flex items-center justify-center text-black font-black text-lg shadow-lg shadow-[#1DB954]/20 flex-shrink-0">
               <Building2 className="w-5 h-5 text-black stroke-[2.5]" />
             </div>
             <div>
-              <h1 className="font-extrabold text-white text-base tracking-tight flex items-center gap-1.5">
+              <h1 className="font-extrabold text-slate-900 dark:text-white text-base tracking-tight flex items-center gap-1.5">
                 <span>AlphaDesk</span>
-                <span className="text-[#1DB954] text-xs font-mono font-normal px-1.5 py-0.5 bg-[#1DB954]/15 rounded">
+                <span className="text-emerald-700 bg-emerald-100 dark:text-[#1DB954] dark:bg-[#1DB954]/15 text-xs font-mono font-bold px-1.5 py-0.5 rounded">
                   CRM
                 </span>
               </h1>
-              <p className="text-[#A7A7A7] text-[11px]">آلفادسک • مدیریت ارتباط و پرسنل</p>
+              <p className="text-slate-500 dark:text-[#A7A7A7] text-[11px]">آلفادسک • مدیریت ارتباط و پرسنل</p>
             </div>
           </div>
 
           {/* Close button on mobile */}
           <button
             onClick={onCloseMobile}
-            className="lg:hidden p-1.5 rounded-lg bg-[#181818] text-[#A7A7A7] hover:text-white"
+            className="lg:hidden p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#181818] text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white border border-slate-200 dark:border-transparent transition-colors cursor-pointer"
             aria-label="بستن منو"
           >
             <X className="w-5 h-5" />
@@ -259,38 +259,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {canSwitchTenants ? (
               <button
                 onClick={() => setIsOrgMenuOpen(!isOrgMenuOpen)}
-                className="w-full flex items-center justify-between p-2.5 rounded-xl bg-[#141414] hover:bg-[#1a1a1a] border border-[#262626] hover:border-[#1DB954]/50 transition-all text-right group shadow-xs cursor-pointer"
+                className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 dark:bg-[#141414] dark:hover:bg-[#1a1a1a] border border-slate-200 dark:border-[#262626] hover:border-emerald-500/50 dark:hover:border-[#1DB954]/50 transition-all text-right group shadow-xs cursor-pointer"
                 title="تغییر یا مدیریت سازمان فعال"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-7 h-7 rounded-lg bg-[#202020] border border-[#303030] flex items-center justify-center text-[#1DB954] flex-shrink-0 group-hover:scale-105 transition-transform">
+                  <div className="w-7 h-7 rounded-lg bg-white dark:bg-[#202020] border border-slate-200 dark:border-[#303030] flex items-center justify-center text-emerald-600 dark:text-[#1DB954] flex-shrink-0 group-hover:scale-105 transition-transform shadow-xs">
                     <Building2 className="w-4 h-4" />
                   </div>
                   <div className="min-w-0 text-right">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-[#888888] font-medium">سازمان فعال:</span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#1DB954] animate-pulse"></span>
+                      <span className="text-[10px] text-slate-500 dark:text-[#888888] font-medium">سازمان فعال:</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-[#1DB954] animate-pulse"></span>
                     </div>
-                    <div className="text-xs font-bold text-white truncate max-w-[130px]">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[130px]">
                       {activeTenantName}
                     </div>
                   </div>
                 </div>
                 <ChevronDown
-                  className={`w-4 h-4 text-[#888888] group-hover:text-white transition-transform ${
+                  className={`w-4 h-4 text-slate-400 group-hover:text-slate-700 dark:text-[#888888] dark:group-hover:text-white transition-transform ${
                     isOrgMenuOpen ? 'rotate-180' : ''
                   }`}
                 />
               </button>
             ) : (
-              <div className="w-full flex items-center justify-between p-2.5 rounded-xl bg-[#141414] border border-[#262626] text-right">
+              <div className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-100 dark:bg-[#141414] border border-slate-200 dark:border-[#262626] text-right">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-7 h-7 rounded-lg bg-[#202020] border border-[#303030] flex items-center justify-center text-[#1DB954] flex-shrink-0">
+                  <div className="w-7 h-7 rounded-lg bg-white dark:bg-[#202020] border border-slate-200 dark:border-[#303030] flex items-center justify-center text-emerald-600 dark:text-[#1DB954] flex-shrink-0 shadow-xs">
                     <Building2 className="w-4 h-4" />
                   </div>
                   <div className="min-w-0 text-right">
-                    <div className="text-[10px] text-[#888888] font-medium">سازمان شما:</div>
-                    <div className="text-xs font-bold text-white truncate max-w-[150px]">
+                    <div className="text-[10px] text-slate-500 dark:text-[#888888] font-medium">سازمان شما:</div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[150px]">
                       {activeTenantName}
                     </div>
                   </div>
@@ -300,10 +300,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Dropdown Menu (only if user can switch) */}
             {canSwitchTenants && isOrgMenuOpen && (
-              <div className="absolute top-full right-0 left-0 mt-1.5 bg-[#181818] border border-[#333333] rounded-xl shadow-2xl p-1.5 z-50 text-right backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-2 py-1.5 text-[10px] text-[#888] font-semibold border-b border-[#252525] flex items-center justify-between">
+              <div className="absolute top-full right-0 left-0 mt-1.5 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#333333] rounded-xl shadow-xl shadow-slate-900/10 dark:shadow-2xl p-1.5 z-50 text-right backdrop-blur-md animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2 py-1.5 text-[10px] text-slate-500 dark:text-[#888] font-semibold border-b border-slate-100 dark:border-[#252525] flex items-center justify-between">
                   <span>انتخاب سازمان فعال</span>
-                  <span className="text-[9px] font-mono text-[#1DB954]">
+                  <span className="text-[9px] font-mono text-emerald-600 dark:text-[#1DB954]">
                     {userAllowedTenants.length} سازمان
                   </span>
                 </div>
@@ -317,15 +317,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       }}
                       className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors cursor-pointer ${
                         activeTenantId === 'all'
-                          ? 'bg-[#1DB954]/15 text-[#1DB954] font-bold'
-                          : 'text-[#B3B3B3] hover:text-white hover:bg-[#222222]'
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#222222]'
                       }`}
                     >
                       <span className="flex items-center gap-2">
-                        <Layers className="w-3.5 h-3.5 text-[#1DB954]" />
+                        <Layers className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                         <span>همه سازمان‌ها (تجمیعی)</span>
                       </span>
-                      {activeTenantId === 'all' && <Check className="w-3.5 h-3.5 text-[#1DB954]" />}
+                      {activeTenantId === 'all' && <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />}
                     </button>
                   )}
 
@@ -342,13 +342,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         }}
                         className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors cursor-pointer ${
                           isSelected
-                            ? 'bg-[#1DB954]/15 text-[#1DB954] font-bold'
-                            : 'text-[#B3B3B3] hover:text-white hover:bg-[#222222]'
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#222222]'
                         }`}
                       >
                         <span className="truncate max-w-[140px]">{t.name}</span>
                         {isSelected && (
-                          <Check className="w-3.5 h-3.5 text-[#1DB954] flex-shrink-0" />
+                          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />
                         )}
                       </button>
                     );
@@ -356,15 +356,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
 
                 {canAccessTenants && (
-                  <div className="pt-1.5 mt-1 border-t border-[#252525]">
+                  <div className="pt-1.5 mt-1 border-t border-slate-100 dark:border-[#252525]">
                     <button
                       onClick={() => {
                         setIsOrgMenuOpen(false);
                         onOpenTenantsManagement?.();
                       }}
-                      className="w-full flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg bg-[#202020] hover:bg-[#282828] text-[#CCC] hover:text-white text-xs font-semibold transition-colors border border-[#333333] cursor-pointer"
+                      className="w-full flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#202020] dark:hover:bg-[#282828] text-slate-700 hover:text-slate-900 dark:text-[#CCC] dark:hover:text-white text-xs font-semibold transition-colors border border-slate-200 dark:border-[#333333] cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5 text-[#888]" />
+                      <Plus className="w-3.5 h-3.5 text-slate-500 dark:text-[#888]" />
                       <span>مدیریت و ایجاد سازمان جدید</span>
                     </button>
                   </div>
@@ -376,7 +376,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Navigation Links */}
         <nav className="flex-1 px-3 py-3 space-y-1.5 overflow-y-auto">
-          <div className="px-3 pb-1.5 text-[10px] font-bold tracking-wider text-[#777] uppercase">
+          <div className="px-3 pb-1.5 text-[10px] font-bold tracking-wider text-slate-400 dark:text-[#777] uppercase">
             بخش‌های اصلی سامانه
           </div>
 
@@ -391,16 +391,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onSelectTab(item.id);
                   onCloseMobile?.();
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group cursor-pointer ${
                   isActive
-                    ? 'bg-[#282828] text-white shadow-sm'
-                    : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                    ? 'bg-emerald-50 text-emerald-900 dark:bg-[#282828] dark:text-white shadow-xs border border-emerald-200 dark:border-transparent font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <Icon
                     className={`w-4 h-4 transition-colors ${
-                      isActive ? 'text-[#1DB954]' : 'text-[#A7A7A7] group-hover:text-white'
+                      isActive ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 group-hover:text-slate-700 dark:text-[#A7A7A7] dark:group-hover:text-white'
                     }`}
                   />
                   <span>{item.label}</span>
@@ -408,7 +408,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                 {item.badgeText && (
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#282828] text-[#A7A7A7] font-normal border border-[#3e3e3e]">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-[#282828] dark:text-[#A7A7A7] font-normal border border-slate-200 dark:border-[#3e3e3e]">
                       {item.badgeText}
                     </span>
                   </div>
@@ -429,45 +429,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   e.stopPropagation();
                   setIsTeamExpanded((prev) => !prev);
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group cursor-pointer ${
                   isTeamActive
-                    ? 'bg-[#282828] text-white shadow-sm'
-                    : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                    ? 'bg-emerald-50 text-emerald-900 dark:bg-[#282828] dark:text-white shadow-xs border border-emerald-200 dark:border-transparent font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <Users2
                     className={`w-4 h-4 transition-colors ${
-                      isTeamActive ? 'text-[#1DB954]' : 'text-[#A7A7A7] group-hover:text-white'
+                      isTeamActive ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 group-hover:text-slate-700 dark:text-[#A7A7A7] dark:group-hover:text-white'
                     }`}
                   />
                   <span>همکاران</span>
                 </div>
 
                 <ChevronDown
-                  className={`w-3.5 h-3.5 text-[#888] transition-transform duration-200 ${
-                    isTeamExpanded ? 'rotate-180 text-white' : ''
+                  className={`w-3.5 h-3.5 text-slate-400 dark:text-[#888] transition-transform duration-200 ${
+                    isTeamExpanded ? 'rotate-180 text-slate-900 dark:text-white' : ''
                   }`}
                 />
               </button>
 
               {/* Team Sub-menu Items */}
               {isTeamExpanded && (
-                <div className="mt-1 mr-3 pr-2.5 border-r-2 border-[#282828] space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className="mt-1 mr-3 pr-2.5 border-r-2 border-slate-200 dark:border-[#282828] space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
                   {/* 1. Register New Colleague */}
                   <button
                     onClick={() => {
                       onSelectTab('team', 'new_colleague');
                       onCloseMobile?.();
                     }}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       isTeamActive && teamSubTab === 'new_colleague'
-                        ? 'bg-[#1DB954]/15 text-[#1DB954]'
-                        : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <UserPlus className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'new_colleague' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                      <UserPlus className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'new_colleague' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
                       <span>ثبت همکار جدید</span>
                     </div>
                   </button>
@@ -478,14 +478,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       onSelectTab('team', 'colleagues_list');
                       onCloseMobile?.();
                     }}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       isTeamActive && teamSubTab === 'colleagues_list'
-                        ? 'bg-[#1DB954]/15 text-[#1DB954]'
-                        : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <Users2 className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'colleagues_list' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                      <Users2 className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'colleagues_list' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
                       <span>لیست همکاران</span>
                     </div>
                   </button>
@@ -496,14 +496,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       onSelectTab('team', 'extend_ownership');
                       onCloseMobile?.();
                     }}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       isTeamActive && teamSubTab === 'extend_ownership'
-                        ? 'bg-[#1DB954]/15 text-[#1DB954]'
-                        : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <Clock className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'extend_ownership' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                      <Clock className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'extend_ownership' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
                       <span>تمدید مالکیت</span>
                     </div>
                   </button>
@@ -514,14 +514,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       onSelectTab('team', 'switch_ownership');
                       onCloseMobile?.();
                     }}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       isTeamActive && teamSubTab === 'switch_ownership'
-                        ? 'bg-[#1DB954]/15 text-[#1DB954]'
-                        : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <ArrowLeftRight className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'switch_ownership' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                      <ArrowLeftRight className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'switch_ownership' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
                       <span>سوئیچ مالکیت</span>
                     </div>
                   </button>
@@ -532,14 +532,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       onSelectTab('team', 'leave_approvals');
                       onCloseMobile?.();
                     }}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       isTeamActive && teamSubTab === 'leave_approvals'
-                        ? 'bg-[#1DB954]/15 text-[#1DB954]'
-                        : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <CalendarCheck className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'leave_approvals' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                      <CalendarCheck className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'leave_approvals' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
                       <span>درخواست‌های مرخصی</span>
                     </div>
                   </button>
@@ -551,17 +551,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onSelectTab('team', 'import_data');
                         onCloseMobile?.();
                       }}
-                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                         isTeamActive && teamSubTab === 'import_data'
-                          ? 'bg-[#1DB954]/15 text-[#1DB954]'
-                          : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
-                        <Database className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'import_data' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                        <Database className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'import_data' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
                         <span>درون‌ریزی و مهاجرت داده‌ها</span>
                       </div>
-                      <span className="text-[9px] px-1 py-0.2 rounded bg-[#1DB954]/10 text-[#1DB954] font-bold border border-[#1DB954]/20">
+                      <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/10 dark:text-[#1DB954] font-bold border border-emerald-200 dark:border-[#1DB954]/20">
                         جدید
                       </span>
                     </button>
@@ -574,17 +574,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onSelectTab('team', 'sms_settings');
                         onCloseMobile?.();
                       }}
-                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                         isTeamActive && teamSubTab === 'sms_settings'
-                          ? 'bg-[#1DB954]/15 text-[#1DB954]'
-                          : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
-                        <MessageSquareText className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'sms_settings' ? 'text-[#1DB954]' : 'text-emerald-400'}`} />
+                        <MessageSquareText className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'sms_settings' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-emerald-600 dark:text-emerald-400'}`} />
                         <span>تنظیمات پیامک (IPPanel)</span>
                       </div>
-                      <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">
+                      <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 font-bold border border-emerald-200 dark:border-emerald-500/20">
                         پترن‌ها
                       </span>
                     </button>
@@ -606,31 +606,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   e.stopPropagation();
                   setIsTenantsExpanded((prev) => !prev);
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group cursor-pointer ${
                   isTenantsActive
-                    ? 'bg-[#282828] text-white shadow-sm'
-                    : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                    ? 'bg-emerald-50 text-emerald-900 dark:bg-[#282828] dark:text-white shadow-xs border border-emerald-200 dark:border-transparent font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <Building2
                     className={`w-4 h-4 transition-colors ${
-                      isTenantsActive ? 'text-[#1DB954]' : 'text-[#A7A7A7] group-hover:text-white'
+                      isTenantsActive ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 group-hover:text-slate-700 dark:text-[#A7A7A7] dark:group-hover:text-white'
                     }`}
                   />
                   <span>سازمان‌ها و شعب</span>
                 </div>
 
                 <ChevronDown
-                  className={`w-3.5 h-3.5 text-[#888] transition-transform duration-200 ${
-                    isTenantsExpanded ? 'rotate-180 text-white' : ''
+                  className={`w-3.5 h-3.5 text-slate-400 dark:text-[#888] transition-transform duration-200 ${
+                    isTenantsExpanded ? 'rotate-180 text-slate-900 dark:text-white' : ''
                   }`}
                 />
               </button>
 
               {/* Tenants Sub-menu Items */}
               {isTenantsExpanded && (
-                <div className="mt-1 mr-3 pr-2.5 border-r-2 border-[#282828] space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className="mt-1 mr-3 pr-2.5 border-r-2 border-slate-200 dark:border-[#282828] space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
                   {/* 1. View & Switch Organizations */}
                   <button
                     onClick={() => {
@@ -639,12 +639,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }}
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                       isTenantsActive
-                        ? 'bg-[#1DB954]/15 text-[#1DB954]'
-                        : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <Building2 className={`w-3.5 h-3.5 ${isTenantsActive ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                      <Building2 className={`w-3.5 h-3.5 ${isTenantsActive ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
                       <span>مشاهده لیست سازمان‌ها</span>
                     </div>
                   </button>
@@ -656,10 +656,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       onOpenTenantsManagement?.();
                       onCloseMobile?.();
                     }}
-                    className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold text-[#B3B3B3] hover:text-white hover:bg-[#181818] transition-all cursor-pointer"
+                    className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818] transition-all cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5">
-                      <Plus className="w-3.5 h-3.5 text-[#888]" />
+                      <Plus className="w-3.5 h-3.5 text-slate-400 dark:text-[#888]" />
                       <span>ساخت سازمان جدید</span>
                     </div>
                   </button>
@@ -681,45 +681,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   e.stopPropagation();
                   setIsPortalExpanded((prev) => !prev);
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-all group cursor-pointer ${
                   isPortalActive
-                    ? 'bg-[#282828] text-white shadow-sm'
-                    : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                    ? 'bg-emerald-50 text-emerald-900 dark:bg-[#282828] dark:text-white shadow-xs border border-emerald-200 dark:border-transparent font-bold'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <User
                     className={`w-4 h-4 transition-colors ${
-                      isPortalActive ? 'text-[#1DB954]' : 'text-[#A7A7A7] group-hover:text-white'
+                      isPortalActive ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 group-hover:text-slate-700 dark:text-[#A7A7A7] dark:group-hover:text-white'
                     }`}
                   />
                   <span>پنل شخصی</span>
                 </div>
 
                 <ChevronDown
-                  className={`w-3.5 h-3.5 text-[#888] transition-transform duration-200 ${
-                    isPortalExpanded ? 'rotate-180 text-white' : ''
+                  className={`w-3.5 h-3.5 text-slate-400 dark:text-[#888] transition-transform duration-200 ${
+                    isPortalExpanded ? 'rotate-180 text-slate-900 dark:text-white' : ''
                   }`}
                 />
               </button>
 
             {/* Sub-menu Items (Dropdown) */}
             {isPortalExpanded && (
-              <div className="mt-1 mr-3 pr-2.5 border-r-2 border-[#282828] space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+              <div className="mt-1 mr-3 pr-2.5 border-r-2 border-slate-200 dark:border-[#282828] space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
                 {/* 1. Profile Sub-item */}
                 <button
                   onClick={() => {
                     onSelectTab('personal_portal', 'profile');
                     onCloseMobile?.();
                   }}
-                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     isPortalActive && portalSubTab === 'profile'
-                      ? 'bg-[#1DB954]/15 text-[#1DB954]'
-                      : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <KeyRound className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'profile' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                    <KeyRound className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'profile' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
                     <span>پروفایل و تغییر رمز</span>
                   </div>
                 </button>
@@ -730,14 +730,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onSelectTab('personal_portal', 'leave');
                     onCloseMobile?.();
                   }}
-                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     isPortalActive && portalSubTab === 'leave'
-                      ? 'bg-[#1DB954]/15 text-[#1DB954]'
-                      : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <CalendarDays className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'leave' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                    <CalendarDays className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'leave' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
                     <span>درخواست مرخصی</span>
                   </div>
                 </button>
@@ -748,14 +748,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onSelectTab('personal_portal', 'advance');
                     onCloseMobile?.();
                   }}
-                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     isPortalActive && portalSubTab === 'advance'
-                      ? 'bg-[#1DB954]/15 text-[#1DB954]'
-                      : 'text-[#B3B3B3] hover:text-white hover:bg-[#181818]'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <Wallet className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'advance' ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                    <Wallet className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'advance' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
                     <span>درخواست مساعده</span>
                   </div>
                 </button>
@@ -767,7 +767,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     else onSelectTab('personal_portal', 'logout');
                     onCloseMobile?.();
                   }}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-rose-400/90 hover:text-rose-300 hover:bg-rose-500/10 transition-all"
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:text-rose-400/90 dark:hover:text-rose-300 dark:hover:bg-rose-500/10 transition-all cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>خروج از حساب</span>
@@ -784,10 +784,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onSelectTab('personal_portal', 'profile');
             onCloseMobile?.();
           }}
-          className="p-3 border-t border-[#282828] bg-[#0c0c0c] flex items-center justify-between cursor-pointer hover:bg-[#151515] transition-colors"
+          className="p-3 border-t border-slate-200 dark:border-[#282828] bg-slate-50 dark:bg-[#0c0c0c] flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-[#151515] transition-colors"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-[#282828] flex items-center justify-center text-[#1DB954] font-bold text-xs border border-[#3e3e3e] flex-shrink-0 overflow-hidden">
+            <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 dark:bg-[#282828] dark:text-[#1DB954] flex items-center justify-center font-bold text-xs border border-emerald-200 dark:border-[#3e3e3e] flex-shrink-0 overflow-hidden shadow-xs">
               {currentPersonnel?.avatar ? (
                 <img
                   src={getAvatarUrl(currentPersonnel.avatar)}
@@ -809,10 +809,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
             </div>
             <div className="truncate">
-              <div className="text-xs font-bold text-white truncate flex items-center gap-1">
+              <div className="text-xs font-bold text-slate-900 dark:text-white truncate flex items-center gap-1">
                 <span>{currentPersonnel?.name || 'کاربر سیستم'}</span>
               </div>
-              <div className="text-[10px] text-[#888] truncate">
+              <div className="text-[10px] text-slate-500 dark:text-[#888] truncate">
                 {currentPersonnel?.role === 'admin'
                   ? 'مدیر سیستم'
                   : currentPersonnel?.role === 'sales_manager'

@@ -175,32 +175,32 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">
       <div
-        className="bg-[#181818] border border-[#282828] w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden my-4 flex flex-col max-h-[90vh]"
+        className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden my-4 flex flex-col max-h-[90vh] text-slate-900 dark:text-white"
         dir="rtl"
       >
         {/* Header */}
-        <div className="p-4 sm:p-5 bg-[#121212] border-b border-[#282828] flex items-center justify-between">
+        <div className="p-4 sm:p-5 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#1DB954]/15 text-[#1DB954] flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-[#1DB954]/15 text-emerald-700 dark:text-[#1DB954] flex items-center justify-center shrink-0">
               <GitMerge className="w-5 h-5 stroke-[2.5]" />
             </div>
             <div>
-              <h3 className="text-base font-black text-white flex items-center gap-2">
+              <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
                 <span>ادغام پرونده‌های مشتریان تکراری</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1DB954]/20 text-[#1DB954] font-bold">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-[#1DB954]/20 dark:text-[#1DB954] font-bold">
                   ویژه مدیر
                 </span>
               </h3>
-              <p className="text-xs text-[#A7A7A7] mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-[#A7A7A7] mt-0.5">
                 تجمیع شماره‌ها، انتقال تاریخچه مذاکرات و تعیین بازاریاب نهایی پرونده
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#242424] hover:bg-[#333] flex items-center justify-center text-[#A7A7A7] hover:text-white transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#242424] dark:hover:bg-[#333] dark:text-[#A7A7A7] dark:hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -209,8 +209,8 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
         {step === 'select' ? (
           <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
             {/* Explanatory banner */}
-            <div className="p-3 bg-[#1DB954]/10 border border-[#1DB954]/20 rounded-2xl flex items-start gap-2.5 text-xs text-[#d0d0d0] leading-relaxed">
-              <CheckCircle2 className="w-4 h-4 text-[#1DB954] shrink-0 mt-0.5" />
+            <div className="p-3 bg-emerald-50 dark:bg-[#1DB954]/10 border border-emerald-200 dark:border-[#1DB954]/20 rounded-2xl flex items-start gap-2.5 text-xs text-slate-700 dark:text-[#d0d0d0] leading-relaxed">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-[#1DB954] shrink-0 mt-0.5" />
               <span>
                 مشتریانی که دارای شماره‌های مختلف بوده و توسط بازاریاب‌های جداگانه پیگیری شده‌اند را انتخاب کنید. با ادغام، تمام شماره‌ها و گزارش‌های هر دو بازاریاب در پرونده اصلی تجمیع شده و بازاریاب منتخب به کل سوابق دسترسی خواهد داشت.
               </span>
@@ -218,17 +218,17 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
 
             {/* Selected Customers list */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-white">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-900 dark:text-white">
                 <span>مشتریان انتخاب‌شده جهت ادغام ({toPersianDigits(selectedCustomers.length)} پرونده):</span>
                 {selectedCustomers.length > 0 && (
-                  <span className="text-[11px] text-[#A7A7A7]">
+                  <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">
                     روی دایره کلیک کنید تا به عنوان پرونده اصلی تعیین شود
                   </span>
                 )}
               </div>
 
               {selectedCustomers.length === 0 ? (
-                <div className="p-6 text-center rounded-2xl bg-[#121212] border border-dashed border-[#333] text-xs text-[#777]">
+                <div className="p-6 text-center rounded-2xl bg-slate-50 dark:bg-[#121212] border border-dashed border-slate-300 dark:border-[#333] text-xs text-slate-500 dark:text-[#777]">
                   هنوز مشتری‌ای انتخاب نشده است. از لیست زیر حداقل ۲ مشتری را تیک بزنید.
                 </div>
               ) : (
@@ -242,8 +242,8 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                         key={cust.id}
                         className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
                           isPrimary
-                            ? 'bg-[#1DB954]/10 border-[#1DB954] shadow-md shadow-[#1DB954]/10'
-                            : 'bg-[#1e1e1e] border-[#333] hover:border-[#444]'
+                            ? 'bg-emerald-50 dark:bg-[#1DB954]/10 border-emerald-500 dark:border-[#1DB954] shadow-md shadow-emerald-500/10'
+                            : 'bg-slate-50 dark:bg-[#1e1e1e] border-slate-200 dark:border-[#333] hover:border-slate-300 dark:hover:border-[#444]'
                         }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
@@ -253,7 +253,7 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                             className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all shrink-0 ${
                               isPrimary
                                 ? 'bg-[#1DB954] border-[#1DB954] text-black'
-                                : 'border-[#666] hover:border-white'
+                                : 'border-slate-400 dark:border-[#666] hover:border-slate-800 dark:hover:border-white'
                             }`}
                             title="انتخاب به عنوان پرونده اصلی"
                           >
@@ -262,7 +262,7 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
 
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-xs text-white truncate">
+                              <span className="font-bold text-xs text-slate-900 dark:text-white truncate">
                                 {cust.company_name}
                               </span>
                               {isPrimary && (
@@ -271,8 +271,8 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-[#A7A7A7] mt-0.5 flex items-center gap-3">
-                              <span className="flex items-center gap-1 text-[#1DB954]">
+                            <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] mt-0.5 flex items-center gap-3">
+                              <span className="flex items-center gap-1 text-emerald-600 dark:text-[#1DB954]">
                                 <User className="w-3 h-3" />
                                 <span>{cust.assigned_marketer_name || 'بدون بازاریاب'}</span>
                               </span>
@@ -285,7 +285,7 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                         <button
                           type="button"
                           onClick={() => toggleSelectCustomer(cust.id)}
-                          className="w-7 h-7 rounded-full bg-[#282828] hover:bg-[#E22134]/20 hover:text-[#E22134] text-[#888] flex items-center justify-center transition-colors shrink-0"
+                          className="w-7 h-7 rounded-full bg-slate-200 hover:bg-red-100 hover:text-red-600 dark:bg-[#282828] dark:hover:bg-[#E22134]/20 dark:hover:text-[#E22134] text-slate-500 dark:text-[#888] flex items-center justify-center transition-colors shrink-0"
                           title="حذف از لیست ادغام"
                         >
                           <X className="w-3.5 h-3.5" />
@@ -298,8 +298,8 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
             </div>
 
             {/* Search & Add more customers */}
-            <div className="space-y-2 pt-2 border-t border-[#282828]">
-              <label className="block text-xs font-semibold text-[#B3B3B3]">
+            <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-[#282828]">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3]">
                 جستجو و انتخاب پرونده‌های مشتریان دیگر برای ادغام:
               </label>
               <div className="relative">
@@ -308,9 +308,9 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="جستجوی نام شرکت، نام مدیر، نام بازاریاب یا شماره تماس..."
-                  className="w-full h-10 bg-[#121212] rounded-xl pl-3 pr-9 text-xs text-white placeholder-[#777] border border-[#2a2a2a] focus:outline-none focus:border-[#1DB954]"
+                  className="w-full h-10 bg-white dark:bg-[#121212] rounded-xl pl-3 pr-9 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#777] border border-slate-300 dark:border-[#2a2a2a] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954]"
                 />
-                <Search className="w-4 h-4 text-[#777] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-4 h-4 text-slate-400 dark:text-[#777] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
 
               {/* Customer Selector Cards */}
@@ -325,8 +325,8 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                       onClick={() => toggleSelectCustomer(c.id)}
                       className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 cursor-pointer select-none ${
                         isChecked
-                          ? 'bg-[#1a2e1e] border-[#1DB954]/50'
-                          : 'bg-[#181818] border-[#282828] hover:bg-[#202020]'
+                          ? 'bg-emerald-50 dark:bg-[#1a2e1e] border-emerald-300 dark:border-[#1DB954]/50'
+                          : 'bg-white dark:bg-[#181818] border-slate-200 dark:border-[#282828] hover:bg-slate-50 dark:hover:bg-[#202020]'
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -334,19 +334,19 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => {}}
-                          className="w-4 h-4 rounded accent-[#1DB954] cursor-pointer shrink-0"
+                          className="w-4 h-4 rounded accent-emerald-600 dark:accent-[#1DB954] cursor-pointer shrink-0"
                         />
                         <div className="min-w-0">
-                          <span className="font-bold text-xs text-white truncate block">
+                          <span className="font-bold text-xs text-slate-900 dark:text-white truncate block">
                             {c.company_name}
                           </span>
-                          <span className="text-[10px] text-[#888]">
+                          <span className="text-[10px] text-slate-500 dark:text-[#888]">
                             بازاریاب: {c.assigned_marketer_name || 'نامشخص'} · {phone}
                           </span>
                         </div>
                       </div>
 
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-[#242424] text-[#aaa] shrink-0 font-mono">
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-[#242424] text-slate-600 dark:text-[#aaa] shrink-0 font-mono">
                         {c.city}
                       </span>
                     </div>
@@ -356,15 +356,15 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
             </div>
 
             {/* Target Marketer Assignment */}
-            <div className="p-4 rounded-2xl bg-[#121212] border border-[#282828] space-y-3">
-              <label className="block text-xs font-bold text-white flex items-center gap-1.5">
-                <User className="w-4 h-4 text-[#1DB954]" />
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] space-y-3">
+              <label className="block text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <User className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                 <span>تعیین بازاریاب مالک پرونده پس از ادغام:</span>
               </label>
               <select
                 value={selectedMarketerId}
                 onChange={(e) => setSelectedMarketerId(e.target.value)}
-                className="w-full h-10 px-3 bg-[#242424] rounded-xl text-xs text-white border border-[#383838] focus:outline-none focus:border-[#1DB954]"
+                className="w-full h-10 px-3 bg-white dark:bg-[#242424] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#383838] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954]"
               >
                 {personnelList.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -372,14 +372,14 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                   </option>
                 ))}
               </select>
-              <p className="text-[11px] text-[#888]">
+              <p className="text-[11px] text-slate-500 dark:text-[#888]">
                 بازاریاب انتخاب‌شده به عنوان مالک نهایی تعیین شده و تمام سوابق و شماره‌های هر دو پرونده برای وی در دسترس خواهد بود.
               </p>
             </div>
 
             {/* Notes */}
             <div>
-              <label className="block text-xs font-semibold text-[#B3B3B3] mb-1">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">
                 توضیحات و علت ادغام (اختیاری):
               </label>
               <input
@@ -387,44 +387,44 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="مثلاً: هر دو شماره متعلق به کارخانه سپهر بوده و ادغام شد..."
-                className="w-full h-9 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#282828] focus:outline-none focus:border-[#1DB954]"
+                className="w-full h-9 px-3 bg-white dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#282828] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954]"
               />
             </div>
           </div>
         ) : (
           /* Confirmation Step */
           <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
-            <div className="p-4 rounded-2xl bg-[#F59B23]/10 border border-[#F59B23]/30 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-[#F59B23] shrink-0 mt-0.5" />
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-[#F59B23]/10 border border-amber-300 dark:border-[#F59B23]/30 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-[#F59B23] shrink-0 mt-0.5" />
               <div className="space-y-1 text-xs">
-                <h4 className="font-bold text-white">تأیید نهایی ادغام پرونده‌ها</h4>
-                <p className="text-[#d0d0d0] leading-relaxed">
+                <h4 className="font-bold text-slate-900 dark:text-white">تأیید نهایی ادغام پرونده‌ها</h4>
+                <p className="text-slate-700 dark:text-[#d0d0d0] leading-relaxed">
                   با تأیید ادغام، پرونده‌های فرعی حذف شده و اطلاعات به صورت یکپارچه در پرونده اصلی تجمیع می‌گردد.
                 </p>
               </div>
             </div>
 
             {/* Summary preview */}
-            <div className="p-4 rounded-2xl bg-[#121212] border border-[#282828] space-y-3">
-              <div className="flex items-center justify-between text-xs pb-2 border-b border-[#222]">
-                <span className="text-[#A7A7A7]">پرونده اصلی نهایی:</span>
-                <span className="font-bold text-white text-sm">{primaryCustomer?.company_name}</span>
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] space-y-3">
+              <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-200 dark:border-[#222]">
+                <span className="text-slate-500 dark:text-[#A7A7A7]">پرونده اصلی نهایی:</span>
+                <span className="font-bold text-slate-900 dark:text-white text-sm">{primaryCustomer?.company_name}</span>
               </div>
-              <div className="flex items-center justify-between text-xs pb-2 border-b border-[#222]">
-                <span className="text-[#A7A7A7]">بازاریاب مسئول جدید:</span>
-                <span className="font-bold text-[#1DB954]">
+              <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-200 dark:border-[#222]">
+                <span className="text-slate-500 dark:text-[#A7A7A7]">بازاریاب مسئول جدید:</span>
+                <span className="font-bold text-emerald-600 dark:text-[#1DB954]">
                   {personnelList.find((p) => p.id === selectedMarketerId)?.name || primaryCustomer?.assigned_marketer_name}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-xs pb-2 border-b border-[#222]">
-                <span className="text-[#A7A7A7]">تعداد کل شماره‌های تجمیع‌شده:</span>
-                <span className="font-bold text-white font-mono">
+              <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-200 dark:border-[#222]">
+                <span className="text-slate-500 dark:text-[#A7A7A7]">تعداد کل شماره‌های تجمیع‌شده:</span>
+                <span className="font-bold text-slate-900 dark:text-white font-mono">
                   {toPersianDigits(combinedStats.mobileCount)} همراه · {toPersianDigits(combinedStats.landlineCount)} ثابت
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[#A7A7A7]">تعداد کل گزارش‌های منتقل‌شده:</span>
-                <span className="font-bold text-white font-mono">
+                <span className="text-slate-500 dark:text-[#A7A7A7]">تعداد کل گزارش‌های منتقل‌شده:</span>
+                <span className="font-bold text-slate-900 dark:text-white font-mono">
                   {toPersianDigits(combinedStats.reportsCount)} گزارش مذاکره
                 </span>
               </div>
@@ -433,22 +433,22 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
             {/* Transferred reports list preview */}
             {combinedStats.reportsList.length > 0 && (
               <div className="space-y-2">
-                <span className="text-xs font-bold text-white">پیش‌نمایش گزارش‌های منتقل‌شده:</span>
+                <span className="text-xs font-bold text-slate-900 dark:text-white">پیش‌نمایش گزارش‌های منتقل‌شده:</span>
                 <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                   {combinedStats.reportsList.map((item, idx) => (
                     <div
                       key={idx}
-                      className="p-2.5 rounded-xl bg-[#1c1c1c] border border-[#2c2c2c] text-xs flex items-center justify-between gap-2"
+                      className="p-2.5 rounded-xl bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#2c2c2c] text-xs flex items-center justify-between gap-2 shadow-sm"
                     >
                       <div className="min-w-0">
-                        <span className="font-semibold text-white block truncate">
+                        <span className="font-semibold text-slate-900 dark:text-white block truncate">
                           {item.report.report_text.slice(0, 70)}...
                         </span>
-                        <span className="text-[10px] text-[#888]">
-                          ثبت‌شده توسط: <strong className="text-[#1DB954]">{item.marketerName}</strong> ({item.customerName})
+                        <span className="text-[10px] text-slate-500 dark:text-[#888]">
+                          ثبت‌شده توسط: <strong className="text-emerald-600 dark:text-[#1DB954]">{item.marketerName}</strong> ({item.customerName})
                         </span>
                       </div>
-                      <span className="text-[10px] text-[#777] font-mono shrink-0">
+                      <span className="text-[10px] text-slate-400 dark:text-[#777] font-mono shrink-0">
                         {formatPersianDate(item.report.date_created)}
                       </span>
                     </div>
@@ -460,13 +460,13 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
         )}
 
         {/* Footer Actions */}
-        <div className="p-4 bg-[#121212] border-t border-[#282828] flex items-center justify-between gap-3">
+        <div className="p-4 bg-slate-50 dark:bg-[#121212] border-t border-slate-200 dark:border-[#282828] flex items-center justify-between gap-3">
           {step === 'select' ? (
             <>
               <button
                 type="button"
                 onClick={onClose}
-                className="h-10 px-5 rounded-full border border-[#444] text-xs font-semibold text-[#A7A7A7] hover:text-white"
+                className="h-10 px-5 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#444] text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white transition-colors"
               >
                 انصراف
               </button>
@@ -485,7 +485,7 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
               <button
                 type="button"
                 onClick={() => setStep('select')}
-                className="h-10 px-5 rounded-full border border-[#444] text-xs font-semibold text-[#A7A7A7] hover:text-white"
+                className="h-10 px-5 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#444] text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white transition-colors"
               >
                 بازگشت به انتخاب
               </button>
@@ -505,3 +505,4 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
     </div>
   );
 };
+

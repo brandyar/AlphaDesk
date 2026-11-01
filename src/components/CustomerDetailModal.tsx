@@ -218,18 +218,18 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#181818] border border-[#282828] w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-6 max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-6 max-h-[95vh] sm:max-h-[90vh] flex flex-col text-slate-900 dark:text-white">
         {/* Top Header */}
-        <div className="p-4 sm:p-6 bg-[#121212] border-b border-[#282828] flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+        <div className="p-4 sm:p-6 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex flex-wrap items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-4 min-w-0">
-            <div className="w-12 h-12 rounded-xl bg-[#282828] border border-[#3e3e3e] flex items-center justify-center text-[#1DB954] font-black text-xl flex-shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-slate-200 dark:bg-[#282828] border border-slate-300 dark:border-[#3e3e3e] flex items-center justify-center text-emerald-600 dark:text-[#1DB954] font-black text-xl flex-shrink-0">
               {(customer.manager_name?.trim() || customer.negotiator_name?.trim() || customer.company_name).charAt(0)}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
                 {/* Main Heading: Business Owner's Name */}
-                <h2 className="text-xl font-extrabold text-white truncate">
+                <h2 className="text-xl font-extrabold text-slate-900 dark:text-white truncate">
                   {customer.manager_name?.trim() || customer.negotiator_name?.trim() || 'صاحب کسب و کار (نامشخص)'}
                 </h2>
                 {/* Status indicator */}
@@ -240,22 +240,22 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   <span>{formatStatusLabel(customer.status)}</span>
                 </div>
                 {customer.is_ecommerce && (
-                  <span className="text-[11px] px-2 py-0.5 rounded bg-[#1DB954]/15 text-[#1DB954] font-medium border border-[#1DB954]/30">
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-medium border border-emerald-300 dark:border-[#1DB954]/30">
                     فروشگاه آنلاین
                   </span>
                 )}
               </div>
 
               {/* Sub-Heading: Business / Company Name and Details */}
-              <div className="flex items-center gap-1.5 text-xs text-[#1DB954] font-medium mt-1 flex-wrap">
-                <Building2 className="w-3.5 h-3.5 text-[#1DB954] flex-shrink-0" />
-                <span className="text-white font-bold">{customer.company_name}</span>
-                <span className="text-[#555]">·</span>
-                <span className="text-[#A7A7A7]">{customer.business_type || 'حوزه فعالیت نامشخص'}</span>
+              <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-[#1DB954] font-medium mt-1 flex-wrap">
+                <Building2 className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />
+                <span className="text-slate-900 dark:text-white font-bold">{customer.company_name}</span>
+                <span className="text-slate-400 dark:text-[#555]">·</span>
+                <span className="text-slate-600 dark:text-[#A7A7A7]">{customer.business_type || 'حوزه فعالیت نامشخص'}</span>
                 {(customer.province || customer.city) && (
                   <>
-                    <span className="text-[#555]">·</span>
-                    <span className="text-[#A7A7A7]">{customer.province}{customer.city ? `، ${customer.city}` : ''}</span>
+                    <span className="text-slate-400 dark:text-[#555]">·</span>
+                    <span className="text-slate-600 dark:text-[#A7A7A7]">{customer.province}{customer.city ? `، ${customer.city}` : ''}</span>
                   </>
                 )}
               </div>
@@ -266,7 +266,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             {userIsAdmin && onOpenMerge && (
               <button
                 onClick={() => onOpenMerge(customer.id)}
-                className="p-2 rounded-full bg-[#282828] hover:bg-[#1DB954] text-[#B3B3B3] hover:text-black transition-colors"
+                className="p-2 rounded-full bg-slate-100 hover:bg-emerald-500 text-slate-600 hover:text-white dark:bg-[#282828] dark:hover:bg-[#1DB954] dark:text-[#B3B3B3] dark:hover:text-black transition-colors"
                 title="ادغام این مشتری با پرونده دیگر"
               >
                 <GitMerge className="w-4 h-4" />
@@ -274,7 +274,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             )}
             <button
               onClick={() => onEdit(customer)}
-              className="p-2 rounded-full bg-[#282828] hover:bg-[#333333] text-[#B3B3B3] hover:text-white transition-colors"
+              className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] dark:text-[#B3B3B3] dark:hover:text-white transition-colors"
               title="ویرایش پرونده"
             >
               <Edit2 className="w-4 h-4" />
@@ -286,14 +286,14 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   onClose();
                 }
               }}
-              className="p-2 rounded-full bg-[#282828] hover:bg-red-950/60 text-[#A7A7A7] hover:text-red-400 transition-colors"
+              className="p-2 rounded-full bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 dark:bg-[#282828] dark:hover:bg-red-950/60 dark:text-[#A7A7A7] dark:hover:text-red-400 transition-colors"
               title="حذف مشتری"
             >
               <Trash2 className="w-4 h-4" />
             </button>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-[#282828] hover:bg-[#333333] flex items-center justify-center text-[#B3B3B3] hover:text-white transition-colors mr-2"
+              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors mr-2"
             >
               <X className="w-4 h-4" />
             </button>
@@ -306,21 +306,21 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           <div
             className={`p-4 rounded-xl border flex flex-wrap items-center justify-between gap-4 ${
               timer.isExpired
-                ? 'bg-[#E22134]/10 border-[#E22134]/30'
-                : 'bg-[#141414] border-[#282828]'
+                ? 'bg-red-50 dark:bg-[#E22134]/10 border-red-200 dark:border-[#E22134]/30'
+                : 'bg-slate-50 dark:bg-[#141414] border-slate-200 dark:border-[#282828]'
             }`}
           >
             <div className="flex items-center gap-3">
               <div
                 className={`w-9 h-9 rounded-full flex items-center justify-center ${
-                  timer.isExpired ? 'bg-[#E22134]/20 text-[#E22134]' : 'bg-[#282828] text-[#1DB954]'
+                  timer.isExpired ? 'bg-red-100 text-red-600 dark:bg-[#E22134]/20 dark:text-[#E22134]' : 'bg-slate-200 text-emerald-600 dark:bg-[#282828] dark:text-[#1DB954]'
                 }`}
               >
                 <Clock className="w-5 h-5" />
               </div>
               <div>
-                <div className="text-xs text-[#A7A7A7]">بازاریاب متصل به مشتری</div>
-                <div className="text-sm font-bold text-white flex items-center gap-2">
+                <div className="text-xs text-slate-500 dark:text-[#A7A7A7]">بازاریاب متصل به مشتری</div>
+                <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <span>{customer.assigned_marketer_name || 'تخصیص نیافته'}</span>
                   <span className={`text-xs px-2.5 py-0.5 rounded-full font-mono ${timer.badgeClass}`}>
                     {timer.text}
@@ -333,9 +333,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             {userIsAdmin && (
               <button
                 onClick={() => setShowReassignBox(!showReassignBox)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-semibold text-white transition-all hover:scale-105 border border-[#3e3e3e]"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-slate-100 text-slate-800 dark:bg-[#282828] dark:hover:bg-[#333333] text-xs font-semibold dark:text-white transition-all hover:scale-105 border border-slate-300 dark:border-[#3e3e3e] shadow-sm"
               >
-                <RefreshCw className="w-3.5 h-3.5 text-[#1DB954]" />
+                <RefreshCw className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                 <span>تغییر بازاریاب یا تمدید مهلت (مدیر)</span>
               </button>
             )}
@@ -343,18 +343,18 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
           {/* Reassign Box Drawer */}
           {showReassignBox && (
-            <div className="p-4 rounded-xl bg-[#202020] border border-[#333333] space-y-3">
-              <div className="text-xs font-bold text-white flex items-center gap-2">
-                <RefreshCw className="w-4 h-4 text-[#1DB954]" />
+            <div className="p-4 rounded-xl bg-slate-100 dark:bg-[#202020] border border-slate-300 dark:border-[#333333] space-y-3">
+              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                 <span>تخصیص مشتری به بازاریاب دیگر با مهلت زمانی جدید</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-[11px] text-[#A7A7A7] mb-1">انتخاب بازاریاب جدید</label>
+                  <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">انتخاب بازاریاب جدید</label>
                   <select
                     value={selectedMarketerId}
                     onChange={(e) => setSelectedMarketerId(e.target.value)}
-                    className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white focus:outline-none"
+                    className="w-full h-9 px-2.5 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   >
                     {personnelList.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -364,11 +364,11 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] text-[#A7A7A7] mb-1">مدت مهلت زمانی جدید</label>
+                  <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">مدت مهلت زمانی جدید</label>
                   <select
                     value={reassignDays}
                     onChange={(e) => setReassignDays(Number(e.target.value))}
-                    className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white focus:outline-none"
+                    className="w-full h-9 px-2.5 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   >
                     <option value={3}>۳ روز</option>
                     <option value={7}>۷ روز (استاندارد)</option>
@@ -381,7 +381,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     type="button"
                     disabled={reassigning}
                     onClick={handleReassignSubmit}
-                    className="w-full h-9 rounded bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-colors"
+                    className="w-full h-9 rounded bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-colors shadow-sm"
                   >
                     {reassigning ? 'در حال ثبت...' : 'تأیید تخصیص و ریست مهلت'}
                   </button>
@@ -391,17 +391,17 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           )}
 
           {/* Modular Contacts Directory */}
-          <div className="p-4 rounded-xl bg-[#121212] border border-[#282828] space-y-3">
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs font-bold text-white flex items-center gap-2">
-                <Phone className="w-4 h-4 text-[#1DB954]" />
+              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Phone className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                 <span>کانال‌های ارتباطی تفکیک‌شده مشتری ({customer.contacts?.length || 0} مورد)</span>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowAddContact(!showAddContact)}
-                  className="px-3 py-1 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs flex items-center gap-1 transition-all"
+                  className="px-3 py-1 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs flex items-center gap-1 transition-all shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5 stroke-[3]" />
                   <span>+ افزودن شماره جدید</span>
@@ -409,9 +409,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 <button
                   type="button"
                   onClick={() => onEdit(customer)}
-                  className="px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333] text-white text-xs font-medium flex items-center gap-1 border border-[#3e3e3e] transition-colors"
+                  className="px-3 py-1 rounded-full bg-white hover:bg-slate-100 text-slate-800 dark:bg-[#282828] dark:hover:bg-[#333] dark:text-white text-xs font-medium flex items-center gap-1 border border-slate-300 dark:border-[#3e3e3e] transition-colors shadow-sm"
                 >
-                  <Edit2 className="w-3 h-3 text-[#1DB954]" />
+                  <Edit2 className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
                   <span>فرم کامل ویرایش</span>
                 </button>
               </div>
@@ -419,30 +419,30 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
             {/* Quick Add Contact Form Drawer */}
             {showAddContact && (
-              <form onSubmit={handleQuickAddContact} className="p-3.5 rounded-xl bg-[#1e1e1e] border border-[#333] space-y-3 animate-in fade-in">
-                <div className="text-xs font-bold text-white flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-[#1DB954]">
+              <form onSubmit={handleQuickAddContact} className="p-3.5 rounded-xl bg-slate-100 dark:bg-[#1e1e1e] border border-slate-300 dark:border-[#333] space-y-3 animate-in fade-in">
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-emerald-600 dark:text-[#1DB954]">
                     <Plus className="w-4 h-4 stroke-[3]" />
                     <span>افزودن سریع شماره تماس یا اکانت ارتباطی</span>
                   </span>
                   <button
                     type="button"
                     onClick={() => setShowAddContact(false)}
-                    className="text-[#888] hover:text-white p-1"
+                    className="text-slate-400 hover:text-slate-700 dark:text-[#888] dark:hover:text-white p-1"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
                 {addContactError && (
-                  <div className="p-2.5 rounded-lg bg-red-950/80 border border-red-500/80 text-xs text-red-200 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/80 border border-red-200 dark:border-red-500/80 text-xs text-red-700 dark:text-red-200 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-500 dark:text-red-400 flex-shrink-0" />
                     <span>{addContactError}</span>
                   </div>
                 )}
 
                 {addContactSuccess && (
-                  <div className="p-2.5 rounded-lg bg-[#1DB954]/20 border border-[#1DB954]/60 text-xs text-[#1DB954] flex items-center gap-2">
+                  <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-[#1DB954]/20 border border-emerald-300 dark:border-[#1DB954]/60 text-xs text-emerald-700 dark:text-[#1DB954] flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 flex-shrink-0" />
                     <span>{addContactSuccess}</span>
                   </div>
@@ -450,11 +450,11 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
                   <div className="sm:col-span-3">
-                    <label className="block text-[11px] text-[#A7A7A7] mb-1">نوع کانال</label>
+                    <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">نوع کانال</label>
                     <select
                       value={newContactType}
                       onChange={(e) => setNewContactType(e.target.value as ChannelType)}
-                      className="w-full h-9 px-2 bg-[#282828] rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                      className="w-full h-9 px-2 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     >
                       <option value="mobile">تلفن همراه (موبایل)</option>
                       <option value="landline">تلفن ثابت (دفتر)</option>
@@ -466,7 +466,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     </select>
                   </div>
                   <div className="sm:col-span-4">
-                    <label className="block text-[11px] text-[#A7A7A7] mb-1">شماره یا شناسه</label>
+                    <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">شماره یا شناسه</label>
                     <input
                       type="text"
                       dir="ltr"
@@ -474,24 +474,24 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       value={newContactValue}
                       onChange={(e) => setNewContactValue(e.target.value)}
                       placeholder={newContactType === 'mobile' ? '09121234567' : newContactType === 'landline' ? '02188776655' : 'مقدار'}
-                      className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-[#1DB954] placeholder:text-right"
+                      className="w-full h-9 px-2.5 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-right"
                     />
                   </div>
                   <div className="sm:col-span-3">
-                    <label className="block text-[11px] text-[#A7A7A7] mb-1">نام یا عنوان رابط (اختیاری)</label>
+                    <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">نام یا عنوان رابط (اختیاری)</label>
                     <input
                       type="text"
                       value={newContactName}
                       onChange={(e) => setNewContactName(e.target.value)}
                       placeholder="مثال: مسئول خرید، مدیر فنی"
-                      className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                      className="w-full h-9 px-2.5 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
                   </div>
                   <div className="sm:col-span-2 flex items-end">
                     <button
                       type="submit"
                       disabled={addingContact}
-                      className="w-full h-9 rounded bg-[#1DB954] hover:bg-[#1ED760] disabled:bg-[#333] text-black font-bold text-xs transition-colors flex items-center justify-center gap-1 shadow-md"
+                      className="w-full h-9 rounded bg-[#1DB954] hover:bg-[#1ED760] disabled:bg-slate-300 dark:disabled:bg-[#333] text-black font-bold text-xs transition-colors flex items-center justify-center gap-1 shadow-md"
                     >
                       {addingContact ? (
                         <span>در حال ثبت...</span>
@@ -511,16 +511,16 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
                 {customer.contacts.map((ct, idx) => {
                   let linkHref = '';
-                  let channelIcon = <Phone className="w-3.5 h-3.5 text-[#1DB954]" />;
+                  let channelIcon = <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />;
                   let typeLabel = 'موبایل';
 
                   if (ct.channel_type === 'mobile' || ct.channel_type === 'landline') {
                     linkHref = `tel:${ct.value}`;
                     channelIcon =
                       ct.channel_type === 'mobile' ? (
-                        <Phone className="w-3.5 h-3.5 text-[#1DB954]" />
+                        <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                       ) : (
-                        <Phone className="w-3.5 h-3.5 text-blue-400" />
+                        <Phone className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
                       );
                     typeLabel = ct.channel_type === 'mobile' ? 'تلفن همراه' : 'تلفن ثابت';
                   } else if (ct.channel_type === 'telegram') {
@@ -528,7 +528,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     linkHref = /^09\d{9}$/.test(ct.value)
                       ? `https://t.me/+98${ct.value.substring(1)}`
                       : `https://t.me/${cleanTid}`;
-                    channelIcon = <Send className="w-3.5 h-3.5 text-[#229ED9]" />;
+                    channelIcon = <Send className="w-3.5 h-3.5 text-sky-500 dark:text-[#229ED9]" />;
                     typeLabel = 'تلگرام';
                   } else if (ct.channel_type === 'instagram') {
                     const cleanInsta = ct.value.replace(/^@/, '');
@@ -537,15 +537,15 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     typeLabel = 'اینستاگرام';
                   } else if (ct.channel_type === 'whatsapp') {
                     linkHref = `https://wa.me/98${ct.value.replace(/^0/, '')}`;
-                    channelIcon = <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />;
+                    channelIcon = <MessageSquare className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />;
                     typeLabel = 'واتساپ';
                   } else if (ct.channel_type === 'email') {
                     linkHref = `mailto:${ct.value}`;
-                    channelIcon = <Mail className="w-3.5 h-3.5 text-amber-400" />;
+                    channelIcon = <Mail className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />;
                     typeLabel = 'ایمیل';
                   } else if (ct.channel_type === 'website') {
                     linkHref = ct.value.startsWith('http') ? ct.value : `https://${ct.value}`;
-                    channelIcon = <Globe className="w-3.5 h-3.5 text-purple-400" />;
+                    channelIcon = <Globe className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />;
                     typeLabel = 'وب‌سایت';
                   }
 
@@ -554,15 +554,15 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   return (
                     <div
                       key={idx}
-                      className="p-2.5 rounded-lg bg-[#1a1a1a] border border-[#2b2b2b] hover:border-[#383838] transition-all space-y-1.5"
+                      className="p-2.5 rounded-lg bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2b2b2b] hover:border-slate-300 dark:hover:border-[#383838] transition-all space-y-1.5 shadow-sm"
                     >
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="flex items-center gap-1.5 text-[#B3B3B3]">
+                        <span className="flex items-center gap-1.5 text-slate-600 dark:text-[#B3B3B3]">
                           {channelIcon}
                           <span className="font-semibold">{typeLabel}</span>
                         </span>
                         {ct.is_primary && (
-                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#1DB954]/20 text-[#1DB954] border border-[#1DB954]/30 font-bold flex items-center gap-0.5">
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-[#1DB954]/20 dark:text-[#1DB954] border border-emerald-300 dark:border-[#1DB954]/30 font-bold flex items-center gap-0.5">
                             <Star className="w-2.5 h-2.5 fill-current" />
                             اصلی
                           </span>
@@ -575,23 +575,23 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           target={linkHref.startsWith('http') ? '_blank' : undefined}
                           rel="noreferrer"
                           dir="ltr"
-                          className="font-mono text-xs text-white hover:text-[#1DB954] truncate transition-colors"
+                          className="font-mono text-xs text-slate-900 dark:text-white hover:text-emerald-600 dark:hover:text-[#1DB954] truncate transition-colors font-medium"
                         >
                           {ct.value}
                         </a>
                         <button
                           type="button"
                           onClick={() => handleCopy(ct.value)}
-                          className="p-1 rounded hover:bg-[#282828] text-[#888] hover:text-white transition-colors"
+                          className="p-1 rounded hover:bg-slate-100 dark:hover:bg-[#282828] text-slate-400 hover:text-slate-700 dark:text-[#888] dark:hover:text-white transition-colors"
                           title="کپی شماره/اکانت"
                         >
-                          {isCopied ? <Check className="w-3 h-3 text-[#1DB954]" /> : <Copy className="w-3 h-3" />}
+                          {isCopied ? <Check className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" /> : <Copy className="w-3 h-3" />}
                         </button>
                       </div>
 
                       {(ct.contact_name || ct.contact_role) && (
-                        <div className="text-[10px] text-[#A7A7A7] truncate">
-                          {ct.contact_name && <span className="text-white">{ct.contact_name}</span>}
+                        <div className="text-[10px] text-slate-500 dark:text-[#A7A7A7] truncate">
+                          {ct.contact_name && <span className="text-slate-900 dark:text-white font-medium">{ct.contact_name}</span>}
                           {ct.contact_name && ct.contact_role && <span> · </span>}
                           {ct.contact_role && <span>{ct.contact_role}</span>}
                         </div>
@@ -601,7 +601,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 })}
               </div>
             ) : (
-              <div className="p-3 text-xs text-[#888] bg-[#181818] rounded-lg border border-[#262626]">
+              <div className="p-3 text-xs text-slate-500 dark:text-[#888] bg-white dark:bg-[#181818] rounded-lg border border-slate-200 dark:border-[#262626]">
                 هیچ شماره‌ای در فهرست تفکیک‌شده ثبت نشده است. از دکمه «+ افزودن شماره جدید» در بالا برای ثبت شماره استفاده کنید.
               </div>
             )}
@@ -609,15 +609,15 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             {/* Quick Contact & Social Bars Fallback */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Direct Numbers */}
-              <div className="p-4 rounded-xl bg-[#121212] border border-[#282828] space-y-3">
-                <div className="text-xs font-bold text-[#B3B3B3] flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-[#1DB954]" />
-                  <span>شماره‌های تماس</span>
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] space-y-3">
+                <div className="text-xs font-bold text-slate-700 dark:text-[#B3B3B3] flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
+                  <span>شماره‌های تماس مستقیم</span>
                 </div>
 
                 {/* Mobiles */}
                 <div>
-                  <span className="text-[11px] text-[#A7A7A7]">موبایل‌ها:</span>
+                  <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">موبایل‌ها:</span>
                   <div className="flex flex-wrap gap-2 mt-1">
                     {Array.isArray(customer.mobile_numbers) && customer.mobile_numbers.length > 0 ? (
                       customer.mobile_numbers.map((num, i) => (
@@ -625,14 +625,14 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           key={i}
                           href={`tel:${num}`}
                           dir="ltr"
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-mono text-white transition-colors"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white dark:bg-[#282828] hover:bg-slate-100 dark:hover:bg-[#333333] border border-slate-200 dark:border-transparent text-xs font-mono text-slate-900 dark:text-white transition-colors shadow-sm"
                         >
-                          <Phone className="w-3 h-3 text-[#1DB954]" />
+                          <Phone className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
                           <span>{num}</span>
                         </a>
                       ))
                     ) : (
-                      <span className="text-xs text-[#535353]">-</span>
+                      <span className="text-xs text-slate-400 dark:text-[#535353]">-</span>
                     )}
                   </div>
                 </div>
@@ -640,14 +640,14 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 {/* Landlines */}
                 {customer.landline_numbers.length > 0 && (
                   <div>
-                    <span className="text-[11px] text-[#A7A7A7]">تلفن‌های ثابت:</span>
+                    <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">تلفن‌های ثابت:</span>
                     <div className="flex flex-wrap gap-2 mt-1">
                       {customer.landline_numbers.map((num, i) => (
                         <a
                           key={i}
                           href={`tel:${num}`}
                           dir="ltr"
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-mono text-white transition-colors"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white dark:bg-[#282828] hover:bg-slate-100 dark:hover:bg-[#333333] border border-slate-200 dark:border-transparent text-xs font-mono text-slate-900 dark:text-white transition-colors shadow-sm"
                         >
                           <span>{num}</span>
                         </a>
@@ -657,21 +657,21 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 )}
 
                 {/* Manager & Negotiator Contacts */}
-                <div className="pt-2 border-t border-[#282828] grid grid-cols-2 gap-2 text-xs">
+                <div className="pt-2 border-t border-slate-200 dark:border-[#282828] grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-[#A7A7A7] block text-[11px]">مدیر:</span>
-                    <span className="font-semibold text-white">{customer.manager_name || 'ثبت نشده'}</span>
+                    <span className="text-slate-500 dark:text-[#A7A7A7] block text-[11px]">مدیر:</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">{customer.manager_name || 'ثبت نشده'}</span>
                     {customer.manager_phones.length > 0 && (
-                      <div className="text-[11px] font-mono text-[#1DB954] mt-0.5" dir="ltr">
+                      <div className="text-[11px] font-mono text-emerald-600 dark:text-[#1DB954] mt-0.5" dir="ltr">
                         {customer.manager_phones.join(' , ')}
                       </div>
                     )}
                   </div>
                   <div>
-                    <span className="text-[#A7A7A7] block text-[11px]">مذاکره‌کننده سمت مشتری:</span>
-                    <span className="font-semibold text-white">{customer.negotiator_name || 'ثبت نشده'}</span>
+                    <span className="text-slate-500 dark:text-[#A7A7A7] block text-[11px]">مذاکره‌کننده سمت مشتری:</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">{customer.negotiator_name || 'ثبت نشده'}</span>
                     {customer.negotiator_phones.length > 0 && (
-                      <div className="text-[11px] font-mono text-[#1DB954] mt-0.5" dir="ltr">
+                      <div className="text-[11px] font-mono text-emerald-600 dark:text-[#1DB954] mt-0.5" dir="ltr">
                         {customer.negotiator_phones.join(' , ')}
                       </div>
                     )}
@@ -680,22 +680,22 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               </div>
 
               {/* Socials & Web */}
-              <div className="p-4 rounded-xl bg-[#121212] border border-[#282828] space-y-3">
-                <div className="text-xs font-bold text-[#B3B3B3] flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-[#1DB954]" />
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] space-y-3">
+                <div className="text-xs font-bold text-slate-700 dark:text-[#B3B3B3] flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                   <span>شبکه‌های اجتماعی و وب‌سایت</span>
                 </div>
 
                 {/* Telegram */}
                 <div>
-                  <span className="text-[11px] text-[#A7A7A7]">تلگرام:</span>
+                  <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">تلگرام:</span>
                   <div className="flex flex-wrap gap-2 mt-1">
                     {customer.telegram_phone && (
                       <a
                         href={`https://t.me/+${customer.telegram_phone.replace(/^0/, '98')}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#229ED9]/15 border border-[#229ED9]/30 text-[#229ED9] text-xs font-mono hover:bg-[#229ED9]/25 transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 dark:bg-[#229ED9]/15 border border-sky-200 dark:border-[#229ED9]/30 text-sky-600 dark:text-[#229ED9] text-xs font-mono hover:bg-sky-100 dark:hover:bg-[#229ED9]/25 transition-colors"
                       >
                         <Send className="w-3 h-3" />
                         <span>شماره تلگرام: {customer.telegram_phone}</span>
@@ -708,21 +708,21 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                         href={`https://t.me/${tid.replace(/^@/, '')}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333333] text-xs font-mono text-white transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white dark:bg-[#282828] hover:bg-slate-100 dark:hover:bg-[#333333] border border-slate-200 dark:border-transparent text-xs font-mono text-slate-900 dark:text-white transition-colors shadow-sm"
                       >
-                        <Send className="w-3 h-3 text-[#229ED9]" />
+                        <Send className="w-3 h-3 text-sky-500 dark:text-[#229ED9]" />
                         <span>@{tid.replace(/^@/, '')}</span>
                       </a>
                     ))}
                     {!customer.telegram_phone && customer.telegram_ids.length === 0 && (
-                      <span className="text-xs text-[#535353]">-</span>
+                      <span className="text-xs text-slate-400 dark:text-[#535353]">-</span>
                     )}
                   </div>
                 </div>
 
                 {/* Instagram */}
                 <div>
-                  <span className="text-[11px] text-[#A7A7A7]">اینستاگرام:</span>
+                  <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">اینستاگرام:</span>
                   <div className="flex flex-wrap gap-2 mt-1">
                     {customer.instagram_ids.length > 0 ? (
                       customer.instagram_ids.map((insta, i) => (
@@ -731,14 +731,14 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           href={`https://instagram.com/${insta.replace(/^@/, '')}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E1306C]/15 border border-[#E1306C]/30 text-[#E1306C] text-xs font-mono hover:bg-[#E1306C]/25 transition-colors"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-50 dark:bg-[#E1306C]/15 border border-pink-200 dark:border-[#E1306C]/30 text-pink-600 dark:text-[#E1306C] text-xs font-mono hover:bg-pink-100 dark:hover:bg-[#E1306C]/25 transition-colors"
                         >
                           <Instagram className="w-3 h-3" />
                           <span>@{insta.replace(/^@/, '')}</span>
                         </a>
                       ))
                     ) : (
-                      <span className="text-xs text-[#535353]">-</span>
+                      <span className="text-xs text-slate-400 dark:text-[#535353]">-</span>
                     )}
                   </div>
                 </div>
@@ -746,7 +746,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 {/* Websites */}
                 {customer.websites.length > 0 && (
                   <div>
-                    <span className="text-[11px] text-[#A7A7A7]">وب‌سایت‌ها:</span>
+                    <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">وب‌سایت‌ها:</span>
                     <div className="flex flex-wrap gap-2 mt-1">
                       {customer.websites.map((web, i) => (
                         <a
@@ -754,7 +754,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           href={web.startsWith('http') ? web : `https://${web}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#282828] hover:bg-[#333333] text-xs text-[#1DB954] hover:underline"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white dark:bg-[#282828] hover:bg-slate-100 dark:hover:bg-[#333333] border border-slate-200 dark:border-transparent text-xs text-emerald-600 dark:text-[#1DB954] hover:underline shadow-sm"
                           dir="ltr"
                         >
                           <Globe className="w-3 h-3" />
@@ -769,39 +769,39 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             </div>
 
           {/* First Interview Report Box */}
-          <div className="p-5 rounded-xl bg-[#121212] border border-[#282828] space-y-3">
-            <div className="flex items-center justify-between border-b border-[#282828] pb-3">
-              <div className="flex items-center gap-2 font-bold text-sm text-white">
-                <Sparkles className="w-4 h-4 text-[#1DB954]" />
+          <div className="p-5 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
+              <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-white">
+                <Sparkles className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                 <span>گزارش مصاحبه اولیه (اولین مکالمه با مشتری)</span>
               </div>
               <div className="flex items-center gap-3 text-xs">
-                <span className="text-[#A7A7A7]">وضعیت مصاحبه:</span>
-                <span className="font-semibold text-white px-2.5 py-0.5 rounded bg-[#282828]">
+                <span className="text-slate-500 dark:text-[#A7A7A7]">وضعیت مصاحبه:</span>
+                <span className="font-semibold text-slate-800 dark:text-white px-2.5 py-0.5 rounded bg-slate-200 dark:bg-[#282828]">
                   {customer.interview_status || 'ثبت نشده'}
                 </span>
-                <span className="text-[#A7A7A7] mr-2">امتیاز:</span>
-                <span className="font-mono font-bold text-[#1DB954] px-2 py-0.5 rounded bg-[#1DB954]/15">
+                <span className="text-slate-500 dark:text-[#A7A7A7] mr-2">امتیاز:</span>
+                <span className="font-mono font-bold text-emerald-700 dark:text-[#1DB954] px-2 py-0.5 rounded bg-emerald-100 dark:bg-[#1DB954]/15">
                   {customer.interview_score} / 10
                 </span>
               </div>
             </div>
 
             {/* Interview report text with distinct background */}
-            <div className="p-3.5 rounded-xl bg-[#1c1c1c] border border-[#2d2d2d] shadow-sm space-y-1.5">
-              <div className="text-[11px] font-semibold text-[#1DB954] flex items-center gap-1.5">
+            <div className="p-3.5 rounded-xl bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#2d2d2d] shadow-sm space-y-1.5">
+              <div className="text-[11px] font-semibold text-emerald-700 dark:text-[#1DB954] flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>شرح و متن مصاحبه اولیه:</span>
               </div>
-              <p className="text-xs sm:text-[13px] text-zinc-100 leading-relaxed whitespace-pre-wrap font-normal">
+              <p className="text-xs sm:text-[13px] text-slate-800 dark:text-zinc-100 leading-relaxed whitespace-pre-wrap font-normal">
                 {customer.interview_report || 'هیچ یادداشتی برای مصاحبه اولیه ثبت نشده است.'}
               </p>
             </div>
 
             {customer.next_followup_date && (
-              <div className="pt-2 text-xs text-[#A7A7A7] flex items-center gap-2">
+              <div className="pt-2 text-xs text-slate-500 dark:text-[#A7A7A7] flex items-center gap-2">
                 <span>موعد پیگیری بعدی تعیین شده:</span>
-                <span className="text-white font-semibold font-mono">
+                <span className="text-slate-900 dark:text-white font-semibold font-mono">
                   {formatPersianDate(customer.next_followup_date)}
                 </span>
               </div>
@@ -811,8 +811,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           {/* Follow-up Reports History Section */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-sm text-white">
-                <MessageSquare className="w-4 h-4 text-[#1DB954]" />
+              <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-white">
+                <MessageSquare className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                 <span>تاریخچه گزارش‌های پیگیری و مذاکره ({customer.reports?.length || 0})</span>
               </div>
 
@@ -829,42 +829,42 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             {showAddReport && (
               <form
                 onSubmit={handleReportSubmit}
-                className="p-4 rounded-xl bg-[#202020] border border-[#333333] space-y-4 animate-in fade-in"
+                className="p-4 rounded-xl bg-slate-100 dark:bg-[#202020] border border-slate-300 dark:border-[#333333] space-y-4 animate-in fade-in"
               >
-                <div className="font-bold text-xs text-white border-b border-[#282828] pb-2">
+                <div className="font-bold text-xs text-slate-900 dark:text-white border-b border-slate-200 dark:border-[#282828] pb-2">
                   ثبت گزارش مذاکره جدید برای این پرونده
                 </div>
 
                 <div className={`grid gap-3 ${userIsAdmin ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'}`}>
                   {userIsAdmin && (
                     <div>
-                      <label className="block text-[11px] text-[#A7A7A7] mb-1">مذاکره‌کننده</label>
+                      <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">مذاکره‌کننده</label>
                       <input
                         type="text"
                         value={negotiatorName}
                         onChange={(e) => setNegotiatorName(e.target.value)}
-                        className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white focus:outline-none"
+                        className="w-full h-9 px-2.5 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       />
                     </div>
                   )}
 
                   <div>
-                    <label className="block text-[11px] text-[#A7A7A7] mb-1">شماره تماس مذاکره</label>
+                    <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">شماره تماس مذاکره</label>
                     <input
                       type="text"
                       dir="ltr"
                       value={negotiationPhone}
                       onChange={(e) => setNegotiationPhone(e.target.value)}
-                      className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white focus:outline-none"
+                      className="w-full h-9 px-2.5 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] text-[#A7A7A7] mb-1">وضعیت مذاکره</label>
+                    <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">وضعیت مذاکره</label>
                     <select
                       value={negotiationStatus}
                       onChange={(e) => setNegotiationStatus(e.target.value as NegotiationStatus)}
-                      className="w-full h-9 px-2.5 bg-[#282828] rounded text-xs text-white focus:outline-none"
+                      className="w-full h-9 px-2.5 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     >
                       <option value="تماس برقرار نشده">تماس برقرار نشده</option>
                       <option value="پاسخ نمیدهد">پاسخ نمیدهد</option>
@@ -879,8 +879,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-[11px] text-[#A7A7A7] mb-1">
-                      امتیاز مذاکره: <span className="text-[#1DB954] font-bold font-mono">{negotiationScore}</span>/10
+                    <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">
+                      امتیاز مذاکره: <span className="text-emerald-700 dark:text-[#1DB954] font-bold font-mono">{negotiationScore}</span>/10
                     </label>
                     <input
                       type="range"
@@ -888,29 +888,29 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       max={10}
                       value={negotiationScore}
                       onChange={(e) => setNegotiationScore(Number(e.target.value))}
-                      className="w-full accent-[#1DB954]"
+                      className="w-full accent-emerald-600 dark:accent-[#1DB954]"
                     />
                   </div>
                 </div>
 
                 {/* Contract / Invoice Details Box */}
                 {(negotiationStatus === 'قرارداد / فاکتور' || negotiationStatus === 'قرارداد') && (
-                  <div className="p-3.5 rounded-xl bg-[#1DB954]/10 border border-[#1DB954]/30 space-y-3 animate-in fade-in">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-[#1DB954] border-b border-[#1DB954]/20 pb-1.5">
+                  <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-[#1DB954]/10 border border-emerald-300 dark:border-[#1DB954]/30 space-y-3 animate-in fade-in">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-[#1DB954] border-b border-emerald-200 dark:border-[#1DB954]/20 pb-1.5">
                       <FileCheck2 className="w-4 h-4" />
                       <span>اطلاعات تکمیلی قرارداد / فاکتور</span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <div>
-                        <label className="block text-[10px] text-[#A7A7A7] mb-1">شماره قرارداد / فاکتور</label>
+                        <label className="block text-[10px] text-slate-600 dark:text-[#A7A7A7] mb-1">شماره قرارداد / فاکتور</label>
                         <input
                           type="text"
                           dir="ltr"
                           value={contractNumber}
                           onChange={(e) => setContractNumber(e.target.value)}
                           placeholder="مثلاً: CNT-1403/102"
-                          className="w-full h-8 px-2.5 bg-[#181818] rounded text-xs text-white border border-[#2a2a2a] focus:border-[#1DB954] focus:outline-none font-mono"
+                          className="w-full h-8 px-2.5 bg-white dark:bg-[#181818] rounded text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2a2a2a] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono"
                         />
                       </div>
                       <div>
@@ -921,8 +921,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-[#A7A7A7] mb-1">
-                          مبلغ نهایی: <span className="text-[#1DB954] font-mono">{formatToman(contractAmount)}</span>
+                        <label className="block text-[10px] text-slate-600 dark:text-[#A7A7A7] mb-1">
+                          مبلغ نهایی: <span className="text-emerald-700 dark:text-[#1DB954] font-mono">{formatToman(contractAmount)}</span>
                         </label>
                         <input
                           type="text"
@@ -933,19 +933,19 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                             setContractAmount(raw ? parseInt(raw, 10).toLocaleString('en-US') : '');
                           }}
                           placeholder="مثلاً: 25,000,000"
-                          className="w-full h-8 px-2.5 bg-[#181818] rounded text-xs text-white border border-[#2a2a2a] focus:border-[#1DB954] focus:outline-none font-mono text-left font-bold"
+                          className="w-full h-8 px-2.5 bg-white dark:bg-[#181818] rounded text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2a2a2a] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono text-left font-bold"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-[#A7A7A7] mb-1">اقلام، خدمات یا بندهای فاکتور</label>
+                      <label className="block text-[10px] text-slate-600 dark:text-[#A7A7A7] mb-1">اقلام، خدمات یا بندهای فاکتور</label>
                       <input
                         type="text"
                         value={contractItems}
                         onChange={(e) => setContractItems(e.target.value)}
                         placeholder="شرح اقلام (مثلاً: طراحی سایت فروشگاهی + درگاه پرداخت + پشتیبانی ۱ ساله)..."
-                        className="w-full h-8 px-2.5 bg-[#181818] rounded text-xs text-white border border-[#2a2a2a] focus:border-[#1DB954] focus:outline-none"
+                        className="w-full h-8 px-2.5 bg-white dark:bg-[#181818] rounded text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2a2a2a] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
                       />
                     </div>
                   </div>
@@ -953,14 +953,14 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   <div className="md:col-span-3">
-                    <label className="block text-[11px] text-[#A7A7A7] mb-1">متن گزارش مذاکره</label>
+                    <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">متن گزارش مذاکره</label>
                     <textarea
                       rows={3}
                       required
                       value={reportText}
                       onChange={(e) => setReportText(e.target.value)}
                       placeholder="شرح جزئیات صحبت، نیاز مشتری، توافقات مالی، ابهامات یا موانع مطرح شده..."
-                      className="w-full p-2.5 bg-[#282828] rounded text-xs text-white resize-none focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                      className="w-full p-2.5 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
                   </div>
                   <div>
@@ -973,14 +973,14 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       <button
                         type="submit"
                         disabled={submittingReport}
-                        className="flex-1 h-9 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-colors"
+                        className="flex-1 h-9 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-colors shadow-sm"
                       >
                         {submittingReport ? 'ثبت...' : 'ذخیره گزارش'}
                       </button>
                       <button
                         type="button"
                         onClick={() => setShowAddReport(false)}
-                        className="px-3 h-9 rounded-full border border-[#535353] text-[#B3B3B3] hover:text-white text-xs"
+                        className="px-3 h-9 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#535353] text-slate-600 hover:text-slate-900 dark:text-[#B3B3B3] dark:hover:text-white text-xs transition-colors"
                       >
                         انصراف
                       </button>
@@ -998,13 +998,13 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   return (
                     <div
                       key={rep.id}
-                      className="p-4 rounded-xl bg-[#121212] border border-[#282828] space-y-2 hover:border-[#3e3e3e] transition-colors"
+                      className="p-4 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] space-y-2 hover:border-slate-300 dark:hover:border-[#3e3e3e] transition-colors shadow-sm"
                     >
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-3">
-                          <span className="text-xs font-bold text-white">{rep.negotiator_name}</span>
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">{rep.negotiator_name}</span>
                           {rep.negotiation_phone && (
-                            <span className="text-[11px] font-mono text-[#A7A7A7]" dir="ltr">
+                            <span className="text-[11px] font-mono text-slate-500 dark:text-[#A7A7A7]" dir="ltr">
                               ({rep.negotiation_phone})
                             </span>
                           )}
@@ -1014,7 +1014,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                             {formatStatusLabel(rep.negotiation_status)}
                           </span>
                         </div>
-                        <div className="flex items-center gap-3 text-[11px] text-[#A7A7A7]">
+                        <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-[#A7A7A7]">
                           <span className="font-mono">امتیاز: {rep.negotiation_score}/10</span>
                           <span>·</span>
                           <span>{formatPersianDateTime(rep.date_created)}</span>
@@ -1022,26 +1022,26 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       </div>
 
                       {/* Report text with distinct, clear background container */}
-                      <div className="p-3.5 rounded-xl bg-[#1c1c1c] border border-[#2d2d2d] shadow-sm space-y-1.5">
-                        <div className="text-[11px] font-semibold text-[#1DB954] flex items-center gap-1.5">
+                      <div className="p-3.5 rounded-xl bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#2d2d2d] shadow-sm space-y-1.5">
+                        <div className="text-[11px] font-semibold text-emerald-700 dark:text-[#1DB954] flex items-center gap-1.5">
                           <MessageSquare className="w-3.5 h-3.5" />
                           <span>متن گزارش مذاکره:</span>
                         </div>
-                        <p className="text-xs sm:text-[13px] text-zinc-100 leading-relaxed whitespace-pre-wrap font-normal">
+                        <p className="text-xs sm:text-[13px] text-slate-800 dark:text-zinc-100 leading-relaxed whitespace-pre-wrap font-normal">
                           {rep.report_text}
                         </p>
                       </div>
 
                       {/* Contract / Invoice Details Card */}
                       {(rep.contract_number || rep.contract_amount || rep.contract_items || rep.contract_date) && (
-                        <div className="p-3 rounded-xl bg-[#1DB954]/10 border border-[#1DB954]/25 space-y-2 text-xs">
-                          <div className="flex items-center justify-between font-bold text-[#1DB954] border-b border-[#1DB954]/20 pb-1.5">
+                        <div className="p-3 rounded-xl bg-emerald-50 dark:bg-[#1DB954]/10 border border-emerald-200 dark:border-[#1DB954]/25 space-y-2 text-xs">
+                          <div className="flex items-center justify-between font-bold text-emerald-800 dark:text-[#1DB954] border-b border-emerald-200 dark:border-[#1DB954]/20 pb-1.5">
                             <span className="flex items-center gap-1.5">
                               <FileCheck2 className="w-4 h-4" />
                               <span>اطلاعات سند قرارداد / فاکتور</span>
                             </span>
                             {rep.contract_number && (
-                              <span className="font-mono bg-[#181818] px-2 py-0.5 rounded border border-[#1DB954]/30 text-white">
+                              <span className="font-mono bg-white dark:bg-[#181818] px-2 py-0.5 rounded border border-emerald-300 dark:border-[#1DB954]/30 text-slate-900 dark:text-white">
                                 شماره: {rep.contract_number}
                               </span>
                             )}
@@ -1049,36 +1049,36 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
                             {rep.contract_date && (
                               <div>
-                                <span className="text-[#888]">تاریخ قرارداد: </span>
-                                <span className="font-mono text-white font-semibold">{formatPersianDate(rep.contract_date)}</span>
+                                <span className="text-slate-500 dark:text-[#888]">تاریخ قرارداد: </span>
+                                <span className="font-mono text-slate-900 dark:text-white font-semibold">{formatPersianDate(rep.contract_date)}</span>
                               </div>
                             )}
                             {rep.contract_amount && (
                               <div>
-                                <span className="text-[#888]">مبلغ نهایی: </span>
-                                <span className="font-bold text-[#1DB954] font-mono">{formatToman(rep.contract_amount)}</span>
+                                <span className="text-slate-500 dark:text-[#888]">مبلغ نهایی: </span>
+                                <span className="font-bold text-emerald-700 dark:text-[#1DB954] font-mono">{formatToman(rep.contract_amount)}</span>
                               </div>
                             )}
                           </div>
                           {rep.contract_items && (
-                            <div className="text-[11px] bg-[#121212] p-2 rounded-lg border border-[#222]">
-                              <span className="text-[#888]">اقلام و خدمات: </span>
-                              <span className="text-white">{rep.contract_items}</span>
+                            <div className="text-[11px] bg-white dark:bg-[#121212] p-2 rounded-lg border border-slate-200 dark:border-[#222]">
+                              <span className="text-slate-500 dark:text-[#888]">اقلام و خدمات: </span>
+                              <span className="text-slate-800 dark:text-white">{rep.contract_items}</span>
                             </div>
                           )}
                         </div>
                       )}
 
                       {rep.next_followup_date && (
-                        <div className="text-[11px] text-[#A7A7A7] pt-1">
-                          پیگیری بعدی: <span className="text-white font-mono">{formatPersianDate(rep.next_followup_date)}</span>
+                        <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] pt-1">
+                          پیگیری بعدی: <span className="text-slate-900 dark:text-white font-mono">{formatPersianDate(rep.next_followup_date)}</span>
                         </div>
                       )}
                     </div>
                   );
                 })
               ) : (
-                <div className="p-8 text-center bg-[#121212] rounded-xl border border-[#282828] text-xs text-[#A7A7A7]">
+                <div className="p-8 text-center bg-slate-50 dark:bg-[#121212] rounded-xl border border-slate-200 dark:border-[#282828] text-xs text-slate-500 dark:text-[#A7A7A7]">
                   هنوز هیچ گزارش پیگیری برای این مشتری ثبت نشده است. با کلیک بر روی دکمه بالا اولین گزارش را ثبت کنید.
                 </div>
               )}

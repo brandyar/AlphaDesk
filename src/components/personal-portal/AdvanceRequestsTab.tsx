@@ -70,12 +70,12 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
   return (
     <div className="space-y-6">
       {/* New Advance Request Form */}
-      <div className="bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-6 space-y-5">
-        <div className="flex items-center gap-2 border-b border-[#282828] pb-3">
-          <Wallet className="w-5 h-5 text-[#1DB954]" />
+      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl p-5 sm:p-6 space-y-5">
+        <div className="flex items-center gap-2 border-b border-slate-200 dark:border-[#282828] pb-3">
+          <Wallet className="w-5 h-5 text-emerald-600 dark:text-[#1DB954]" />
           <div>
-            <h3 className="text-base font-bold text-white">ثبت درخواست مساعده مالی</h3>
-            <p className="text-xs text-[#888]">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">ثبت درخواست مساعده مالی</h3>
+            <p className="text-xs text-slate-500 dark:text-[#888]">
               درخواست مساعده حقوق خود را ثبت کنید تا پس از بررسی مدیریت واریز گردد.
             </p>
           </div>
@@ -84,7 +84,7 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
         <form onSubmit={handleSubmitAdvance} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                 مبلغ درخواستی (تومان) *
               </label>
               <input
@@ -94,15 +94,15 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
                 onChange={(e) => setAdvanceAmount(e.target.value)}
                 placeholder="5,000,000"
                 required
-                className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono font-bold text-sm"
+                className="w-full h-10 px-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono font-bold text-sm"
               />
-              <div className="text-[11px] text-[#1DB954] mt-1 font-mono">
+              <div className="text-[11px] text-emerald-600 dark:text-[#1DB954] mt-1 font-mono">
                 معادل: {formatToman(Number(advanceAmount.replace(/[^0-9]/g, '')) || 0)}
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                 مربوط به حقوق ماه
               </label>
               <input
@@ -110,7 +110,7 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
                 value={advanceMonth}
                 onChange={(e) => setAdvanceMonth(e.target.value)}
                 placeholder="مهر ۱۴۰۵"
-                className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none"
+                className="w-full h-10 px-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
               />
             </div>
 
@@ -125,7 +125,7 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                 شماره کارت جهت واریز
               </label>
               <input
@@ -134,12 +134,12 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
                 value={advanceCard}
                 onChange={(e) => setAdvanceCard(e.target.value)}
                 placeholder="6037-9975-..."
-                className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono tracking-wider"
+                className="w-full h-10 px-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono tracking-wider"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                 شماره شبا (IBAN)
               </label>
               <input
@@ -148,13 +148,13 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
                 value={advanceIban}
                 onChange={(e) => setAdvanceIban(e.target.value)}
                 placeholder="IR12017..."
-                className="w-full h-10 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none font-mono"
+                className="w-full h-10 px-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
               علت و ضرورت درخواست مساعده *
             </label>
             <textarea
@@ -163,7 +163,7 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
               placeholder="شرح دلیل درخواست مساعده مالی..."
               rows={3}
               required
-              className="w-full p-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none leading-relaxed"
+              className="w-full p-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none leading-relaxed"
             />
           </div>
 
@@ -171,7 +171,7 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
             <button
               type="submit"
               disabled={isSubmittingAdvance}
-              className="px-6 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-xs shadow-lg shadow-[#1DB954]/25 transition-all disabled:opacity-50 flex items-center gap-2"
+              className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black font-bold text-xs shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 transition-all disabled:opacity-50 flex items-center gap-2"
             >
               <Send className="w-4 h-4" />
               <span>{isSubmittingAdvance ? 'در حال ثبت...' : 'ارسال درخواست مساعده'}</span>
@@ -181,14 +181,14 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
       </div>
 
       {/* List of Advance Requests */}
-      <div className="bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-6 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#282828] pb-3">
+      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl p-5 sm:p-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-[#282828] pb-3">
           <div className="flex items-center gap-2">
-            <Coins className="w-4 h-4 text-[#1DB954]" />
-            <h3 className="text-sm font-bold text-white">
+            <Coins className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
               {isAdmin ? 'همه درخواست‌های مساعده پرسنل' : 'درخواست‌های مساعده من'}
             </h3>
-            <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-[#242424] text-[#A7A7A7]">
+            <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-[#242424] text-slate-600 dark:text-[#A7A7A7]">
               {toPersianDigits(filteredAdvanceRequests.length)} مورد
             </span>
           </div>
@@ -198,7 +198,7 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
             <select
               value={advanceStatusFilter}
               onChange={(e) => setAdvanceStatusFilter(e.target.value)}
-              className="h-8 px-3 rounded-xl bg-[#121212] text-xs text-white border border-[#2c2c2c] focus:outline-none"
+              className="h-8 px-3 rounded-xl bg-slate-50 dark:bg-[#121212] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c] focus:outline-none"
             >
               <option value="all">همه وضعیت‌ها</option>
               <option value="pending">در انتظار بررسی</option>
@@ -212,7 +212,7 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
                 value={advanceSearch}
                 onChange={(e) => setAdvanceSearch(e.target.value)}
                 placeholder="جستجو در نام یا شرح..."
-                className="h-8 px-3 rounded-xl bg-[#121212] text-xs text-white border border-[#2c2c2c] focus:outline-none w-36 sm:w-44"
+                className="h-8 px-3 rounded-xl bg-slate-50 dark:bg-[#121212] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c] focus:outline-none w-36 sm:w-44"
               />
             )}
           </div>
@@ -222,7 +222,7 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-right text-xs">
             <thead>
-              <tr className="border-b border-[#282828] text-[#888]">
+              <tr className="border-b border-slate-200 dark:border-[#282828] text-slate-500 dark:text-[#888]">
                 <th className="py-2.5 px-3 font-semibold">متقاضی</th>
                 <th className="py-2.5 px-3 font-semibold">مبلغ درخواستی</th>
                 <th className="py-2.5 px-3 font-semibold">مبلغ تاییدشده</th>
@@ -233,25 +233,25 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
                 <th className="py-2.5 px-3 font-semibold">عملیات</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#222]">
+            <tbody className="divide-y divide-slate-100 dark:divide-[#222]">
               {filteredAdvanceRequests.map((req) => {
                 const badge = getRequestStatusBadge(req.status);
 
                 return (
-                  <tr key={req.id} className="hover:bg-[#202020] transition-colors">
-                    <td className="py-3 px-3 font-bold text-[#white]">
+                  <tr key={req.id} className="hover:bg-slate-50 dark:hover:bg-[#202020] transition-colors">
+                    <td className="py-3 px-3 font-bold text-slate-900 dark:text-white">
                       {req.personnel_name}
                     </td>
-                    <td className="py-3 px-3 font-mono font-bold text-white">
+                    <td className="py-3 px-3 font-mono font-bold text-slate-900 dark:text-white">
                       {formatToman(req.amount)}
                     </td>
-                    <td className="py-3 px-3 font-mono font-bold text-[#1DB954]">
+                    <td className="py-3 px-3 font-mono font-bold text-emerald-600 dark:text-[#1DB954]">
                       {req.approved_amount ? formatToman(req.approved_amount) : '-'}
                     </td>
-                    <td className="py-3 px-3 text-[#A7A7A7]">
+                    <td className="py-3 px-3 text-slate-500 dark:text-[#A7A7A7]">
                       {req.target_month || '-'}
                     </td>
-                    <td className="py-3 px-3 text-[#bbb] max-w-xs truncate">
+                    <td className="py-3 px-3 text-slate-700 dark:text-[#bbb] max-w-xs truncate">
                       {req.reason}
                     </td>
                     <td className="py-3 px-3">
@@ -262,7 +262,7 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
                         <span>{badge.label}</span>
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-[#888] max-w-xs truncate">
+                    <td className="py-3 px-3 text-slate-500 dark:text-[#888] max-w-xs truncate">
                       {req.manager_note || '-'}
                     </td>
                     <td className="py-3 px-3">
@@ -275,20 +275,20 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
                               setReviewApprovedAmount(String(req.amount));
                               setReviewManagerNote('');
                             }}
-                            className="px-2.5 py-1 rounded-lg bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-[11px] transition-all"
+                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black font-bold text-[11px] transition-all"
                           >
                             بررسی و واریز
                           </button>
                         ) : req.status === 'pending' ? (
                           <button
                             onClick={() => onDeleteAdvanceRequest(req.id)}
-                            className="p-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors"
+                            className="p-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors"
                             title="حذف درخواست"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         ) : (
-                          <span className="text-[11px] text-[#555]">ثبت نهایی</span>
+                          <span className="text-[11px] text-slate-400 dark:text-[#555]">ثبت نهایی</span>
                         )}
                       </div>
                     </td>
@@ -297,7 +297,7 @@ export const AdvanceRequestsTab: React.FC<AdvanceRequestsTabProps> = ({
               })}
               {filteredAdvanceRequests.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-xs text-[#777]">
+                  <td colSpan={8} className="py-8 text-center text-xs text-slate-400 dark:text-[#777]">
                     هیچ درخواست مساعده‌ای یافت نشد.
                   </td>
                 </tr>

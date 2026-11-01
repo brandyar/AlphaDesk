@@ -511,86 +511,86 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#181818] border border-[#282828] w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-8 max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-8 max-h-[95vh] sm:max-h-[90vh] flex flex-col text-slate-900 dark:text-white">
         {/* Header */}
-        <div className="p-4 sm:p-6 bg-[#121212] border-b border-[#282828] flex items-center justify-between">
+        <div className="p-4 sm:p-6 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-full bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954] flex-shrink-0">
+            <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-full bg-emerald-100 dark:bg-[#1DB954]/15 border border-emerald-300 dark:border-[#1DB954]/30 flex items-center justify-center text-emerald-600 dark:text-[#1DB954] flex-shrink-0">
               <Building className="w-4 sm:w-5 h-4 sm:h-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-white">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
                 {editingCustomer ? 'ویرایش پرونده مشتری' : 'ثبت پرونده مشتری جدید'}
               </h2>
-              <p className="text-[11px] sm:text-xs text-[#A7A7A7]">
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-[#A7A7A7]">
                 ثبت اطلاعات کامل شرکت، کانال‌های ارتباطی تفکیک‌شده و بررسی یکتایی شماره‌ها
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-[#282828] hover:bg-[#333333] flex items-center justify-center text-[#B3B3B3] hover:text-white transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab switcher inside modal */}
-        <div className="flex border-b border-[#282828] bg-[#141414] px-3 sm:px-6 pt-2 overflow-x-auto whitespace-nowrap scrollbar-none">
+        <div className="flex border-b border-slate-200 dark:border-[#282828] bg-slate-100/70 dark:bg-[#141414] px-3 sm:px-6 pt-2 overflow-x-auto whitespace-nowrap scrollbar-none">
           <button
             type="button"
             onClick={() => setActiveTab('info')}
             className={`pb-3 px-3 sm:px-4 text-xs font-bold transition-colors relative flex-shrink-0 ${
-              activeTab === 'info' ? 'text-[#1DB954]' : 'text-[#A7A7A7] hover:text-white'
+              activeTab === 'info' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-500 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white'
             }`}
           >
             اطلاعات پایه و انتساب
-            {activeTab === 'info' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1DB954]" />}
+            {activeTab === 'info' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 dark:bg-[#1DB954]" />}
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('contacts')}
             className={`pb-3 px-3 sm:px-4 text-xs font-bold transition-colors relative flex-shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'contacts' ? 'text-[#1DB954]' : 'text-[#A7A7A7] hover:text-white'
+              activeTab === 'contacts' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-500 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white'
             }`}
           >
             <span>کانال‌های ارتباطی و شماره‌ها</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[#282828] text-white">
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-800 dark:bg-[#282828] dark:text-white font-mono">
               {contacts.length}
             </span>
             {hasAnyDuplicateWarning && (
               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
             )}
-            {activeTab === 'contacts' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1DB954]" />}
+            {activeTab === 'contacts' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 dark:bg-[#1DB954]" />}
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('interview')}
             className={`pb-3 px-3 sm:px-4 text-xs font-bold transition-colors relative flex-shrink-0 ${
-              activeTab === 'interview' ? 'text-[#1DB954]' : 'text-[#A7A7A7] hover:text-white'
+              activeTab === 'interview' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-500 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white'
             }`}
           >
             مصاحبه اولیه و وضعیت
-            {activeTab === 'interview' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1DB954]" />}
+            {activeTab === 'interview' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-500 dark:bg-[#1DB954]" />}
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1">
           {/* Prominent Error Banner */}
           {submitError && (
-            <div className="p-3.5 rounded-xl bg-red-950/70 border border-red-500/80 text-red-200 text-xs flex items-start gap-2.5 shadow-lg animate-in fade-in">
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/70 border border-red-200 dark:border-red-500/80 text-red-700 dark:text-red-200 text-xs flex items-start gap-2.5 shadow-lg animate-in fade-in">
+              <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <div className="font-bold text-red-100 mb-0.5">پیام سیستم / خطا:</div>
+                <div className="font-bold text-red-800 dark:text-red-100 mb-0.5">پیام سیستم / خطا:</div>
                 <div className="leading-relaxed">{submitError}</div>
               </div>
               <button
                 type="button"
                 onClick={() => setSubmitError(null)}
-                className="text-red-400 hover:text-white p-1 rounded"
+                className="text-red-400 hover:text-red-700 dark:hover:text-white p-1 rounded"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -603,8 +603,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
               {/* Row 1: Company & Job */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    نام شرکت / فروشگاه <span className="text-[#E22134]">*</span>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
+                    نام شرکت / فروشگاه <span className="text-red-500 dark:text-[#E22134]">*</span>
                   </label>
                   <input
                     type="text"
@@ -612,11 +612,11 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
                     placeholder="مثال: تجارت الکترونیک سپهر، بازرگانی پارس..."
-                    className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white border border-transparent focus:border-[#1DB954] focus:outline-none transition-colors"
+                    className="w-full h-10 px-3 bg-white dark:bg-[#282828] rounded-md text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-transparent focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                     شغل / زمینه فعالیت
                   </label>
                   <input
@@ -624,7 +624,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                     value={businessType}
                     onChange={(e) => setBusinessType(e.target.value)}
                     placeholder="مثال: تجهیزات صنعتی، پوشاک و اکسسوری..."
-                    className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white border border-transparent focus:border-[#1DB954] focus:outline-none transition-colors"
+                    className="w-full h-10 px-3 bg-white dark:bg-[#282828] rounded-md text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-transparent focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none transition-colors"
                   />
                 </div>
               </div>
@@ -632,14 +632,14 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
               {/* Row 2: Location & Ecommerce Toggle */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5 flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5 flex items-center justify-between">
                     <span>استان</span>
-                    <span className="text-[10px] text-[#777]">۳۱ استان کشور</span>
+                    <span className="text-[10px] text-slate-500 dark:text-[#777]">۳۱ استان کشور</span>
                   </label>
                   <select
                     value={province}
                     onChange={(e) => handleProvinceChange(e.target.value)}
-                    className="w-full h-10 px-3 bg-[#282828] rounded-xl text-xs text-white border border-[#3e3e3e] focus:border-[#1DB954] focus:outline-none transition-colors cursor-pointer"
+                    className="w-full h-10 px-3 bg-white dark:bg-[#282828] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#3e3e3e] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none transition-colors cursor-pointer"
                   >
                     <option value="">انتخاب استان...</option>
                     {IRAN_PROVINCES.map((p) => (
@@ -650,10 +650,10 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5 flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5 flex items-center justify-between">
                     <span>شهر</span>
                     {availableCities.length > 0 && (
-                      <span className="text-[10px] text-[#1DB954] font-mono">
+                      <span className="text-[10px] text-emerald-600 dark:text-[#1DB954] font-mono">
                         {toPersianDigits(availableCities.length)} شهر
                       </span>
                     )}
@@ -662,7 +662,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                     <select
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
-                      className="w-full h-10 px-3 bg-[#282828] rounded-xl text-xs text-white border border-[#3e3e3e] focus:border-[#1DB954] focus:outline-none transition-colors cursor-pointer"
+                      className="w-full h-10 px-3 bg-white dark:bg-[#282828] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#3e3e3e] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none transition-colors cursor-pointer"
                     >
                       <option value="">انتخاب شهر...</option>
                       {availableCities.map((c: string) => (
@@ -677,17 +677,17 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
                       placeholder="نام شهر را وارد کنید"
-                      className="w-full h-10 px-3 bg-[#282828] rounded-xl text-xs text-white border border-[#3e3e3e] focus:border-[#1DB954] focus:outline-none transition-colors"
+                      className="w-full h-10 px-3 bg-white dark:bg-[#282828] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#3e3e3e] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none transition-colors"
                     />
                   )}
                 </div>
                 <div className="flex items-center pt-5">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs text-white">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-800 dark:text-white">
                     <input
                       type="checkbox"
                       checked={isEcommerce}
                       onChange={(e) => setIsEcommerce(e.target.checked)}
-                      className="w-4 h-4 rounded accent-[#1DB954]"
+                      className="w-4 h-4 rounded accent-emerald-600 dark:accent-[#1DB954]"
                     />
                     <span>دارای فروشگاه اینترنتی فعال</span>
                   </label>
@@ -695,10 +695,10 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
               </div>
 
               {/* Quick Contacts Summary in Info Tab */}
-              <div className="p-4 rounded-xl bg-[#121212] border border-[#282828] space-y-3">
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-white flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-[#1DB954]" />
+                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                     <span>شماره‌های تماس و کانال‌های ارتباطی مشتری ({contacts.length} شماره)</span>
                   </div>
                   <button
@@ -707,7 +707,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                       addContactRow('mobile');
                       setActiveTab('contacts');
                     }}
-                    className="px-3 py-1.5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black text-xs font-bold flex items-center gap-1 transition-all"
+                    className="px-3 py-1.5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black text-xs font-bold flex items-center gap-1 transition-all shadow-sm"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[3]" />
                     <span>+ افزودن شماره جدید</span>
@@ -719,31 +719,31 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                       <div
                         key={idx}
                         onClick={() => setActiveTab('contacts')}
-                        className="px-2.5 py-1.5 rounded-lg bg-[#222222] border border-[#333333] hover:border-[#1DB954] cursor-pointer text-xs text-white font-mono flex items-center gap-2 transition-colors"
+                        className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#222222] border border-slate-200 dark:border-[#333333] hover:border-emerald-500 dark:hover:border-[#1DB954] cursor-pointer text-xs text-slate-900 dark:text-white font-mono flex items-center gap-2 transition-colors shadow-sm"
                         title="برای ویرایش این شماره کلیک کنید"
                       >
-                        <span className="text-[10px] text-[#A7A7A7] font-sans">
+                        <span className="text-[10px] text-slate-500 dark:text-[#A7A7A7] font-sans">
                           {c.channel_type === 'mobile' ? 'موبایل' : c.channel_type === 'landline' ? 'ثابت' : c.channel_type}:
                         </span>
                         <span>{c.value || '(هنوز وارد نشده)'}</span>
                         {c.contact_name && (
-                          <span className="text-[10px] text-[#1DB954] font-sans">({c.contact_name})</span>
+                          <span className="text-[10px] text-emerald-600 dark:text-[#1DB954] font-sans">({c.contact_name})</span>
                         )}
                         {c.is_primary && (
-                          <span className="text-[9px] px-1 py-0.2 rounded bg-[#1DB954]/20 text-[#1DB954]">اصلی</span>
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-[#1DB954]/20 dark:text-[#1DB954] font-bold">اصلی</span>
                         )}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-[#888]">هیچ شماره‌ای ثبت نشده است. روی دکمه افزودن شماره جدید کلیک کنید.</p>
+                  <p className="text-xs text-slate-500 dark:text-[#888]">هیچ شماره‌ای ثبت نشده است. روی دکمه افزودن شماره جدید کلیک کنید.</p>
                 )}
               </div>
 
               {/* Row 3: Manager & Negotiator Names */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-[#282828]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-slate-200 dark:border-[#282828]">
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                     نام مدیر مجموعه / تصمیم‌گیرنده اصلی
                   </label>
                   <input
@@ -751,11 +751,11 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                     value={managerName}
                     onChange={(e) => setManagerName(e.target.value)}
                     placeholder="مهندس رستمی"
-                    className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white border border-transparent focus:border-[#1DB954] focus:outline-none transition-colors"
+                    className="w-full h-10 px-3 bg-white dark:bg-[#282828] rounded-md text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-transparent focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                     نام کارشناس پیگیری / مذاکره‌کننده رابط
                   </label>
                   <input
@@ -763,29 +763,29 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                     value={negotiatorName}
                     onChange={(e) => setNegotiatorName(e.target.value)}
                     placeholder="خانم سهرابی"
-                    className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white border border-transparent focus:border-[#1DB954] focus:outline-none transition-colors"
+                    className="w-full h-10 px-3 bg-white dark:bg-[#282828] rounded-md text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-transparent focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none transition-colors"
                   />
                 </div>
               </div>
 
               {/* Row 4: Marketer Assignment & Duration */}
-              <div className="p-4 rounded-xl bg-[#121212] border border-[#282828] space-y-4">
-                <div className="text-xs font-bold text-white flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-[#1DB954]" />
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] space-y-4">
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                   <span>تخصیص مشتری به بازاریاب و تعیین مهلت</span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Marketer Field */}
                   <div>
-                    <label className="block text-[11px] text-[#A7A7A7] mb-1">
+                    <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">
                       بازاریاب مسئول این پرونده
                     </label>
                     <select
                       value={assignedMarketerId}
                       onChange={(e) => setAssignedMarketerId(e.target.value)}
                       disabled={!userIsAdmin}
-                      className="w-full h-10 px-3 bg-[#282828] disabled:bg-[#202020] disabled:text-[#777] disabled:border-[#333] disabled:cursor-not-allowed rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954] border border-transparent transition-colors"
+                      className="w-full h-10 px-3 bg-white dark:bg-[#282828] disabled:bg-slate-100 dark:disabled:bg-[#202020] disabled:text-slate-400 dark:disabled:text-[#777] disabled:border-slate-200 dark:disabled:border-[#333] disabled:cursor-not-allowed rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954] border border-slate-300 dark:border-transparent transition-colors"
                     >
                       <option value="none">تخصیص نیافته (عمومی)</option>
                       {personnelList.map((p) => (
@@ -798,14 +798,14 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
 
                   {/* Deadline Duration Field */}
                   <div>
-                    <label className="block text-[11px] text-[#A7A7A7] mb-1">
+                    <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">
                       مهلت واگذاری به بازاریاب
                     </label>
                     <select
                       value={assignmentDurationDays}
                       onChange={(e) => setAssignmentDurationDays(Number(e.target.value))}
                       disabled={!userIsAdmin}
-                      className="w-full h-10 px-3 bg-[#282828] disabled:bg-[#202020] disabled:text-[#777] disabled:border-[#333] disabled:cursor-not-allowed rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954] border border-transparent transition-colors"
+                      className="w-full h-10 px-3 bg-white dark:bg-[#282828] disabled:bg-slate-100 dark:disabled:bg-[#202020] disabled:text-slate-400 dark:disabled:text-[#777] disabled:border-slate-200 dark:disabled:border-[#333] disabled:cursor-not-allowed rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954] border border-slate-300 dark:border-transparent transition-colors"
                     >
                       <option value={3}>۳ روز (پیگیری فوری)</option>
                       <option value={7}>۷ روز (استاندارد)</option>
@@ -817,14 +817,14 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
               </div>
 
               {/* Prompt to go to Contacts Tab */}
-              <div className="flex justify-between items-center p-3 rounded-lg bg-[#282828]/50 border border-[#333]">
-                <span className="text-xs text-[#A7A7A7]">
+              <div className="flex justify-between items-center p-3 rounded-lg bg-slate-100 dark:bg-[#282828]/50 border border-slate-200 dark:border-[#333]">
+                <span className="text-xs text-slate-600 dark:text-[#A7A7A7]">
                   شماره‌های تماس و اکانت‌های شبکه‌های اجتماعی در برگه مجزا با قابلیت بررسی تکراری قرار دارند:
                 </span>
                 <button
                   type="button"
                   onClick={() => setActiveTab('contacts')}
-                  className="px-3 py-1.5 rounded-full bg-[#1DB954] text-black text-xs font-bold hover:bg-[#1ED760] transition-colors"
+                  className="px-3 py-1.5 rounded-full bg-[#1DB954] text-black text-xs font-bold hover:bg-[#1ED760] transition-colors shadow-sm"
                 >
                   رفتن به ثبت شماره‌ها ({contacts.length})
                 </button>
@@ -835,13 +835,13 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           {/* TAB 2: Modular Contacts Management & Duplicate Prevention */}
           {activeTab === 'contacts' && (
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-[#121212] rounded-xl border border-[#282828]">
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 dark:bg-[#121212] rounded-xl border border-slate-200 dark:border-[#282828]">
                 <div>
-                  <h3 className="text-xs font-bold text-white flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-[#1DB954]" />
+                  <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                     <span>کانال‌های ارتباطی تفکیک‌شده و بررسی آنی عدم تکرار</span>
                   </h3>
-                  <p className="text-[11px] text-[#A7A7A7] mt-0.5">
+                  <p className="text-[11px] text-slate-500 dark:text-[#A7A7A7] mt-0.5">
                     هر شماره یا اکانت جداگانه ذخیره می‌شود؛ در صورت تعلق به بازاریاب دیگر اخطار داده خواهد شد.
                   </p>
                 </div>
@@ -849,31 +849,31 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                   <button
                     type="button"
                     onClick={() => addContactRow('mobile')}
-                    className="px-2.5 py-1 rounded-full bg-[#282828] hover:bg-[#333] text-[11px] text-white flex items-center gap-1 border border-[#3e3e3e]"
+                    className="px-2.5 py-1 rounded-full bg-white hover:bg-slate-100 text-slate-700 dark:bg-[#282828] dark:hover:bg-[#333] text-[11px] dark:text-white flex items-center gap-1 border border-slate-300 dark:border-[#3e3e3e] shadow-sm"
                   >
-                    <Plus className="w-3 h-3 text-[#1DB954]" />
+                    <Plus className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
                     <span>+ موبایل</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => addContactRow('landline')}
-                    className="px-2.5 py-1 rounded-full bg-[#282828] hover:bg-[#333] text-[11px] text-white flex items-center gap-1 border border-[#3e3e3e]"
+                    className="px-2.5 py-1 rounded-full bg-white hover:bg-slate-100 text-slate-700 dark:bg-[#282828] dark:hover:bg-[#333] text-[11px] dark:text-white flex items-center gap-1 border border-slate-300 dark:border-[#3e3e3e] shadow-sm"
                   >
-                    <Plus className="w-3 h-3 text-blue-400" />
+                    <Plus className="w-3 h-3 text-blue-500 dark:text-blue-400" />
                     <span>+ تلفن ثابت</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => addContactRow('telegram')}
-                    className="px-2.5 py-1 rounded-full bg-[#282828] hover:bg-[#333] text-[11px] text-white flex items-center gap-1 border border-[#3e3e3e]"
+                    className="px-2.5 py-1 rounded-full bg-white hover:bg-slate-100 text-slate-700 dark:bg-[#282828] dark:hover:bg-[#333] text-[11px] dark:text-white flex items-center gap-1 border border-slate-300 dark:border-[#3e3e3e] shadow-sm"
                   >
-                    <Plus className="w-3 h-3 text-[#229ED9]" />
+                    <Plus className="w-3 h-3 text-sky-500 dark:text-[#229ED9]" />
                     <span>+ تلگرام</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => addContactRow('instagram')}
-                    className="px-2.5 py-1 rounded-full bg-[#282828] hover:bg-[#333] text-[11px] text-white flex items-center gap-1 border border-[#3e3e3e]"
+                    className="px-2.5 py-1 rounded-full bg-white hover:bg-slate-100 text-slate-700 dark:bg-[#282828] dark:hover:bg-[#333] text-[11px] dark:text-white flex items-center gap-1 border border-slate-300 dark:border-[#3e3e3e] shadow-sm"
                   >
                     <Plus className="w-3 h-3 text-pink-500" />
                     <span>+ اینستاگرام</span>
@@ -893,20 +893,20 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                       key={idx}
                       className={`p-3 rounded-xl border transition-all ${
                         isBlocker
-                          ? 'bg-red-950/20 border-red-500/50'
+                          ? 'bg-red-50 dark:bg-red-950/20 border-red-300 dark:border-red-500/50'
                           : hasConflict
-                          ? 'bg-amber-950/20 border-amber-500/40'
-                          : 'bg-[#141414] border-[#282828] hover:border-[#383838]'
+                          ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-500/40'
+                          : 'bg-white dark:bg-[#141414] border-slate-200 dark:border-[#282828] hover:border-slate-300 dark:hover:border-[#383838] shadow-sm'
                       }`}
                     >
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
                         {/* Type Selector */}
                         <div className="sm:col-span-3">
-                          <label className="block text-[10px] text-[#A7A7A7] mb-1">نوع کانال</label>
+                          <label className="block text-[10px] text-slate-500 dark:text-[#A7A7A7] mb-1">نوع کانال</label>
                           <select
                             value={contact.channel_type}
                             onChange={(e) => handleContactChange(idx, 'channel_type', e.target.value as ChannelType)}
-                            className="w-full h-8 px-2 bg-[#282828] rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                            className="w-full h-8 px-2 bg-slate-50 dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                           >
                             {channelOptions.map((opt) => (
                               <option key={opt.type} value={opt.type}>
@@ -918,9 +918,9 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
 
                         {/* Value Input */}
                         <div className="sm:col-span-4">
-                          <label className="block text-[10px] text-[#A7A7A7] mb-1 flex items-center justify-between">
+                          <label className="block text-[10px] text-slate-500 dark:text-[#A7A7A7] mb-1 flex items-center justify-between">
                             <span>مقدار / شماره تماس / آیدی</span>
-                            {contact.isChecking && <span className="text-[#1DB954] text-[10px]">در حال بررسی...</span>}
+                            {contact.isChecking && <span className="text-emerald-600 dark:text-[#1DB954] text-[10px]">در حال بررسی...</span>}
                           </label>
                           <div className="relative">
                             <input
@@ -929,10 +929,10 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                               value={contact.value}
                               onChange={(e) => handleContactChange(idx, 'value', e.target.value)}
                               placeholder={chMeta.placeholder}
-                              className={`w-full h-8 px-2.5 bg-[#282828] rounded text-xs text-white focus:outline-none font-mono ${
+                              className={`w-full h-8 px-2.5 bg-slate-50 dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white focus:outline-none font-mono ${
                                 isBlocker
-                                  ? 'border border-red-500 ring-1 ring-red-500'
-                                  : 'focus:ring-1 focus:ring-[#1DB954]'
+                                  ? 'border-red-500 ring-1 ring-red-500'
+                                  : 'focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]'
                               }`}
                             />
                           </div>
@@ -940,21 +940,21 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
 
                         {/* Contact Name & Role */}
                         <div className="sm:col-span-3">
-                          <label className="block text-[10px] text-[#A7A7A7] mb-1">دارنده شماره / نقش</label>
+                          <label className="block text-[10px] text-slate-500 dark:text-[#A7A7A7] mb-1">دارنده شماره / نقش</label>
                           <div className="grid grid-cols-2 gap-1">
                             <input
                               type="text"
                               value={contact.contact_name}
                               onChange={(e) => handleContactChange(idx, 'contact_name', e.target.value)}
                               placeholder="نام شخص"
-                              className="w-full h-8 px-2 bg-[#282828] rounded text-xs text-white focus:outline-none"
+                              className="w-full h-8 px-2 bg-slate-50 dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                             />
                             <input
                               type="text"
                               value={contact.contact_role}
                               onChange={(e) => handleContactChange(idx, 'contact_role', e.target.value)}
                               placeholder="مدیر، خرید..."
-                              className="w-full h-8 px-2 bg-[#282828] rounded text-xs text-white focus:outline-none"
+                              className="w-full h-8 px-2 bg-slate-50 dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                             />
                           </div>
                         </div>
@@ -966,8 +966,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                             onClick={() => setPrimaryContact(idx)}
                             className={`h-8 px-2 rounded flex items-center gap-1 text-[11px] transition-colors ${
                               contact.is_primary
-                                ? 'bg-[#1DB954]/20 text-[#1DB954] border border-[#1DB954]/40 font-bold'
-                                : 'bg-[#282828] text-[#A7A7A7] hover:text-white'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-[#1DB954]/20 dark:text-[#1DB954] border border-emerald-300 dark:border-[#1DB954]/40 font-bold'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-[#282828] dark:text-[#A7A7A7] dark:hover:text-white'
                             }`}
                             title={contact.is_primary ? 'شماره اصلی' : 'تنظیم به عنوان شماره اصلی'}
                           >
@@ -979,7 +979,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                             type="button"
                             onClick={() => removeContactRow(idx)}
                             disabled={contacts.length <= 1}
-                            className="w-8 h-8 rounded bg-[#282828] hover:bg-red-950/60 text-[#A7A7A7] hover:text-red-400 flex items-center justify-center transition-colors disabled:opacity-30"
+                            className="w-8 h-8 rounded bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 dark:bg-[#282828] dark:hover:bg-red-950/60 dark:text-[#A7A7A7] dark:hover:text-red-400 flex items-center justify-center transition-colors disabled:opacity-30"
                             title="حذف این سطر"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -992,10 +992,10 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                         <div
                           className={`mt-2.5 p-2 rounded-lg text-xs flex items-start gap-2 ${
                             contact.duplicateWarning.conflictType === 'active_marketer'
-                              ? 'bg-red-500/15 border border-red-500/30 text-red-300'
+                              ? 'bg-red-100 dark:bg-red-500/15 border border-red-300 dark:border-red-500/30 text-red-800 dark:text-red-300'
                               : contact.duplicateWarning.conflictType === 'contract'
-                              ? 'bg-purple-500/15 border border-purple-500/30 text-purple-300'
-                              : 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
+                              ? 'bg-purple-100 dark:bg-purple-500/15 border border-purple-300 dark:border-purple-500/30 text-purple-800 dark:text-purple-300'
+                              : 'bg-amber-100 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/30 text-amber-800 dark:text-amber-300'
                           }`}
                         >
                           <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-current" />
@@ -1007,7 +1007,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                             </span>{' '}
                             <span>{contact.duplicateWarning.message}</span>
                             {contact.duplicateWarning.matchedCustomer && (
-                              <div className="mt-1 text-[11px] opacity-90">
+                              <div className="mt-1 text-[11px] opacity-90 font-medium">
                                 پرونده: «{contact.duplicateWarning.matchedCustomer.company_name}» | بازاریاب متصل:{' '}
                                 {contact.duplicateWarning.matchedCustomer.assigned_marketer_name}
                               </div>
@@ -1024,7 +1024,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
               <button
                 type="button"
                 onClick={() => addContactRow('mobile')}
-                className="w-full py-2.5 rounded-xl border border-dashed border-[#3e3e3e] hover:border-[#1DB954] text-xs text-[#A7A7A7] hover:text-[#1DB954] flex items-center justify-center gap-1.5 transition-colors"
+                className="w-full py-2.5 rounded-xl border border-dashed border-slate-300 dark:border-[#3e3e3e] hover:border-emerald-500 dark:hover:border-[#1DB954] text-xs text-slate-600 dark:text-[#A7A7A7] hover:text-emerald-600 dark:hover:text-[#1DB954] flex items-center justify-center gap-1.5 transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 <span>افزودن راه ارتباطی جدید (موبایل، خط، سوشال)</span>
@@ -1037,13 +1037,13 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
             <div className="space-y-4">
               {/* Overall Status */}
               <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                   وضعیت فعلی پرونده مذاکره
                 </label>
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as NegotiationStatus)}
-                  className="w-full h-10 px-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954]"
+                  className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
                 >
                   <option value="تماس برقرار نشده">تماس برقرار نشده</option>
                   <option value="پیگیری قبل از انقضا">پیگیری قبل از انقضا</option>
@@ -1060,10 +1060,10 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
               {/* Interview Score */}
               <div>
                 <div className="flex justify-between items-center mb-1.5">
-                  <label className="text-xs font-semibold text-[#B3B3B3]">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-[#B3B3B3]">
                     امتیاز تمایل و پتانسیل مشتری در مصاحبه اول:
                   </label>
-                  <span className="text-xs font-bold text-[#1DB954] px-2 py-0.5 rounded bg-[#1DB954]/15">
+                  <span className="text-xs font-bold text-emerald-800 dark:text-[#1DB954] px-2 py-0.5 rounded bg-emerald-100 dark:bg-[#1DB954]/15">
                     {interviewScore} از ۱۰
                   </span>
                 </div>
@@ -1073,7 +1073,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                   max="10"
                   value={interviewScore}
                   onChange={(e) => setInterviewScore(Number(e.target.value))}
-                  className="w-full accent-[#1DB954]"
+                  className="w-full accent-emerald-600 dark:accent-[#1DB954]"
                 />
               </div>
 
@@ -1088,7 +1088,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
 
               {/* Interview Report Text */}
               <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                   شرح مذاکرات مصاحبه اولیه و نیازهای اصلی مشتری
                 </label>
                 <textarea
@@ -1096,17 +1096,17 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                   value={interviewReport}
                   onChange={(e) => setInterviewReport(e.target.value)}
                   placeholder="شرح کامل صحبت‌ها، محصولات مدنظر، بودجه، دغدغه‌ها و هماهنگی جلسه بعدی..."
-                  className="w-full p-3 bg-[#282828] rounded-md text-xs text-white focus:outline-none focus:ring-1 focus:ring-[#1DB954] resize-none"
+                  className="w-full p-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
                 />
               </div>
             </div>
           )}
 
           {/* Footer Save & Cancel Buttons */}
-          <div className="pt-4 border-t border-[#282828] flex items-center justify-between">
-            <div className="text-xs text-[#A7A7A7]">
+          <div className="pt-4 border-t border-slate-200 dark:border-[#282828] flex items-center justify-between">
+            <div className="text-xs text-slate-500 dark:text-[#A7A7A7]">
               {hasAnyDuplicateWarning && (
-                <span className="text-red-400 font-bold flex items-center gap-1">
+                <span className="text-red-500 dark:text-red-400 font-bold flex items-center gap-1">
                   <AlertCircle className="w-4 h-4" />
                   <span>یک یا چند شماره دارای تداخل بازاریاب دیگر هستند!</span>
                 </span>
@@ -1117,14 +1117,14 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                 type="button"
                 onClick={onClose}
                 disabled={saving || isSubmittingRef.current}
-                className="px-4 py-2 rounded-full bg-[#282828] hover:bg-[#333] text-xs font-semibold text-[#B3B3B3] hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333] text-xs font-semibold dark:text-[#B3B3B3] dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 انصراف
               </button>
               <button
                 type="submit"
                 disabled={saving || isSubmittingRef.current}
-                className="px-6 py-2 rounded-full bg-[#1DB954] hover:bg-[#1ED760] disabled:bg-[#333] disabled:text-[#666] disabled:cursor-not-allowed text-black text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+                className="px-6 py-2 rounded-full bg-[#1DB954] hover:bg-[#1ED760] disabled:bg-slate-300 dark:disabled:bg-[#333] disabled:text-slate-400 dark:disabled:text-[#666] disabled:cursor-not-allowed text-black text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
               >
                 {saving || isSubmittingRef.current ? 'در حال ثبت اطلاعات پرونده...' : editingCustomer ? 'ذخیره تغییرات و شماره‌ها' : 'ثبت قطعی پرونده'}
               </button>

@@ -25,26 +25,26 @@ export const ReviewRequestModal: React.FC<ReviewRequestModalProps> = ({
   if (!reviewingLeave) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-[#181818] border border-[#282828] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[#282828] pb-3">
-          <h3 className="font-bold text-sm text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/80 backdrop-blur-xs animate-in fade-in">
+      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
+          <h3 className="font-bold text-sm text-slate-900 dark:text-white">
             {reviewAction === 'approved' ? 'تایید مرخصی' : 'رد درخواست مرخصی'}
           </h3>
-          <button onClick={onClose} className="text-[#888] hover:text-white">
+          <button onClick={onClose} className="text-slate-400 dark:text-[#888] hover:text-slate-700 dark:hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="space-y-3 text-xs">
-          <div className="p-3 bg-[#121212] rounded-xl text-[#B3B3B3] space-y-1">
+          <div className="p-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-slate-700 dark:text-[#B3B3B3] space-y-1 border border-slate-200 dark:border-transparent">
             <div>
-              <span className="text-[#777]">متقاضی: </span>
-              <span className="text-white font-bold">{reviewingLeave.personnel_name}</span>
+              <span className="text-slate-500 dark:text-[#777]">متقاضی: </span>
+              <span className="text-slate-900 dark:text-white font-bold">{reviewingLeave.personnel_name}</span>
             </div>
             <div>
-              <span className="text-[#777]">نوع و تاریخ: </span>
-              <span className="text-white">
+              <span className="text-slate-500 dark:text-[#777]">نوع و تاریخ: </span>
+              <span className="text-slate-900 dark:text-white">
                 {reviewingLeave.leave_type === 'daily'
                   ? `روزانه (${formatPersianDate(reviewingLeave.start_date)})`
                   : `ساعتی (${reviewingLeave.hours_count} ساعت)`}
@@ -53,7 +53,7 @@ export const ReviewRequestModal: React.FC<ReviewRequestModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-[#B3B3B3] mb-1">
+            <label className="block text-slate-700 dark:text-[#B3B3B3] mb-1">
               یادداشت و پیام مدیریت (اختیاری):
             </label>
             <textarea
@@ -61,25 +61,25 @@ export const ReviewRequestModal: React.FC<ReviewRequestModalProps> = ({
               value={reviewManagerNote}
               onChange={(e) => setReviewManagerNote(e.target.value)}
               placeholder="علت رد یا توضیحات تایید جهت مشاهده کارشناس..."
-              className="w-full p-3 bg-[#121212] rounded-xl text-white border border-[#333] focus:border-[#1DB954] focus:outline-none"
+              className="w-full p-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
             />
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2 border-t border-[#282828]">
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-200 dark:border-[#282828]">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-[#282828] text-white text-xs font-bold"
+            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#282828] text-slate-700 dark:text-white text-xs font-bold"
           >
             انصراف
           </button>
           <button
             onClick={onConfirm}
             disabled={isProcessing}
-            className={`px-4 py-2 rounded-xl font-bold text-xs text-black ${
+            className={`px-4 py-2 rounded-xl font-bold text-xs ${
               reviewAction === 'approved'
-                ? 'bg-emerald-500 hover:bg-emerald-400'
-                : 'bg-rose-500 hover:bg-rose-400 text-white'
+                ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black'
+                : 'bg-rose-600 hover:bg-rose-700 dark:bg-rose-500 dark:hover:bg-rose-400 text-white'
             }`}
           >
             {isProcessing ? 'در حال ثبت...' : reviewAction === 'approved' ? 'تایید نهایی' : 'ثبت رد درخواست'}
