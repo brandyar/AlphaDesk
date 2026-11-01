@@ -147,14 +147,133 @@ router.post('/check-duplicate', async (req: Request, res: Response) => {
   res.json(dup || { isDuplicate: false });
 });
 
+export function matchesCustomerSearch(c: any, searchStr?: string | null): boolean {
+  if (!c) return false;
+  if (!searchStr || !searchStr.trim()) return true;
+  const raw = searchStr.trim().toLowerCase();
+  const normRaw = normalizePersianString(raw);
+
+  const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
+  const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
+  const digitsOnly = raw
+    .replace(/[۰-۹]/g, (w) => persianDigits.indexOf(w).toString())
+    .replace(/[٠-٩]/g, (w) => arabicDigits.indexOf(w).toString())
+    .replace(/[^\d]/g, '');
+
+  // 1. Text match in primary fields
+  if (
+    c.company_name?.toLowerCase().includes(raw) ||
+    normalizePersianString(c.company_name).includes(normRaw) ||
+    c.manager_name?.toLowerCase().includes(raw) ||
+    normalizePersianString(c.manager_name).includes(normRaw) ||
+    c.negotiator_name?.toLowerCase().includes(raw) ||
+    normalizePersianString(c.negotiator_name).includes(normRaw) ||
+    c.city?.toLowerCase().includes(raw) ||
+    normalizePersianString(c.city).includes(normRaw) ||
+    c.province?.toLowerCase().includes(raw) ||
+    normalizePersianString(c.province).includes(normRaw) ||
+    c.business_type?.toLowerCase().includes(raw) ||
+    normalizePersianString(c.business_type).includes(normRaw) ||
+    c.assigned_marketer_name?.toLowerCase().includes(raw) ||
+    normalizePersianString(c.assigned_marketer_name).includes(normRaw)
+  ) {
+    return true;
+  }
+
+  // 2. Phone / Contact number helper
+  const isMatchVal = (val: any): boolean => {
+    if (!val) return false;
+    const sVal = String(val).trim().toLowerCase();
+    if (!sVal) return false;
+
+    if (sVal.includes(raw)) return true;
+
+    if (digitsOnly.length >= 3) {
+      const cleanPhoneDigits = sVal.replace(/[^\d]/g, '');
+      if (cleanPhoneDigits.includes(digitsOnly)) return true;
+
+      const pNoZero = cleanPhoneDigits.replace(/^(0|98|\+98)/, '');
+      const sNoZero = digitsOnly.replace(/^(0|98|\+98)/, '');
+      if (pNoZero && sNoZero && pNoZero.includes(sNoZero)) return true;
+    }
+
+    return false;
+  };
+
+  const phoneLists = [
+    ...(Array.isArray(c.mobile_numbers) ? c.mobile_numbers : [c.mobile_numbers]),
+    ...(Array.isArray(c.landline_numbers) ? c.landline_numbers : [c.landline_numbers]),
+    ...(Array.isArray(c.manager_phones) ? c.manager_phones : [c.manager_phones]),
+    ...(Array.isArray(c.negotiator_phones) ? c.negotiator_phones : [c.negotiator_phones]),
+    c.telegram_phone,
+    ...(Array.isArray(c.telegram_ids) ? c.telegram_ids : [c.telegram_ids]),
+    ...(Array.isArray(c.instagram_ids) ? c.instagram_ids : [c.instagram_ids]),
+    ...(Array.isArray(c.emails) ? c.emails : [c.emails]),
+  ];
+
+  if (phoneLists.some(isMatchVal)) return true;
+
+  if (Array.isArray(c.contacts)) {
+    for (const ct of c.contacts) {
+      if (ct && (isMatchVal(ct.value) || isMatchVal(ct.normalized_value) || isMatchVal(ct.contact_name))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export function sortCustomersList(items: any[], sortKey?: string): any[] {
+  if (!items || items.length <= 1) return items || [];
+  const list = [...items];
+
+  if (sortKey === 'next_followup_asc' || sortKey === 'next_followup_date') {
+    return list.sort((a, b) => {
+      if (!a.next_followup_date && !b.next_followup_date) return 0;
+      if (!a.next_followup_date) return 1;
+      if (!b.next_followup_date) return -1;
+      return new Date(a.next_followup_date).getTime() - new Date(b.next_followup_date).getTime();
+    });
+  }
+
+  if (sortKey === 'next_followup_desc' || sortKey === '-next_followup_date') {
+    return list.sort((a, b) => {
+      if (!a.next_followup_date && !b.next_followup_date) return 0;
+      if (!a.next_followup_date) return 1;
+      if (!b.next_followup_date) return -1;
+      return new Date(b.next_followup_date).getTime() - new Date(a.next_followup_date).getTime();
+    });
+  }
+
+  if (sortKey === 'company_name_asc') {
+    return list.sort((a, b) => (a.company_name || '').localeCompare(b.company_name || '', 'fa'));
+  }
+
+  if (sortKey === 'deadline_asc') {
+    return list.sort((a, b) => {
+      if (!a.assignment_deadline && !b.assignment_deadline) return 0;
+      if (!a.assignment_deadline) return 1;
+      if (!b.assignment_deadline) return -1;
+      return new Date(a.assignment_deadline).getTime() - new Date(b.assignment_deadline).getTime();
+    });
+  }
+
+  // Default: date_created_desc
+  return list.sort(
+    (a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
+  );
+}
+
 router.get('/', async (req: Request, res: Response) => {
-  const { search, status, marketer_id, expired_only, page, limit, free_only, all } = req.query;
+  const { search, status, marketer_id, expired_only, page, limit, free_only, all, sort } = req.query;
   const { userId, personnelId, isAdmin, userName, tenantId, canViewAllCustomers } = getRequestUser(req);
 
   const isUnlimited = all === 'true' || limit === 'all' || limit === '20000';
   const reqLimit = isUnlimited ? 500 : limit ? Math.min(Math.max(1, parseInt(String(limit), 10)), 500) : 25;
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
   const isFreeOnly = free_only === 'true';
+  const sortKey = typeof sort === 'string' && sort.trim() ? sort.trim() : 'next_followup_asc';
 
   if (!isAdmin && !canViewAllCustomers && !userId && !personnelId && !isFreeOnly) {
     return res.json({
@@ -178,15 +297,8 @@ router.get('/', async (req: Request, res: Response) => {
           (userName && c.assigned_marketer_name === userName)
       );
     }
-    if (search && typeof search === 'string') {
-      const s = search.toLowerCase();
-      list = list.filter(
-        (c) =>
-          c.company_name?.toLowerCase().includes(s) ||
-          c.manager_name?.toLowerCase().includes(s) ||
-          c.city?.toLowerCase().includes(s) ||
-          c.business_type?.toLowerCase().includes(s)
-      );
+    if (search && typeof search === 'string' && search.trim()) {
+      list = list.filter((c) => matchesCustomerSearch(c, search));
     }
     if (status && status !== 'همه') {
       list = list.filter((c) => c.status === status);
@@ -200,17 +312,25 @@ router.get('/', async (req: Request, res: Response) => {
     if (isFreeOnly) {
       list = list.filter((c) => !c.assigned_marketer_id || c.is_expired);
     }
+
+    list = sortCustomersList(list, sortKey);
     return res.json(list);
   }
 
   if (directusUrl && directusAdminToken) {
     try {
-      let directusPath = `/items/customers?page=${reqPage}&limit=${reqLimit}&meta=*&sort=-date_created`;
-      directusPath += `&fields=id,company_name,business_type,province,city,manager_name,negotiator_name,mobile_numbers,landline_numbers,next_followup_date,assigned_marketer_id,assigned_marketer_name,assignment_deadline,status,is_expired,claimed_from_pool,date_created,date_updated,tenant_id`;
+      let dSort = '-date_created';
+      if (sortKey === 'next_followup_asc' || sortKey === 'next_followup_date') dSort = 'next_followup_date';
+      else if (sortKey === 'next_followup_desc' || sortKey === '-next_followup_date') dSort = '-next_followup_date';
+      else if (sortKey === 'company_name_asc') dSort = 'company_name';
+      else if (sortKey === 'deadline_asc') dSort = 'assignment_deadline';
+
+      let directusPath = `/items/customers?page=${reqPage}&limit=${reqLimit}&meta=*&sort=${encodeURIComponent(dSort)}`;
+      directusPath += `&fields=id,company_name,business_type,province,city,manager_name,manager_phones,negotiator_name,negotiator_phones,mobile_numbers,landline_numbers,telegram_phone,telegram_ids,instagram_ids,emails,websites,next_followup_date,assigned_marketer_id,assigned_marketer_name,assignment_deadline,status,is_expired,claimed_from_pool,date_created,date_updated,tenant_id`;
 
       let andIdx = 0;
 
-      // Tenant filter: Only filter by tenant if tenantNum > 1 (a specific secondary organization)
+      // Tenant filter
       if (tenantId && tenantId !== 'all') {
         const tenantNum = resolveDirectusTenantId(tenantId);
         if (tenantNum && tenantNum > 1) {
@@ -218,7 +338,7 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
 
-      // Marketer scoping for non-admins (marketers must only see their own assigned customers)
+      // Marketer scoping
       if (!isAdmin && !canViewAllCustomers && !isFreeOnly) {
         const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
         const rawUid = cleanPId.replace(/^p-/, '');
@@ -255,15 +375,44 @@ router.get('/', async (req: Request, res: Response) => {
         directusPath += `&filter[_and][${andIdx}][_or][0][assigned_marketer_id][_null]=true&filter[_and][${andIdx}][_or][1][is_expired][_eq]=true`;
         andIdx++;
       }
+
+      // Contact matching for phone numbers if search query is provided
+      let contactMatchedCustomerIds: string[] = [];
       if (search && typeof search === 'string' && search.trim()) {
-        const s = search.trim();
-        directusPath += `&filter[_and][${andIdx}][_or][0][company_name][_icontains]=${encodeURIComponent(
-          s
-        )}&filter[_and][${andIdx}][_or][1][manager_name][_icontains]=${encodeURIComponent(
-          s
-        )}&filter[_and][${andIdx}][_or][2][city][_icontains]=${encodeURIComponent(
-          s
-        )}&filter[_and][${andIdx}][_or][3][business_type][_icontains]=${encodeURIComponent(s)}`;
+        const cleanSearch = search.trim();
+        const digits = cleanSearch.replace(/[^\d]/g, '');
+        try {
+          const contactOrFilters = [
+            `filter[_or][0][value][_icontains]=${encodeURIComponent(cleanSearch)}`,
+            `filter[_or][1][normalized_value][_icontains]=${encodeURIComponent(cleanSearch)}`,
+            `filter[_or][2][contact_name][_icontains]=${encodeURIComponent(cleanSearch)}`,
+          ];
+          if (digits.length >= 3) {
+            contactOrFilters.push(`filter[_or][3][value][_icontains]=${encodeURIComponent(digits)}`);
+            contactOrFilters.push(`filter[_or][4][normalized_value][_icontains]=${encodeURIComponent(digits)}`);
+          }
+          const cRes = await directusFetch(
+            `/items/customer_contacts?${contactOrFilters.join('&')}&fields=customer_id&limit=500`
+          ).catch(() => null);
+          if (cRes?.data && Array.isArray(cRes.data)) {
+            contactMatchedCustomerIds = cRes.data
+              .map((ct: any) => (typeof ct.customer_id === 'object' ? ct.customer_id?.id : ct.customer_id))
+              .filter(Boolean);
+          }
+        } catch {}
+
+        const s = cleanSearch;
+        let sOrIdx = 0;
+        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][company_name][_icontains]=${encodeURIComponent(s)}`;
+        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][manager_name][_icontains]=${encodeURIComponent(s)}`;
+        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][negotiator_name][_icontains]=${encodeURIComponent(s)}`;
+        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][city][_icontains]=${encodeURIComponent(s)}`;
+        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][business_type][_icontains]=${encodeURIComponent(s)}`;
+        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][telegram_phone][_icontains]=${encodeURIComponent(s)}`;
+
+        for (const cid of contactMatchedCustomerIds) {
+          directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][id][_eq]=${encodeURIComponent(cid)}`;
+        }
         andIdx++;
       }
 
@@ -293,17 +442,10 @@ router.get('/', async (req: Request, res: Response) => {
         }
 
         if (search && typeof search === 'string' && search.trim()) {
-          const s = search.trim().toLowerCase();
-          items = items.filter(
-            (c: any) =>
-              c.company_name?.toLowerCase().includes(s) ||
-              c.manager_name?.toLowerCase().includes(s) ||
-              c.city?.toLowerCase().includes(s) ||
-              c.business_type?.toLowerCase().includes(s) ||
-              (Array.isArray(c.mobile_numbers) && c.mobile_numbers.some((m: string) => m.includes(s))) ||
-              (Array.isArray(c.landline_numbers) && c.landline_numbers.some((l: string) => l.includes(s)))
-          );
+          items = items.filter((c: any) => matchesCustomerSearch(c, search));
         }
+
+        items = sortCustomersList(items, sortKey);
 
         const filterCount = resData.meta?.filter_count ?? items.length;
         const totalCount = resData.meta?.total_count ?? filterCount;
@@ -348,15 +490,8 @@ router.get('/', async (req: Request, res: Response) => {
     );
   }
 
-  if (search && typeof search === 'string') {
-    const s = search.toLowerCase();
-    list = list.filter(
-      (c) =>
-        c.company_name?.toLowerCase().includes(s) ||
-        c.manager_name?.toLowerCase().includes(s) ||
-        c.city?.toLowerCase().includes(s) ||
-        c.business_type?.toLowerCase().includes(s)
-    );
+  if (search && typeof search === 'string' && search.trim()) {
+    list = list.filter((c) => matchesCustomerSearch(c, search));
   }
   if (status && status !== 'همه') {
     list = list.filter((c) => c.status === status);
@@ -370,6 +505,8 @@ router.get('/', async (req: Request, res: Response) => {
   if (isFreeOnly) {
     list = list.filter((c) => !c.assigned_marketer_id || c.is_expired);
   }
+
+  list = sortCustomersList(list, sortKey);
 
   const totalCount = list.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / reqLimit));

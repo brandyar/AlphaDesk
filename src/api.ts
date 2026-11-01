@@ -403,6 +403,7 @@ export async function fetchCustomersPaginated(filters?: {
   free_only?: boolean;
   page?: number;
   limit?: number;
+  sort?: string;
 }): Promise<PaginatedResult<Customer>> {
   const params = new URLSearchParams();
   if (filters?.search) params.append('search', filters.search);
@@ -410,6 +411,7 @@ export async function fetchCustomersPaginated(filters?: {
   if (filters?.marketer_id) params.append('marketer_id', filters.marketer_id);
   if (filters?.expired_only) params.append('expired_only', 'true');
   if (filters?.free_only) params.append('free_only', 'true');
+  if (filters?.sort) params.append('sort', filters.sort);
   params.append('page', String(filters?.page || 1));
   params.append('limit', String(filters?.limit || 25));
 

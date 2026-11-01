@@ -430,6 +430,83 @@ export function normalizePersianText(str?: string | null): string {
     .toLowerCase();
 }
 
+export function matchesCustomerSearch(c: any, searchStr?: string | null): boolean {
+  if (!c) return false;
+  if (!searchStr || !searchStr.trim()) return true;
+  const raw = searchStr.trim().toLowerCase();
+  const normRaw = normalizePersianText(raw);
+
+  const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
+  const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
+  const digitsOnly = raw
+    .replace(/[۰-۹]/g, (w) => persianDigits.indexOf(w).toString())
+    .replace(/[٠-٩]/g, (w) => arabicDigits.indexOf(w).toString())
+    .replace(/[^\d]/g, '');
+
+  // 1. Text match in primary fields
+  if (
+    c.company_name?.toLowerCase().includes(raw) ||
+    normalizePersianText(c.company_name).includes(normRaw) ||
+    c.manager_name?.toLowerCase().includes(raw) ||
+    normalizePersianText(c.manager_name).includes(normRaw) ||
+    c.negotiator_name?.toLowerCase().includes(raw) ||
+    normalizePersianText(c.negotiator_name).includes(normRaw) ||
+    c.city?.toLowerCase().includes(raw) ||
+    normalizePersianText(c.city).includes(normRaw) ||
+    c.province?.toLowerCase().includes(raw) ||
+    normalizePersianText(c.province).includes(normRaw) ||
+    c.business_type?.toLowerCase().includes(raw) ||
+    normalizePersianText(c.business_type).includes(normRaw) ||
+    c.assigned_marketer_name?.toLowerCase().includes(raw) ||
+    normalizePersianText(c.assigned_marketer_name).includes(normRaw)
+  ) {
+    return true;
+  }
+
+  // 2. Phone / Contact number helper
+  const isMatchVal = (val: any): boolean => {
+    if (!val) return false;
+    const sVal = String(val).trim().toLowerCase();
+    if (!sVal) return false;
+
+    if (sVal.includes(raw)) return true;
+
+    if (digitsOnly.length >= 3) {
+      const cleanPhoneDigits = sVal.replace(/[^\d]/g, '');
+      if (cleanPhoneDigits.includes(digitsOnly)) return true;
+
+      const pNoZero = cleanPhoneDigits.replace(/^(0|98|\+98)/, '');
+      const sNoZero = digitsOnly.replace(/^(0|98|\+98)/, '');
+      if (pNoZero && sNoZero && pNoZero.includes(sNoZero)) return true;
+    }
+
+    return false;
+  };
+
+  const phoneLists = [
+    ...(Array.isArray(c.mobile_numbers) ? c.mobile_numbers : [c.mobile_numbers]),
+    ...(Array.isArray(c.landline_numbers) ? c.landline_numbers : [c.landline_numbers]),
+    ...(Array.isArray(c.manager_phones) ? c.manager_phones : [c.manager_phones]),
+    ...(Array.isArray(c.negotiator_phones) ? c.negotiator_phones : [c.negotiator_phones]),
+    c.telegram_phone,
+    ...(Array.isArray(c.telegram_ids) ? c.telegram_ids : [c.telegram_ids]),
+    ...(Array.isArray(c.instagram_ids) ? c.instagram_ids : [c.instagram_ids]),
+    ...(Array.isArray(c.emails) ? c.emails : [c.emails]),
+  ];
+
+  if (phoneLists.some(isMatchVal)) return true;
+
+  if (Array.isArray(c.contacts)) {
+    for (const ct of c.contacts) {
+      if (ct && (isMatchVal(ct.value) || isMatchVal(ct.normalized_value) || isMatchVal(ct.contact_name))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 export function matchPersonnelToCustomer(
   customer: { assigned_marketer_id?: string | null; assigned_marketer_name?: string | null },
   personnel?: { id?: string | null; user_id?: string | null; username?: string | null; name?: string | null } | null,

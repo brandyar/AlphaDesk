@@ -66,6 +66,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(25);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortOption, setSortOption] = useState<string>('next_followup_asc');
 
   const [items, setItems] = useState<Customer[]>(customers);
   const [totalCount, setTotalCount] = useState<number>(customers.length);
@@ -113,12 +114,12 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     };
   }, [items]);
 
-  // Reset page to 1 when filters, search or tenant change
+  // Reset page to 1 when filters, search, sort or tenant change
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId]);
+  }, [statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId, sortOption]);
 
-  // Fetch server-side paginated items on filter, tenant or page change
+  // Fetch server-side paginated items on filter, tenant, sort or page change
   useEffect(() => {
     let isMounted = true;
     setIsLoadingPage(true);
@@ -130,6 +131,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       status: statusFilter !== 'همه' ? statusFilter : undefined,
       marketer_id: selectedMarketerId !== 'همه' ? selectedMarketerId : undefined,
       expired_only: showExpiredOnly,
+      sort: sortOption,
     })
       .then((res) => {
         if (isMounted) {
@@ -146,7 +148,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId]);
+  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId, sortOption]);
 
   const userIsAdmin = Boolean(
     isAdmin ||
@@ -255,6 +257,25 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               ))}
             </select>
           </div>
+
+          {/* Sort Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
+              <ArrowUpDown className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
+              <span>مرتب‌سازی:</span>
+            </span>
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value)}
+              className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer font-medium"
+            >
+              <option value="next_followup_asc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">نزدیک‌ترین موعد پیگیری</option>
+              <option value="next_followup_desc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">دورترین موعد پیگیری</option>
+              <option value="date_created_desc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">جدیدترین ثبت</option>
+              <option value="company_name_asc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">نام برند (الف - ی)</option>
+              <option value="deadline_asc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">مهلت مالکیت</option>
+            </select>
+          </div>
         </div>
 
         {/* Search input, View Mode & Pagination Size */}
@@ -264,7 +285,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="جستجو در مدیر، برند، شماره یا شهر..."
+              placeholder="جستجو در نام، برند، شماره تلفن، شهر..."
               className="h-9 w-52 sm:w-64 pl-8 pr-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#777] border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954]"
             />
             <Search className="w-3.5 h-3.5 text-slate-400 dark:text-[#777] absolute left-2.5 top-3 pointer-events-none" />
