@@ -517,8 +517,10 @@ export default function App() {
     if (isSavingCustomerRef.current) return;
     isSavingCustomerRef.current = true;
     try {
+      let savedCustomer: Customer;
       if (editingCustomer) {
         const updated = await updateCustomer(editingCustomer.id, customerData);
+        savedCustomer = updated;
         setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
         if (selectedCustomer?.id === updated.id) {
           setSelectedCustomer(updated);
@@ -526,6 +528,7 @@ export default function App() {
         showToast('پرونده و شماره‌های مشتری با موفقیت ذخیره شدند.', 'success');
       } else {
         const created = await createCustomer(customerData);
+        savedCustomer = created;
         setCustomers((prev) => {
           const filtered = prev.filter((c) => c.id !== created.id);
           return [created, ...filtered];
@@ -546,6 +549,11 @@ export default function App() {
                   : l
               )
             );
+            window.dispatchEvent(
+              new CustomEvent('crm_lead_saved', {
+                detail: { ...lead, status: 'تبدیل شده به مشتری', converted_customer_id: created.id },
+              })
+            );
           }
         }
         showToast('پرونده مشتری جدید با موفقیت در سامانه ثبت شد.', 'success');
@@ -557,8 +565,7 @@ export default function App() {
       setPrefilledLeadNotes('');
 
       // Synchronize latest state
-      const savedCustomer = editingCustomer ? (editingCustomer.id ? { ...editingCustomer, ...customerData } : null) : null;
-      window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: savedCustomer || customerData }));
+      window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: savedCustomer }));
       fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
       fetchBffStatus().then(setBffStatus).catch(() => {});
     } catch (err: any) {
@@ -573,11 +580,62 @@ export default function App() {
     try {
       const created = await createCustomerContact(contactData);
       if (contactData.customer_id) {
-        const updated = await fetchCustomerById(contactData.customer_id);
-        setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-        if (selectedCustomer?.id === updated.id) {
-          setSelectedCustomer(updated);
+        const custId = contactData.customer_id;
+        // Optimistic instant state update
+        setCustomers((prev) =>
+          prev.map((c) => {
+            if (c.id !== custId) return c;
+            const existingContacts = c.contacts || [];
+            const newContacts = [created, ...existingContacts.filter((ct) => ct.id !== created.id)];
+            const mobiles =
+              created.channel_type === 'mobile' && !c.mobile_numbers?.includes(created.value)
+                ? [...(c.mobile_numbers || []), created.value]
+                : c.mobile_numbers;
+            const landlines =
+              created.channel_type === 'landline' && !c.landline_numbers?.includes(created.value)
+                ? [...(c.landline_numbers || []), created.value]
+                : c.landline_numbers;
+            return {
+              ...c,
+              contacts: newContacts,
+              mobile_numbers: mobiles,
+              landline_numbers: landlines,
+            };
+          })
+        );
+        if (selectedCustomer?.id === custId) {
+          setSelectedCustomer((prev) => {
+            if (!prev) return null;
+            const existingContacts = prev.contacts || [];
+            const newContacts = [created, ...existingContacts.filter((ct) => ct.id !== created.id)];
+            const mobiles =
+              created.channel_type === 'mobile' && !prev.mobile_numbers?.includes(created.value)
+                ? [...(prev.mobile_numbers || []), created.value]
+                : prev.mobile_numbers;
+            const landlines =
+              created.channel_type === 'landline' && !prev.landline_numbers?.includes(created.value)
+                ? [...(prev.landline_numbers || []), created.value]
+                : prev.landline_numbers;
+            return {
+              ...prev,
+              contacts: newContacts,
+              mobile_numbers: mobiles,
+              landline_numbers: landlines,
+            };
+          });
         }
+        window.dispatchEvent(new CustomEvent('crm_contact_saved', { detail: created }));
+
+        // Background sync to ensure full consistency
+        fetchCustomerById(custId).then((freshCust) => {
+          if (freshCust) {
+            setCustomers((prev) => prev.map((c) => (c.id === freshCust.id ? freshCust : c)));
+            if (selectedCustomer?.id === freshCust.id) {
+              setSelectedCustomer(freshCust);
+            }
+            window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: freshCust }));
+          }
+        }).catch(() => {});
       }
       showToast(`شماره تماس «${created.value}» با موفقیت افزوده شد.`, 'success');
     } catch (err: any) {
@@ -592,6 +650,8 @@ export default function App() {
       setCustomers((prev) => prev.filter((c) => c.id !== id));
       setReports((prev) => prev.filter((r) => r.customer_id !== id));
       setSelectedCustomer(null);
+      window.dispatchEvent(new CustomEvent('crm_customer_deleted', { detail: { id } }));
+      fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
       fetchBffStatus().then(setBffStatus).catch(() => {});
       showToast('پرونده مشتری با موفقیت حذف شد.', 'info');
     } catch (err: any) {
@@ -627,8 +687,9 @@ export default function App() {
       });
 
       if (res && res.customer) {
-        setCustomers((prev) => prev.map((c) => (c.id === res.customer.id ? res.customer : c)));
+        setCustomers((prev) => [res.customer, ...prev.filter((c) => c.id !== res.customer.id)]);
         window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: res.customer }));
+        window.dispatchEvent(new CustomEvent('crm_customer_claimed', { detail: { id: customerId } }));
         fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
         fetchBffStatus().then(setBffStatus).catch(() => {});
         showToast(res.message || 'پرونده با موفقیت به شما اختصاص یافت.', 'success');
@@ -657,6 +718,9 @@ export default function App() {
         notes
       );
       showToast(res.message || 'پرونده‌های مشتری با موفقیت ادغام شدند.', 'success');
+      for (const mId of mergedCustomerIds) {
+        window.dispatchEvent(new CustomEvent('crm_customer_deleted', { detail: { id: mId } }));
+      }
       await loadAllData();
       setIsMergeModalOpen(false);
       setMergeInitialCustomerIds([]);
@@ -673,18 +737,54 @@ export default function App() {
   const handleAddCustomerReport = async (reportData: Partial<CustomerReport>) => {
     try {
       const created = await createCustomerReport(reportData);
-      setReports((prev) => [created, ...prev]);
+      setReports((prev) => [created, ...prev.filter((r) => r.id !== created.id)]);
 
-      // Refresh customer list to get updated status and followup date
-      const updatedCustomer = await fetchCustomerById(reportData.customer_id!).catch(() => null);
-      if (updatedCustomer) {
-        setCustomers((prev) => prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)));
-        if (selectedCustomer?.id === updatedCustomer.id) {
-          setSelectedCustomer(updatedCustomer);
+      // Optimistically update customer status and next followup date immediately in local state
+      const custId = reportData.customer_id;
+      if (custId) {
+        const statusToSet = reportData.negotiation_status || 'پیگیری قبل از انقضا';
+        const nextDate = reportData.next_followup_date || null;
+        setCustomers((prev) =>
+          prev.map((c) =>
+            c.id === custId
+              ? {
+                  ...c,
+                  status: statusToSet,
+                  next_followup_date: nextDate,
+                  reports: [created, ...(c.reports?.filter((r) => r.id !== created.id) || [])],
+                }
+              : c
+          )
+        );
+        if (selectedCustomer?.id === custId) {
+          setSelectedCustomer((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: statusToSet,
+                  next_followup_date: nextDate,
+                  reports: [created, ...(prev.reports?.filter((r) => r.id !== created.id) || [])],
+                }
+              : null
+          );
         }
-        window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: updatedCustomer }));
       }
+
       window.dispatchEvent(new CustomEvent('crm_report_saved', { detail: created }));
+
+      // Refresh customer in background for full consistency
+      if (custId) {
+        fetchCustomerById(custId).then((updatedCustomer) => {
+          if (updatedCustomer) {
+            setCustomers((prev) => prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)));
+            if (selectedCustomer?.id === updatedCustomer.id) {
+              setSelectedCustomer(updatedCustomer);
+            }
+            window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: updatedCustomer }));
+          }
+        }).catch(() => {});
+      }
+
       fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
       fetchBffStatus().then(setBffStatus).catch(() => {});
       showToast('گزارش پیگیری با موفقیت در سامانه ثبت شد.', 'success');
@@ -697,7 +797,8 @@ export default function App() {
   const handleAddColdLead = async (leadData: Partial<ColdLead>) => {
     try {
       const created = await createColdLead(leadData);
-      setColdLeads((prev) => [created, ...prev]);
+      setColdLeads((prev) => [created, ...prev.filter((l) => l.id !== created.id)]);
+      window.dispatchEvent(new CustomEvent('crm_lead_saved', { detail: created }));
       fetchBffStatus().then(setBffStatus).catch(() => {});
       showToast('شماره جدید به بانک لید اولیه افزوده شد.', 'success');
     } catch (err: any) {
@@ -709,6 +810,7 @@ export default function App() {
     try {
       const updated = await updateColdLead(leadId, { status });
       setColdLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+      window.dispatchEvent(new CustomEvent('crm_lead_saved', { detail: updated }));
       fetchBffStatus().then(setBffStatus).catch(() => {});
       showToast('وضعیت لید بروزرسانی شد.', 'success');
     } catch (err: any) {
@@ -720,6 +822,7 @@ export default function App() {
     try {
       const updated = await updateColdLead(leadId, { assigned_to: assignedToId });
       setColdLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+      window.dispatchEvent(new CustomEvent('crm_lead_saved', { detail: updated }));
       fetchBffStatus().then(setBffStatus).catch(() => {});
     } catch (err: any) {
       showToast('خطا در تغییر بازاریاب لید: ' + (err.message || 'خطای نامشخص'), 'error');
@@ -730,12 +833,16 @@ export default function App() {
     await bulkAssignColdLeads(leadIds, targetMarketerId);
     const refreshed = await fetchColdLeads();
     setColdLeads(refreshed);
+    for (const lid of leadIds) {
+      window.dispatchEvent(new CustomEvent('crm_lead_saved', { detail: { id: lid, assigned_to: targetMarketerId } }));
+    }
     fetchBffStatus().then(setBffStatus).catch(() => {});
   };
 
   const handleDeleteLead = async (leadId: string) => {
     await deleteColdLead(leadId);
     setColdLeads((prev) => prev.filter((l) => l.id !== leadId));
+    window.dispatchEvent(new CustomEvent('crm_lead_deleted', { detail: { id: leadId } }));
     fetchBffStatus().then(setBffStatus).catch(() => {});
   };
 

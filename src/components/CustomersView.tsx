@@ -72,7 +72,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
 
-  // Listen to customer save/update events to immediately show changes without page reload
+  // Sync items whenever customers prop updates
+  useEffect(() => {
+    if (customers) {
+      setItems(customers);
+      setTotalCount(customers.length);
+    }
+  }, [customers]);
+
+  // Listen to customer save/update/delete events to immediately show changes without page reload
   useEffect(() => {
     const handleSaved = (e: any) => {
       const saved: Customer = e.detail;
@@ -84,19 +92,26 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         }
         return [saved, ...prev];
       });
-      setTotalCount((prev) => prev + 1);
+      setTotalCount((prev) => {
+        const exists = items.some((c) => c.id === saved.id);
+        return exists ? prev : prev + 1;
+      });
     };
-    window.addEventListener('crm_customer_saved', handleSaved);
-    return () => window.removeEventListener('crm_customer_saved', handleSaved);
-  }, []);
 
-  // Sync initial items when customers prop updates
-  useEffect(() => {
-    if (customers && customers.length > 0 && items.length === 0) {
-      setItems(customers);
-      setTotalCount(customers.length);
-    }
-  }, [customers]);
+    const handleDeleted = (e: any) => {
+      const deletedId = e.detail?.id;
+      if (!deletedId) return;
+      setItems((prev) => prev.filter((c) => c.id !== deletedId));
+      setTotalCount((prev) => Math.max(0, prev - 1));
+    };
+
+    window.addEventListener('crm_customer_saved', handleSaved);
+    window.addEventListener('crm_customer_deleted', handleDeleted);
+    return () => {
+      window.removeEventListener('crm_customer_saved', handleSaved);
+      window.removeEventListener('crm_customer_deleted', handleDeleted);
+    };
+  }, [items]);
 
   // Reset page to 1 when filters, search or tenant change
   useEffect(() => {

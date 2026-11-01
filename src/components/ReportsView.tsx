@@ -232,25 +232,47 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     userIsAdmin,
   ]);
 
-  // Listen to report save events to immediately show newly added reports at the top
+  // Listen to report save/delete events to immediately show newly added or deleted reports
   useEffect(() => {
     const handleSaved = (e: any) => {
       const saved: CustomerReport = e.detail;
       if (!saved || !saved.id) return;
-      if (currentPage === 1) {
-        setReportList((prev) => {
-          const exists = prev.some((r) => r.id === saved.id);
-          if (exists) {
-            return prev.map((r) => (r.id === saved.id ? saved : r));
-          }
-          return [saved, ...prev.slice(0, pageSize - 1)];
-        });
-        setTotalCount((prev) => prev + 1);
-      }
+      setReportList((prev) => {
+        const exists = prev.some((r) => r.id === saved.id);
+        if (exists) {
+          return prev.map((r) => (r.id === saved.id ? saved : r));
+        }
+        return [saved, ...prev];
+      });
+      setTotalCount((prev) => prev + 1);
     };
+
+    const handleReportDeleted = (e: any) => {
+      const deletedId = e.detail?.id;
+      if (!deletedId) return;
+      setReportList((prev) => prev.filter((r) => r.id !== deletedId));
+      setTotalCount((prev) => Math.max(0, prev - 1));
+    };
+
+    const handleCustomerDeleted = (e: any) => {
+      const deletedCustId = e.detail?.id;
+      if (!deletedCustId) return;
+      setReportList((prev) => prev.filter((r) => {
+        const rCustId = typeof r.customer_id === 'object' && r.customer_id !== null ? (r.customer_id as any).id : String(r.customer_id);
+        return String(rCustId) !== String(deletedCustId);
+      }));
+      setTotalCount((prev) => Math.max(0, prev - 1));
+    };
+
     window.addEventListener('crm_report_saved', handleSaved);
-    return () => window.removeEventListener('crm_report_saved', handleSaved);
-  }, [currentPage, pageSize]);
+    window.addEventListener('crm_report_deleted', handleReportDeleted);
+    window.addEventListener('crm_customer_deleted', handleCustomerDeleted);
+    return () => {
+      window.removeEventListener('crm_report_saved', handleSaved);
+      window.removeEventListener('crm_report_deleted', handleReportDeleted);
+      window.removeEventListener('crm_customer_deleted', handleCustomerDeleted);
+    };
+  }, []);
 
   // The displayed reports are directly the server-paginated items for the current page
   const displayedReports = reportList;

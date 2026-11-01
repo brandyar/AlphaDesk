@@ -93,7 +93,15 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
 
-  // Listen to lead save/update events to immediately show newly added or edited leads without page reload
+  // Sync items whenever coldLeads prop updates
+  useEffect(() => {
+    if (coldLeads) {
+      setItems(coldLeads);
+      setTotalCount(coldLeads.length);
+    }
+  }, [coldLeads]);
+
+  // Listen to lead save/update and delete events to immediately show newly added, edited or deleted leads
   useEffect(() => {
     const handleSaved = (e: any) => {
       const saved: ColdLead = e.detail;
@@ -105,19 +113,26 @@ export const ColdLeadsView: React.FC<ColdLeadsViewProps> = ({
         }
         return [saved, ...prev];
       });
-      setTotalCount((prev) => prev + 1);
+      setTotalCount((prev) => {
+        const exists = items.some((l) => l.id === saved.id);
+        return exists ? prev : prev + 1;
+      });
     };
-    window.addEventListener('crm_lead_saved', handleSaved);
-    return () => window.removeEventListener('crm_lead_saved', handleSaved);
-  }, []);
 
-  // Sync initial items when coldLeads prop updates
-  useEffect(() => {
-    if (coldLeads && coldLeads.length > 0 && items.length === 0) {
-      setItems(coldLeads);
-      setTotalCount(coldLeads.length);
-    }
-  }, [coldLeads]);
+    const handleDeleted = (e: any) => {
+      const deletedId = e.detail?.id;
+      if (!deletedId) return;
+      setItems((prev) => prev.filter((l) => l.id !== deletedId));
+      setTotalCount((prev) => Math.max(0, prev - 1));
+    };
+
+    window.addEventListener('crm_lead_saved', handleSaved);
+    window.addEventListener('crm_lead_deleted', handleDeleted);
+    return () => {
+      window.removeEventListener('crm_lead_saved', handleSaved);
+      window.removeEventListener('crm_lead_deleted', handleDeleted);
+    };
+  }, [items]);
 
   // Reset page when filters or tenant change
   useEffect(() => {

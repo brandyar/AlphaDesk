@@ -124,6 +124,28 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
       .catch(() => {});
   }, []);
 
+  // Listen to customer claimed or deleted events to immediately remove them from the pool
+  useEffect(() => {
+    const handleClaimed = (e: any) => {
+      const id = e.detail?.id;
+      if (!id) return;
+      setDedicatedFreeCustomers((prev) => prev.filter((c) => c.id !== id));
+      setTotalCount((prev) => Math.max(0, prev - 1));
+    };
+    const handleDeleted = (e: any) => {
+      const id = e.detail?.id;
+      if (!id) return;
+      setDedicatedFreeCustomers((prev) => prev.filter((c) => c.id !== id));
+      setTotalCount((prev) => Math.max(0, prev - 1));
+    };
+    window.addEventListener('crm_customer_claimed', handleClaimed);
+    window.addEventListener('crm_customer_deleted', handleDeleted);
+    return () => {
+      window.removeEventListener('crm_customer_claimed', handleClaimed);
+      window.removeEventListener('crm_customer_deleted', handleDeleted);
+    };
+  }, []);
+
   // Accordion for viewing previous reports
   const [expandedReportCustId, setExpandedReportCustId] = useState<string | null>(null);
 
