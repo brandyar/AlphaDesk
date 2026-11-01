@@ -884,20 +884,58 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      await directusFetch(`/items/customers/${id}`, { method: 'DELETE' });
+      // 1. Delete all related customer contacts FIRST to prevent PostgreSQL foreign key constraint violation
       const contactsRes = await directusFetch(
-        `/items/customer_contacts?filter[customer_id][_eq]=${encodeURIComponent(id)}`
+        `/items/customer_contacts?filter[customer_id][_eq]=${encodeURIComponent(id)}&fields=id`
       ).catch(() => null);
-      if (contactsRes?.data && Array.isArray(contactsRes.data)) {
+      if (contactsRes?.data && Array.isArray(contactsRes.data) && contactsRes.data.length > 0) {
         for (const ct of contactsRes.data) {
-          await directusFetch(`/items/customer_contacts/${ct.id}`, { method: 'DELETE' }).catch(
-            () => {}
-          );
+          if (ct?.id) {
+            await directusFetch(`/items/customer_contacts/${ct.id}`, { method: 'DELETE' }).catch(() => {});
+          }
         }
       }
+
+      // 2. Delete all related negotiation reports for this customer
+      const reportsRes = await directusFetch(
+        `/items/customer_reports?filter[customer_id][_eq]=${encodeURIComponent(id)}&fields=id`
+      ).catch(() => null);
+      if (reportsRes?.data && Array.isArray(reportsRes.data) && reportsRes.data.length > 0) {
+        for (const rep of reportsRes.data) {
+          if (rep?.id) {
+            await directusFetch(`/items/customer_reports/${rep.id}`, { method: 'DELETE' }).catch(() => {});
+          }
+        }
+      }
+
+      // 3. Clear converted_customer_id in cold leads referencing this customer
+      const coldLeadsRes = await directusFetch(
+        `/items/cold_leads?filter[converted_customer_id][_eq]=${encodeURIComponent(id)}&fields=id`
+      ).catch(() => null);
+      if (coldLeadsRes?.data && Array.isArray(coldLeadsRes.data) && coldLeadsRes.data.length > 0) {
+        for (const lead of coldLeadsRes.data) {
+          if (lead?.id) {
+            await directusFetch(`/items/cold_leads/${lead.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ converted_customer_id: null }),
+            }).catch(() => {});
+          }
+        }
+      }
+
+      // 4. Now safely delete the parent customer record
+      await directusFetch(`/items/customers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+      // Clean memory store
+      setCustomersData(customersData.filter((c) => c.id !== id));
+      contactsData.splice(0, contactsData.length, ...contactsData.filter((ct) => String(ct.customer_id) !== String(id)));
+      reportsData.splice(0, reportsData.length, ...reportsData.filter((r) => String(r.customer_id) !== String(id)));
+
       invalidateCustomersCache();
+      invalidateReportsCache();
       return res.status(204).send();
     } catch (err: any) {
+      console.error('Delete customer error:', err.message);
       return res.status(500).json({
         error: 'CUSTOMER_DELETE_FAILED',
         message: `خطا در حذف پرونده مشتری: ${err.message}`,
@@ -906,7 +944,10 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 
   setCustomersData(customersData.filter((c) => c.id !== id));
+  contactsData.splice(0, contactsData.length, ...contactsData.filter((ct) => String(ct.customer_id) !== String(id)));
+  reportsData.splice(0, reportsData.length, ...reportsData.filter((r) => String(r.customer_id) !== String(id)));
   invalidateCustomersCache();
+  invalidateReportsCache();
   res.status(204).send();
 });
 
@@ -1192,6 +1233,16 @@ router.post('/merge', async (req: Request, res: Response) => {
       });
 
       for (const mId of merged_customer_ids) {
+        const resCt = await directusFetch(
+          `/items/customer_contacts?filter[customer_id][_eq]=${encodeURIComponent(mId)}&fields=id`
+        ).catch(() => null);
+        if (resCt?.data && Array.isArray(resCt.data)) {
+          for (const ct of resCt.data) {
+            if (ct?.id) {
+              await directusFetch(`/items/customer_contacts/${ct.id}`, { method: 'DELETE' }).catch(() => {});
+            }
+          }
+        }
         await directusFetch(`/items/customers/${mId}`, { method: 'DELETE' }).catch(() => {});
       }
 
