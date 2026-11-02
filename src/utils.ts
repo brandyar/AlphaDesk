@@ -835,3 +835,51 @@ export function formatDisplayDate(dateVal?: any): string {
   return toPersianDigits(str);
 }
 
+/**
+ * Normalizes any date value (Excel serial date number e.g. 45882.719, Jalali date, or date string)
+ * into a standard ISO 8601 UTC dateTime string (e.g. "2025-08-13T17:16:00.000Z") for Directus.
+ */
+export function normalizeToIsoDateTime(dateVal?: any): string | null {
+  if (dateVal === undefined || dateVal === null || dateVal === '') return null;
+
+  const num = typeof dateVal === 'number' ? dateVal : Number(String(dateVal).trim());
+  if (!isNaN(num) && num > 20000 && num < 60000) {
+    try {
+      const ms = Math.round((num - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) {
+        return d.toISOString();
+      }
+    } catch {}
+  }
+
+  const str = String(dateVal).trim();
+
+  if (/^1[34]\d\d[\/\-]/.test(str)) {
+    try {
+      const parts = str.split(/\s+/);
+      const datePart = parts[0];
+      const timePart = parts[1] || '00:00:00';
+      const [jy, jm, jd] = datePart.split(/[\/\-]/).map((p) => parseInt(p, 10));
+      if (!isNaN(jy) && !isNaN(jm) && !isNaN(jd)) {
+        const g = jalaliToGregorian(jy, jm, jd);
+        const isoStr = `${g.gy}-${String(g.gm).padStart(2, '0')}-${String(g.gd).padStart(2, '0')}T${timePart}`;
+        const d = new Date(isoStr);
+        if (!isNaN(d.getTime())) return d.toISOString();
+      }
+    } catch {}
+  }
+
+  let d = new Date(str);
+  if (isNaN(d.getTime())) {
+    d = new Date(str.replace(' ', 'T'));
+  }
+
+  if (!isNaN(d.getTime())) {
+    return d.toISOString();
+  }
+
+  return null;
+}
+
+

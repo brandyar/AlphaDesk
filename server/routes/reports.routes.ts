@@ -18,7 +18,60 @@ import { cleanCustomerPayloadForDirectus, normalizePersianString } from '../serv
 import { getRequestUser, getRequestTenantId, matchesTenant } from '../middlewares/auth.middleware.ts';
 import { CustomerReport } from '../types.ts';
 
+export function normalizeToIsoDateTime(dateVal?: any): string | null {
+  if (dateVal === undefined || dateVal === null || dateVal === '') return null;
+
+  const num = typeof dateVal === 'number' ? dateVal : Number(String(dateVal).trim());
+  if (!isNaN(num) && num > 20000 && num < 60000) {
+    try {
+      const ms = Math.round((num - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) return d.toISOString();
+    } catch {}
+  }
+
+  const str = String(dateVal).trim();
+
+  if (/^1[34]\d\d[\/\-]/.test(str)) {
+    try {
+      const parts = str.split(/\s+/);
+      const datePart = parts[0];
+      const timePart = parts[1] || '00:00:00';
+      const [jy, jm, jd] = datePart.split(/[\/\-]/).map((p) => parseInt(p, 10));
+      if (!isNaN(jy) && !isNaN(jm) && !isNaN(jd)) {
+        let y = jy - 979, m = jm - 1, d = jd - 1;
+        let j_day_no = 365 * y + Math.floor(y / 33) * 8 + Math.floor(((y % 33) + 3) / 4);
+        for (let i = 0; i < m; ++i) j_day_no += i < 6 ? 31 : 30;
+        j_day_no += d;
+        let g_day_no = j_day_no + 79;
+        let gy = 1600 + 400 * Math.floor(g_day_no / 146097);
+        g_day_no = g_day_no % 146097;
+        let leap = true;
+        if (g_day_no >= 36525) {
+          g_day_no--; gy += 100 * Math.floor(g_day_no / 36524); g_day_no = g_day_no % 36524;
+          if (g_day_no >= 365) gy++; else leap = false;
+        }
+        gy += 4 * Math.floor(g_day_no / 1461); g_day_no %= 1461;
+        if (g_day_no >= 366) { leap = false; g_day_no--; gy += Math.floor(g_day_no / 365); g_day_no = g_day_no % 365; }
+        const g_days_in_month = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        let gm = 0;
+        while (gm < 12 && g_day_no >= g_days_in_month[gm]) { g_day_no -= g_days_in_month[gm]; gm++; }
+        const isoStr = `${gy}-${String(gm + 1).padStart(2, '0')}-${String(g_day_no + 1).padStart(2, '0')}T${timePart}`;
+        const dt = new Date(isoStr);
+        if (!isNaN(dt.getTime())) return dt.toISOString();
+      }
+    } catch {}
+  }
+
+  let d = new Date(str);
+  if (isNaN(d.getTime())) d = new Date(str.replace(' ', 'T'));
+  if (!isNaN(d.getTime())) return d.toISOString();
+
+  return null;
+}
+
 const router = Router();
+
 
 router.get('/', async (req: Request, res: Response) => {
   const {
@@ -578,6 +631,8 @@ router.post('/', async (req: Request, res: Response) => {
     }
   }
 
+
+
   const newReport: CustomerReport = {
     id: newReportId,
     customer_id: payload.customer_id,
@@ -588,12 +643,13 @@ router.post('/', async (req: Request, res: Response) => {
     next_followup_date: nextFollowupIso,
     negotiation_status: payload.negotiation_status || 'تماس برقرار نشده',
     created_by: safeCreatedByFk || undefined,
-    date_created: payload.date_created || nowIso,
+    date_created: (payload.date_created ? normalizeToIsoDateTime(payload.date_created) : null) || nowIso,
     contract_number: payload.contract_number ? String(payload.contract_number).trim() : null,
     contract_date: contractDateIso,
     contract_items: payload.contract_items ? String(payload.contract_items).trim() : null,
     contract_amount: payload.contract_amount ? Number(payload.contract_amount) : null,
   };
+
 
   if (directusUrl && directusAdminToken) {
     try {
@@ -703,6 +759,9 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'آرایه رکوردهای فایل ارسال نشده است.' });
   }
+
+  const nowIso = new Date().toISOString();
+
 
   const isDryRun = dry_run !== false;
 
@@ -960,7 +1019,7 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
         previewUpdates.push({
           id: bestMatch.id,
           phone: bestMatch.negotiation_phone || rawPhone,
-          insertDate: rawDate || bestMatch.date_created,
+          insertDate: bestMatch.date_created || rawDate,
           current_negotiator: fixMojibake(currentNegotiatorName) || '(خالی)',
           new_negotiator: fixMojibake(cleanTargetNegotiator),
         });
@@ -969,6 +1028,8 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
       alreadyMatchingCount++;
     }
   }
+
+
 
   if (isDryRun) {
     return res.json({
