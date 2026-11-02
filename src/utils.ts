@@ -762,3 +762,76 @@ export function getUserAllowedTenants(
   return matched.length > 0 ? matched : effectiveTenants;
 }
 
+const CP1252_REVERSE_MAP: Record<number, number> = {
+  0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85, 0x2020: 0x86,
+  0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C,
+  0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95,
+  0x2013: 0x96, 0x2014: 0x97, 0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B,
+  0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F,
+};
+
+/**
+ * Automatically detects and repairs UTF-8 text mistakenly decoded as Windows-1252/ISO-8859-1 (Mojibake)
+ * e.g., "Ù¾ÙˆØ± Ø§Ø³Ù…Ø§Ø¹ÛŒÙ„" -> "پور اسماعیل"
+ */
+export function fixMojibake(str?: string | null): string {
+  if (!str || typeof str !== 'string') return '';
+  // Check if string contains byte artifacts from UTF-8 Persian/Arabic characters (0xD8..0xDF -> Ø, Ù, Û, Ú, etc.)
+  if (/[ØÙÛÚ]/.test(str)) {
+    try {
+      const bytes = new Uint8Array(
+        [...str].map((ch) => {
+          const code = ch.charCodeAt(0);
+          return CP1252_REVERSE_MAP[code] || (code <= 0xFF ? code : 0x3F);
+        })
+      );
+      const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      if (decoded && !/[\uFFFD]/.test(decoded)) {
+        return decoded;
+      }
+    } catch {
+      // Return original if decoding fails
+    }
+  }
+  return str;
+}
+
+/**
+ * Formats any date value (Excel serial number like 45882.719, ISO date string, Jalali date string)
+ * into a clean Persian date-time string (e.g. "۲۲ مرداد ۱۴۰۴، ۱۷:۱۶").
+ */
+export function formatDisplayDate(dateVal?: any): string {
+  if (dateVal === undefined || dateVal === null || dateVal === '') return '-';
+
+  // 1. If numeric or string Excel serial date number (e.g. 45882.71944444445)
+  const num = typeof dateVal === 'number' ? dateVal : Number(String(dateVal).trim());
+  if (!isNaN(num) && num > 20000 && num < 60000) {
+    try {
+      const ms = Math.round((num - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) {
+        return formatPersianDateTime(d.toISOString());
+      }
+    } catch {}
+  }
+
+  const str = String(dateVal).trim();
+
+  // 2. Already Jalali date string like 1403/05/22 17:16 or 1404-05-22
+  if (/^1[34]\d\d[\/\-]\d{1,2}[\/\-]\d{1,2}/.test(str)) {
+    return toPersianDigits(str);
+  }
+
+  // 3. ISO or standard JS Date string
+  let d = new Date(str);
+  if (isNaN(d.getTime())) {
+    d = new Date(str.replace(' ', 'T'));
+  }
+
+  if (!isNaN(d.getTime())) {
+    return formatPersianDateTime(d.toISOString());
+  }
+
+  return toPersianDigits(str);
+}
+

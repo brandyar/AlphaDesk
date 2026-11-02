@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { repairNegotiators } from '../api';
-import { toPersianDigits } from '../utils';
+import { toPersianDigits, fixMojibake, formatDisplayDate } from '../utils';
 
 interface RepairNegotiatorsModalProps {
   isOpen: boolean;
@@ -62,7 +62,7 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
     message: string;
   } | null>(null);
 
-  // Process File Upload with UTF-8 array buffer preservation
+  // Process File Upload with UTF-8 array buffer & plain text preservation
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
@@ -72,26 +72,40 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
     setDryRunResult(null);
     setExecuteResult(null);
 
+    const fileName = selectedFile.name.toLowerCase();
+    const isPlainText = fileName.endsWith('.csv') || fileName.endsWith('.tsv') || fileName.endsWith('.txt');
+
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const buffer = evt.target?.result as ArrayBuffer;
-        const data = new Uint8Array(buffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+        let json: any[] = [];
+        if (isPlainText) {
+          const text = evt.target?.result as string;
+          const workbook = XLSX.read(text, { type: 'string', codepage: 65001 });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          json = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+        } else {
+          const buffer = evt.target?.result as ArrayBuffer;
+          const data = new Uint8Array(buffer);
+          const workbook = XLSX.read(data, { type: 'array', codepage: 65001 });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          json = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+        }
 
         if (!Array.isArray(json) || json.length === 0) {
           setError('فایل انتخابی فاقد ردیف‌های معتبر است یا خالی می‌باشد.');
           return;
         }
 
-        // Clean keys and trim string values
+        // Clean keys, trim string values, and auto-repair any Mojibake
         const cleanedRows = (json as any[]).map((row) => {
           const clean: Record<string, any> = {};
           for (const [k, v] of Object.entries(row)) {
-            clean[k.trim()] = typeof v === 'string' ? v.trim() : v;
+            const cleanKey = fixMojibake(k.trim());
+            const cleanVal = typeof v === 'string' ? fixMojibake(v.trim()) : v;
+            clean[cleanKey] = cleanVal;
           }
           return clean;
         });
@@ -101,10 +115,15 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
         setError(`خطا در خواندن فایل اکسل/CSV: ${err.message}`);
       }
     };
-    reader.readAsArrayBuffer(selectedFile);
+
+    if (isPlainText) {
+      reader.readAsText(selectedFile, 'utf-8');
+    } else {
+      reader.readAsArrayBuffer(selectedFile);
+    }
   };
 
-  // Process Pasted Text (Smart TSV/CSV/JSON Parser)
+  // Process Pasted Text (Smart TSV/CSV/JSON Parser with Mojibake repair)
   const handleParsePasteText = () => {
     if (!pasteText.trim()) {
       setError('لطفا ابتدا متن گزارش‌ها را در کادر وارد کنید.');
@@ -120,7 +139,14 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
       if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
         const parsed = JSON.parse(trimmed);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setParsedRows(parsed);
+          const cleaned = parsed.map((row: any) => {
+            const clean: Record<string, any> = {};
+            for (const [k, v] of Object.entries(row)) {
+              clean[fixMojibake(k.trim())] = typeof v === 'string' ? fixMojibake(v.trim()) : v;
+            }
+            return clean;
+          });
+          setParsedRows(cleaned);
           return;
         }
       }
@@ -133,7 +159,7 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
       }
 
       const delimiter = lines[0].includes('\t') ? '\t' : ',';
-      const headers = lines[0].split(delimiter).map((h) => h.trim().replace(/^["']|["']$/g, ''));
+      const headers = lines[0].split(delimiter).map((h) => fixMojibake(h.trim().replace(/^["']|["']$/g, '')));
       const rows: any[] = [];
 
       for (let i = 1; i < lines.length; i++) {
@@ -141,7 +167,8 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
         const values = line.split(delimiter).map((v) => v.trim().replace(/^["']|["']$/g, ''));
         const obj: Record<string, any> = {};
         headers.forEach((h, idx) => {
-          obj[h] = values[idx] !== undefined ? values[idx] : '';
+          const rawVal = values[idx] !== undefined ? values[idx] : '';
+          obj[h] = typeof rawVal === 'string' ? fixMojibake(rawVal) : rawVal;
         });
         rows.push(obj);
       }
@@ -234,9 +261,11 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
         item.phone.toLowerCase().includes(q) ||
         item.current_negotiator.toLowerCase().includes(q) ||
         item.new_negotiator.toLowerCase().includes(q) ||
-        item.insertDate.toLowerCase().includes(q)
+        String(item.insertDate).toLowerCase().includes(q) ||
+        formatDisplayDate(item.insertDate).toLowerCase().includes(q)
     );
   }, [dryRunResult, previewSearch]);
+
 
   if (!isOpen) return null;
 
@@ -538,12 +567,14 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
                               <tr key={item.id || idx} className="hover:bg-slate-50 dark:hover:bg-[#202020]">
                                 <td className="p-2.5 font-mono text-slate-400 dark:text-[#666]">{idx + 1}</td>
                                 <td className="p-2.5 font-mono dir-ltr text-right">{item.phone}</td>
-                                <td className="p-2.5 font-mono text-[11px]">{item.insertDate}</td>
+                                <td className="p-2.5 font-mono text-[11px] font-bold text-slate-700 dark:text-[#ccc]">
+                                  {formatDisplayDate(item.insertDate)}
+                                </td>
                                 <td className="p-2.5 font-bold text-rose-600 dark:text-rose-400 bg-rose-50/50 dark:bg-rose-950/20">
-                                  {item.current_negotiator}
+                                  {fixMojibake(item.current_negotiator)}
                                 </td>
                                 <td className="p-2.5 font-bold text-emerald-600 dark:text-[#1DB954] bg-emerald-50/50 dark:bg-[#1DB954]/10">
-                                  {item.new_negotiator}
+                                  {fixMojibake(item.new_negotiator)}
                                 </td>
                               </tr>
                             ))

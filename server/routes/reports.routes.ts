@@ -739,15 +739,100 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
     return clean.replace(/^0+/, '');
   };
 
-  const parseTimeMs = (dateStr?: string | null): number => {
-    if (!dateStr) return NaN;
-    const str = String(dateStr).trim();
+  const CP1252_REVERSE_MAP: Record<number, number> = {
+    0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85, 0x2020: 0x86,
+    0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C,
+    0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95,
+    0x2013: 0x96, 0x2014: 0x97, 0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B,
+    0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F,
+  };
+
+  const fixMojibake = (str?: string | null): string => {
+    if (!str || typeof str !== 'string') return '';
+    if (/[ØÙÛÚ]/.test(str)) {
+      try {
+        const bytes = new Uint8Array(
+          [...str].map((ch) => {
+            const code = ch.charCodeAt(0);
+            return CP1252_REVERSE_MAP[code] || (code <= 0xFF ? code : 0x3F);
+          })
+        );
+        const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+        if (decoded && !/[\uFFFD]/.test(decoded)) {
+          return decoded;
+        }
+      } catch {}
+    }
+    return str;
+  };
+
+  const jalaliToGregorian = (jy: number, jm: number, jd: number) => {
+    jy = jy - 979;
+    jm = jm - 1;
+    jd = jd - 1;
+    let j_day_no = 365 * jy + Math.floor(jy / 33) * 8 + Math.floor(((jy % 33) + 3) / 4);
+    for (let i = 0; i < jm; ++i) j_day_no += i < 6 ? 31 : 30;
+    j_day_no += jd;
+    let g_day_no = j_day_no + 79;
+    let gy = 1600 + 400 * Math.floor(g_day_no / 146097);
+    g_day_no = g_day_no % 146097;
+    let leap = true;
+    if (g_day_no >= 36525) {
+      g_day_no--;
+      gy += 100 * Math.floor(g_day_no / 36524);
+      g_day_no = g_day_no % 36524;
+      if (g_day_no >= 365) g_day_no++;
+      else leap = false;
+    }
+    gy += 4 * Math.floor(g_day_no / 1461);
+    g_day_no %= 1461;
+    if (g_day_no >= 366) {
+      leap = false;
+      g_day_no--;
+      gy += Math.floor(g_day_no / 365);
+      g_day_no = g_day_no % 365;
+    }
+    const g_days_in_month = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let gm = 0;
+    while (gm < 12 && g_day_no >= g_days_in_month[gm]) {
+      g_day_no -= g_days_in_month[gm];
+      gm++;
+    }
+    return { gy, gm: gm + 1, gd: g_day_no + 1 };
+  };
+
+  const parseTimeMs = (dateVal?: any): number => {
+    if (!dateVal) return NaN;
+    if (typeof dateVal === 'number' && dateVal > 20000 && dateVal < 60000) {
+      return Math.round((dateVal - 25569) * 86400 * 1000);
+    }
+    const str = String(dateVal).trim();
+    const num = Number(str);
+    if (!isNaN(num) && num > 20000 && num < 60000) {
+      return Math.round((num - 25569) * 86400 * 1000);
+    }
+    if (/^1[34]\d\d[\/\-]/.test(str)) {
+      try {
+        const parts = str.split(/\s+/);
+        const datePart = parts[0];
+        const timePart = parts[1] || '00:00:00';
+        const [jy, jm, jd] = datePart.split(/[\/\-]/).map((p) => parseInt(p, 10));
+        if (!isNaN(jy) && !isNaN(jm) && !isNaN(jd)) {
+          const g = jalaliToGregorian(jy, jm, jd);
+          const iso = `${g.gy}-${String(g.gm).padStart(2, '0')}-${String(g.gd).padStart(2, '0')}T${timePart}`;
+          const t = new Date(iso).getTime();
+          if (!isNaN(t)) return t;
+        }
+      } catch {}
+    }
     let ms = new Date(str).getTime();
     if (isNaN(ms)) {
       ms = new Date(str.replace(' ', 'T')).getTime();
     }
     return ms;
   };
+
+
 
   // Build O(1) phone indexes
   const phoneMap = new Map<string, any[]>();
@@ -800,7 +885,7 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
       continue;
     }
 
-    const cleanTargetNegotiator = rawNegotiator.trim();
+    const cleanTargetNegotiator = fixMojibake(rawNegotiator.trim());
     const pDigits = getPhoneDigits(rawPhone);
 
     if (!pDigits) {
@@ -876,8 +961,8 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
           id: bestMatch.id,
           phone: bestMatch.negotiation_phone || rawPhone,
           insertDate: rawDate || bestMatch.date_created,
-          current_negotiator: currentNegotiatorName || '(خالی)',
-          new_negotiator: cleanTargetNegotiator,
+          current_negotiator: fixMojibake(currentNegotiatorName) || '(خالی)',
+          new_negotiator: fixMojibake(cleanTargetNegotiator),
         });
       }
     } else {

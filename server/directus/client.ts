@@ -119,20 +119,22 @@ export async function directusFetchAllPages(
   const targetCount = Math.min(totalCount, maxTotal);
   if (targetCount > page1Res.data.length && page1Res.data.length > 0) {
     const totalPages = Math.ceil(targetCount / PAGE_SIZE);
-    const pagePromises = [];
-    for (let p = 2; p <= totalPages; p++) {
-      const pParams = new URLSearchParams(queryString || '');
-      pParams.set('limit', String(PAGE_SIZE));
-      pParams.set('page', String(p));
-      if (!pParams.has('meta')) pParams.set('meta', '*');
-      const pUrl = `${pathOnly}?${pParams.toString()}`;
-      pagePromises.push(directusFetch(pUrl, options, 2).catch(() => null));
-    }
-
-    const pagesRes = await Promise.all(pagePromises);
-    for (const res of pagesRes) {
-      if (res && Array.isArray(res.data)) {
-        allItems.push(...res.data);
+    const CONCURRENCY = 6;
+    for (let p = 2; p <= totalPages; p += CONCURRENCY) {
+      const pagePromises = [];
+      for (let cp = p; cp < p + CONCURRENCY && cp <= totalPages; cp++) {
+        const pParams = new URLSearchParams(queryString || '');
+        pParams.set('limit', String(PAGE_SIZE));
+        pParams.set('page', String(cp));
+        if (!pParams.has('meta')) pParams.set('meta', '*');
+        const pUrl = `${pathOnly}?${pParams.toString()}`;
+        pagePromises.push(directusFetch(pUrl, options, 2).catch(() => null));
+      }
+      const batchRes = await Promise.all(pagePromises);
+      for (const res of batchRes) {
+        if (res && Array.isArray(res.data)) {
+          allItems.push(...res.data);
+        }
       }
     }
   }
