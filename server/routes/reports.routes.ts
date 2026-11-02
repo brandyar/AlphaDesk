@@ -6,7 +6,7 @@ import {
   reportsData,
   customersData,
 } from '../config.ts';
-import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
+import { directusFetch, directusFetchAllPages, directusSafeBatchPatch } from '../directus/client.ts';
 import {
   ensureCustomersCache,
   ensureReportsCache,
@@ -692,6 +692,234 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
   invalidateReportsCache();
   res.status(204).send();
+});
+
+let repairReportsCache: any[] | null = null;
+let repairReportsCacheTime = 0;
+
+// POST /api/reports/repair-negotiators - Fast & Safe Repair of negotiator_name for legacy imported reports
+router.post('/repair-negotiators', async (req: Request, res: Response) => {
+  const { items, dry_run } = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'آرایه رکوردهای فایل ارسال نشده است.' });
+  }
+
+  const isDryRun = dry_run !== false;
+
+  // 1. Fetch all existing customer reports with in-memory caching
+  let existingReports: any[] = [];
+  if (repairReportsCache && Date.now() - repairReportsCacheTime < 5 * 60 * 1000) {
+    existingReports = repairReportsCache;
+  } else if (directusUrl && directusAdminToken) {
+    try {
+      const directusRes = await directusFetchAllPages(
+        '/items/customer_reports?fields=id,negotiation_phone,date_created,negotiator_name,report_text',
+        {},
+        100000
+      );
+      existingReports = directusRes.data || [];
+      repairReportsCache = existingReports;
+      repairReportsCacheTime = Date.now();
+    } catch (e: any) {
+      console.warn('Failed to fetch Directus reports for repair, fallback to cache:', e.message);
+      existingReports = await ensureReportsCache().catch(() => reportsData);
+    }
+  } else {
+    existingReports = await ensureReportsCache().catch(() => reportsData);
+  }
+
+  const getPhoneDigits = (str?: string | null): string => {
+    if (!str) return '';
+    let clean = String(str).replace(/[^\d]/g, '');
+    if (clean.startsWith('0098') && clean.length > 12) {
+      clean = clean.slice(4);
+    } else if (clean.startsWith('98') && clean.length === 12) {
+      clean = clean.slice(2);
+    }
+    return clean.replace(/^0+/, '');
+  };
+
+  const parseTimeMs = (dateStr?: string | null): number => {
+    if (!dateStr) return NaN;
+    const str = String(dateStr).trim();
+    let ms = new Date(str).getTime();
+    if (isNaN(ms)) {
+      ms = new Date(str.replace(' ', 'T')).getTime();
+    }
+    return ms;
+  };
+
+  // Build O(1) phone indexes
+  const phoneMap = new Map<string, any[]>();
+  for (const rep of existingReports) {
+    const pDigits = getPhoneDigits(rep.negotiation_phone);
+    if (pDigits) {
+      if (!phoneMap.has(pDigits)) phoneMap.set(pDigits, []);
+      phoneMap.get(pDigits)!.push(rep);
+
+      if (pDigits.length > 10) {
+        const last10 = pDigits.slice(-10);
+        if (!phoneMap.has(last10)) phoneMap.set(last10, []);
+        phoneMap.get(last10)!.push(rep);
+      }
+    }
+  }
+
+  const totalInputRows = items.length;
+  let matchedCount = 0;
+  let needsUpdateCount = 0;
+  let alreadyMatchingCount = 0;
+  let unmatchedCount = 0;
+
+  const patchItemsMap = new Map<string, any>();
+  const previewUpdates: any[] = [];
+  const unmatchedSamples: any[] = [];
+
+  for (const r of items) {
+    const getVal = (aliases: string[]): string => {
+      for (const a of aliases) {
+        if (r[a] !== undefined && r[a] !== null && String(r[a]).trim() !== '') {
+          return String(r[a]).trim();
+        }
+        const found = Object.keys(r).find((k) => k.trim().toLowerCase() === a.toLowerCase());
+        if (found && r[found] !== undefined && r[found] !== null && String(r[found]).trim() !== '') {
+          return String(r[found]).trim();
+        }
+      }
+      return '';
+    };
+
+    const rawPhone = getVal(['callNum', 'call_num', 'negotiation_phone', 'phone', 'mobile', 'شماره تماس', 'تلفن', 'موبایل', 'شماره']);
+    const rawDate = getVal(['insertDate', 'insert_date', 'date_created', 'dateTime', 'datetime', 'updateDate', 'تاریخ ثبت', 'تاریخ']);
+    const rawNegotiator = getVal(['negotiator', 'negotiator_name', 'user', 'personnel_name', 'مذاکره‌کننده', 'مذاکره کننده', 'نام مذاکره کننده', 'طرف مذاکره']);
+    const rawReportSnippet = getVal(['report', 'report_text', 'گزارش', 'متن گزارش', 'شرح مذاکره']);
+
+    if (!rawNegotiator) {
+      unmatchedCount++;
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: 'نام مذاکره‌کننده موجود نیست' });
+      continue;
+    }
+
+    const cleanTargetNegotiator = rawNegotiator.trim();
+    const pDigits = getPhoneDigits(rawPhone);
+
+    if (!pDigits) {
+      unmatchedCount++;
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: 'شماره تلفن معتبر نیست' });
+      continue;
+    }
+
+    const candidates = phoneMap.get(pDigits) || (pDigits.length > 10 ? phoneMap.get(pDigits.slice(-10)) : undefined) || [];
+
+    if (candidates.length === 0) {
+      unmatchedCount++;
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: 'گزارشی با این شماره در سیستم پیدا نشد' });
+      continue;
+    }
+
+    let bestMatch: any = null;
+    let bestScore = -1;
+    const incomingTime = parseTimeMs(rawDate);
+
+    for (const c of candidates) {
+      let score = 0;
+      if (!isNaN(incomingTime) && c.date_created) {
+        const cTime = parseTimeMs(c.date_created);
+        if (!isNaN(cTime)) {
+          const diffMs = Math.abs(cTime - incomingTime);
+          if (diffMs <= 1000 * 60) {
+            score += 100; // Almost exact second/minute match
+          } else if (diffMs <= 1000 * 3600) {
+            score += 80; // Within 1 hour
+          } else if (diffMs <= 1000 * 3600 * 24) {
+            score += 50; // Within 1 day
+          } else if (diffMs <= 1000 * 3600 * 24 * 7) {
+            score += 20; // Within 7 days
+          }
+        }
+      }
+
+      if (rawReportSnippet && c.report_text) {
+        const snippet = rawReportSnippet.slice(0, 20).trim();
+        if (snippet && c.report_text.includes(snippet)) {
+          score += 150; // High confidence on report text match
+        }
+      }
+
+      if (candidates.length === 1 && score === 0) {
+        score = 10;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = c;
+      }
+    }
+
+    if (!bestMatch) {
+      bestMatch = candidates[0];
+    }
+
+    matchedCount++;
+    const currentNegotiatorName = (bestMatch.negotiator_name || '').trim();
+
+    if (currentNegotiatorName !== cleanTargetNegotiator) {
+      needsUpdateCount++;
+      const patchObj = {
+        id: bestMatch.id,
+        negotiator_name: cleanTargetNegotiator,
+      };
+      patchItemsMap.set(bestMatch.id, patchObj);
+
+      if (previewUpdates.length < 100) {
+        previewUpdates.push({
+          id: bestMatch.id,
+          phone: bestMatch.negotiation_phone || rawPhone,
+          insertDate: rawDate || bestMatch.date_created,
+          current_negotiator: currentNegotiatorName || '(خالی)',
+          new_negotiator: cleanTargetNegotiator,
+        });
+      }
+    } else {
+      alreadyMatchingCount++;
+    }
+  }
+
+  if (isDryRun) {
+    return res.json({
+      dry_run: true,
+      total_input_rows: totalInputRows,
+      matched_count: matchedCount,
+      needs_update_count: needsUpdateCount,
+      already_matching_count: alreadyMatchingCount,
+      unmatched_count: unmatchedCount,
+      preview_updates: previewUpdates,
+      unmatched_samples: unmatchedSamples,
+    });
+  }
+
+  // Execute Batch Patching
+  if (directusUrl && directusAdminToken && patchItemsMap.size > 0) {
+    await directusSafeBatchPatch('customer_reports', patchItemsMap, 50);
+  }
+
+  // Update in-memory fallback
+  for (const [id, patch] of patchItemsMap.entries()) {
+    const idx = reportsData.findIndex((r) => r.id === id);
+    if (idx >= 0) {
+      reportsData[idx].negotiator_name = patch.negotiator_name;
+    }
+  }
+
+  repairReportsCache = null;
+  invalidateReportsCache();
+
+  return res.json({
+    dry_run: false,
+    success: true,
+    total_updated: patchItemsMap.size,
+    message: `نام مذاکره‌کننده ${patchItemsMap.size} گزارش با موفقیت در پایگاه داده اصلاح شد.`,
+  });
 });
 
 export default router;

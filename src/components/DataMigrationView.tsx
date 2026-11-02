@@ -29,6 +29,7 @@ import {
 import { Tenant, Personnel } from '../types';
 import { importLegacyMigrationData, resetMigrationCache, autoAssignFreeCustomersWithReports, backfillTenantsData } from '../api';
 import { toPersianDigits, normalizeLegacyStatus } from '../utils';
+import { RepairNegotiatorsModal } from './RepairNegotiatorsModal';
 
 interface DataMigrationViewProps {
   tenants: Tenant[];
@@ -186,6 +187,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
   // وضعیت پردازش و پیشرفت زنده
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAutoAssigning, setIsAutoAssigning] = useState(false);
+  const [isRepairModalOpen, setIsRepairModalOpen] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [currentPhaseText, setCurrentPhaseText] = useState('');
   const [progressLogs, setProgressLogs] = useState<string[]>([]);
@@ -477,6 +479,14 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
               <span>{isBackfilling ? 'در حال اصلاح شناسه‌ها...' : 'اصلاح شناسه سازمان رکوردهای قبلی'}</span>
             </button>
             <button
+              onClick={() => setIsRepairModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              title="اصلاح بدون خطای نام مذاکره‌کنندگان بر اساس فایل خروجی ۲۵ هزار گزارش بدون آسیب به داده‌های جدید پروداکشن"
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>ترمیم نام مذاکره‌کنندگان (۲۵ هزار گزارش)</span>
+            </button>
+            <button
               onClick={handleLoadSampleData}
               className="px-3.5 py-2 rounded-xl bg-[#252525] hover:bg-[#303030] border border-[#3e3e3e] text-xs font-bold text-[#CCC] hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-sm"
             >
@@ -565,7 +575,32 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         </button>
       </div>
 
-      {/* گام ۱: پرسنل */}
+      {/* کارت ابزار ترمیم و اصلاح نام مذاکره‌کنندگان ۲۵ هزار گزارش */}
+      <div className="bg-[#181818] border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl shadow-amber-500/5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+              <span>ابزار ترمیم و اصلاح نام مذاکره‌کنندگان (۲۵,۰۰۰ گزارش مذاکره)</span>
+              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">بدون ریسک پروداکشن</span>
+            </div>
+            <div className="text-[11px] text-[#A7A7A7] mt-0.5 max-w-2xl leading-relaxed">
+              اصلاح دقیق فیلد اشتباه نام مذاکره‌کننده (`negotiator_name`) بر اساس فایل خروجی دیتابیس قدیمی با تطبیق شماره تماس (`callNum`) و تاریخ ثبت (`insertDate`) بدون کوچک‌ترین تغییر یا آسیب در گزارش‌ها و مشتریان جدید پروداکشن.
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsRepairModalOpen(true)}
+          className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-amber-500/20 cursor-pointer flex-shrink-0"
+        >
+          <FileSpreadsheet className="w-4 h-4" />
+          <span>باز کردن ابزار ترمیم ۲۵ هزار گزارش</span>
+        </button>
+      </div>
       {activeStep === 1 && (
         <div className="bg-[#181818] border border-[#282828] rounded-2xl p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -1017,6 +1052,16 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* مودال ترمیم و اصلاح نام مذاکره‌کنندگان ۲۵ هزار گزارش */}
+      <RepairNegotiatorsModal
+        isOpen={isRepairModalOpen}
+        onClose={() => setIsRepairModalOpen(false)}
+        onSuccess={async () => {
+          await onRefreshData();
+          showToast('نام مذاکره‌کنندگان گزارش‌ها با موفقیت اصلاح شد.', 'success');
+        }}
+      />
     </div>
   );
 };

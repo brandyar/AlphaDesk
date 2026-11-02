@@ -324,13 +324,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={() => onOpenAddReportModal()}
-          className="h-10 px-5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex items-center gap-2 cursor-pointer"
-        >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>ثبت گزارش پیگیری جدید</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onOpenAddReportModal()}
+            className="h-10 px-5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex items-center gap-2 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>ثبت گزارش پیگیری جدید</span>
+          </button>
+        </div>
       </div>
 
       {/* Primary Role-Based Category Filter Bar (Tabs) */}

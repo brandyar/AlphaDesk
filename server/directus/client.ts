@@ -238,29 +238,45 @@ export async function directusSafeBatchInsert(
 export async function directusSafeBatchPatch(
   collection: string,
   patchMap: Map<string, any>,
-  chunkSize = 20
+  chunkSize = 50
 ) {
   if (patchMap.size === 0) return;
+  const cleanCollection = collection.replace(/^\/?items\//, '').replace(/^\//, '');
   const items = Array.from(patchMap.values());
   const chunks = chunkArray(items, chunkSize);
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    if (i > 0) await new Promise((r) => setTimeout(r, 100));
+    if (i > 0) await new Promise((r) => setTimeout(r, 40));
+
+    // Try Directus bulk PATCH first
+    try {
+      await directusFetch(
+        `/items/${cleanCollection}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(chunk),
+        },
+        2
+      );
+      continue;
+    } catch {
+      // Fallback: item-by-item concurrent patch
+    }
 
     await Promise.all(
       chunk.map(async (c: any) => {
         try {
           await directusFetch(
-            `/items/${collection}/${c.id}`,
+            `/items/${cleanCollection}/${c.id}`,
             {
               method: 'PATCH',
               body: JSON.stringify(c),
             },
-            4
+            3
           );
         } catch (err: any) {
-          console.warn(`Failed to patch item ${c.id} in ${collection}:`, err.message);
+          console.warn(`Failed to patch item ${c.id} in ${cleanCollection}:`, err.message);
         }
       })
     );

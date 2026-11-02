@@ -1202,5 +1202,32 @@ export async function backfillTenantsData(): Promise<{
   return handleResponse(res, 'خطا در اصلاح خودکار شناسه‌های سازمان');
 }
 
+export async function repairNegotiators(payload: { dry_run: boolean; items: any[] }): Promise<{
+  dry_run: boolean;
+  total_input_rows: number;
+  matched_count: number;
+  needs_update_count: number;
+  already_matching_count: number;
+  unmatched_count: number;
+  preview_updates: Array<{
+    id: string;
+    phone: string;
+    insertDate: string;
+    current_negotiator: string;
+    new_negotiator: string;
+  }>;
+  unmatched_samples: any[];
+  success?: boolean;
+  total_updated?: number;
+  message?: string;
+}> {
+  const res = await fetch(`${BASE_URL}/customer-reports/repair-negotiators`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, 'خطا در اصلاح نام مذاکره‌کنندگان');
+}
+
 
 
