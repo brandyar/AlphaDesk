@@ -62,8 +62,6 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
     message: string;
   } | null>(null);
 
-  if (!isOpen) return null;
-
   // Process File Upload with UTF-8 array buffer preservation
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -239,6 +237,8 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
         item.insertDate.toLowerCase().includes(q)
     );
   }, [dryRunResult, previewSearch]);
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">

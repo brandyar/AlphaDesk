@@ -41,8 +41,6 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
   initialSelectedCustomerIds = [],
   onMerge,
 }) => {
-  if (!isOpen) return null;
-
   const [selectedIds, setSelectedIds] = useState<string[]>(initialSelectedCustomerIds);
   const [primaryId, setPrimaryId] = useState<string>(initialSelectedCustomerIds[0] || '');
   const [selectedMarketerId, setSelectedMarketerId] = useState<string>('');
@@ -173,6 +171,8 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
       setMerging(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto">

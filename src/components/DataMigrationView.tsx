@@ -1054,14 +1054,16 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
       )}
 
       {/* مودال ترمیم و اصلاح نام مذاکره‌کنندگان ۲۵ هزار گزارش */}
-      <RepairNegotiatorsModal
-        isOpen={isRepairModalOpen}
-        onClose={() => setIsRepairModalOpen(false)}
-        onSuccess={async () => {
-          await onRefreshData();
-          showToast('نام مذاکره‌کنندگان گزارش‌ها با موفقیت اصلاح شد.', 'success');
-        }}
-      />
+      {isRepairModalOpen && (
+        <RepairNegotiatorsModal
+          isOpen={isRepairModalOpen}
+          onClose={() => setIsRepairModalOpen(false)}
+          onSuccess={async () => {
+            await onRefreshData();
+            showToast('نام مذاکره‌کنندگان گزارش‌ها با موفقیت اصلاح شد.', 'success');
+          }}
+        />
+      )}
     </div>
   );
 };
