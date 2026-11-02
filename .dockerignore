@@ -13,3 +13,5 @@ yarn-error.log*
 !COOLIFY.md
 scripts
 bun.lock
+server.js
+dist-server

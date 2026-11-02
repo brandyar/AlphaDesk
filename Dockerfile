@@ -1,19 +1,16 @@
 # ========================================================
 # AlphaDesk CRM - Production Dockerfile for Coolify
 # Multi-stage optimized build for Node.js / Express / Vite
+# Using Debian slim (node:20-slim) for native glibc & zero apk dependency
 # ========================================================
 
 # --- Stage 1: Build Frontend Assets & Backend Bundle ---
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Ensure dev dependencies are installed for Vite & esbuild
 ENV NODE_ENV=development
 ENV PATH="/app/node_modules/.bin:$PATH"
-
-# Install libc6-compat for esbuild compatibility in Alpine
-RUN apk add --no-cache libc6-compat
 
 # Copy package descriptors
 COPY package*.json ./
@@ -28,16 +25,13 @@ COPY . .
 RUN npm run build
 
 # --- Stage 2: Production Execution Image ---
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV PATH="/app/node_modules/.bin:$PATH"
-
-# Install libc6-compat for system compatibility
-RUN apk add --no-cache libc6-compat
 
 # Copy package descriptors and install only production runtime dependencies
 COPY package*.json ./

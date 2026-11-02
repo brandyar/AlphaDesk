@@ -425,26 +425,39 @@ async function directusSafeBatchInsert(collection, items, chunkSize = 50) {
   }
   return inserted;
 }
-async function directusSafeBatchPatch(collection, patchMap, chunkSize = 20) {
+async function directusSafeBatchPatch(collection, patchMap, chunkSize = 50) {
   if (patchMap.size === 0) return;
+  const cleanCollection = collection.replace(/^\/?items\//, "").replace(/^\//, "");
   const items = Array.from(patchMap.values());
   const chunks = chunkArray(items, chunkSize);
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    if (i > 0) await new Promise((r) => setTimeout(r, 100));
+    if (i > 0) await new Promise((r) => setTimeout(r, 40));
+    try {
+      await directusFetch(
+        `/items/${cleanCollection}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(chunk)
+        },
+        2
+      );
+      continue;
+    } catch {
+    }
     await Promise.all(
       chunk.map(async (c) => {
         try {
           await directusFetch(
-            `/items/${collection}/${c.id}`,
+            `/items/${cleanCollection}/${c.id}`,
             {
               method: "PATCH",
               body: JSON.stringify(c)
             },
-            4
+            3
           );
         } catch (err) {
-          console.warn(`Failed to patch item ${c.id} in ${collection}:`, err.message);
+          console.warn(`Failed to patch item ${c.id} in ${cleanCollection}:`, err.message);
         }
       })
     );
@@ -2773,13 +2786,93 @@ router3.post("/check-duplicate", async (req, res) => {
   );
   res.json(dup || { isDuplicate: false });
 });
+function matchesCustomerSearch(c, searchStr) {
+  if (!c) return false;
+  if (!searchStr || !searchStr.trim()) return true;
+  const raw = searchStr.trim().toLowerCase();
+  const normRaw = normalizePersianString(raw);
+  const persianDigits = "\u06F0\u06F1\u06F2\u06F3\u06F4\u06F5\u06F6\u06F7\u06F8\u06F9";
+  const arabicDigits = "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669";
+  const digitsOnly = raw.replace(/[۰-۹]/g, (w) => persianDigits.indexOf(w).toString()).replace(/[٠-٩]/g, (w) => arabicDigits.indexOf(w).toString()).replace(/[^\d]/g, "");
+  if (c.company_name?.toLowerCase().includes(raw) || normalizePersianString(c.company_name).includes(normRaw) || c.manager_name?.toLowerCase().includes(raw) || normalizePersianString(c.manager_name).includes(normRaw) || c.negotiator_name?.toLowerCase().includes(raw) || normalizePersianString(c.negotiator_name).includes(normRaw) || c.city?.toLowerCase().includes(raw) || normalizePersianString(c.city).includes(normRaw) || c.province?.toLowerCase().includes(raw) || normalizePersianString(c.province).includes(normRaw) || c.business_type?.toLowerCase().includes(raw) || normalizePersianString(c.business_type).includes(normRaw) || c.assigned_marketer_name?.toLowerCase().includes(raw) || normalizePersianString(c.assigned_marketer_name).includes(normRaw)) {
+    return true;
+  }
+  const isMatchVal = (val) => {
+    if (!val) return false;
+    const sVal = String(val).trim().toLowerCase();
+    if (!sVal) return false;
+    if (sVal.includes(raw)) return true;
+    if (digitsOnly.length >= 3) {
+      const cleanPhoneDigits = sVal.replace(/[^\d]/g, "");
+      if (cleanPhoneDigits.includes(digitsOnly)) return true;
+      const pNoZero = cleanPhoneDigits.replace(/^(0|98|\+98)/, "");
+      const sNoZero = digitsOnly.replace(/^(0|98|\+98)/, "");
+      if (pNoZero && sNoZero && pNoZero.includes(sNoZero)) return true;
+    }
+    return false;
+  };
+  const phoneLists = [
+    ...Array.isArray(c.mobile_numbers) ? c.mobile_numbers : [c.mobile_numbers],
+    ...Array.isArray(c.landline_numbers) ? c.landline_numbers : [c.landline_numbers],
+    ...Array.isArray(c.manager_phones) ? c.manager_phones : [c.manager_phones],
+    ...Array.isArray(c.negotiator_phones) ? c.negotiator_phones : [c.negotiator_phones],
+    c.telegram_phone,
+    ...Array.isArray(c.telegram_ids) ? c.telegram_ids : [c.telegram_ids],
+    ...Array.isArray(c.instagram_ids) ? c.instagram_ids : [c.instagram_ids],
+    ...Array.isArray(c.emails) ? c.emails : [c.emails]
+  ];
+  if (phoneLists.some(isMatchVal)) return true;
+  if (Array.isArray(c.contacts)) {
+    for (const ct of c.contacts) {
+      if (ct && (isMatchVal(ct.value) || isMatchVal(ct.normalized_value) || isMatchVal(ct.contact_name))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+function sortCustomersList(items, sortKey) {
+  if (!items || items.length <= 1) return items || [];
+  const list = [...items];
+  if (sortKey === "next_followup_asc" || sortKey === "next_followup_date") {
+    return list.sort((a, b) => {
+      if (!a.next_followup_date && !b.next_followup_date) return 0;
+      if (!a.next_followup_date) return 1;
+      if (!b.next_followup_date) return -1;
+      return new Date(a.next_followup_date).getTime() - new Date(b.next_followup_date).getTime();
+    });
+  }
+  if (sortKey === "next_followup_desc" || sortKey === "-next_followup_date") {
+    return list.sort((a, b) => {
+      if (!a.next_followup_date && !b.next_followup_date) return 0;
+      if (!a.next_followup_date) return 1;
+      if (!b.next_followup_date) return -1;
+      return new Date(b.next_followup_date).getTime() - new Date(a.next_followup_date).getTime();
+    });
+  }
+  if (sortKey === "company_name_asc") {
+    return list.sort((a, b) => (a.company_name || "").localeCompare(b.company_name || "", "fa"));
+  }
+  if (sortKey === "deadline_asc") {
+    return list.sort((a, b) => {
+      if (!a.assignment_deadline && !b.assignment_deadline) return 0;
+      if (!a.assignment_deadline) return 1;
+      if (!b.assignment_deadline) return -1;
+      return new Date(a.assignment_deadline).getTime() - new Date(b.assignment_deadline).getTime();
+    });
+  }
+  return list.sort(
+    (a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
+  );
+}
 router3.get("/", async (req, res) => {
-  const { search, status, marketer_id, expired_only, page, limit, free_only, all } = req.query;
+  const { search, status, marketer_id, expired_only, page, limit, free_only, all, sort } = req.query;
   const { userId, personnelId, isAdmin, userName, tenantId, canViewAllCustomers } = getRequestUser(req);
   const isUnlimited = all === "true" || limit === "all" || limit === "20000";
   const reqLimit = isUnlimited ? 500 : limit ? Math.min(Math.max(1, parseInt(String(limit), 10)), 500) : 25;
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
   const isFreeOnly = free_only === "true";
+  const sortKey = typeof sort === "string" && sort.trim() ? sort.trim() : "next_followup_asc";
   if (!isAdmin && !canViewAllCustomers && !userId && !personnelId && !isFreeOnly) {
     return res.json({
       data: [],
@@ -2798,11 +2891,8 @@ router3.get("/", async (req, res) => {
         (c) => c.assigned_marketer_id === personnelId || c.assigned_marketer_id === userId || userName && c.assigned_marketer_name === userName
       );
     }
-    if (search && typeof search === "string") {
-      const s = search.toLowerCase();
-      list2 = list2.filter(
-        (c) => c.company_name?.toLowerCase().includes(s) || c.manager_name?.toLowerCase().includes(s) || c.city?.toLowerCase().includes(s) || c.business_type?.toLowerCase().includes(s)
-      );
+    if (search && typeof search === "string" && search.trim()) {
+      list2 = list2.filter((c) => matchesCustomerSearch(c, search));
     }
     if (status && status !== "\u0647\u0645\u0647") {
       list2 = list2.filter((c) => c.status === status);
@@ -2816,12 +2906,18 @@ router3.get("/", async (req, res) => {
     if (isFreeOnly) {
       list2 = list2.filter((c) => !c.assigned_marketer_id || c.is_expired);
     }
+    list2 = sortCustomersList(list2, sortKey);
     return res.json(list2);
   }
   if (directusUrl && directusAdminToken) {
     try {
-      let directusPath = `/items/customers?page=${reqPage}&limit=${reqLimit}&meta=*&sort=-date_created`;
-      directusPath += `&fields=id,company_name,business_type,province,city,manager_name,negotiator_name,mobile_numbers,landline_numbers,next_followup_date,assigned_marketer_id,assigned_marketer_name,assignment_deadline,status,is_expired,claimed_from_pool,date_created,date_updated,tenant_id`;
+      let dSort = "-date_created";
+      if (sortKey === "next_followup_asc" || sortKey === "next_followup_date") dSort = "next_followup_date";
+      else if (sortKey === "next_followup_desc" || sortKey === "-next_followup_date") dSort = "-next_followup_date";
+      else if (sortKey === "company_name_asc") dSort = "company_name";
+      else if (sortKey === "deadline_asc") dSort = "assignment_deadline";
+      let directusPath = `/items/customers?page=${reqPage}&limit=${reqLimit}&meta=*&sort=${encodeURIComponent(dSort)}`;
+      directusPath += `&fields=id,company_name,business_type,province,city,manager_name,manager_phones,negotiator_name,negotiator_phones,mobile_numbers,landline_numbers,telegram_phone,telegram_ids,instagram_ids,emails,websites,next_followup_date,assigned_marketer_id,assigned_marketer_name,assignment_deadline,status,is_expired,claimed_from_pool,date_created,date_updated,tenant_id`;
       let andIdx = 0;
       if (tenantId && tenantId !== "all") {
         const tenantNum = resolveDirectusTenantId(tenantId);
@@ -2863,15 +2959,39 @@ router3.get("/", async (req, res) => {
         directusPath += `&filter[_and][${andIdx}][_or][0][assigned_marketer_id][_null]=true&filter[_and][${andIdx}][_or][1][is_expired][_eq]=true`;
         andIdx++;
       }
+      let contactMatchedCustomerIds = [];
       if (search && typeof search === "string" && search.trim()) {
-        const s = search.trim();
-        directusPath += `&filter[_and][${andIdx}][_or][0][company_name][_icontains]=${encodeURIComponent(
-          s
-        )}&filter[_and][${andIdx}][_or][1][manager_name][_icontains]=${encodeURIComponent(
-          s
-        )}&filter[_and][${andIdx}][_or][2][city][_icontains]=${encodeURIComponent(
-          s
-        )}&filter[_and][${andIdx}][_or][3][business_type][_icontains]=${encodeURIComponent(s)}`;
+        const cleanSearch = search.trim();
+        const digits = cleanSearch.replace(/[^\d]/g, "");
+        try {
+          const contactOrFilters = [
+            `filter[_or][0][value][_icontains]=${encodeURIComponent(cleanSearch)}`,
+            `filter[_or][1][normalized_value][_icontains]=${encodeURIComponent(cleanSearch)}`,
+            `filter[_or][2][contact_name][_icontains]=${encodeURIComponent(cleanSearch)}`
+          ];
+          if (digits.length >= 3) {
+            contactOrFilters.push(`filter[_or][3][value][_icontains]=${encodeURIComponent(digits)}`);
+            contactOrFilters.push(`filter[_or][4][normalized_value][_icontains]=${encodeURIComponent(digits)}`);
+          }
+          const cRes = await directusFetch(
+            `/items/customer_contacts?${contactOrFilters.join("&")}&fields=customer_id&limit=500`
+          ).catch(() => null);
+          if (cRes?.data && Array.isArray(cRes.data)) {
+            contactMatchedCustomerIds = cRes.data.map((ct) => typeof ct.customer_id === "object" ? ct.customer_id?.id : ct.customer_id).filter(Boolean);
+          }
+        } catch {
+        }
+        const s = cleanSearch;
+        let sOrIdx = 0;
+        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][company_name][_icontains]=${encodeURIComponent(s)}`;
+        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][manager_name][_icontains]=${encodeURIComponent(s)}`;
+        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][negotiator_name][_icontains]=${encodeURIComponent(s)}`;
+        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][city][_icontains]=${encodeURIComponent(s)}`;
+        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][business_type][_icontains]=${encodeURIComponent(s)}`;
+        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][telegram_phone][_icontains]=${encodeURIComponent(s)}`;
+        for (const cid of contactMatchedCustomerIds) {
+          directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][id][_eq]=${encodeURIComponent(cid)}`;
+        }
         andIdx++;
       }
       const resData = await directusFetch(directusPath, {}, 1).catch(() => null);
@@ -2896,11 +3016,9 @@ router3.get("/", async (req, res) => {
           });
         }
         if (search && typeof search === "string" && search.trim()) {
-          const s = search.trim().toLowerCase();
-          items = items.filter(
-            (c) => c.company_name?.toLowerCase().includes(s) || c.manager_name?.toLowerCase().includes(s) || c.city?.toLowerCase().includes(s) || c.business_type?.toLowerCase().includes(s) || Array.isArray(c.mobile_numbers) && c.mobile_numbers.some((m) => m.includes(s)) || Array.isArray(c.landline_numbers) && c.landline_numbers.some((l) => l.includes(s))
-          );
+          items = items.filter((c) => matchesCustomerSearch(c, search));
         }
+        items = sortCustomersList(items, sortKey);
         const filterCount = resData.meta?.filter_count ?? items.length;
         const totalCount2 = resData.meta?.total_count ?? filterCount;
         const totalPages2 = Math.max(1, Math.ceil(filterCount / reqLimit));
@@ -2936,11 +3054,8 @@ router3.get("/", async (req, res) => {
       (c) => c.assigned_marketer_id === personnelId || c.assigned_marketer_id === userId || userName && c.assigned_marketer_name === userName
     );
   }
-  if (search && typeof search === "string") {
-    const s = search.toLowerCase();
-    list = list.filter(
-      (c) => c.company_name?.toLowerCase().includes(s) || c.manager_name?.toLowerCase().includes(s) || c.city?.toLowerCase().includes(s) || c.business_type?.toLowerCase().includes(s)
-    );
+  if (search && typeof search === "string" && search.trim()) {
+    list = list.filter((c) => matchesCustomerSearch(c, search));
   }
   if (status && status !== "\u0647\u0645\u0647") {
     list = list.filter((c) => c.status === status);
@@ -2954,6 +3069,7 @@ router3.get("/", async (req, res) => {
   if (isFreeOnly) {
     list = list.filter((c) => !c.assigned_marketer_id || c.is_expired);
   }
+  list = sortCustomersList(list, sortKey);
   const totalCount = list.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / reqLimit));
   const startIndex = (reqPage - 1) * reqLimit;
@@ -4310,6 +4426,198 @@ router4.delete("/:id", async (req, res) => {
   }
   invalidateReportsCache();
   res.status(204).send();
+});
+var repairReportsCache = null;
+var repairReportsCacheTime = 0;
+router4.post("/repair-negotiators", async (req, res) => {
+  const { items, dry_run } = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: "\u0622\u0631\u0627\u06CC\u0647 \u0631\u06A9\u0648\u0631\u062F\u0647\u0627\u06CC \u0641\u0627\u06CC\u0644 \u0627\u0631\u0633\u0627\u0644 \u0646\u0634\u062F\u0647 \u0627\u0633\u062A." });
+  }
+  const isDryRun = dry_run !== false;
+  let existingReports = [];
+  if (repairReportsCache && Date.now() - repairReportsCacheTime < 5 * 60 * 1e3) {
+    existingReports = repairReportsCache;
+  } else if (directusUrl && directusAdminToken) {
+    try {
+      const directusRes = await directusFetchAllPages(
+        "/items/customer_reports?fields=id,negotiation_phone,date_created,negotiator_name,report_text",
+        {},
+        1e5
+      );
+      existingReports = directusRes.data || [];
+      repairReportsCache = existingReports;
+      repairReportsCacheTime = Date.now();
+    } catch (e) {
+      console.warn("Failed to fetch Directus reports for repair, fallback to cache:", e.message);
+      existingReports = await ensureReportsCache().catch(() => reportsData);
+    }
+  } else {
+    existingReports = await ensureReportsCache().catch(() => reportsData);
+  }
+  const getPhoneDigits = (str) => {
+    if (!str) return "";
+    let clean = String(str).replace(/[^\d]/g, "");
+    if (clean.startsWith("0098") && clean.length > 12) {
+      clean = clean.slice(4);
+    } else if (clean.startsWith("98") && clean.length === 12) {
+      clean = clean.slice(2);
+    }
+    return clean.replace(/^0+/, "");
+  };
+  const parseTimeMs = (dateStr) => {
+    if (!dateStr) return NaN;
+    const str = String(dateStr).trim();
+    let ms = new Date(str).getTime();
+    if (isNaN(ms)) {
+      ms = new Date(str.replace(" ", "T")).getTime();
+    }
+    return ms;
+  };
+  const phoneMap = /* @__PURE__ */ new Map();
+  for (const rep of existingReports) {
+    const pDigits = getPhoneDigits(rep.negotiation_phone);
+    if (pDigits) {
+      if (!phoneMap.has(pDigits)) phoneMap.set(pDigits, []);
+      phoneMap.get(pDigits).push(rep);
+      if (pDigits.length > 10) {
+        const last10 = pDigits.slice(-10);
+        if (!phoneMap.has(last10)) phoneMap.set(last10, []);
+        phoneMap.get(last10).push(rep);
+      }
+    }
+  }
+  const totalInputRows = items.length;
+  let matchedCount = 0;
+  let needsUpdateCount = 0;
+  let alreadyMatchingCount = 0;
+  let unmatchedCount = 0;
+  const patchItemsMap = /* @__PURE__ */ new Map();
+  const previewUpdates = [];
+  const unmatchedSamples = [];
+  for (const r of items) {
+    const getVal = (aliases) => {
+      for (const a of aliases) {
+        if (r[a] !== void 0 && r[a] !== null && String(r[a]).trim() !== "") {
+          return String(r[a]).trim();
+        }
+        const found = Object.keys(r).find((k) => k.trim().toLowerCase() === a.toLowerCase());
+        if (found && r[found] !== void 0 && r[found] !== null && String(r[found]).trim() !== "") {
+          return String(r[found]).trim();
+        }
+      }
+      return "";
+    };
+    const rawPhone = getVal(["callNum", "call_num", "negotiation_phone", "phone", "mobile", "\u0634\u0645\u0627\u0631\u0647 \u062A\u0645\u0627\u0633", "\u062A\u0644\u0641\u0646", "\u0645\u0648\u0628\u0627\u06CC\u0644", "\u0634\u0645\u0627\u0631\u0647"]);
+    const rawDate = getVal(["insertDate", "insert_date", "date_created", "dateTime", "datetime", "updateDate", "\u062A\u0627\u0631\u06CC\u062E \u062B\u0628\u062A", "\u062A\u0627\u0631\u06CC\u062E"]);
+    const rawNegotiator = getVal(["negotiator", "negotiator_name", "user", "personnel_name", "\u0645\u0630\u0627\u06A9\u0631\u0647\u200C\u06A9\u0646\u0646\u062F\u0647", "\u0645\u0630\u0627\u06A9\u0631\u0647 \u06A9\u0646\u0646\u062F\u0647", "\u0646\u0627\u0645 \u0645\u0630\u0627\u06A9\u0631\u0647 \u06A9\u0646\u0646\u062F\u0647", "\u0637\u0631\u0641 \u0645\u0630\u0627\u06A9\u0631\u0647"]);
+    const rawReportSnippet = getVal(["report", "report_text", "\u06AF\u0632\u0627\u0631\u0634", "\u0645\u062A\u0646 \u06AF\u0632\u0627\u0631\u0634", "\u0634\u0631\u062D \u0645\u0630\u0627\u06A9\u0631\u0647"]);
+    if (!rawNegotiator) {
+      unmatchedCount++;
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: "\u0646\u0627\u0645 \u0645\u0630\u0627\u06A9\u0631\u0647\u200C\u06A9\u0646\u0646\u062F\u0647 \u0645\u0648\u062C\u0648\u062F \u0646\u06CC\u0633\u062A" });
+      continue;
+    }
+    const cleanTargetNegotiator = rawNegotiator.trim();
+    const pDigits = getPhoneDigits(rawPhone);
+    if (!pDigits) {
+      unmatchedCount++;
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: "\u0634\u0645\u0627\u0631\u0647 \u062A\u0644\u0641\u0646 \u0645\u0639\u062A\u0628\u0631 \u0646\u06CC\u0633\u062A" });
+      continue;
+    }
+    const candidates = phoneMap.get(pDigits) || (pDigits.length > 10 ? phoneMap.get(pDigits.slice(-10)) : void 0) || [];
+    if (candidates.length === 0) {
+      unmatchedCount++;
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: "\u06AF\u0632\u0627\u0631\u0634\u06CC \u0628\u0627 \u0627\u06CC\u0646 \u0634\u0645\u0627\u0631\u0647 \u062F\u0631 \u0633\u06CC\u0633\u062A\u0645 \u067E\u06CC\u062F\u0627 \u0646\u0634\u062F" });
+      continue;
+    }
+    let bestMatch = null;
+    let bestScore = -1;
+    const incomingTime = parseTimeMs(rawDate);
+    for (const c of candidates) {
+      let score = 0;
+      if (!isNaN(incomingTime) && c.date_created) {
+        const cTime = parseTimeMs(c.date_created);
+        if (!isNaN(cTime)) {
+          const diffMs = Math.abs(cTime - incomingTime);
+          if (diffMs <= 1e3 * 60) {
+            score += 100;
+          } else if (diffMs <= 1e3 * 3600) {
+            score += 80;
+          } else if (diffMs <= 1e3 * 3600 * 24) {
+            score += 50;
+          } else if (diffMs <= 1e3 * 3600 * 24 * 7) {
+            score += 20;
+          }
+        }
+      }
+      if (rawReportSnippet && c.report_text) {
+        const snippet = rawReportSnippet.slice(0, 20).trim();
+        if (snippet && c.report_text.includes(snippet)) {
+          score += 150;
+        }
+      }
+      if (candidates.length === 1 && score === 0) {
+        score = 10;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = c;
+      }
+    }
+    if (!bestMatch) {
+      bestMatch = candidates[0];
+    }
+    matchedCount++;
+    const currentNegotiatorName = (bestMatch.negotiator_name || "").trim();
+    if (currentNegotiatorName !== cleanTargetNegotiator) {
+      needsUpdateCount++;
+      const patchObj = {
+        id: bestMatch.id,
+        negotiator_name: cleanTargetNegotiator
+      };
+      patchItemsMap.set(bestMatch.id, patchObj);
+      if (previewUpdates.length < 100) {
+        previewUpdates.push({
+          id: bestMatch.id,
+          phone: bestMatch.negotiation_phone || rawPhone,
+          insertDate: rawDate || bestMatch.date_created,
+          current_negotiator: currentNegotiatorName || "(\u062E\u0627\u0644\u06CC)",
+          new_negotiator: cleanTargetNegotiator
+        });
+      }
+    } else {
+      alreadyMatchingCount++;
+    }
+  }
+  if (isDryRun) {
+    return res.json({
+      dry_run: true,
+      total_input_rows: totalInputRows,
+      matched_count: matchedCount,
+      needs_update_count: needsUpdateCount,
+      already_matching_count: alreadyMatchingCount,
+      unmatched_count: unmatchedCount,
+      preview_updates: previewUpdates,
+      unmatched_samples: unmatchedSamples
+    });
+  }
+  if (directusUrl && directusAdminToken && patchItemsMap.size > 0) {
+    await directusSafeBatchPatch("customer_reports", patchItemsMap, 50);
+  }
+  for (const [id, patch] of patchItemsMap.entries()) {
+    const idx = reportsData.findIndex((r) => r.id === id);
+    if (idx >= 0) {
+      reportsData[idx].negotiator_name = patch.negotiator_name;
+    }
+  }
+  repairReportsCache = null;
+  invalidateReportsCache();
+  return res.json({
+    dry_run: false,
+    success: true,
+    total_updated: patchItemsMap.size,
+    message: `\u0646\u0627\u0645 \u0645\u0630\u0627\u06A9\u0631\u0647\u200C\u06A9\u0646\u0646\u062F\u0647 ${patchItemsMap.size} \u06AF\u0632\u0627\u0631\u0634 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062F\u0631 \u067E\u0627\u06CC\u06AF\u0627\u0647 \u062F\u0627\u062F\u0647 \u0627\u0635\u0644\u0627\u062D \u0634\u062F.`
+  });
 });
 var reports_routes_default = router4;
 
@@ -7723,6 +8031,9 @@ app.use(auth_routes_default);
 app.use("/api/personnel", personnel_routes_default);
 app.use("/api/customers", customers_routes_default);
 app.use("/api/customer-reports", reports_routes_default);
+app.use("/customer-reports", reports_routes_default);
+app.use("/api/reports", reports_routes_default);
+app.use("/reports", reports_routes_default);
 app.use("/api/contacts", contacts_routes_default);
 app.use("/contacts", contacts_routes_default);
 app.use("/api/tenants", tenants_routes_default);
