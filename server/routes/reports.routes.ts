@@ -892,8 +892,10 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
     return ms;
   };
 
-  // Build O(1) phone indexes
+  // Build O(1) phone and minute time indexes
   const phoneMap = new Map<string, any[]>();
+  const minuteMap = new Map<number, any[]>();
+
   for (const rep of existingReports) {
     const pDigits = getPhoneDigits(rep.negotiation_phone);
     if (pDigits) {
@@ -904,6 +906,15 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
         const last10 = pDigits.slice(-10);
         if (!phoneMap.has(last10)) phoneMap.set(last10, []);
         phoneMap.get(last10)!.push(rep);
+      }
+    }
+
+    if (rep.date_created) {
+      const ms = parseTimeMs(rep.date_created);
+      if (!isNaN(ms)) {
+        const minKey = Math.floor(ms / 60000);
+        if (!minuteMap.has(minKey)) minuteMap.set(minKey, []);
+        minuteMap.get(minKey)!.push(rep);
       }
     }
   }
@@ -967,17 +978,28 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
     const normNextDate = normalizeToIsoDateTime(rawNextDate);
     const pDigits = getPhoneDigits(rawPhone);
 
-    if (!pDigits) {
-      unmatchedCount++;
-      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: 'شماره تلفن معتبر نیست' });
-      continue;
+    let candidates: any[] = [];
+    if (pDigits) {
+      candidates = phoneMap.get(pDigits) || (pDigits.length > 10 ? phoneMap.get(pDigits.slice(-10)) : undefined) || [];
     }
 
-    const candidates = phoneMap.get(pDigits) || (pDigits.length > 10 ? phoneMap.get(pDigits.slice(-10)) : undefined) || [];
+    // Fallback search by time window +/- 15 minutes if no phone match
+    if (candidates.length === 0) {
+      const incomingTime = parseTimeMs(rawDate);
+      if (!isNaN(incomingTime)) {
+        const incMin = Math.floor(incomingTime / 60000);
+        for (let m = incMin - 15; m <= incMin + 15; m++) {
+          const list = minuteMap.get(m);
+          if (list) {
+            candidates.push(...list);
+          }
+        }
+      }
+    }
 
     if (candidates.length === 0) {
       unmatchedCount++;
-      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: 'گزارشی با این شماره در سیستم پیدا نشد' });
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: 'گزارشی با این شماره یا تاریخ در سیستم پیدا نشد' });
       continue;
     }
 
@@ -987,31 +1009,48 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
 
     for (const c of candidates) {
       let score = 0;
+
+      // 1. Phone match score
+      if (pDigits && c.negotiation_phone) {
+        const cPhoneDigits = getPhoneDigits(c.negotiation_phone);
+        if (cPhoneDigits && (cPhoneDigits === pDigits || cPhoneDigits.endsWith(pDigits) || pDigits.endsWith(cPhoneDigits))) {
+          score += 100;
+        }
+      }
+
+      // 2. Time proximity score (minute window tolerance)
       if (!isNaN(incomingTime) && c.date_created) {
         const cTime = parseTimeMs(c.date_created);
         if (!isNaN(cTime)) {
-          const diffMs = Math.abs(cTime - incomingTime);
-          if (diffMs <= 1000 * 60) {
-            score += 100;
-          } else if (diffMs <= 1000 * 3600) {
-            score += 80;
-          } else if (diffMs <= 1000 * 3600 * 24) {
-            score += 50;
-          } else if (diffMs <= 1000 * 3600 * 24 * 7) {
-            score += 20;
+          const diffMinutes = Math.abs(Math.round((cTime - incomingTime) / 60000));
+          if (diffMinutes === 0) {
+            score += 120; // Exact minute match!
+          } else if (diffMinutes <= 2) {
+            score += 90;  // Within 2 minutes
+          } else if (diffMinutes <= 10) {
+            score += 50;  // Within 10 minutes
+          } else if (diffMinutes <= 60) {
+            score += 20;  // Within 1 hour
           }
         }
       }
 
+      // 3. Report snippet text match
       if (rawReportSnippet && c.report_text) {
-        const snippet = rawReportSnippet.slice(0, 20).trim();
-        if (snippet && c.report_text.includes(snippet)) {
-          score += 150;
+        const cleanSnippet = rawReportSnippet.slice(0, 15).replace(/[^\w\u0600-\u06FF]/g, '').trim();
+        const cleanCReport = c.report_text.slice(0, 30).replace(/[^\w\u0600-\u06FF]/g, '').trim();
+        if (cleanSnippet && cleanCReport && (cleanCReport.includes(cleanSnippet) || cleanSnippet.includes(cleanCReport))) {
+          score += 150; // High confidence on report text match
         }
       }
 
-      if (candidates.length === 1 && score === 0) {
-        score = 10;
+      // 4. Negotiator / Staff name match
+      if (rawNegotiator && c.negotiator_name) {
+        const normN1 = fixMojibake(rawNegotiator).trim();
+        const normN2 = fixMojibake(c.negotiator_name).trim();
+        if (normN1 && normN2 && (normN1 === normN2 || normN1.includes(normN2) || normN2.includes(normN1))) {
+          score += 30;
+        }
       }
 
       if (score > bestScore) {
@@ -1020,8 +1059,17 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
       }
     }
 
+    // Threshold check for non-phone matching: require score >= 80 to avoid false positives
+    if (!pDigits && bestScore < 80) {
+      unmatchedCount++;
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: 'گزارش بدون شماره تلفن، تطبیق زمان یا متن کافی در سیستم نداشت' });
+      continue;
+    }
+
     if (!bestMatch) {
-      bestMatch = candidates[0];
+      unmatchedCount++;
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: 'هیچ رکوردی برای تطبیق یافت نشد' });
+      continue;
     }
 
     matchedCount++;
