@@ -754,15 +754,15 @@ router.delete('/:id', async (req: Request, res: Response) => {
 let repairReportsCache: any[] | null = null;
 let repairReportsCacheTime = 0;
 
-// POST /api/reports/repair-negotiators - Fast & Safe Repair of negotiator_name for legacy imported reports
+// POST /api/reports/repair-negotiators - Fast & Safe Repair of negotiator_name & next_followup_date for legacy imported reports
 router.post('/repair-negotiators', async (req: Request, res: Response) => {
-  const { items, dry_run } = req.body;
+  const { items, dry_run, repair_negotiators, repair_followups, repair_type } = req.body;
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'آرایه رکوردهای فایل ارسال نشده است.' });
   }
 
-  const nowIso = new Date().toISOString();
-
+  const repairNegotiatorsOpt = repair_negotiators !== false && repair_type !== 'followup_date';
+  const repairFollowupsOpt = repair_followups !== false && repair_type !== 'negotiator';
 
   const isDryRun = dry_run !== false;
 
@@ -773,7 +773,7 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
   } else if (directusUrl && directusAdminToken) {
     try {
       const directusRes = await directusFetchAllPages(
-        '/items/customer_reports?fields=id,negotiation_phone,date_created,negotiator_name,customer_negotiator_name,report_text',
+        '/items/customer_reports?fields=id,negotiation_phone,date_created,negotiator_name,customer_negotiator_name,next_followup_date,report_text',
         {},
         100000
       );
@@ -892,8 +892,6 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
     return ms;
   };
 
-
-
   // Build O(1) phone indexes
   const phoneMap = new Map<string, any[]>();
   for (const rep of existingReports) {
@@ -939,13 +937,34 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
     const rawNegotiator = getVal(['negotiator', 'negotiator_name', 'user', 'personnel_name', 'مذاکره‌کننده', 'مذاکره کننده', 'نام مذاکره کننده', 'طرف مذاکره']);
     const rawReportSnippet = getVal(['report', 'report_text', 'گزارش', 'متن گزارش', 'شرح مذاکره']);
 
-    if (!rawNegotiator) {
+    let rawNextDate = getVal([
+      'nextFollow',
+      'next_followup_date',
+      'next_followup',
+      'next_date',
+      'nextDate',
+      'next_follow',
+      'تاریخ پیگیری بعدی',
+      'تاریخ پیگیری',
+      'موعد پیگیری',
+    ]);
+
+    if (!rawNextDate) {
+      const nextP = getVal(['next', 'تاریخ پیگیری']);
+      const followP = getVal(['follow', 'زمان پیگیری', 'ساعت پیگیری']);
+      if (nextP) {
+        rawNextDate = followP ? `${nextP} ${followP}` : nextP;
+      }
+    }
+
+    if (!rawNegotiator && !rawNextDate) {
       unmatchedCount++;
-      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: 'نام مذاکره‌کننده موجود نیست' });
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: 'اطلاعات نام یا تاریخ پیگیری در فایل موجود نیست' });
       continue;
     }
 
     const cleanTargetNegotiator = fixMojibake(rawNegotiator.trim());
+    const normNextDate = normalizeToIsoDateTime(rawNextDate);
     const pDigits = getPhoneDigits(rawPhone);
 
     if (!pDigits) {
@@ -973,13 +992,13 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
         if (!isNaN(cTime)) {
           const diffMs = Math.abs(cTime - incomingTime);
           if (diffMs <= 1000 * 60) {
-            score += 100; // Almost exact second/minute match
+            score += 100;
           } else if (diffMs <= 1000 * 3600) {
-            score += 80; // Within 1 hour
+            score += 80;
           } else if (diffMs <= 1000 * 3600 * 24) {
-            score += 50; // Within 1 day
+            score += 50;
           } else if (diffMs <= 1000 * 3600 * 24 * 7) {
-            score += 20; // Within 7 days
+            score += 20;
           }
         }
       }
@@ -987,7 +1006,7 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
       if (rawReportSnippet && c.report_text) {
         const snippet = rawReportSnippet.slice(0, 20).trim();
         if (snippet && c.report_text.includes(snippet)) {
-          score += 150; // High confidence on report text match
+          score += 150;
         }
       }
 
@@ -1007,13 +1026,20 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
 
     matchedCount++;
     const currentCustomerNegotiator = (bestMatch.customer_negotiator_name || '').trim();
+    const currentFollowupDate = bestMatch.next_followup_date || null;
 
-    if (currentCustomerNegotiator !== cleanTargetNegotiator) {
+    const negotiatorNeedsUpdate = repairNegotiatorsOpt && Boolean(cleanTargetNegotiator) && (currentCustomerNegotiator !== cleanTargetNegotiator);
+    const followupNeedsUpdate = repairFollowupsOpt && Boolean(normNextDate) && (currentFollowupDate !== normNextDate);
+
+    if (negotiatorNeedsUpdate || followupNeedsUpdate) {
       needsUpdateCount++;
-      const patchObj = {
-        id: bestMatch.id,
-        customer_negotiator_name: cleanTargetNegotiator,
-      };
+      const patchObj: Record<string, any> = { id: bestMatch.id };
+      if (negotiatorNeedsUpdate) {
+        patchObj.customer_negotiator_name = cleanTargetNegotiator;
+      }
+      if (followupNeedsUpdate) {
+        patchObj.next_followup_date = normNextDate;
+      }
       patchItemsMap.set(bestMatch.id, patchObj);
 
       if (previewUpdates.length < 100) {
@@ -1023,6 +1049,10 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
           insertDate: bestMatch.date_created || rawDate,
           current_negotiator: fixMojibake(currentCustomerNegotiator) || '(خالی)',
           new_negotiator: fixMojibake(cleanTargetNegotiator),
+          current_followup_date: currentFollowupDate,
+          new_followup_date: normNextDate,
+          negotiator_changed: negotiatorNeedsUpdate,
+          followup_changed: followupNeedsUpdate,
         });
       }
     } else {
@@ -1052,7 +1082,12 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
   for (const [id, patch] of patchItemsMap.entries()) {
     const idx = reportsData.findIndex((r) => r.id === id);
     if (idx >= 0) {
-      reportsData[idx].customer_negotiator_name = patch.customer_negotiator_name;
+      if (patch.customer_negotiator_name !== undefined) {
+        reportsData[idx].customer_negotiator_name = patch.customer_negotiator_name;
+      }
+      if (patch.next_followup_date !== undefined) {
+        reportsData[idx].next_followup_date = patch.next_followup_date;
+      }
     }
   }
 
@@ -1063,7 +1098,7 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
     dry_run: false,
     success: true,
     total_updated: patchItemsMap.size,
-    message: `طرف مذاکره مشتری (فیلد customer_negotiator_name) برای ${patchItemsMap.size} گزارش با موفقیت در پایگاه داده ذخیره شد.`,
+    message: `اطلاعات (طرف مذاکره و تاریخ پیگیری بعدی) برای ${patchItemsMap.size} گزارش با موفقیت در پایگاه داده ترمیم و ذخیره شد.`,
   });
 });
 

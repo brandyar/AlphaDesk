@@ -1202,20 +1202,32 @@ export async function backfillTenantsData(): Promise<{
   return handleResponse(res, 'خطا در اصلاح خودکار شناسه‌های سازمان');
 }
 
-export async function repairNegotiators(payload: { dry_run: boolean; items: any[] }): Promise<{
+export interface RepairPreviewItem {
+  id: string;
+  phone: string;
+  insertDate: string;
+  current_negotiator: string;
+  new_negotiator: string;
+  current_followup_date?: string | null;
+  new_followup_date?: string | null;
+  negotiator_changed?: boolean;
+  followup_changed?: boolean;
+}
+
+export async function repairNegotiators(payload: {
+  dry_run: boolean;
+  items: any[];
+  repair_negotiators?: boolean;
+  repair_followups?: boolean;
+  repair_type?: 'all' | 'negotiator' | 'followup_date';
+}): Promise<{
   dry_run: boolean;
   total_input_rows: number;
   matched_count: number;
   needs_update_count: number;
   already_matching_count: number;
   unmatched_count: number;
-  preview_updates: Array<{
-    id: string;
-    phone: string;
-    insertDate: string;
-    current_negotiator: string;
-    new_negotiator: string;
-  }>;
+  preview_updates: RepairPreviewItem[];
   unmatched_samples: any[];
   success?: boolean;
   total_updated?: number;
@@ -1226,7 +1238,7 @@ export async function repairNegotiators(payload: { dry_run: boolean; items: any[
     headers: getBffHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(payload),
   });
-  return handleResponse(res, 'خطا در اصلاح نام مذاکره‌کنندگان');
+  return handleResponse(res, 'خطا در اصلاح نام مذاکره‌کنندگان و تاریخ‌های پیگیری');
 }
 
 

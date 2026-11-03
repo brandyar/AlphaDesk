@@ -14,9 +14,10 @@ import {
   Database,
   FileCheck,
   Check,
+  Calendar,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { repairNegotiators } from '../api';
+import { repairNegotiators, RepairPreviewItem } from '../api';
 import { toPersianDigits, fixMojibake, formatDisplayDate } from '../utils';
 
 interface RepairNegotiatorsModalProps {
@@ -35,6 +36,9 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
   const [pasteText, setPasteText] = useState<string>('');
   const [inputMode, setInputMode] = useState<'file' | 'paste'>('file');
 
+  const [repairNegotiatorsEnabled, setRepairNegotiatorsEnabled] = useState<boolean>(true);
+  const [repairFollowupsEnabled, setRepairFollowupsEnabled] = useState<boolean>(true);
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,13 +51,7 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
     needs_update_count: number;
     already_matching_count: number;
     unmatched_count: number;
-    preview_updates: Array<{
-      id: string;
-      phone: string;
-      insertDate: string;
-      current_negotiator: string;
-      new_negotiator: string;
-    }>;
+    preview_updates: RepairPreviewItem[];
     unmatched_samples: any[];
   } | null>(null);
 
@@ -190,6 +188,10 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
       setError('لطفا ابتدا فایل اکسل/CSV را بارگذاری کنید.');
       return;
     }
+    if (!repairNegotiatorsEnabled && !repairFollowupsEnabled) {
+      setError('لطفا حداقل یکی از گزینه‌های ترمیم (نام طرف مذاکره یا تاریخ پیگیری) را فعال کنید.');
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -198,6 +200,8 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
       const res = await repairNegotiators({
         dry_run: true,
         items: parsedRows,
+        repair_negotiators: repairNegotiatorsEnabled,
+        repair_followups: repairFollowupsEnabled,
       });
 
       setDryRunResult(res);
@@ -219,11 +223,13 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
       const res = await repairNegotiators({
         dry_run: false,
         items: parsedRows,
+        repair_negotiators: repairNegotiatorsEnabled,
+        repair_followups: repairFollowupsEnabled,
       });
 
       setExecuteResult({
         total_updated: res.total_updated || dryRunResult.needs_update_count,
-        message: res.message || 'نام مذاکره‌کنندگان با موفقیت در دیتابیس به روزرسانی شد.',
+        message: res.message || 'اطلاعات با موفقیت در پایگاه داده به روزرسانی شد.',
       });
 
       if (onSuccess) onSuccess();
@@ -247,6 +253,7 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
       phone: findKey(['callNum', 'call_num', 'phone', 'mobile', 'negotiation_phone', 'شماره تماس', 'تلفن', 'موبایل']),
       negotiator: findKey(['negotiator', 'negotiator_name', 'user', 'مذاکره‌کننده', 'مذاکره کننده', 'کارشناس']),
       date: findKey(['insertDate', 'insert_date', 'date_created', 'dateTime', 'updateDate', 'تاریخ']),
+      followupDate: findKey(['nextFollow', 'next_followup_date', 'next_followup', 'next_date', 'next', 'تاریخ پیگیری']),
       report: findKey(['report', 'report_text', 'گزارش', 'متن گزارش']),
     };
   }, [parsedRows]);
@@ -262,16 +269,16 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
         item.current_negotiator.toLowerCase().includes(q) ||
         item.new_negotiator.toLowerCase().includes(q) ||
         String(item.insertDate).toLowerCase().includes(q) ||
-        formatDisplayDate(item.insertDate).toLowerCase().includes(q)
+        formatDisplayDate(item.insertDate).toLowerCase().includes(q) ||
+        formatDisplayDate(item.new_followup_date).toLowerCase().includes(q)
     );
   }, [dryRunResult, previewSearch]);
-
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="relative w-full max-w-4xl bg-white dark:bg-[#181818] rounded-3xl border border-slate-200 dark:border-[#282828] shadow-2xl overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-150">
+      <div className="relative w-full max-w-5xl bg-white dark:bg-[#181818] rounded-3xl border border-slate-200 dark:border-[#282828] shadow-2xl overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="p-5 sm:p-6 bg-slate-50 dark:bg-[#202020] border-b border-slate-200 dark:border-[#2c2c2c] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -280,13 +287,13 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                <span>ابزار ترمیم و اصلاح نام مذاکره‌کنندگان (۲۵,۰۰۰ گزارش)</span>
+                <span>ابزار ترمیم نام مذاکره‌کنندگان و تاریخ پیگیری (۲۵,۰۰۰ گزارش)</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-mono font-bold border border-emerald-200 dark:border-transparent">
-                  Patch Tool
+                  Patch & Repair Tool
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-[#A7A7A7] mt-0.5">
-                ذخیره نام طرف مذاکره در فیلد اختصاصی `customer_negotiator_name` با حفظ کامل فیلد ثبت‌کننده (`negotiator_name`) و تاریخ گزارش‌ها
+                ترمیم و اصلاح «طرف مذاکره مشتری» (`customer_negotiator_name`) و «تاریخ پیگیری بعدی» (`next_followup_date`) با حفظ کامل نام ثبت‌کننده و تاریخ ایجادی
               </p>
             </div>
           </div>
@@ -333,9 +340,41 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
             </div>
           ) : (
             <>
-              {/* Step 1: Input selection */}
+              {/* Step 1: Input selection & Repair Options */}
               {!dryRunResult && (
                 <div className="space-y-4">
+                  {/* Options Toggles */}
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#202020] border border-slate-200 dark:border-[#2e2e2e] space-y-3">
+                    <span className="text-xs font-bold text-slate-800 dark:text-white block">
+                      انتخاب گزینه‌های ترمیم داده‌ها:
+                    </span>
+                    <div className="flex flex-wrap gap-4 text-xs">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={repairNegotiatorsEnabled}
+                          onChange={(e) => setRepairNegotiatorsEnabled(e.target.checked)}
+                          className="w-4 h-4 rounded text-[#1DB954] focus:ring-[#1DB954] accent-[#1DB954]"
+                        />
+                        <span className="font-medium text-slate-700 dark:text-[#ccc]">
+                          ترمیم نام طرف مذاکره مشتری (<code className="text-[11px] font-mono text-emerald-600 dark:text-[#1DB954]">customer_negotiator_name</code>)
+                        </span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={repairFollowupsEnabled}
+                          onChange={(e) => setRepairFollowupsEnabled(e.target.checked)}
+                          className="w-4 h-4 rounded text-[#1DB954] focus:ring-[#1DB954] accent-[#1DB954]"
+                        />
+                        <span className="font-medium text-slate-700 dark:text-[#ccc]">
+                          ترمیم تاریخ پیگیری بعدی (<code className="text-[11px] font-mono text-amber-600 dark:text-amber-400">next_followup_date</code>)
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-700 dark:text-[#ccc]">
                       گام ۱: بارگذاری یا وارد کردن فایل خروجی ۲۵ هزار گزارش
@@ -418,7 +457,7 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
                           <span className="font-bold text-slate-800 dark:text-white block mb-2">
                             ستون‌های شناسایی‌شده در فایل:
                           </span>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px]">
                             <div className="flex items-center gap-1.5 text-slate-600 dark:text-[#AAA]">
                               <span className="font-bold">شماره تماس:</span>
                               <span className="font-mono text-emerald-600 dark:text-[#1DB954] bg-emerald-500/10 px-1.5 py-0.5 rounded">
@@ -435,6 +474,12 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
                               <span className="font-bold">تاریخ ثبت:</span>
                               <span className="font-mono text-emerald-600 dark:text-[#1DB954] bg-emerald-500/10 px-1.5 py-0.5 rounded">
                                 {detectedColumns.date || 'نامشخص'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-slate-600 dark:text-[#AAA]">
+                              <span className="font-bold">تاریخ پیگیری:</span>
+                              <span className="font-mono text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                                {detectedColumns.followupDate || 'نامشخص'}
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 text-slate-600 dark:text-[#AAA]">
@@ -503,7 +548,7 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
 
                     <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50">
                       <span className="text-[11px] text-amber-700 dark:text-amber-400 block font-medium">
-                        نیازمند اصلاح نام ✏️
+                        نیازمند اصلاح داده‌ها ✏️
                       </span>
                       <span className="text-lg font-black text-amber-600 dark:text-amber-400 font-mono mt-1 block">
                         {toPersianDigits(dryRunResult.needs_update_count)}
@@ -524,7 +569,7 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
                   <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-[#202020] border border-slate-200 dark:border-[#2e2e2e] flex items-center gap-3 text-xs text-slate-700 dark:text-[#ccc]">
                     <ShieldCheck className="w-5 h-5 text-emerald-500 flex-shrink-0" />
                     <span>
-                      <strong>تضمین عدم تغییر فیلد ثبت‌کننده:</strong> اجرای این عملیات فیلد جدید «طرف مذاکره مشتری» (`customer_negotiator_name`) را برای {toPersianDigits(dryRunResult.needs_update_count)} گزارش مقداردهی می‌کند و فیلد نام کارشناس/پرسنل ثبت‌کننده (`negotiator_name`) و تاریخ ایجاد گزارش کاملا دست‌نخورده می‌مانند.
+                      <strong>تضمین عدم تغییر فیلد ثبت‌کننده:</strong> اجرای این عملیات فیلدهای منتخب را برای {toPersianDigits(dryRunResult.needs_update_count)} گزارش ترمیم می‌کند و فیلد نام کارشناس/پرسنل ثبت‌کننده (`negotiator_name`) و تاریخ ثبت گزارش کاملا دست‌نخورده می‌مانند.
                     </span>
                   </div>
 
@@ -533,9 +578,6 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                       <h5 className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-2">
                         <span>نمونه تغییرات پیشنهادی (نمایش ۱۰۰ مورد از اصلاحات):</span>
-                        <span className="text-[11px] font-mono text-slate-400 dark:text-[#777]">
-                          تغییر نام اشتباه ➔ نام واقعی
-                        </span>
                       </h5>
 
                       <div className="relative w-full sm:w-64">
@@ -550,15 +592,15 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="border border-slate-200 dark:border-[#2c2c2c] rounded-2xl overflow-hidden max-h-60 overflow-y-auto text-xs">
+                    <div className="border border-slate-200 dark:border-[#2c2c2c] rounded-2xl overflow-hidden max-h-64 overflow-y-auto text-xs">
                       <table className="w-full text-right border-collapse">
                         <thead className="bg-slate-100 dark:bg-[#222] text-slate-600 dark:text-[#999] sticky top-0 font-bold">
                           <tr>
                             <th className="p-2.5">#</th>
                             <th className="p-2.5">شماره تماس</th>
                             <th className="p-2.5">تاریخ ثبت</th>
-                            <th className="p-2.5 text-rose-600 dark:text-rose-400">نام فعلی در دیتابیس</th>
-                            <th className="p-2.5 text-emerald-600 dark:text-[#1DB954]">نام واقعی (جدید)</th>
+                            <th className="p-2.5 text-emerald-600 dark:text-[#1DB954]">طرف مذاکره مشتری</th>
+                            <th className="p-2.5 text-amber-600 dark:text-amber-400">تاریخ پیگیری بعدی</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-[#282828] text-slate-800 dark:text-[#ddd]">
@@ -570,11 +612,39 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
                                 <td className="p-2.5 font-mono text-[11px] font-bold text-slate-700 dark:text-[#ccc]">
                                   {formatDisplayDate(item.insertDate)}
                                 </td>
-                                <td className="p-2.5 font-bold text-rose-600 dark:text-rose-400 bg-rose-50/50 dark:bg-rose-950/20">
-                                  {fixMojibake(item.current_negotiator)}
+                                <td className="p-2.5 font-bold">
+                                  {item.negotiator_changed ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="line-through text-rose-500/70 text-[11px]">
+                                        {fixMojibake(item.current_negotiator)}
+                                      </span>
+                                      <ArrowRight className="w-3 h-3 text-emerald-500" />
+                                      <span className="text-emerald-600 dark:text-[#1DB954]">
+                                        {fixMojibake(item.new_negotiator)}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-500 dark:text-[#888]">
+                                      {fixMojibake(item.new_negotiator) || '(بدون تغییر)'}
+                                    </span>
+                                  )}
                                 </td>
-                                <td className="p-2.5 font-bold text-emerald-600 dark:text-[#1DB954] bg-emerald-50/50 dark:bg-[#1DB954]/10">
-                                  {fixMojibake(item.new_negotiator)}
+                                <td className="p-2.5 font-mono text-[11px] font-bold">
+                                  {item.followup_changed ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="line-through text-rose-500/70">
+                                        {formatDisplayDate(item.current_followup_date)}
+                                      </span>
+                                      <ArrowRight className="w-3 h-3 text-amber-500" />
+                                      <span className="text-amber-600 dark:text-amber-400">
+                                        {formatDisplayDate(item.new_followup_date)}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-500 dark:text-[#888]">
+                                      {formatDisplayDate(item.new_followup_date || item.current_followup_date)}
+                                    </span>
+                                  )}
                                 </td>
                               </tr>
                             ))
@@ -613,7 +683,7 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
                         <>
                           <CheckCircle2 className="w-4 h-4" />
                           <span>
-                            تایید و اعمال اصلاح نام {toPersianDigits(dryRunResult.needs_update_count)} گزارش
+                            تایید و اعمال اصلاحات روی {toPersianDigits(dryRunResult.needs_update_count)} گزارش
                           </span>
                         </>
                       )}
