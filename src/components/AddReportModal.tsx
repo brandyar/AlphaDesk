@@ -42,6 +42,9 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
   const [negotiatorName, setNegotiatorName] = useState(
     currentPersonnel?.name || currentUser?.name || 'کارشناس پیگیری'
   );
+  const [customerNegotiatorName, setCustomerNegotiatorName] = useState(
+    customers.find((c) => c.id === (preselectedCustomerId || customers[0]?.id))?.negotiator_name || ''
+  );
   const [negotiationPhone, setNegotiationPhone] = useState('');
   const [reportText, setReportText] = useState('');
   const [negotiationScore, setNegotiationScore] = useState<number>(7);
@@ -84,6 +87,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
       await onSaveReport({
         customer_id: customerId,
         negotiator_name: finalNegotiator,
+        customer_negotiator_name: customerNegotiatorName.trim() || undefined,
         negotiation_phone: negotiationPhone || (Array.isArray(selectedCustomer?.mobile_numbers) ? selectedCustomer.mobile_numbers[0] : '') || '',
         report_text: reportText.trim(),
         negotiation_score: Number(negotiationScore),
@@ -147,6 +151,9 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                 if (c && Array.isArray(c.mobile_numbers) && c.mobile_numbers[0]) {
                   setNegotiationPhone(c.mobile_numbers[0]);
                 }
+                if (c?.negotiator_name) {
+                  setCustomerNegotiatorName(c.negotiator_name);
+                }
               }}
               className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
             >
@@ -158,26 +165,20 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
             </select>
           </div>
 
-          <div className={`grid gap-4 ${userIsAdmin ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
-            {/* Negotiator Name - ONLY for Admin */}
-            {userIsAdmin && (
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
-                  مذاکره‌کننده (ویژه مدیر)
-                </label>
-                <select
-                  value={negotiatorName}
-                  onChange={(e) => setNegotiatorName(e.target.value)}
-                  className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
-                >
-                  {personnelList.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Customer Negotiator Name */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
+                طرف مذاکره سمت مشتری
+              </label>
+              <input
+                type="text"
+                value={customerNegotiatorName}
+                onChange={(e) => setCustomerNegotiatorName(e.target.value)}
+                placeholder="نام طرف مذاکره سمت مشتری..."
+                className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
+              />
+            </div>
 
             {/* Negotiation Phone */}
             <div>
@@ -194,6 +195,25 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
               />
             </div>
           </div>
+
+          {userIsAdmin && (
+            <div className="mb-2">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
+                کارشناس ثبت‌کننده (ویژه مدیر)
+              </label>
+              <select
+                value={negotiatorName}
+                onChange={(e) => setNegotiatorName(e.target.value)}
+                className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
+              >
+                {personnelList.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Negotiation Status */}

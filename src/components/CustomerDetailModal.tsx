@@ -1001,8 +1001,16 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       className="p-4 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] space-y-2 hover:border-slate-300 dark:hover:border-[#3e3e3e] transition-colors shadow-sm"
                     >
                       <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white">{rep.negotiator_name}</span>
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1">
+                            <User className="w-3.5 h-3.5 text-slate-400 dark:text-[#888]" />
+                            <span>ثبت‌کننده: {rep.negotiator_name}</span>
+                          </span>
+                          {(rep.customer_negotiator_name || customer.negotiator_name) && (
+                            <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-semibold border border-emerald-200 dark:border-[#1DB954]/30">
+                              طرف مذاکره: {rep.customer_negotiator_name || customer.negotiator_name}
+                            </span>
+                          )}
                           {rep.negotiation_phone && (
                             <span className="text-[11px] font-mono text-slate-500 dark:text-[#A7A7A7]" dir="ltr">
                               ({rep.negotiation_phone})

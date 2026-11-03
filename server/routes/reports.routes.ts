@@ -637,6 +637,7 @@ router.post('/', async (req: Request, res: Response) => {
     id: newReportId,
     customer_id: payload.customer_id,
     negotiator_name: (payload.negotiator_name || userName || 'کارشناس').trim(),
+    customer_negotiator_name: payload.customer_negotiator_name ? String(payload.customer_negotiator_name).trim() : null,
     negotiation_phone: (payload.negotiation_phone || '').trim(),
     report_text: (payload.report_text || '').trim(),
     negotiation_score: Number(payload.negotiation_score) || 5,
@@ -772,7 +773,7 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
   } else if (directusUrl && directusAdminToken) {
     try {
       const directusRes = await directusFetchAllPages(
-        '/items/customer_reports?fields=id,negotiation_phone,date_created,negotiator_name,report_text',
+        '/items/customer_reports?fields=id,negotiation_phone,date_created,negotiator_name,customer_negotiator_name,report_text',
         {},
         100000
       );
@@ -1005,13 +1006,13 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
     }
 
     matchedCount++;
-    const currentNegotiatorName = (bestMatch.negotiator_name || '').trim();
+    const currentCustomerNegotiator = (bestMatch.customer_negotiator_name || '').trim();
 
-    if (currentNegotiatorName !== cleanTargetNegotiator) {
+    if (currentCustomerNegotiator !== cleanTargetNegotiator) {
       needsUpdateCount++;
       const patchObj = {
         id: bestMatch.id,
-        negotiator_name: cleanTargetNegotiator,
+        customer_negotiator_name: cleanTargetNegotiator,
       };
       patchItemsMap.set(bestMatch.id, patchObj);
 
@@ -1020,7 +1021,7 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
           id: bestMatch.id,
           phone: bestMatch.negotiation_phone || rawPhone,
           insertDate: bestMatch.date_created || rawDate,
-          current_negotiator: fixMojibake(currentNegotiatorName) || '(خالی)',
+          current_negotiator: fixMojibake(currentCustomerNegotiator) || '(خالی)',
           new_negotiator: fixMojibake(cleanTargetNegotiator),
         });
       }
@@ -1028,8 +1029,6 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
       alreadyMatchingCount++;
     }
   }
-
-
 
   if (isDryRun) {
     return res.json({
@@ -1053,7 +1052,7 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
   for (const [id, patch] of patchItemsMap.entries()) {
     const idx = reportsData.findIndex((r) => r.id === id);
     if (idx >= 0) {
-      reportsData[idx].negotiator_name = patch.negotiator_name;
+      reportsData[idx].customer_negotiator_name = patch.customer_negotiator_name;
     }
   }
 
@@ -1064,7 +1063,7 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
     dry_run: false,
     success: true,
     total_updated: patchItemsMap.size,
-    message: `نام مذاکره‌کننده ${patchItemsMap.size} گزارش با موفقیت در پایگاه داده اصلاح شد.`,
+    message: `طرف مذاکره مشتری (فیلد customer_negotiator_name) برای ${patchItemsMap.size} گزارش با موفقیت در پایگاه داده ذخیره شد.`,
   });
 });
 

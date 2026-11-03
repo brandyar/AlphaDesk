@@ -53,6 +53,7 @@ export interface CustomerReport {
   id: string;
   customer_id: string;
   negotiator_name: string;
+  customer_negotiator_name?: string | null;
   negotiation_phone: string;
   report_text: string;
   negotiation_score: number;

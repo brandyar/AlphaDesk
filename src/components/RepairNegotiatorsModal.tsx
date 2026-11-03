@@ -286,7 +286,7 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-[#A7A7A7] mt-0.5">
-                اصلاح امن فیلد `negotiator_name` بر اساس فایل خروجی بدون دست‌کاری در گزارش‌ها و مشتریان جدید پروداکشن
+                ذخیره نام طرف مذاکره در فیلد اختصاصی `customer_negotiator_name` با حفظ کامل فیلد ثبت‌کننده (`negotiator_name`) و تاریخ گزارش‌ها
               </p>
             </div>
           </div>
@@ -524,7 +524,7 @@ export const RepairNegotiatorsModal: React.FC<RepairNegotiatorsModalProps> = ({
                   <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-[#202020] border border-slate-200 dark:border-[#2e2e2e] flex items-center gap-3 text-xs text-slate-700 dark:text-[#ccc]">
                     <ShieldCheck className="w-5 h-5 text-emerald-500 flex-shrink-0" />
                     <span>
-                      <strong>تضمین عدم آسیب به داده‌های جدید:</strong> اجرای این عملیات فقط و فقط فیلد نام مذاکره‌کننده (`negotiator_name`) را برای {toPersianDigits(dryRunResult.needs_update_count)} گزارش شناسا‌یی‌شده به‌روز می‌کند و تمام گزارش‌ها و مشتریان جدید ثبت‌شده در پروداکشن کاملا دست‌نخورده می‌مانند.
+                      <strong>تضمین عدم تغییر فیلد ثبت‌کننده:</strong> اجرای این عملیات فیلد جدید «طرف مذاکره مشتری» (`customer_negotiator_name`) را برای {toPersianDigits(dryRunResult.needs_update_count)} گزارش مقداردهی می‌کند و فیلد نام کارشناس/پرسنل ثبت‌کننده (`negotiator_name`) و تاریخ ایجاد گزارش کاملا دست‌نخورده می‌مانند.
                     </span>
                   </div>
 

@@ -648,11 +648,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   </div>
 
                   {/* Metadata */}
-                  <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-[#A7A7A7]">
-                    <span className="flex items-center gap-1 text-slate-900 dark:text-white">
-                      <User className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
-                      <span>{rep.negotiator_name}</span>
+                  <div className="flex items-center gap-3.5 text-xs text-slate-500 dark:text-[#A7A7A7] flex-wrap">
+                    <span className="flex items-center gap-1 text-slate-900 dark:text-white font-medium" title="کارشناس/پرسنل ثبت‌کننده گزارش">
+                      <User className="w-3.5 h-3.5 text-slate-400 dark:text-[#888]" />
+                      <span>ثبت‌کننده: {rep.negotiator_name}</span>
                     </span>
+                    {(rep.customer_negotiator_name || customer?.negotiator_name) && (
+                      <span className="flex items-center gap-1 text-emerald-800 dark:text-[#1DB954] font-semibold bg-emerald-50 dark:bg-[#1DB954]/10 px-2 py-0.5 rounded border border-emerald-200 dark:border-[#1DB954]/25">
+                        <UserCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
+                        <span>طرف مذاکره: {rep.customer_negotiator_name || customer?.negotiator_name}</span>
+                      </span>
+                    )}
                     {rep.negotiation_phone && (
                       <span className="font-mono text-slate-700 dark:text-slate-300" dir="ltr">
                         {rep.negotiation_phone}
