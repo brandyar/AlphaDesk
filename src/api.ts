@@ -367,6 +367,7 @@ export async function fetchCustomers(filters?: {
   marketer_id?: string;
   expired_only?: boolean;
   free_only?: boolean;
+  followup_filter?: string;
   page?: number;
   limit?: number;
   all?: boolean;
@@ -377,6 +378,7 @@ export async function fetchCustomers(filters?: {
   if (filters?.marketer_id) params.append('marketer_id', filters.marketer_id);
   if (filters?.expired_only) params.append('expired_only', 'true');
   if (filters?.free_only) params.append('free_only', 'true');
+  if (filters?.followup_filter) params.append('followup_filter', filters.followup_filter);
   if (filters?.page) params.append('page', String(filters.page));
   if (filters?.limit !== undefined) params.append('limit', String(filters.limit));
   else params.append('limit', '25');
@@ -401,6 +403,7 @@ export async function fetchCustomersPaginated(filters?: {
   marketer_id?: string;
   expired_only?: boolean;
   free_only?: boolean;
+  followup_filter?: string;
   page?: number;
   limit?: number;
   sort?: string;
@@ -411,6 +414,7 @@ export async function fetchCustomersPaginated(filters?: {
   if (filters?.marketer_id) params.append('marketer_id', filters.marketer_id);
   if (filters?.expired_only) params.append('expired_only', 'true');
   if (filters?.free_only) params.append('free_only', 'true');
+  if (filters?.followup_filter) params.append('followup_filter', filters.followup_filter);
   if (filters?.sort) params.append('sort', filters.sort);
   params.append('page', String(filters?.page || 1));
   params.append('limit', String(filters?.limit || 25));

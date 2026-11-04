@@ -836,6 +836,45 @@ export function formatDisplayDate(dateVal?: any): string {
 }
 
 /**
+ * Formats any date value into a clean Persian date string without time (e.g. "۱۴۰۴/۰۵/۲۲").
+ */
+export function formatDisplayDateOnly(dateVal?: any): string {
+  if (dateVal === undefined || dateVal === null || dateVal === '') return 'ثبت نشده';
+
+  const str = String(dateVal).trim();
+  if (!str) return 'ثبت نشده';
+
+  const num = typeof dateVal === 'number' ? dateVal : Number(str);
+  if (!isNaN(num) && num > 20000 && num < 60000) {
+    try {
+      const ms = Math.round((num - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) {
+        const j = gregorianIsoToJalali(d.toISOString());
+        return j ? toPersianDigits(j) : '-';
+      }
+    } catch {}
+  }
+
+  if (/^1[34]\d\d[\/\-]\d{1,2}[\/\-]\d{1,2}/.test(str)) {
+    const dateOnlyPart = str.split(/\s+/)[0];
+    return toPersianDigits(dateOnlyPart);
+  }
+
+  let d = new Date(str);
+  if (isNaN(d.getTime())) {
+    d = new Date(str.replace(' ', 'T'));
+  }
+
+  if (!isNaN(d.getTime())) {
+    const j = gregorianIsoToJalali(d.toISOString());
+    return j ? toPersianDigits(j) : formatPersianDate(d.toISOString());
+  }
+
+  return toPersianDigits(str.split(/\s+/)[0]);
+}
+
+/**
  * Normalizes any date value (Excel serial date number e.g. 45882.719, Jalali date, or date string)
  * into a standard ISO 8601 UTC dateTime string (e.g. "2025-08-13T17:16:00.000Z") for Directus.
  */

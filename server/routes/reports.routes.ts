@@ -70,6 +70,53 @@ export function normalizeToIsoDateTime(dateVal?: any): string | null {
   return null;
 }
 
+export async function syncCustomerFollowupFromLatestReport(customerId: string): Promise<string | null> {
+  if (!customerId) return null;
+
+  let latestFollowupDate: string | null = null;
+  const nowIso = new Date().toISOString();
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const res = await directusFetch(
+        `/items/customer_reports?filter[customer_id][_eq]=${encodeURIComponent(customerId)}&sort=-date_created&limit=1&fields=id,next_followup_date,date_created`
+      ).catch(() => null);
+
+      if (res?.data && res.data.length > 0) {
+        latestFollowupDate = res.data[0].next_followup_date || null;
+      }
+
+      await directusFetch(`/items/customers/${encodeURIComponent(customerId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          next_followup_date: latestFollowupDate,
+          date_updated: nowIso,
+        }),
+      }).catch(() => {});
+
+      invalidateCustomersCache();
+    } catch (e: any) {
+      console.warn(`Failed to sync customer followup for ${customerId}:`, e.message);
+    }
+  }
+
+  // Update in-memory fallback
+  const cIdx = customersData.findIndex((c) => String(c.id) === String(customerId));
+  if (cIdx >= 0) {
+    const localReports = reportsData
+      .filter((r) => String(r.customer_id) === String(customerId))
+      .sort((a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime());
+
+    if (localReports.length > 0) {
+      latestFollowupDate = localReports[0].next_followup_date || null;
+    }
+    customersData[cIdx].next_followup_date = latestFollowupDate;
+    customersData[cIdx].date_updated = nowIso;
+  }
+
+  return latestFollowupDate;
+}
+
 const router = Router();
 
 
@@ -667,6 +714,10 @@ router.post('/', async (req: Request, res: Response) => {
         body: JSON.stringify(directusReportPayload),
       });
 
+      if (payload.customer_id) {
+        await syncCustomerFollowupFromLatestReport(payload.customer_id);
+      }
+
       const custRes = await directusFetch(`/items/customers/${payload.customer_id}`).catch(
         () => null
       );
@@ -730,9 +781,23 @@ router.delete('/:id', async (req: Request, res: Response) => {
     return res.status(403).json({ error: 'فقط مدیر سیستم اجازه حذف گزارش مذاکره را دارد.' });
   }
 
+  let deletedCustId: string | null = null;
+  const foundReport = reportsData.find((r) => r.id === id);
+  if (foundReport) deletedCustId = String(foundReport.customer_id);
+
   if (directusUrl && directusAdminToken) {
     try {
+      const repRes = await directusFetch(`/items/customer_reports/${id}?fields=customer_id`).catch(() => null);
+      if (repRes?.data?.customer_id) {
+        deletedCustId = typeof repRes.data.customer_id === 'object' ? repRes.data.customer_id.id : repRes.data.customer_id;
+      }
+
       await directusFetch(`/items/customer_reports/${id}`, { method: 'DELETE' });
+      
+      if (deletedCustId) {
+        await syncCustomerFollowupFromLatestReport(deletedCustId);
+      }
+
       invalidateReportsCache();
       return res.status(204).send();
     } catch (err: any) {
@@ -746,6 +811,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
   const idx = reportsData.findIndex((r) => r.id === id);
   if (idx >= 0) {
     reportsData.splice(idx, 1);
+  }
+  if (deletedCustId) {
+    await syncCustomerFollowupFromLatestReport(deletedCustId);
   }
   invalidateReportsCache();
   res.status(204).send();

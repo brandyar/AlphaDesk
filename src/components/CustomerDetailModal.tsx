@@ -26,6 +26,7 @@ import {
   DollarSign,
   PackageCheck,
   Building2,
+  ArrowRight,
 } from 'lucide-react';
 import { Customer, CustomerReport, Personnel, NegotiationStatus, ChannelType, CustomerContact, AuthUser } from '../types';
 import {
@@ -218,12 +219,31 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-6 max-h-[95vh] sm:max-h-[90vh] flex flex-col text-slate-900 dark:text-white">
-        {/* Top Header */}
-        <div className="p-4 sm:p-6 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+    <div className="fixed inset-0 z-50 bg-slate-50 dark:bg-[#121212] overflow-y-auto font-sans flex flex-col text-slate-900 dark:text-white">
+      {/* Sticky Full-Page Header & Navigation Bar */}
+      <div className="sticky top-0 z-30 bg-white/95 dark:bg-[#181818]/95 backdrop-blur-md border-b border-slate-200 dark:border-[#282828] px-4 sm:px-6 py-3 flex items-center justify-between shadow-xs">
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-9 px-4 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-[#1DB954]/15 dark:hover:bg-[#1DB954]/25 dark:text-[#1DB954] border border-emerald-200 dark:border-[#1DB954]/30 font-bold text-xs transition-all flex items-center gap-2 cursor-pointer shadow-xs hover:scale-105"
+        >
+          <ArrowRight className="w-4 h-4" />
+          <span>بازگشت به لیست مشتریان</span>
+        </button>
+
+        <div className="text-xs text-slate-500 dark:text-[#A7A7A7] font-semibold flex items-center gap-2">
+          <span className="hidden sm:inline">مدیریت مشتریان</span>
+          <span className="hidden sm:inline text-slate-300 dark:text-[#444]">/</span>
+          <span className="text-slate-900 dark:text-white font-extrabold">{customer.company_name}</span>
+        </div>
+      </div>
+
+      {/* Main Full Page Scrollable Body */}
+      <div className="max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex-1 flex flex-col space-y-6">
+        {/* Customer Header Card */}
+        <div className="p-4 sm:p-6 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-4 min-w-0">
-            <div className="w-12 h-12 rounded-xl bg-slate-200 dark:bg-[#282828] border border-slate-300 dark:border-[#3e3e3e] flex items-center justify-center text-emerald-600 dark:text-[#1DB954] font-black text-xl flex-shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-[#282828] border border-slate-300 dark:border-[#3e3e3e] flex items-center justify-center text-emerald-600 dark:text-[#1DB954] font-black text-xl flex-shrink-0">
               {(customer.manager_name?.trim() || customer.negotiator_name?.trim() || customer.company_name).charAt(0)}
             </div>
             <div className="min-w-0">
@@ -265,43 +285,49 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           <div className="flex items-center gap-2">
             {userIsAdmin && onOpenMerge && (
               <button
+                type="button"
                 onClick={() => onOpenMerge(customer.id)}
-                className="p-2 rounded-full bg-slate-100 hover:bg-emerald-500 text-slate-600 hover:text-white dark:bg-[#282828] dark:hover:bg-[#1DB954] dark:text-[#B3B3B3] dark:hover:text-black transition-colors"
+                className="p-2 rounded-full bg-slate-100 hover:bg-emerald-500 text-slate-600 hover:text-white dark:bg-[#282828] dark:hover:bg-[#1DB954] dark:text-[#B3B3B3] dark:hover:text-black transition-colors cursor-pointer"
                 title="ادغام این مشتری با پرونده دیگر"
               >
                 <GitMerge className="w-4 h-4" />
               </button>
             )}
             <button
+              type="button"
               onClick={() => onEdit(customer)}
-              className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] dark:text-[#B3B3B3] dark:hover:text-white transition-colors"
+              className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] dark:text-[#B3B3B3] dark:hover:text-white transition-colors cursor-pointer"
               title="ویرایش پرونده"
             >
               <Edit2 className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={() => {
                 if (confirm('آیا از حذف پرونده این مشتری اطمینان دارید؟ تمامی گزارش‌های پیگیری نیز حذف خواهند شد.')) {
                   onDelete(customer.id);
                   onClose();
                 }
               }}
-              className="p-2 rounded-full bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 dark:bg-[#282828] dark:hover:bg-red-950/60 dark:text-[#A7A7A7] dark:hover:text-red-400 transition-colors"
+              className="p-2 rounded-full bg-slate-100 hover:bg-red-100 text-slate-500 hover:text-red-600 dark:bg-[#282828] dark:hover:bg-red-950/60 dark:text-[#A7A7A7] dark:hover:text-red-400 transition-colors cursor-pointer"
               title="حذف مشتری"
             >
               <Trash2 className="w-4 h-4" />
             </button>
             <button
+              type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors mr-2"
+              className="h-8 px-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-[#282828] dark:hover:bg-[#333333] dark:text-[#B3B3B3] dark:hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+              title="خروج و بازگشت"
             >
-              <X className="w-4 h-4" />
+              <span>بازگشت</span>
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
         {/* Scrollable Content Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="space-y-6">
           {/* Marketer Assignment Bar & Expiration Timer */}
           <div
             className={`p-4 rounded-xl border flex flex-wrap items-center justify-between gap-4 ${

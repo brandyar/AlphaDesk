@@ -21,9 +21,10 @@ import {
   LayoutGrid,
   List,
   Loader2,
+  Calendar,
 } from 'lucide-react';
 import { Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
-import { formatTimeRemaining, formatPersianDate, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS, toPersianDigits } from '../utils';
+import { formatTimeRemaining, formatPersianDate, formatDisplayDate, formatDisplayDateOnly, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS, toPersianDigits } from '../utils';
 import { fetchCustomersPaginated } from '../api';
 import { PaginationControl } from './PaginationControl';
 
@@ -67,43 +68,51 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [pageSize, setPageSize] = useState<number>(25);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOption, setSortOption] = useState<string>('next_followup_asc');
+  const [followupFilter, setFollowupFilter] = useState<string>('همه');
 
   const [items, setItems] = useState<Customer[]>(customers);
   const [totalCount, setTotalCount] = useState<number>(customers.length);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
 
-  // Sync items whenever customers prop updates
+  // Listen to customer save/update/delete events to immediately refresh server pagination
   useEffect(() => {
-    if (customers) {
-      setItems(customers);
-      setTotalCount(customers.length);
-    }
-  }, [customers]);
-
-  // Listen to customer save/update/delete events to immediately show changes without page reload
-  useEffect(() => {
-    const handleSaved = (e: any) => {
-      const saved: Customer = e.detail;
-      if (!saved || !saved.id) return;
-      setItems((prev) => {
-        const exists = prev.some((c) => c.id === saved.id);
-        if (exists) {
-          return prev.map((c) => (c.id === saved.id ? saved : c));
-        }
-        return [saved, ...prev];
-      });
-      setTotalCount((prev) => {
-        const exists = items.some((c) => c.id === saved.id);
-        return exists ? prev : prev + 1;
-      });
+    const handleSaved = () => {
+      fetchCustomersPaginated({
+        page: currentPage,
+        limit: pageSize,
+        search: searchQuery.trim(),
+        status: statusFilter !== 'همه' ? statusFilter : undefined,
+        marketer_id: selectedMarketerId !== 'همه' ? selectedMarketerId : undefined,
+        expired_only: showExpiredOnly,
+        followup_filter: followupFilter !== 'همه' ? followupFilter : undefined,
+        sort: sortOption,
+      })
+        .then((res) => {
+          setItems(res.data);
+          setTotalCount(res.meta.filter_count);
+          setTotalPages(res.meta.total_pages);
+        })
+        .catch(() => {});
     };
 
-    const handleDeleted = (e: any) => {
-      const deletedId = e.detail?.id;
-      if (!deletedId) return;
-      setItems((prev) => prev.filter((c) => c.id !== deletedId));
-      setTotalCount((prev) => Math.max(0, prev - 1));
+    const handleDeleted = () => {
+      fetchCustomersPaginated({
+        page: currentPage,
+        limit: pageSize,
+        search: searchQuery.trim(),
+        status: statusFilter !== 'همه' ? statusFilter : undefined,
+        marketer_id: selectedMarketerId !== 'همه' ? selectedMarketerId : undefined,
+        expired_only: showExpiredOnly,
+        followup_filter: followupFilter !== 'همه' ? followupFilter : undefined,
+        sort: sortOption,
+      })
+        .then((res) => {
+          setItems(res.data);
+          setTotalCount(res.meta.filter_count);
+          setTotalPages(res.meta.total_pages);
+        })
+        .catch(() => {});
     };
 
     window.addEventListener('crm_customer_saved', handleSaved);
@@ -112,12 +121,12 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       window.removeEventListener('crm_customer_saved', handleSaved);
       window.removeEventListener('crm_customer_deleted', handleDeleted);
     };
-  }, [items]);
+  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, followupFilter, searchQuery, activeTenantId, sortOption]);
 
   // Reset page to 1 when filters, search, sort or tenant change
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId, sortOption]);
+  }, [statusFilter, selectedMarketerId, showExpiredOnly, followupFilter, searchQuery, activeTenantId, sortOption]);
 
   // Fetch server-side paginated items on filter, tenant, sort or page change
   useEffect(() => {
@@ -131,6 +140,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       status: statusFilter !== 'همه' ? statusFilter : undefined,
       marketer_id: selectedMarketerId !== 'همه' ? selectedMarketerId : undefined,
       expired_only: showExpiredOnly,
+      followup_filter: followupFilter !== 'همه' ? followupFilter : undefined,
       sort: sortOption,
     })
       .then((res) => {
@@ -148,7 +158,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, searchQuery, activeTenantId, sortOption]);
+  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, followupFilter, searchQuery, activeTenantId, sortOption]);
 
   const userIsAdmin = Boolean(
     isAdmin ||
@@ -255,6 +265,27 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   {opt.label}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Follow-up Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
+              <span>موعد پیگیری:</span>
+            </span>
+            <select
+              value={followupFilter}
+              onChange={(e) => setFollowupFilter(e.target.value)}
+              className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
+            >
+              <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه موعدها</option>
+              <option value="active" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">دارای پیگیری آینده</option>
+              <option value="today" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">پیگیری امروز</option>
+              <option value="due_3_days" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">سررسید ۳ روز آینده</option>
+              <option value="due_7_days" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">سررسید ۷ روز آینده</option>
+              <option value="overdue" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">عقب‌افتاده / منقضی</option>
+              <option value="no_followup" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">بدون موعد پیگیری</option>
             </select>
           </div>
 
@@ -379,7 +410,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     <th className="py-3.5 px-4">مدیر کسب‌وکار (عنوان اصلی) و نام برند</th>
                     <th className="py-3.5 px-4">وضعیت پرونده</th>
                     <th className="py-3.5 px-4">بازاریاب مسئول</th>
-                    <th className="py-3.5 px-4">مهلت پیگیری</th>
+                    <th className="py-3.5 px-4">موعد پیگیری</th>
+                    <th className="py-3.5 px-4">تاریخ انقضا</th>
                     <th className="py-3.5 px-4">ارتباط سریع</th>
                     <th className="py-3.5 px-4 text-left">عملیات</th>
                   </tr>
@@ -438,7 +470,15 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           {c.assigned_marketer_name || 'تخصیص نیافته'}
                         </td>
 
-                        {/* Timer */}
+                        {/* Next Follow-up Date (Day, Month, Year only) */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 text-xs text-slate-800 dark:text-white font-medium">
+                            <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />
+                            <span>{c.next_followup_date ? formatDisplayDateOnly(c.next_followup_date) : 'ثبت نشده'}</span>
+                          </div>
+                        </td>
+
+                        {/* Expiry Timer */}
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           <span className={`px-2.5 py-1 rounded-full text-[11px] font-mono ${timer.badgeClass}`}>
                             {timer.text}
@@ -559,8 +599,18 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
+                      <span>موعد پیگیری:</span>
+                    </span>
+                    <span className="font-semibold text-slate-900 dark:text-white font-mono">
+                      {c.next_followup_date ? formatDisplayDateOnly(c.next_followup_date) : 'ثبت نشده'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
                       <Clock className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
-                      <span>مهلت پیگیری:</span>
+                      <span>تاریخ انقضا:</span>
                     </span>
                     <span className={`px-2 py-0.5 rounded-full text-[11px] font-mono ${timer.badgeClass}`}>
                       {timer.text}

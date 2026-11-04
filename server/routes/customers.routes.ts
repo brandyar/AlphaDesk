@@ -266,7 +266,7 @@ export function sortCustomersList(items: any[], sortKey?: string): any[] {
 }
 
 router.get('/', async (req: Request, res: Response) => {
-  const { search, status, marketer_id, expired_only, page, limit, free_only, all, sort } = req.query;
+  const { search, status, marketer_id, expired_only, page, limit, free_only, all, sort, followup_filter } = req.query;
   const { userId, personnelId, isAdmin, userName, tenantId, canViewAllCustomers } = getRequestUser(req);
 
   const isUnlimited = all === 'true' || limit === 'all' || limit === '20000';
@@ -274,6 +274,18 @@ router.get('/', async (req: Request, res: Response) => {
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
   const isFreeOnly = free_only === 'true';
   const sortKey = typeof sort === 'string' && sort.trim() ? sort.trim() : 'next_followup_asc';
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfTodayIso = startOfToday.toISOString();
+
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+  const endOfTodayIso = endOfToday.toISOString();
+
+  const nowIso = new Date().toISOString();
+  const in3DaysIso = new Date(Date.now() + 3 * 86400000).toISOString();
+  const in7DaysIso = new Date(Date.now() + 7 * 86400000).toISOString();
 
   if (!isAdmin && !canViewAllCustomers && !userId && !personnelId && !isFreeOnly) {
     return res.json({
@@ -311,6 +323,26 @@ router.get('/', async (req: Request, res: Response) => {
     }
     if (isFreeOnly) {
       list = list.filter((c) => !c.assigned_marketer_id || c.is_expired);
+    }
+    if (followup_filter && followup_filter !== 'همه' && followup_filter !== 'all') {
+      const ff = String(followup_filter);
+      const startTodayMs = startOfToday.getTime();
+      const endTodayMs = endOfToday.getTime();
+      const nowMs = Date.now();
+
+      list = list.filter((c) => {
+        if (!c.next_followup_date) return ff === 'no_followup';
+        const fTime = new Date(c.next_followup_date).getTime();
+        if (isNaN(fTime)) return ff === 'no_followup';
+
+        if (ff === 'active') return fTime >= startTodayMs;
+        if (ff === 'today') return fTime >= startTodayMs && fTime <= endTodayMs;
+        if (ff === 'due_3_days') return fTime >= nowMs && fTime <= nowMs + 3 * 86400000;
+        if (ff === 'due_7_days') return fTime >= nowMs && fTime <= nowMs + 7 * 86400000;
+        if (ff === 'overdue') return fTime < startTodayMs;
+        if (ff === 'no_followup') return false;
+        return true;
+      });
     }
 
     list = sortCustomersList(list, sortKey);
@@ -374,6 +406,27 @@ router.get('/', async (req: Request, res: Response) => {
       if (isFreeOnly) {
         directusPath += `&filter[_and][${andIdx}][_or][0][assigned_marketer_id][_null]=true&filter[_and][${andIdx}][_or][1][is_expired][_eq]=true`;
         andIdx++;
+      }
+
+      if (followup_filter && followup_filter !== 'همه' && followup_filter !== 'all') {
+        const ff = String(followup_filter);
+        if (ff === 'active') {
+          directusPath += `&filter[_and][${andIdx++}][next_followup_date][_gte]=${encodeURIComponent(startOfTodayIso)}`;
+        } else if (ff === 'today') {
+          directusPath += `&filter[_and][${andIdx}][next_followup_date][_gte]=${encodeURIComponent(startOfTodayIso)}&filter[_and][${andIdx}][next_followup_date][_lte]=${encodeURIComponent(endOfTodayIso)}`;
+          andIdx++;
+        } else if (ff === 'due_3_days') {
+          directusPath += `&filter[_and][${andIdx}][next_followup_date][_gte]=${encodeURIComponent(nowIso)}&filter[_and][${andIdx}][next_followup_date][_lte]=${encodeURIComponent(in3DaysIso)}`;
+          andIdx++;
+        } else if (ff === 'due_7_days') {
+          directusPath += `&filter[_and][${andIdx}][next_followup_date][_gte]=${encodeURIComponent(nowIso)}&filter[_and][${andIdx}][next_followup_date][_lte]=${encodeURIComponent(in7DaysIso)}`;
+          andIdx++;
+        } else if (ff === 'overdue') {
+          directusPath += `&filter[_and][${andIdx}][next_followup_date][_nnull]=true&filter[_and][${andIdx}][next_followup_date][_lt]=${encodeURIComponent(startOfTodayIso)}`;
+          andIdx++;
+        } else if (ff === 'no_followup') {
+          directusPath += `&filter[_and][${andIdx++}][next_followup_date][_null]=true`;
+        }
       }
 
       // Contact matching for phone numbers if search query is provided
@@ -504,6 +557,26 @@ router.get('/', async (req: Request, res: Response) => {
   }
   if (isFreeOnly) {
     list = list.filter((c) => !c.assigned_marketer_id || c.is_expired);
+  }
+  if (followup_filter && followup_filter !== 'همه' && followup_filter !== 'all') {
+    const ff = String(followup_filter);
+    const startTodayMs = startOfToday.getTime();
+    const endTodayMs = endOfToday.getTime();
+    const nowMs = Date.now();
+
+    list = list.filter((c) => {
+      if (!c.next_followup_date) return ff === 'no_followup';
+      const fTime = new Date(c.next_followup_date).getTime();
+      if (isNaN(fTime)) return ff === 'no_followup';
+
+      if (ff === 'active') return fTime >= startTodayMs;
+      if (ff === 'today') return fTime >= startTodayMs && fTime <= endTodayMs;
+      if (ff === 'due_3_days') return fTime >= nowMs && fTime <= nowMs + 3 * 86400000;
+      if (ff === 'due_7_days') return fTime >= nowMs && fTime <= nowMs + 7 * 86400000;
+      if (ff === 'overdue') return fTime < startTodayMs;
+      if (ff === 'no_followup') return false;
+      return true;
+    });
   }
 
   list = sortCustomersList(list, sortKey);
