@@ -299,7 +299,7 @@ router.post('/login', async (req: Request, res: Response) => {
         // Strict personnel-based role determination: the role defined in the personnel collection is the single source of truth
         const isAdmin = Boolean(
           pItem
-            ? (pItem.role === 'admin' || pItem.role === 'sales_manager')
+            ? pItem.role === 'admin'
             : isDirectusAdmin
         );
         const appRole = pItem

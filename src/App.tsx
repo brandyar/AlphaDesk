@@ -185,17 +185,17 @@ export default function App() {
   };
 
   const canViewAllCustomers = Boolean(
-    currentUser?.is_admin ||
-      currentPersonnel?.permissions?.can_view_all_customers === true ||
-      ((currentPersonnel?.role === 'admin' || currentPersonnel?.role === 'sales_manager') &&
-        currentPersonnel?.permissions?.can_view_all_customers !== false)
+    currentPersonnel
+      ? (currentPersonnel.role === 'admin' ||
+         currentPersonnel.role === 'sales_manager' ||
+         currentPersonnel.permissions?.can_view_all_customers === true)
+      : currentUser?.is_admin
   );
 
   const isCurrentUserAdmin = Boolean(
-    currentUser?.is_admin ||
-      currentPersonnel?.role === 'admin' ||
-      currentPersonnel?.role === 'sales_manager' ||
-      currentPersonnel?.permissions?.can_manage_personnel === true
+    currentPersonnel
+      ? (currentPersonnel.role === 'admin' || currentPersonnel.permissions?.can_manage_personnel === true)
+      : Boolean(currentUser?.is_admin && currentUser?.app_role === 'admin')
   );
 
   const canAccessTenantsTab =

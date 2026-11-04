@@ -312,7 +312,7 @@ export interface AuthUser {
   role_id?: string;
   avatar?: string;
   is_admin: boolean;
-  app_role: 'admin' | 'marketer' | 'sales_manager';
+  app_role: 'admin' | 'marketer' | 'sales_manager' | string;
 }
 
 export interface AuthResponse {
