@@ -9,7 +9,7 @@ import {
   updateProjectSettingsData,
 } from './config.ts';
 import { directusFetch } from './directus/client.ts';
-import { ensureDirectusTenants, ensureDirectusPersonnel, syncAllCustomersFollowupFromReports } from './directus/sync.ts';
+import { ensureDirectusTenants, ensureDirectusPersonnel } from './directus/sync.ts';
 import { rateLimiter } from './middlewares/rateLimit.middleware.ts';
 import { checkInactivePersonnel } from './middlewares/auth.middleware.ts';
 
@@ -84,7 +84,6 @@ export async function startServer() {
           }
         } catch {}
       })
-      .then(() => syncAllCustomersFollowupFromReports())
       .catch((err) => console.warn('Database initialization warning:', err?.message || err));
   }
 

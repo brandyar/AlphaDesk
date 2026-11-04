@@ -27,7 +27,6 @@ import {
   PackageCheck,
   Building2,
   ArrowRight,
-  Calendar,
 } from 'lucide-react';
 import { Customer, CustomerReport, Personnel, NegotiationStatus, ChannelType, CustomerContact, AuthUser } from '../types';
 import {
@@ -37,8 +36,6 @@ import {
   getStatusTheme,
   formatToman,
   formatStatusLabel,
-  formatFollowupRelativeBadge,
-  formatDisplayDateOnly,
 } from '../utils';
 import { PersianDatePicker } from './PersianDatePicker';
 
@@ -83,22 +80,6 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
     currentPersonnel?.role === 'admin'
   );
-
-  // Compute latest report and effective next follow-up date (Single Source of Truth)
-  const latestReport = React.useMemo(() => {
-    if (!customer?.reports || customer.reports.length === 0) return null;
-    return [...customer.reports].sort(
-      (a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
-    )[0];
-  }, [customer?.reports]);
-
-  const effectiveNextFollowup = latestReport
-    ? latestReport.next_followup_date || null
-    : customer?.next_followup_date || null;
-
-  const followupBadge = React.useMemo(() => {
-    return formatFollowupRelativeBadge(effectiveNextFollowup);
-  }, [effectiveNextFollowup]);
 
   // New report form state
   const [showAddReport, setShowAddReport] = useState(false);
@@ -327,86 +308,43 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
         {/* Scrollable Content Body */}
         <div className="space-y-6">
-          {/* Top Info Grid: Marketer Assignment & Next Follow-up Date (Based on Latest Report) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Marketer Assignment Bar & Expiration Timer */}
-            <div
-              className={`p-4 rounded-xl border flex flex-wrap items-center justify-between gap-4 ${
-                timer.isExpired
-                  ? 'bg-red-50 dark:bg-[#E22134]/10 border-red-200 dark:border-[#E22134]/30'
-                  : 'bg-slate-50 dark:bg-[#141414] border-slate-200 dark:border-[#282828]'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-9 h-9 rounded-full flex items-center justify-center ${
-                    timer.isExpired ? 'bg-red-100 text-red-600 dark:bg-[#E22134]/20 dark:text-[#E22134]' : 'bg-slate-200 text-emerald-600 dark:bg-[#282828] dark:text-[#1DB954]'
-                  }`}
-                >
-                  <Clock className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="text-xs text-slate-500 dark:text-[#A7A7A7]">بازاریاب متصل به مشتری</div>
-                  <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <span>{customer.assigned_marketer_name || 'تخصیص نیافته'}</span>
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-mono ${timer.badgeClass}`}>
-                      {timer.text}
-                    </span>
-                  </div>
-                </div>
+          {/* Marketer Assignment Bar & Expiration Timer */}
+          <div
+            className={`p-4 rounded-xl border flex flex-wrap items-center justify-between gap-4 ${
+              timer.isExpired
+                ? 'bg-red-50 dark:bg-[#E22134]/10 border-red-200 dark:border-[#E22134]/30'
+                : 'bg-slate-50 dark:bg-[#141414] border-slate-200 dark:border-[#282828]'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                  timer.isExpired ? 'bg-red-100 text-red-600 dark:bg-[#E22134]/20 dark:text-[#E22134]' : 'bg-slate-200 text-emerald-600 dark:bg-[#282828] dark:text-[#1DB954]'
+                }`}
+              >
+                <Clock className="w-5 h-5" />
               </div>
-
-              {/* Reassign action (Admin only) */}
-              {userIsAdmin && (
-                <button
-                  onClick={() => setShowReassignBox(!showReassignBox)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-slate-100 text-slate-800 dark:bg-[#282828] dark:hover:bg-[#333333] text-xs font-semibold dark:text-white transition-all hover:scale-105 border border-slate-300 dark:border-[#3e3e3e] shadow-xs cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
-                  <span>تغییر بازاریاب</span>
-                </button>
-              )}
-            </div>
-
-            {/* Next Follow-up Date (Single Source of Truth: Latest Report) */}
-            <div className="p-4 rounded-xl border bg-slate-50 dark:bg-[#141414] border-slate-200 dark:border-[#282828] flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  followupBadge.isToday
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-[#1DB954]/20 dark:text-[#1DB954]'
-                    : followupBadge.isOverdue
-                    ? 'bg-rose-100 text-rose-700 dark:bg-[#E22134]/20 dark:text-[#E22134]'
-                    : 'bg-emerald-50 text-emerald-600 dark:bg-[#282828] dark:text-[#1DB954]'
-                }`}>
-                  <Calendar className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1.5">
-                    <span className="font-medium">موعد پیگیری بعدی</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-[#242424] text-slate-700 dark:text-[#999] font-medium">
-                      {latestReport ? 'بر اساس آخرین گزارش' : 'ثبت اولیه پرونده'}
-                    </span>
-                  </div>
-                  <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 mt-0.5">
-                    <span className="font-mono">
-                      {effectiveNextFollowup ? formatPersianDate(effectiveNextFollowup) : 'بدون موعد پیگیری'}
-                    </span>
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full ${followupBadge.badgeClass}`}>
-                      {followupBadge.text}
-                    </span>
-                  </div>
-                  {latestReport ? (
-                    <div className="text-[11px] text-slate-500 dark:text-[#777] truncate mt-0.5">
-                      ثبت‌شده توسط {latestReport.negotiator_name || 'کارشناس'} ({formatDisplayDateOnly(latestReport.date_created)})
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-slate-400 dark:text-[#666] truncate mt-0.5">
-                      هنوز گزارش جدیدی ثبت نشده است
-                    </div>
-                  )}
+              <div>
+                <div className="text-xs text-slate-500 dark:text-[#A7A7A7]">بازاریاب متصل به مشتری</div>
+                <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>{customer.assigned_marketer_name || 'تخصیص نیافته'}</span>
+                  <span className={`text-xs px-2.5 py-0.5 rounded-full font-mono ${timer.badgeClass}`}>
+                    {timer.text}
+                  </span>
                 </div>
               </div>
             </div>
+
+            {/* Reassign action (Admin only) */}
+            {userIsAdmin && (
+              <button
+                onClick={() => setShowReassignBox(!showReassignBox)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white hover:bg-slate-100 text-slate-800 dark:bg-[#282828] dark:hover:bg-[#333333] text-xs font-semibold dark:text-white transition-all hover:scale-105 border border-slate-300 dark:border-[#3e3e3e] shadow-sm"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
+                <span>تغییر بازاریاب یا تمدید مهلت (مدیر)</span>
+              </button>
+            )}
           </div>
 
           {/* Reassign Box Drawer */}
@@ -866,33 +804,14 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               </p>
             </div>
 
-            {/* Next Followup details in information section */}
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#181818] border border-slate-200 dark:border-[#282828] space-y-2">
-              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-emerald-600 dark:text-[#1DB954]">
-                  <Calendar className="w-4 h-4" />
-                  <span>موعد پیگیری بعدی (بر اساس آخرین گزارش مذاکره):</span>
-                </span>
-                <span className={`text-[11px] px-2.5 py-0.5 rounded-full ${followupBadge.badgeClass}`}>
-                  {followupBadge.text}
+            {customer.next_followup_date && (
+              <div className="pt-2 text-xs text-slate-500 dark:text-[#A7A7A7] flex items-center gap-2">
+                <span>موعد پیگیری بعدی تعیین شده:</span>
+                <span className="text-slate-900 dark:text-white font-semibold font-mono">
+                  {formatPersianDate(customer.next_followup_date)}
                 </span>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 border-t border-slate-200 dark:border-[#242424]">
-                <span className="text-slate-600 dark:text-[#A7A7A7]">تاریخ و موعد تعیین شده:</span>
-                <span className="font-bold text-slate-900 dark:text-white font-mono text-sm">
-                  {effectiveNextFollowup ? formatPersianDateTime(effectiveNextFollowup) : 'بدون موعد پیگیری'}
-                </span>
-              </div>
-              {latestReport ? (
-                <div className="text-[11px] text-slate-500 dark:text-[#888] pt-1 leading-relaxed">
-                  این موعد بر اساس آخرین گزارش پیگیری ثبت‌شده توسط <span className="font-semibold text-slate-800 dark:text-white">{latestReport.negotiator_name || 'کارشناس'}</span> در تاریخ {formatPersianDate(latestReport.date_created)} تنظیم گردیده است.
-                </div>
-              ) : (
-                <div className="text-[11px] text-slate-500 dark:text-[#888] pt-1">
-                  هنوز گزارش پیگیری برای این پرونده ثبت نشده است؛ این موعد در مصاحبه اولیه ثبت گردیده است.
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           {/* Follow-up Reports History Section */}

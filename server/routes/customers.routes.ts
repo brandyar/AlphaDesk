@@ -10,7 +10,7 @@ import {
   personnelData,
   addDays,
 } from '../config.ts';
-import { directusFetch, directusFetchAllPages, directusSafeBatchPatch, chunkArray } from '../directus/client.ts';
+import { directusFetch, directusFetchAllPages, directusSafeBatchPatch } from '../directus/client.ts';
 import {
   ensureCustomersCache,
   invalidateCustomersCache,
@@ -24,7 +24,6 @@ import {
   resolvePersonnelId,
   getSafeDirectusPersonnelForeignKey,
   resolveDirectusTenantId,
-  syncAllCustomersFollowupFromReports,
 } from '../directus/sync.ts';
 import {
   cleanCustomerPayloadForDirectus,
@@ -225,100 +224,25 @@ export function matchesCustomerSearch(c: any, searchStr?: string | null): boolea
   return false;
 }
 
-export async function enrichCustomersWithLatestReportFollowup(items: any[]): Promise<any[]> {
-  if (!items || items.length === 0) return items || [];
-  const itemIds = items.map((c: any) => String(c.id)).filter(Boolean);
-  if (itemIds.length === 0) return items;
-
-  if (directusUrl && directusAdminToken) {
-    try {
-      const chunks = chunkArray(itemIds, 50);
-      const latestMap = new Map<string, string | null>();
-
-      await Promise.all(
-        chunks.map(async (chunk) => {
-          const repRes = await directusFetch(
-            `/items/customer_reports?filter[customer_id][_in]=${encodeURIComponent(
-              chunk.join(',')
-            )}&sort=-date_created&fields=id,customer_id,next_followup_date,date_created&limit=1000`
-          ).catch(() => null);
-
-          if (repRes?.data && Array.isArray(repRes.data)) {
-            for (const r of repRes.data) {
-              const rawC = r.customer_id;
-              const cId =
-                typeof rawC === 'object' && rawC !== null
-                  ? String(rawC.id || rawC.item || '')
-                  : String(rawC || '');
-              if (cId && !latestMap.has(cId)) {
-                latestMap.set(cId, r.next_followup_date || null);
-              }
-            }
-          }
-        })
-      );
-
-      for (const c of items) {
-        const cIdStr = String(c.id);
-        if (latestMap.has(cIdStr)) {
-          const val = latestMap.get(cIdStr);
-          if (val !== undefined && val !== null) {
-            c.next_followup_date = val;
-          }
-        }
-      }
-    } catch (e: any) {
-      console.warn('Error enriching customers with latest report followup:', e.message);
-    }
-  } else {
-    const inMemLatestMap = new Map<string, string | null>();
-    const sortedInMemReports = [...reportsData].sort(
-      (a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
-    );
-    for (const r of sortedInMemReports) {
-      const cId = String(r.customer_id || '');
-      if (cId && !inMemLatestMap.has(cId)) {
-        inMemLatestMap.set(cId, r.next_followup_date || null);
-      }
-    }
-    for (const c of items) {
-      const cIdStr = String(c.id);
-      if (inMemLatestMap.has(cIdStr)) {
-        c.next_followup_date = inMemLatestMap.get(cIdStr);
-      }
-    }
-  }
-
-  return items;
-}
-
 export function sortCustomersList(items: any[], sortKey?: string): any[] {
   if (!items || items.length <= 1) return items || [];
   const list = [...items];
 
   if (sortKey === 'next_followup_asc' || sortKey === 'next_followup_date') {
     return list.sort((a, b) => {
-      const aTime = a.next_followup_date ? new Date(a.next_followup_date).getTime() : NaN;
-      const bTime = b.next_followup_date ? new Date(b.next_followup_date).getTime() : NaN;
-      const aValid = !isNaN(aTime);
-      const bValid = !isNaN(bTime);
-      if (!aValid && !bValid) return 0;
-      if (!aValid) return 1;
-      if (!bValid) return -1;
-      return aTime - bTime;
+      if (!a.next_followup_date && !b.next_followup_date) return 0;
+      if (!a.next_followup_date) return 1;
+      if (!b.next_followup_date) return -1;
+      return new Date(a.next_followup_date).getTime() - new Date(b.next_followup_date).getTime();
     });
   }
 
   if (sortKey === 'next_followup_desc' || sortKey === '-next_followup_date') {
     return list.sort((a, b) => {
-      const aTime = a.next_followup_date ? new Date(a.next_followup_date).getTime() : NaN;
-      const bTime = b.next_followup_date ? new Date(b.next_followup_date).getTime() : NaN;
-      const aValid = !isNaN(aTime);
-      const bValid = !isNaN(bTime);
-      if (!aValid && !bValid) return 0;
-      if (!aValid) return 1;
-      if (!bValid) return -1;
-      return bTime - aTime;
+      if (!a.next_followup_date && !b.next_followup_date) return 0;
+      if (!a.next_followup_date) return 1;
+      if (!b.next_followup_date) return -1;
+      return new Date(b.next_followup_date).getTime() - new Date(a.next_followup_date).getTime();
     });
   }
 
@@ -421,7 +345,6 @@ router.get('/', async (req: Request, res: Response) => {
       });
     }
 
-    list = await enrichCustomersWithLatestReportFollowup(list);
     list = sortCustomersList(list, sortKey);
     return res.json(list);
   }
@@ -575,7 +498,6 @@ router.get('/', async (req: Request, res: Response) => {
           items = items.filter((c: any) => matchesCustomerSearch(c, search));
         }
 
-        items = await enrichCustomersWithLatestReportFollowup(items);
         items = sortCustomersList(items, sortKey);
 
         const filterCount = resData.meta?.filter_count ?? items.length;
@@ -636,8 +558,6 @@ router.get('/', async (req: Request, res: Response) => {
   if (isFreeOnly) {
     list = list.filter((c) => !c.assigned_marketer_id || c.is_expired);
   }
-  list = await enrichCustomersWithLatestReportFollowup(list);
-
   if (followup_filter && followup_filter !== 'همه' && followup_filter !== 'all') {
     const ff = String(followup_filter);
     const startTodayMs = startOfToday.getTime();
@@ -706,29 +626,6 @@ router.get('/:id', async (req: Request, res: Response) => {
           }
         }
 
-        if (customerReports.length > 0) {
-          customerReports.sort(
-            (a: any, b: any) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
-          );
-          const latestFollowup = customerReports[0].next_followup_date || null;
-          cust.next_followup_date = latestFollowup;
-
-          const currentCustFollowup = custRes.data.next_followup_date
-            ? new Date(custRes.data.next_followup_date).toISOString()
-            : null;
-          const targetFollowupIso = latestFollowup ? new Date(latestFollowup).toISOString() : null;
-
-          if (currentCustFollowup !== targetFollowupIso) {
-            directusFetch(`/items/customers/${encodeURIComponent(id)}`, {
-              method: 'PATCH',
-              body: JSON.stringify({
-                next_followup_date: targetFollowupIso,
-                date_updated: new Date().toISOString(),
-              }),
-            }).catch(() => {});
-          }
-        }
-
         cust.reports = customerReports;
         cust.contacts = customerContacts;
 
@@ -746,27 +643,10 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 
   const cust = computeCustomerExpiration(found);
-  const foundReports = reportsData
-    .filter((r) => String(r.customer_id) === String(id))
-    .sort((a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime());
-  if (foundReports.length > 0) {
-    cust.next_followup_date = foundReports[0].next_followup_date || null;
-  }
-  cust.reports = foundReports;
+  cust.reports = reportsData.filter((r) => String(r.customer_id) === String(id));
   cust.contacts = contactsData.filter((ct) => String(ct.customer_id) === String(id));
 
   res.json(cust);
-});
-
-// POST /api/customers/sync-followups - Trigger synchronization of all customers' next_followup_date with latest reports
-router.post('/sync-followups', async (req: Request, res: Response) => {
-  res.json({
-    success: true,
-    message: 'همگام‌سازی موعد پیگیری مشتریان بر اساس آخرین گزارش در پس‌زمینه آغاز شد.',
-  });
-  syncAllCustomersFollowupFromReports().catch((err) => {
-    console.error('[AlphaDesk] Background followup sync error:', err.message);
-  });
 });
 
 // GET /api/customers/:id/contacts - Get contacts for a customer

@@ -185,17 +185,17 @@ export default function App() {
   };
 
   const canViewAllCustomers = Boolean(
-    currentPersonnel
-      ? (currentPersonnel.role === 'admin' ||
-         currentPersonnel.role === 'sales_manager' ||
-         currentPersonnel.permissions?.can_view_all_customers === true)
-      : currentUser?.is_admin
+    currentUser?.is_admin ||
+      currentPersonnel?.permissions?.can_view_all_customers === true ||
+      ((currentPersonnel?.role === 'admin' || currentPersonnel?.role === 'sales_manager') &&
+        currentPersonnel?.permissions?.can_view_all_customers !== false)
   );
 
   const isCurrentUserAdmin = Boolean(
-    currentPersonnel
-      ? (currentPersonnel.role === 'admin' || currentPersonnel.permissions?.can_manage_personnel === true)
-      : Boolean(currentUser?.is_admin && currentUser?.app_role === 'admin')
+    currentUser?.is_admin ||
+      currentPersonnel?.role === 'admin' ||
+      currentPersonnel?.role === 'sales_manager' ||
+      currentPersonnel?.permissions?.can_manage_personnel === true
   );
 
   const canAccessTenantsTab =
@@ -290,17 +290,8 @@ export default function App() {
           return;
         }
 
-        const effectiveAvatar = targetPersonnel.avatar || targetUser?.avatar || currentUser?.avatar || '';
-        if (effectiveAvatar) {
-          targetPersonnel = { ...targetPersonnel, avatar: effectiveAvatar };
-        }
-
         setCurrentPersonnel(targetPersonnel);
         setApiPersonnelContext(targetPersonnel);
-
-        if (effectiveAvatar && (!currentUser?.avatar || currentUser.avatar !== effectiveAvatar)) {
-          setCurrentUser((prev) => (prev ? { ...prev, avatar: effectiveAvatar } : prev));
-        }
 
         const allowedTenants = getUserAllowedTenants(targetPersonnel, targetUser, tData);
         const currentActive = getActiveTenantId();

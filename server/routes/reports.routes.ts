@@ -724,9 +724,11 @@ router.post('/', async (req: Request, res: Response) => {
       if (custRes?.data) {
         const custPatch: Record<string, any> = {
           status: payload.negotiation_status || custRes.data.status,
-          next_followup_date: nextFollowupIso,
           date_updated: nowIso,
         };
+        if (nextFollowupIso) {
+          custPatch.next_followup_date = nextFollowupIso;
+        }
 
         const cleanCustPatch = cleanCustomerPayloadForDirectus(
           { ...custRes.data, ...custPatch },
@@ -738,10 +740,6 @@ router.post('/', async (req: Request, res: Response) => {
           method: 'PATCH',
           body: JSON.stringify(cleanCustPatch),
         }).catch(() => {});
-      }
-
-      if (payload.customer_id) {
-        await syncCustomerFollowupFromLatestReport(payload.customer_id);
       }
 
       invalidateCustomersCache();
@@ -759,11 +757,13 @@ router.post('/', async (req: Request, res: Response) => {
 
   reportsData.unshift(newReport);
 
-  const custIdx = customersData.findIndex((c) => String(c.id) === String(payload.customer_id));
+  const custIdx = customersData.findIndex((c) => c.id === payload.customer_id);
   if (custIdx >= 0) {
     customersData[custIdx].status =
       payload.negotiation_status || customersData[custIdx].status;
-    customersData[custIdx].next_followup_date = nextFollowupIso;
+    if (nextFollowupIso) {
+      customersData[custIdx].next_followup_date = nextFollowupIso;
+    }
     customersData[custIdx].date_updated = nowIso;
   }
 

@@ -49,12 +49,6 @@ try {
     currentAuthUser = parsed.user || null;
     currentPersonnelContext = parsed.personnel || null;
     currentSessionIat = parsed.session_iat || Date.now();
-
-    if (currentPersonnelContext && currentPersonnelContext.role && currentAuthUser) {
-      currentAuthUser.is_admin = currentPersonnelContext.role === 'admin';
-      currentAuthUser.app_role = currentPersonnelContext.role;
-    }
-
     if (parsed.user?.tenant_id && !localStorage.getItem(TENANT_STORAGE_KEY)) {
       currentTenantId = parsed.user.tenant_id;
     }
@@ -74,10 +68,6 @@ export function setActiveTenantId(id: string) {
 
 export function setApiPersonnelContext(p: Personnel | null) {
   currentPersonnelContext = p;
-  if (p && p.role && currentAuthUser) {
-    currentAuthUser.is_admin = p.role === 'admin';
-    currentAuthUser.app_role = p.role;
-  }
 }
 
 export function getApiPersonnelContext(): Personnel | null {
@@ -85,10 +75,6 @@ export function getApiPersonnelContext(): Personnel | null {
 }
 
 export function getStoredAuthSession(): { user: AuthUser | null; personnel: Personnel | null; token: string; sessionIat: number } {
-  if (currentPersonnelContext && currentPersonnelContext.role && currentAuthUser) {
-    currentAuthUser.is_admin = currentPersonnelContext.role === 'admin';
-    currentAuthUser.app_role = currentPersonnelContext.role;
-  }
   return {
     user: currentAuthUser,
     personnel: currentPersonnelContext,
@@ -102,13 +88,7 @@ export function saveAuthSession(data: AuthResponse) {
   currentAuthUser = data.user || null;
   currentPersonnelContext = data.personnel || null;
   currentSessionIat = Date.now();
-
-  if (currentPersonnelContext && currentPersonnelContext.role && currentAuthUser) {
-    currentAuthUser.is_admin = currentPersonnelContext.role === 'admin';
-    currentAuthUser.app_role = currentPersonnelContext.role;
-  }
-
-  const sessionToSave = { ...data, user: currentAuthUser, personnel: currentPersonnelContext, session_iat: currentSessionIat };
+  const sessionToSave = { ...data, session_iat: currentSessionIat };
   try {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessionToSave));
   } catch {}

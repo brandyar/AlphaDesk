@@ -176,14 +176,15 @@ export function getRequestUser(req: Request): RequestUserContext {
       !isInactive
   );
 
+  const resolvedRole = pMatch?.role || userRole || '';
   const isDirectusSystemAdmin = Boolean(
-    DIRECTUS_ADMIN_ROLE_IDS.includes(roleId)
+    DIRECTUS_ADMIN_ROLE_IDS.includes(roleId) || userRole === 'admin'
   );
 
   // System admin (global admin or personnel with admin role)
   const isSystemAdmin = Boolean(
     hasUserContext &&
-      (pMatch ? pMatch.role === 'admin' : (isDirectusSystemAdmin || userRole === 'admin'))
+      (isDirectusSystemAdmin || userRole === 'admin' || pMatch?.role === 'admin')
   );
 
   // Personnel-level admin/manager (admin or sales_manager)
@@ -212,7 +213,7 @@ export function getRequestUser(req: Request): RequestUserContext {
   return {
     userId: isSessionRevoked || isInactive ? '' : userId,
     personnelId: isSessionRevoked || isInactive ? '' : personnelId,
-    userRole: pMatch ? pMatch.role : (userRole || 'marketer'),
+    userRole: isPersonnelAdmin ? (pMatch?.role === 'sales_manager' ? 'sales_manager' : 'admin') : resolvedRole || 'marketer',
     roleId,
     isAdmin: isSystemAdmin,
     isPersonnelAdmin,
