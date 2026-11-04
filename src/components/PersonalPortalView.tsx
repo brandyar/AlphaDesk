@@ -164,6 +164,17 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const avatarToUse = currentPersonnel?.avatar || currentUser?.avatar || '';
+    if (avatarToUse) setProfileAvatar(avatarToUse);
+    if (currentPersonnel?.name || currentUser?.name) setProfileName(currentPersonnel?.name || currentUser?.name || '');
+    if (currentPersonnel?.username || currentUser?.username) setProfileUsername(currentPersonnel?.username || currentUser?.username || '');
+    if (currentPersonnel?.phone) setProfilePhone(currentPersonnel.phone);
+    if (currentPersonnel?.bank_card_number) setProfileBankCard(currentPersonnel.bank_card_number);
+    if (currentPersonnel?.iban) setProfileIban(currentPersonnel.iban);
+    if (currentPersonnel?.national_id) setProfileNationalId(currentPersonnel.national_id);
+  }, [currentPersonnel, currentUser]);
+
   const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -496,11 +507,20 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
           <div className="flex items-center gap-3">
             <div className="relative">
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-[#1DB954] dark:to-[#14833b] text-white dark:text-black font-black text-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 dark:shadow-[#1DB954]/20 overflow-hidden border-2 border-emerald-500 dark:border-[#1DB954]">
-                {profileAvatar ? (
+                {(profileAvatar || currentPersonnel?.avatar || currentUser?.avatar) ? (
                   <img
-                    src={getAvatarUrl(profileAvatar)}
+                    key={getAvatarUrl(profileAvatar || currentPersonnel?.avatar || currentUser?.avatar)}
+                    src={getAvatarUrl(profileAvatar || currentPersonnel?.avatar || currentUser?.avatar)}
                     alt={profileName}
                     className="w-full h-full object-cover"
+                    onLoad={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = 'block';
+                      const parent = (e.currentTarget as HTMLElement).parentElement;
+                      if (parent) {
+                        const existing = parent.querySelector('.portal-avatar-fallback');
+                        if (existing) existing.remove();
+                      }
+                    }}
                     onError={(e) => {
                       (e.currentTarget as HTMLElement).style.display = 'none';
                       const parent = (e.currentTarget as HTMLElement).parentElement;

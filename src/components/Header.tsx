@@ -210,9 +210,17 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 {(currentPersonnel?.avatar || currentUser?.avatar) ? (
                   <img
+                    key={getAvatarUrl(currentPersonnel?.avatar || currentUser?.avatar)}
                     src={getAvatarUrl(currentPersonnel?.avatar || currentUser?.avatar)}
                     alt={displayName}
-                    className="w-full h-full object-cover"
+                    onLoad={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = 'block';
+                      const parent = (e.currentTarget as HTMLElement).parentElement;
+                      if (parent) {
+                        const existing = parent.querySelector('.header-avatar-fallback');
+                        if (existing) existing.remove();
+                      }
+                    }}
                     onError={(e) => {
                       (e.currentTarget as HTMLElement).style.display = 'none';
                       const parent = (e.currentTarget as HTMLElement).parentElement;

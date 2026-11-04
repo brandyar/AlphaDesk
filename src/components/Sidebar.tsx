@@ -26,7 +26,7 @@ import {
   Plus,
   Database,
 } from 'lucide-react';
-import { Personnel, TeamSubTab, Tenant } from '../types';
+import { Personnel, AuthUser, TeamSubTab, Tenant } from '../types';
 import { getAvatarUrl, getUserAllowedTenants } from '../utils';
 
 export type NavTab =
@@ -60,6 +60,7 @@ interface SidebarProps {
     totalTenants?: number;
   };
   currentPersonnel: Personnel | null;
+  currentUser?: AuthUser | null;
   isAdmin?: boolean;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
@@ -77,6 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   counts,
   currentPersonnel,
+  currentUser,
   isAdmin = false,
   isOpenMobile,
   onCloseMobile,
@@ -789,24 +791,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 dark:bg-[#282828] dark:text-[#1DB954] flex items-center justify-center font-bold text-xs border border-emerald-200 dark:border-[#3e3e3e] flex-shrink-0 overflow-hidden shadow-xs">
-              {currentPersonnel?.avatar ? (
+              {(currentPersonnel?.avatar || currentUser?.avatar) ? (
                 <img
-                  src={getAvatarUrl(currentPersonnel.avatar)}
+                  key={getAvatarUrl(currentPersonnel?.avatar || currentUser?.avatar)}
+                  src={getAvatarUrl(currentPersonnel?.avatar || currentUser?.avatar)}
                   alt="avatar"
                   className="w-full h-full object-cover"
+                  onLoad={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'block';
+                    const parent = (e.currentTarget as HTMLElement).parentElement;
+                    if (parent) {
+                      const existing = parent.querySelector('.sidebar-avatar-fallback');
+                      if (existing) existing.remove();
+                    }
+                  }}
                   onError={(e) => {
                     (e.currentTarget as HTMLElement).style.display = 'none';
                     const parent = (e.currentTarget as HTMLElement).parentElement;
                     if (parent && !parent.querySelector('.sidebar-avatar-fallback')) {
                       const span = document.createElement('span');
                       span.className = 'sidebar-avatar-fallback font-bold text-xs';
-                      span.textContent = currentPersonnel ? currentPersonnel.name.charAt(0) : 'U';
+                      span.textContent = currentPersonnel?.name ? currentPersonnel.name.charAt(0) : (currentUser?.name ? currentUser.name.charAt(0) : 'U');
                       parent.appendChild(span);
                     }
                   }}
                 />
               ) : (
-                currentPersonnel ? currentPersonnel.name.charAt(0) : 'U'
+                currentPersonnel?.name ? currentPersonnel.name.charAt(0) : (currentUser?.name ? currentUser.name.charAt(0) : 'U')
               )}
             </div>
             <div className="truncate">

@@ -1957,9 +1957,18 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                             <div className="w-10 h-10 rounded-xl bg-[#222] border border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-sm flex-shrink-0">
                               {p.avatar ? (
                                 <img
+                                  key={getAvatarUrl(p.avatar)}
                                   src={getAvatarUrl(p.avatar)}
                                   alt={p.name}
                                   className="w-full h-full object-cover"
+                                  onLoad={(e) => {
+                                    (e.currentTarget as HTMLElement).style.display = 'block';
+                                    const parent = (e.currentTarget as HTMLElement).parentElement;
+                                    if (parent) {
+                                      const existing = parent.querySelector('.table-avatar-fallback');
+                                      if (existing) existing.remove();
+                                    }
+                                  }}
                                   onError={(e) => {
                                     (e.currentTarget as HTMLElement).style.display = 'none';
                                     const parent = (e.currentTarget as HTMLElement).parentElement;
@@ -2157,9 +2166,18 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         <div className="w-12 h-12 rounded-2xl bg-[#222] border-2 border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-base flex-shrink-0 shadow-md">
                           {p.avatar ? (
                             <img
+                              key={getAvatarUrl(p.avatar)}
                               src={getAvatarUrl(p.avatar)}
                               alt={p.name}
                               className="w-full h-full object-cover"
+                              onLoad={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = 'block';
+                                const parent = (e.currentTarget as HTMLElement).parentElement;
+                                if (parent) {
+                                  const existing = parent.querySelector('.card-avatar-fallback');
+                                  if (existing) existing.remove();
+                                }
+                              }}
                               onError={(e) => {
                                 (e.currentTarget as HTMLElement).style.display = 'none';
                                 const parent = (e.currentTarget as HTMLElement).parentElement;

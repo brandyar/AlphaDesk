@@ -1070,6 +1070,7 @@ export default function App() {
           totalTenants: tenants.length,
         }}
         currentPersonnel={currentPersonnel}
+        currentUser={currentUser}
         isAdmin={Boolean(
           currentUser?.is_admin ||
           currentUser?.app_role === 'admin' ||

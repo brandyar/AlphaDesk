@@ -96,11 +96,20 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           {/* Avatar Preview */}
           <div className="relative flex-shrink-0">
             <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-[#222] border-2 border-emerald-500 dark:border-[#1DB954] overflow-hidden flex items-center justify-center text-slate-900 dark:text-white font-black text-xl shadow-lg shadow-black/10 dark:shadow-black/40">
-              {profileAvatar ? (
+              {(profileAvatar || currentPersonnel?.avatar || currentUser?.avatar) ? (
                 <img
-                  src={getAvatarUrl(profileAvatar)}
+                  key={getAvatarUrl(profileAvatar || currentPersonnel?.avatar || currentUser?.avatar)}
+                  src={getAvatarUrl(profileAvatar || currentPersonnel?.avatar || currentUser?.avatar)}
                   alt="avatar preview"
                   className="w-full h-full object-cover"
+                  onLoad={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'block';
+                    const parent = (e.currentTarget as HTMLElement).parentElement;
+                    if (parent) {
+                      const existing = parent.querySelector('.profile-tab-avatar-fallback');
+                      if (existing) existing.remove();
+                    }
+                  }}
                   onError={(e) => {
                     (e.currentTarget as HTMLElement).style.display = 'none';
                     const parent = (e.currentTarget as HTMLElement).parentElement;

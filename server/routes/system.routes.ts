@@ -428,25 +428,42 @@ export const handleAssetProxy = async (req: Request, res: Response, next?: any) 
     return res.send(cached.buffer);
   }
 
-  // 2. Fetch from Directus with both Bearer header and access_token query param
   if (directusUrl) {
     try {
-      const tokenParam = directusAdminToken ? `?access_token=${encodeURIComponent(directusAdminToken)}` : '';
-      const directusAssetUrl = `${directusUrl.replace(/\/$/, '')}/assets/${cleanId}${tokenParam}`;
+      const tokenToUse = directusAdminToken || process.env.DIRECTUS_ADMIN_TOKEN || '';
+      const urlToUse = directusUrl || process.env.DIRECTUS_URL || '';
+      const cleanBaseUrl = urlToUse.replace(/\/$/, '');
       const headers: Record<string, string> = {};
-      if (directusAdminToken) {
-        headers['Authorization'] = `Bearer ${directusAdminToken}`;
+      if (tokenToUse) {
+        headers['Authorization'] = `Bearer ${tokenToUse}`;
       }
-      const assetRes = await fetch(directusAssetUrl, { headers });
 
-      if (assetRes.ok) {
+      // 1. Directus thumbnail transformation: ?width=250&height=250&quality=80&format=webp
+      // Downloads in ~200ms (<10KB) and avoids upstream socket stalling on raw full-sized images
+      const thumbUrl = `${cleanBaseUrl}/assets/${cleanId}?width=250&height=250&quality=80&format=webp`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      let assetRes = await fetch(thumbUrl, { headers, signal: controller.signal }).catch(() => null);
+      clearTimeout(timeoutId);
+
+      // 2. Fallback to raw asset if thumbnail transformation was not available
+      if (!assetRes || !assetRes.ok) {
+        const rawController = new AbortController();
+        const rawTimeoutId = setTimeout(() => rawController.abort(), 5000);
+        assetRes = await fetch(`${cleanBaseUrl}/assets/${cleanId}`, { headers, signal: rawController.signal }).catch(() => null);
+        clearTimeout(rawTimeoutId);
+      }
+
+      if (assetRes && assetRes.ok) {
         const contentType = assetRes.headers.get('content-type') || 'image/jpeg';
         const buffer = Buffer.from(await assetRes.arrayBuffer());
         localAvatarCacheMap.set(cleanId, { buffer, contentType });
+        localAvatarCacheMap.set(id, { buffer, contentType });
         res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
         return res.send(buffer);
-      } else {
+      } else if (assetRes) {
         console.warn(`[Asset Proxy] Directus asset ${cleanId} returned HTTP ${assetRes.status}`);
       }
     } catch (err: any) {
