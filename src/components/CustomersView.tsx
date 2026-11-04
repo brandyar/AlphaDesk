@@ -24,7 +24,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
-import { formatTimeRemaining, formatPersianDate, formatDisplayDate, formatDisplayDateOnly, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS, toPersianDigits } from '../utils';
+import { formatTimeRemaining, formatPersianDate, formatDisplayDate, formatDisplayDateOnly, formatFollowupRelativeBadge, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS, toPersianDigits } from '../utils';
 import { fetchCustomersPaginated } from '../api';
 import { PaginationControl } from './PaginationControl';
 
@@ -420,6 +420,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   {items.map((c) => {
                     const timer = formatTimeRemaining(c.assignment_deadline);
                     const statusTheme = getStatusTheme(c.status);
+                    const fBadge = formatFollowupRelativeBadge(c.next_followup_date);
 
                     const contactsArr = Array.isArray(c.contacts) ? c.contacts : [];
                     const mobilesArr = Array.isArray(c.mobile_numbers) ? c.mobile_numbers : [];
@@ -470,12 +471,19 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           {c.assigned_marketer_name || 'تخصیص نیافته'}
                         </td>
 
-                        {/* Next Follow-up Date (Day, Month, Year only) */}
+                        {/* Next Follow-up Date (Day, Month, Year only + Relative Badge) */}
                         <td className="py-3.5 px-4 whitespace-nowrap">
-                          <div className="flex items-center gap-1.5 text-xs text-slate-800 dark:text-white font-medium">
-                            <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />
-                            <span>{c.next_followup_date ? formatDisplayDateOnly(c.next_followup_date) : 'ثبت نشده'}</span>
-                          </div>
+                          {c.next_followup_date ? (
+                            <div className="flex items-center gap-1.5 text-xs text-slate-800 dark:text-white font-medium">
+                              <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />
+                              <span className="font-mono">{formatDisplayDateOnly(c.next_followup_date)}</span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-sans font-medium ${fBadge.badgeClass}`}>
+                                {fBadge.text}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400 dark:text-[#666]">ثبت نشده</span>
+                          )}
                         </td>
 
                         {/* Expiry Timer */}
@@ -602,9 +610,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                       <span>موعد پیگیری:</span>
                     </span>
-                    <span className="font-semibold text-slate-900 dark:text-white font-mono">
-                      {c.next_followup_date ? formatDisplayDateOnly(c.next_followup_date) : 'ثبت نشده'}
-                    </span>
+                    <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-white font-mono">
+                      <span>{c.next_followup_date ? formatDisplayDateOnly(c.next_followup_date) : 'ثبت نشده'}</span>
+                      {c.next_followup_date && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-sans font-medium ${formatFollowupRelativeBadge(c.next_followup_date).badgeClass}`}>
+                          {formatFollowupRelativeBadge(c.next_followup_date).text}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between text-xs">
