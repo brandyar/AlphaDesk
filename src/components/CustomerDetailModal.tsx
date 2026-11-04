@@ -219,29 +219,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-50 dark:bg-[#121212] overflow-y-auto font-sans flex flex-col text-slate-900 dark:text-white">
-      {/* Sticky Full-Page Header & Navigation Bar */}
-      <div className="sticky top-0 z-30 bg-white/95 dark:bg-[#181818]/95 backdrop-blur-md border-b border-slate-200 dark:border-[#282828] px-4 sm:px-6 py-3 flex items-center justify-between shadow-xs">
-        <button
-          type="button"
-          onClick={onClose}
-          className="h-9 px-4 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-[#1DB954]/15 dark:hover:bg-[#1DB954]/25 dark:text-[#1DB954] border border-emerald-200 dark:border-[#1DB954]/30 font-bold text-xs transition-all flex items-center gap-2 cursor-pointer shadow-xs hover:scale-105"
-        >
-          <ArrowRight className="w-4 h-4" />
-          <span>بازگشت به لیست مشتریان</span>
-        </button>
-
-        <div className="text-xs text-slate-500 dark:text-[#A7A7A7] font-semibold flex items-center gap-2">
-          <span className="hidden sm:inline">مدیریت مشتریان</span>
-          <span className="hidden sm:inline text-slate-300 dark:text-[#444]">/</span>
-          <span className="text-slate-900 dark:text-white font-extrabold">{customer.company_name}</span>
-        </div>
-      </div>
-
-      {/* Main Full Page Scrollable Body */}
-      <div className="max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex-1 flex flex-col space-y-6">
-        {/* Customer Header Card */}
-        <div className="p-4 sm:p-6 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+    <div className="w-full max-w-6xl mx-auto space-y-6 text-slate-900 dark:text-white font-sans">
+      {/* Customer Header Card */}
+      <div className="p-4 sm:p-6 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-[#282828] border border-slate-300 dark:border-[#3e3e3e] flex items-center justify-center text-emerald-600 dark:text-[#1DB954] font-black text-xl flex-shrink-0">
               {(customer.manager_name?.trim() || customer.negotiator_name?.trim() || customer.company_name).charAt(0)}
@@ -1119,7 +1099,6 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             </div>
           </div>
         </div>
-      </div>
     </div>
   );
 };

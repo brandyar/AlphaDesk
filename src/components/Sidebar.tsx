@@ -39,7 +39,8 @@ export type NavTab =
   | 'admin_reports'
   | 'team'
   | 'tenants'
-  | 'personal_portal';
+  | 'personal_portal'
+  | 'customer_detail';
 
 interface SidebarProps {
   activeTab: NavTab;

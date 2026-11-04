@@ -979,34 +979,28 @@ export default function App() {
     setCustomers(refreshed);
   };
 
-  const openCustomerDetail = async (customer: Customer) => {
-    try {
-      const full = await fetchCustomerById(customer.id);
-      const matchReports = reports.filter(
-        (r) =>
-          String(r.customer_id) === String(customer.id) ||
-          (typeof r.customer_id === 'object' && r.customer_id !== null && String((r.customer_id as any).id) === String(customer.id))
-      );
-      const combinedReports = (full.reports && full.reports.length > 0)
-        ? full.reports
-        : matchReports.length > 0 ? matchReports : (customer.reports || []);
-
-      setSelectedCustomer({
-        ...full,
-        reports: combinedReports,
-      });
-    } catch {
-      const matchReports = reports.filter(
-        (r) =>
-          String(r.customer_id) === String(customer.id) ||
-          (typeof r.customer_id === 'object' && r.customer_id !== null && String((r.customer_id as any).id) === String(customer.id))
-      );
-      setSelectedCustomer({
-        ...customer,
-        reports: matchReports.length > 0 ? matchReports : (customer.reports || []),
-      });
-    }
+  const openCustomerDetail = (customer: Customer) => {
+    if (!customer || !customer.id) return;
+    const detailUrl = `${window.location.origin}${window.location.pathname}?customer_id=${customer.id}`;
+    window.open(detailUrl, '_blank');
   };
+
+  // URL query parameter listener for opening customer in a new tab
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetCustId = urlParams.get('customer_id') || urlParams.get('id');
+    if (targetCustId) {
+      setActiveTab('customer_detail' as NavTab);
+      fetchCustomerById(targetCustId)
+        .then((full) => {
+          setSelectedCustomer(full);
+        })
+        .catch(() => {
+          const match = customers.find((c) => String(c.id) === String(targetCustId));
+          if (match) setSelectedCustomer(match);
+        });
+    }
+  }, [customers]);
 
   // If not authenticated, block dashboard and show full-screen login/register
   if (!currentUser) {
@@ -1340,6 +1334,40 @@ export default function App() {
                     personnelList={personnelList}
                   />
                 )}
+
+                {activeTab === ('customer_detail' as NavTab) && (
+                  selectedCustomer ? (
+                    <CustomerDetailModal
+                      customer={selectedCustomer}
+                      isOpen={true}
+                      onClose={() => handleNavigateToTab('customers')}
+                      onAddReport={handleAddCustomerReport}
+                      onReassign={handleReassignCustomer}
+                      onAddContact={handleAddCustomerContact}
+                      onEdit={(cust) => {
+                        setEditingCustomer(cust);
+                        setIsCustomerModalOpen(true);
+                      }}
+                      onDelete={(custId) => {
+                        handleDeleteCustomer(custId);
+                        handleNavigateToTab('customers');
+                      }}
+                      onOpenMerge={(customerId) => {
+                        setMergeInitialCustomerIds([customerId]);
+                        setIsMergeModalOpen(true);
+                      }}
+                      personnelList={personnelList}
+                      currentPersonnel={currentPersonnel}
+                      currentUser={currentUser}
+                      isAdmin={isCurrentUserAdmin}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-64 space-y-3">
+                      <div className="w-8 h-8 rounded-full border-2 border-emerald-500 dark:border-[#1DB954] border-t-transparent animate-spin" />
+                      <div className="text-xs text-slate-500 dark:text-[#A7A7A7]">در حال دریافت اطلاعات کامل پرونده مشتری...</div>
+                    </div>
+                  )
+                )}
               </ErrorBoundary>
             </div>
           )}
@@ -1461,29 +1489,7 @@ export default function App() {
         prefilledNotes={prefilledLeadNotes}
       />
 
-      {/* Customer Profile & Timeline Detail Modal */}
-      <CustomerDetailModal
-        customer={selectedCustomer}
-        isOpen={!!selectedCustomer}
-        onClose={() => setSelectedCustomer(null)}
-        onAddReport={handleAddCustomerReport}
-        onReassign={handleReassignCustomer}
-        onAddContact={handleAddCustomerContact}
-        onEdit={(cust) => {
-          setSelectedCustomer(null);
-          setEditingCustomer(cust);
-          setIsCustomerModalOpen(true);
-        }}
-        onDelete={handleDeleteCustomer}
-        onOpenMerge={(customerId) => {
-          setMergeInitialCustomerIds([customerId]);
-          setIsMergeModalOpen(true);
-        }}
-        personnelList={personnelList}
-        currentPersonnel={currentPersonnel}
-        currentUser={currentUser}
-        isAdmin={isCurrentUserAdmin}
-      />
+
 
       {/* Standalone Add Report Modal */}
       <AddReportModal
