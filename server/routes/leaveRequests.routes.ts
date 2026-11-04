@@ -412,8 +412,6 @@ router.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
         sendIppanelSmsPattern(applicantPhone, patternToUse, statusVars)
           .catch(e => console.warn('Leave request status SMS error:', e.message));
       }
-      sendTenantAdminsSmsPattern(targetReq.tenant_id || 'default', patternToUse, statusVars)
-        .catch(e => console.warn('Leave status SMS to admin warning:', e.message));
     }
   }
 

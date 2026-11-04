@@ -13,6 +13,7 @@ import {
   getRequestTenantId,
   getRequestUser,
   formatAvatarUrl,
+  extractFileId,
 } from '../middlewares/auth.middleware.ts';
 import { Personnel } from '../types.ts';
 
@@ -30,6 +31,8 @@ export function enrichPersonnel(p: any): any {
     ? p.permissions.allowed_tenant_ids.map(String)
     : [tid];
 
+  const formattedAvatar = formatAvatarUrl(p.avatar) || (typeof p.avatar === 'string' ? p.avatar : '');
+
   return {
     ...p,
     id: String(p.id),
@@ -40,6 +43,7 @@ export function enrichPersonnel(p: any): any {
       allowed_tenant_ids: allowed,
     },
     active: p.active !== false && p.status !== 'inactive',
+    avatar: formattedAvatar,
   };
 }
 
@@ -426,12 +430,36 @@ router.post('/me/profile', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken && targetId) {
     try {
+      const directusPersonnelPatch: Record<string, any> = { ...personnelPatch };
+      if (avatar !== undefined) {
+        const fileId = extractFileId(avatar);
+        if (fileId) directusPersonnelPatch.avatar = fileId;
+        else if (!avatar) directusPersonnelPatch.avatar = null;
+        else delete directusPersonnelPatch.avatar;
+      }
+
       const patched = await directusFetch(`/items/personnel/${encodeURIComponent(targetId)}`, {
         method: 'PATCH',
-        body: JSON.stringify(personnelPatch),
+        body: JSON.stringify(directusPersonnelPatch),
       });
       if (patched?.data) {
         targetPersonnel = enrichPersonnel(patched.data);
+      }
+
+      if (userId) {
+        const fileId = extractFileId(avatar);
+        const userPatch: Record<string, any> = {};
+        if (name !== undefined) userPatch.first_name = String(name).trim();
+        if (avatar !== undefined) {
+          if (fileId) userPatch.avatar = fileId;
+          else if (!avatar) userPatch.avatar = null;
+        }
+        if (Object.keys(userPatch).length > 0) {
+          await directusFetch(`/users/${userId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(userPatch),
+          }).catch(() => {});
+        }
       }
     } catch (err: any) {
       console.warn('Directus personnel profile PATCH warning:', err.message);

@@ -407,9 +407,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       className="p-3 bg-slate-50 dark:bg-[#121212] hover:bg-slate-100 dark:hover:bg-[#1a1a1a] rounded-xl border border-slate-200 dark:border-[#282828] hover:border-slate-300 dark:hover:border-[#383838] flex items-center justify-between gap-3 transition-colors cursor-pointer"
                     >
                       <div className="min-w-0">
-                        <div className="font-bold text-xs text-slate-900 dark:text-white truncate">{c.company_name}</div>
+                        <div className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                          {c.manager_name || c.negotiator_name || c.company_name || 'بدون نام'}
+                        </div>
                         <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] mt-0.5">
-                          مذاکره‌کننده: {c.assigned_marketer_name} · {c.city || c.province || 'تهران'}
+                          کسب‌وکار: {c.company_name || '-'} · کارشناس: {c.assigned_marketer_name || 'نامشخص'} · {c.city || c.province || 'تهران'}
                         </div>
                       </div>
 
@@ -487,8 +489,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     className="p-2.5 bg-white/90 dark:bg-[#121212]/90 hover:bg-slate-50 dark:hover:bg-[#181818] rounded-xl border border-rose-200 dark:border-[#E22134]/30 flex items-center justify-between text-xs transition-colors cursor-pointer"
                   >
                     <div className="truncate">
-                      <div className="font-bold text-slate-900 dark:text-white truncate">{c.company_name}</div>
-                      <div className="text-[10px] text-slate-500 dark:text-[#A7A7A7]">{c.assigned_marketer_name}</div>
+                      <div className="font-bold text-slate-900 dark:text-white truncate">
+                        {c.manager_name || c.negotiator_name || c.company_name || 'بدون نام'}
+                      </div>
+                      <div className="text-[10px] text-slate-500 dark:text-[#A7A7A7]">
+                        {c.company_name ? `${c.company_name} · ` : ''}{c.assigned_marketer_name || 'نامشخص'}
+                      </div>
                     </div>
                     <span className="text-[10px] text-rose-600 dark:text-rose-400 font-mono font-bold whitespace-nowrap mr-2">
                       {formatTimeRemaining(c.assignment_deadline).text}

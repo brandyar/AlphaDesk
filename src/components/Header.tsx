@@ -153,25 +153,7 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
       </div>
 
-      {/* Search Input */}
-      <div className="flex-1 max-w-xs sm:max-w-sm md:max-w-md relative min-w-0">
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="جستجو در نام، مدیر، شهر..."
-          className="w-full h-10 sm:h-11 bg-slate-100 dark:bg-[#282828] rounded-full pl-3 sm:pl-4 pr-9 sm:pr-11 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#888888] border border-slate-200 dark:border-transparent focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-white transition-all truncate"
-        />
-        <Search className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-slate-400 dark:text-[#A7A7A7] absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-        {searchQuery && (
-          <button
-            onClick={() => onSearchChange('')}
-            className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-[10px] sm:text-xs text-slate-400 hover:text-slate-700 dark:text-[#A7A7A7] dark:hover:text-white"
-          >
-            پاک کردن
-          </button>
-        )}
-      </div>
+
 
       {/* Action Controls & User Profile */}
       <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">

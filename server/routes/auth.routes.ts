@@ -17,39 +17,9 @@ import {
 } from '../middlewares/auth.middleware.ts';
 import { sendIppanelSmsPattern, sendTenantAdminsSmsPattern, getPersonnelFullName } from '../services/sms.service.ts';
 import { enrichPersonnel } from './personnel.routes.ts';
+import { localAvatarCacheMap, handleAssetProxy } from './system.routes.ts';
 
 const router = Router();
-
-// Proxy for directus assets/avatars
-const handleAssetProxy = async (req: Request, res: Response, next: NextFunction) => {
-  const assetId = req.params.id;
-
-  // Pass through static frontend build files (.js, .css, .map, etc.) to express.static / Vite
-  if (assetId && /\.(js|css|map|woff2?|ttf|eot|ico|svg)$/i.test(assetId)) {
-    return next();
-  }
-
-  if (directusUrl) {
-    try {
-      const assetUrl = `${directusUrl.replace(/\/$/, '')}/assets/${assetId}`;
-      const headers: Record<string, string> = {};
-      if (directusAdminToken) {
-        headers['Authorization'] = `Bearer ${directusAdminToken}`;
-      }
-      const fetchRes = await fetch(assetUrl, { headers });
-      if (fetchRes.ok) {
-        const contentType = fetchRes.headers.get('content-type') || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        const buffer = Buffer.from(await fetchRes.arrayBuffer());
-        return res.send(buffer);
-      }
-    } catch (e: any) {
-      console.warn('Asset proxy error:', e.message);
-    }
-  }
-  return res.status(404).send('Asset not found');
-};
 
 router.get('/assets/:id', handleAssetProxy);
 router.get('/api/assets/:id', handleAssetProxy);
@@ -559,21 +529,49 @@ router.get('/me', async (req: Request, res: Response) => {
 
 router.post('/change-password', async (req: Request, res: Response) => {
   const { current_password, new_password } = req.body;
-  const { userId } = getRequestUser(req);
+  const { userId, personnelId, userEmail } = getRequestUser(req);
 
-  if (!new_password || new_password.length < 6) {
+  if (!new_password || String(new_password).trim().length < 6) {
     return res.status(400).json({ error: 'رمز عبور جدید باید حداقل ۶ کاراکتر باشد.' });
   }
 
-  if (directusUrl && directusAdminToken && userId) {
+  if (directusUrl && directusAdminToken) {
     try {
-      await directusFetch(`/users/${userId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ password: new_password }),
-      });
-      return res.json({ success: true, message: 'رمز عبور با موفقیت تغییر یافت.' });
+      let targetDirectusUserId: string | null = null;
+
+      if (userId && !String(userId).startsWith('p-')) {
+        targetDirectusUserId = String(userId);
+      }
+
+      if (!targetDirectusUserId && (personnelId || userEmail)) {
+        const pMatch = personnelData.find(
+          (p) =>
+            (personnelId && String(p.id).toLowerCase() === String(personnelId).toLowerCase()) ||
+            (userEmail && p.email && p.email.toLowerCase() === userEmail.toLowerCase())
+        );
+        if (pMatch?.user_id) {
+          targetDirectusUserId = String(pMatch.user_id);
+        }
+      }
+
+      if (!targetDirectusUserId && userEmail) {
+        const uRes = await directusFetch(
+          `/users?filter[email][_eq]=${encodeURIComponent(userEmail.toLowerCase())}`
+        ).catch(() => null);
+        if (uRes?.data && uRes.data.length > 0) {
+          targetDirectusUserId = String(uRes.data[0].id);
+        }
+      }
+
+      if (targetDirectusUserId) {
+        await directusFetch(`/users/${targetDirectusUserId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ password: String(new_password).trim() }),
+        });
+        return res.json({ success: true, message: 'رمز عبور با موفقیت تغییر یافت.' });
+      }
     } catch (err: any) {
-      return res.status(500).json({ error: `خطا در تغییر رمز عبور: ${err.message}` });
+      console.warn('Change password Directus warning:', err.message);
     }
   }
 

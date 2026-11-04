@@ -100,6 +100,24 @@ export function formatAvatarUrl(avatar: any): string | undefined {
   return `/api/assets/${raw}`;
 }
 
+export function extractFileId(avatar: any): string | null {
+  if (!avatar) return null;
+  if (typeof avatar === 'object' && avatar !== null) {
+    return avatar.id || avatar.fileId || null;
+  }
+  if (typeof avatar !== 'string') return null;
+  const str = avatar.trim();
+  if (!str) return null;
+  if (str.startsWith('data:')) return null;
+  const match = str.match(/\/api\/assets\/([a-zA-Z0-9\-_]+)/) || str.match(/\/assets\/([a-zA-Z0-9\-_]+)/);
+  if (match && match[1]) return match[1];
+  if (!str.startsWith('http://') && !str.startsWith('https://') && !str.startsWith('/')) {
+    return str;
+  }
+  return null;
+}
+
+
 export function getRequestUser(req: Request): RequestUserContext {
   const userId =
     (req.headers['x-user-id'] as string) || (req.query.user_id as string) || '';

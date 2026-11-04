@@ -18,13 +18,14 @@ import {
   initialPersonnel,
 } from '../config.ts';
 import { directusFetch, directusFetchAllPages, directusSafeBatchInsert, directusSafeBatchPatch } from '../directus/client.ts';
-import { getRequestUser, getRequestTenantId } from '../middlewares/auth.middleware.ts';
+import { getRequestUser, getRequestTenantId, extractFileId, formatAvatarUrl } from '../middlewares/auth.middleware.ts';
 import { invalidateCustomersCache, invalidateReportsCache } from '../directus/cache.ts';
 import { resolveDirectusTenantId, backfillNullTenantsDirectus } from '../directus/sync.ts';
 import { normalizeContactValue, normalizePersianString } from '../services/phoneNormalizer.ts';
 import { Personnel } from '../types.ts';
 
 const router = Router();
+
 
 // GET /api/health & /health for Docker container healthchecks
 router.get('/api/health', (req: Request, res: Response) => {
@@ -320,10 +321,18 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
         }
       }
 
+      const directusFileId = extractFileId(avatar);
+      const directusPersonnelPatch: Record<string, any> = { ...personnelPatch };
+      if (avatar !== undefined) {
+        if (directusFileId) directusPersonnelPatch.avatar = directusFileId;
+        else if (!avatar) directusPersonnelPatch.avatar = null;
+        else delete directusPersonnelPatch.avatar;
+      }
+
       if (foundPId) {
         const updatedRes = await directusFetch(`/items/personnel/${foundPId}`, {
           method: 'PATCH',
-          body: JSON.stringify(personnelPatch)
+          body: JSON.stringify(directusPersonnelPatch)
         });
         targetPersonnel = updatedRes?.data || { id: foundPId, ...personnelPatch };
       } else {
@@ -338,25 +347,25 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
             role: 'marketer',
             status: 'active',
             user_id: userId || null,
-            ...personnelPatch
+            ...directusPersonnelPatch
           })
         });
         targetPersonnel = createdRes?.data || { id: newPId, ...personnelPatch };
       }
 
       if (userId) {
-        let directusAvatarId: string | undefined = undefined;
-        if (typeof avatar === 'string') {
-          const match = avatar.match(/\/api\/assets\/([a-zA-Z0-9\-_]+)/);
-          directusAvatarId = match ? match[1] : (!avatar.startsWith('http') && !avatar.startsWith('data:') && !avatar.startsWith('/') ? avatar : undefined);
+        const userPatch: Record<string, any> = {};
+        if (name) userPatch.first_name = name;
+        if (avatar !== undefined) {
+          if (directusFileId) userPatch.avatar = directusFileId;
+          else if (!avatar) userPatch.avatar = null;
         }
-        await directusFetch(`/users/${userId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            ...(name ? { first_name: name } : {}),
-            ...(directusAvatarId ? { avatar: directusAvatarId } : {})
-          })
-        }).catch(() => {});
+        if (Object.keys(userPatch).length > 0) {
+          await directusFetch(`/users/${userId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(userPatch)
+          }).catch(() => {});
+        }
       }
     } catch (err: any) {
       console.error('Directus personnel profile update error:', err.message);
@@ -391,30 +400,52 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
   res.json({ success: true, personnel: targetPersonnel, message: 'مشخصات پروفایل با موفقیت در پایگاه داده مرکزی ذخیره شد.' });
 });
 
-// GET /api/assets/:id (Directus asset proxy with admin token)
-const handleAssetProxy = async (req: Request, res: Response) => {
+interface LocalAvatarCacheItem {
+  buffer: Buffer;
+  contentType: string;
+}
+export const localAvatarCacheMap = new Map<string, LocalAvatarCacheItem>();
+
+// GET /api/assets/:id (Directus asset proxy with admin token & in-memory fallback)
+export const handleAssetProxy = async (req: Request, res: Response, next?: any) => {
   const { id } = req.params;
   if (!id) {
     return res.status(400).send('Asset ID is required');
   }
 
+  if (id && /\.(js|css|map|woff2?|ttf|eot|ico|svg)$/i.test(id)) {
+    if (typeof next === 'function') return next();
+    return res.status(404).send('Not static asset');
+  }
+
   const cleanId = id.replace(/\.[a-zA-Z0-9]+$/, '');
 
-  if (directusUrl && directusAdminToken) {
+  // 1. Check local in-memory avatar cache first
+  const cached = localAvatarCacheMap.get(cleanId) || localAvatarCacheMap.get(id);
+  if (cached) {
+    res.setHeader('Content-Type', cached.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+    return res.send(cached.buffer);
+  }
+
+  // 2. Fetch from Directus with both Bearer header and access_token query param
+  if (directusUrl) {
     try {
-      const directusAssetUrl = `${directusUrl.replace(/\/$/, '')}/assets/${cleanId}`;
-      const assetRes = await fetch(directusAssetUrl, {
-        headers: {
-          'Authorization': `Bearer ${directusAdminToken}`
-        }
-      });
+      const tokenParam = directusAdminToken ? `?access_token=${encodeURIComponent(directusAdminToken)}` : '';
+      const directusAssetUrl = `${directusUrl.replace(/\/$/, '')}/assets/${cleanId}${tokenParam}`;
+      const headers: Record<string, string> = {};
+      if (directusAdminToken) {
+        headers['Authorization'] = `Bearer ${directusAdminToken}`;
+      }
+      const assetRes = await fetch(directusAssetUrl, { headers });
 
       if (assetRes.ok) {
         const contentType = assetRes.headers.get('content-type') || 'image/jpeg';
+        const buffer = Buffer.from(await assetRes.arrayBuffer());
+        localAvatarCacheMap.set(cleanId, { buffer, contentType });
         res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
-        const buffer = await assetRes.arrayBuffer();
-        return res.send(Buffer.from(buffer));
+        return res.send(buffer);
       } else {
         console.warn(`[Asset Proxy] Directus asset ${cleanId} returned HTTP ${assetRes.status}`);
       }
@@ -440,14 +471,14 @@ router.post('/api/upload-avatar', async (req: Request, res: Response) => {
   let finalAvatarUrl = dataUrl;
   let fileId: string | null = null;
 
-  if (directusUrl && directusAdminToken) {
-    try {
-      const matches = dataUrl.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
-      if (matches && matches.length === 3) {
-        const fileBuffer = Buffer.from(matches[2], 'base64');
-        const fileType = matches[1] || mimeType || 'image/webp';
-        const name = fileName || `avatar-${userId || personnelId || Date.now()}.webp`;
+  try {
+    const matches = dataUrl.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
+    if (matches && matches.length === 3) {
+      const fileBuffer = Buffer.from(matches[2], 'base64');
+      const fileType = matches[1] || mimeType || 'image/webp';
+      const name = fileName || `avatar-${userId || personnelId || Date.now()}.webp`;
 
+      if (directusUrl && directusAdminToken) {
         const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
         const header = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\nContent-Type: ${fileType}\r\n\r\n`;
         const footer = `\r\n--${boundary}--\r\n`;
@@ -465,47 +496,53 @@ router.post('/api/upload-avatar', async (req: Request, res: Response) => {
         if (uploadRes.ok) {
           const fileData: any = await uploadRes.json();
           fileId = fileData?.data?.id;
-          if (fileId) {
-            finalAvatarUrl = `/api/assets/${fileId}`;
-
-            // Update user avatar in directus_users
-            if (userId) {
-              await directusFetch(`/users/${userId}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ avatar: fileId })
-              }).catch(() => {});
-            }
-
-            // Also find and update the personnel record in Directus
-            let directusPersonnelId: string | null = null;
-            if (personnelId) {
-              const byPId = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
-              if (byPId?.data?.id) directusPersonnelId = byPId.data.id;
-            }
-            if (!directusPersonnelId && userId) {
-              const byUser = await directusFetch(`/items/personnel?filter[user_id][_eq]=${userId}&limit=1`).catch(() => null);
-              if (byUser?.data?.[0]?.id) directusPersonnelId = byUser.data[0].id;
-            }
-            if (!directusPersonnelId && userEmail) {
-              const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail)}&limit=1`).catch(() => null);
-              if (byEmail?.data?.[0]?.id) directusPersonnelId = byEmail.data[0].id;
-            }
-
-            if (directusPersonnelId) {
-              await directusFetch(`/items/personnel/${directusPersonnelId}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ avatar: fileId })
-              }).catch((e) => console.warn('Could not update personnel avatar in Directus:', e.message));
-            }
-          }
         } else {
           const errText = await uploadRes.text().catch(() => '');
           console.warn('[Directus Upload Avatar Error]:', uploadRes.status, errText);
         }
       }
-    } catch (e: any) {
-      console.error('Error uploading avatar to Directus:', e.message);
+
+      if (!fileId) {
+        fileId = 'avatar-' + crypto.randomUUID();
+      }
+
+      localAvatarCacheMap.set(fileId, { buffer: fileBuffer, contentType: fileType });
+      finalAvatarUrl = `/api/assets/${fileId}`;
+
+      // Update user avatar in directus_users
+      if (userId && directusUrl && directusAdminToken) {
+        await directusFetch(`/users/${userId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ avatar: fileId })
+        }).catch(() => {});
+      }
+
+      // Also find and update the personnel record in Directus
+      if (directusUrl && directusAdminToken) {
+        let directusPersonnelId: string | null = null;
+        if (personnelId) {
+          const byPId = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
+          if (byPId?.data?.id) directusPersonnelId = byPId.data.id;
+        }
+        if (!directusPersonnelId && userId) {
+          const byUser = await directusFetch(`/items/personnel?filter[user_id][_eq]=${userId}&limit=1`).catch(() => null);
+          if (byUser?.data?.[0]?.id) directusPersonnelId = byUser.data[0].id;
+        }
+        if (!directusPersonnelId && userEmail) {
+          const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail)}&limit=1`).catch(() => null);
+          if (byEmail?.data?.[0]?.id) directusPersonnelId = byEmail.data[0].id;
+        }
+
+        if (directusPersonnelId) {
+          await directusFetch(`/items/personnel/${directusPersonnelId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ avatar: fileId })
+          }).catch((e) => console.warn('Could not update personnel avatar in Directus:', e.message));
+        }
+      }
     }
+  } catch (e: any) {
+    console.error('Error uploading avatar to Directus/Cache:', e.message);
   }
 
   const targetId = personnelId || userId;
