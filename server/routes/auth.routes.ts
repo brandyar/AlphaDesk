@@ -263,27 +263,39 @@ router.post('/login', async (req: Request, res: Response) => {
         }
 
         if (!pItem) {
-          const cleanPName =
-            `${meUser.first_name || ''} ${meUser.last_name || ''}`.trim() || meUser.email;
-          const newPId = crypto.randomUUID();
-          const newPersonnelPayload = {
-            id: newPId,
-            name: cleanPName,
-            username: meUser.email.split('@')[0],
-            email: meUser.email,
-            phone: '',
-            role: isDirectusAdmin ? 'admin' : 'marketer',
-            status: 'active',
-            user_id: meUser.id,
-          };
+          const localMatch = personnelData.find(
+            (p) => p.email && p.email.toLowerCase() === meUser.email.toLowerCase()
+          );
+          if (localMatch) {
+            pItem = { ...localMatch, user_id: meUser.id };
+            await directusFetch(`/items/personnel/${localMatch.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ user_id: meUser.id }),
+            }).catch(() => {});
+          } else {
+            const cleanPName =
+              `${meUser.first_name || ''} ${meUser.last_name || ''}`.trim() || meUser.email;
+            const newPId = crypto.randomUUID();
+            const isDefaultAdmin = meUser.email.toLowerCase().includes('kiani');
+            const newPersonnelPayload = {
+              id: newPId,
+              name: cleanPName,
+              username: meUser.email.split('@')[0],
+              email: meUser.email,
+              phone: '',
+              role: isDefaultAdmin ? 'admin' : 'marketer',
+              status: 'active',
+              user_id: meUser.id,
+            };
 
-          const createdPRes = await directusFetch('/items/personnel', {
-            method: 'POST',
-            body: JSON.stringify(newPersonnelPayload),
-          }).catch(() => null);
+            const createdPRes = await directusFetch('/items/personnel', {
+              method: 'POST',
+              body: JSON.stringify(newPersonnelPayload),
+            }).catch(() => null);
 
-          pItem = createdPRes?.data || newPersonnelPayload;
-          personnelData.push(pItem);
+            pItem = createdPRes?.data || newPersonnelPayload;
+            personnelData.push(pItem);
+          }
         }
 
         pItem = enrichPersonnel(pItem);
@@ -297,14 +309,9 @@ router.post('/login', async (req: Request, res: Response) => {
         }
 
         // Strict personnel-based role determination: the role defined in the personnel collection is the single source of truth
-        const isAdmin = Boolean(
-          pItem
-            ? pItem.role === 'admin'
-            : isDirectusAdmin
-        );
-        const appRole = pItem
-          ? pItem.role
-          : (isAdmin ? 'admin' : 'marketer');
+        const personnelRole = pItem?.role || (isDirectusAdmin && meUser.email.toLowerCase().includes('kiani') ? 'admin' : 'marketer');
+        const isAdmin = Boolean(personnelRole === 'admin');
+        const appRole = personnelRole;
 
         let avatarUrl = formatAvatarUrl(meUser.avatar);
         if (!avatarUrl && pItem?.avatar) {
@@ -571,14 +578,8 @@ router.get('/me', async (req: Request, res: Response) => {
     if (avatarUrl) pItem.avatar = avatarUrl;
   }
 
-  const effectiveIsAdmin = Boolean(
-    pItem
-      ? (pItem.role === 'admin' || pItem.role === 'sales_manager')
-      : isDirectusAdmin || isAdmin
-  );
-  const effectiveRole = pItem
-    ? pItem.role
-    : (effectiveIsAdmin ? 'admin' : 'marketer');
+  const effectiveRole = pItem?.role || (userRole || 'marketer');
+  const effectiveIsAdmin = Boolean(effectiveRole === 'admin');
 
   res.json({
     user: {

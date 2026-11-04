@@ -247,7 +247,9 @@ export async function enrichCustomersWithLatestReportFollowup(items: any[]): Pro
             for (const r of repRes.data) {
               const rawC = r.customer_id;
               const cId =
-                typeof rawC === 'object' && rawC !== null ? String(rawC.id) : String(rawC);
+                typeof rawC === 'object' && rawC !== null
+                  ? String(rawC.id || rawC.item || '')
+                  : String(rawC || '');
               if (cId && !latestMap.has(cId)) {
                 latestMap.set(cId, r.next_followup_date || null);
               }
@@ -259,7 +261,10 @@ export async function enrichCustomersWithLatestReportFollowup(items: any[]): Pro
       for (const c of items) {
         const cIdStr = String(c.id);
         if (latestMap.has(cIdStr)) {
-          c.next_followup_date = latestMap.get(cIdStr);
+          const val = latestMap.get(cIdStr);
+          if (val !== undefined && val !== null) {
+            c.next_followup_date = val;
+          }
         }
       }
     } catch (e: any) {
