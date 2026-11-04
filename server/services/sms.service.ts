@@ -75,9 +75,9 @@ export async function getPersonnelFullName(
         const queryParts = [
           `filter[_or][0][id][_eq]=${encodeURIComponent(clean)}`,
           `filter[_or][1][user_id][_eq]=${encodeURIComponent(clean)}`,
-          `filter[_or][2][email][_ieq]=${encodeURIComponent(clean)}`,
-          `filter[_or][3][username][_ieq]=${encodeURIComponent(clean)}`,
-          `filter[_or][4][name][_ieq]=${encodeURIComponent(clean)}`,
+          `filter[_or][2][email][_eq]=${encodeURIComponent(clean)}`,
+          `filter[_or][3][username][_eq]=${encodeURIComponent(clean)}`,
+          `filter[_or][4][name][_eq]=${encodeURIComponent(clean)}`,
         ];
         if (cleanDigits.length >= 7) {
           queryParts.push(`filter[_or][5][phone][_icontains]=${encodeURIComponent(cleanDigits)}`);
@@ -98,7 +98,7 @@ export async function getPersonnelFullName(
 
       if (searchFallback && searchFallback.length > 2) {
         const dNameRes = await directusFetch(
-          `/items/personnel?filter[name][_ieq]=${encodeURIComponent(searchFallback)}&limit=1`
+          `/items/personnel?filter[name][_eq]=${encodeURIComponent(searchFallback)}&limit=1`
         ).catch(() => null);
         if (dNameRes?.data && Array.isArray(dNameRes.data) && dNameRes.data.length > 0) {
           const item = dNameRes.data[0];

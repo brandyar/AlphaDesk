@@ -323,17 +323,14 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
 
       const directusFileId = extractFileId(avatar);
       const directusPersonnelPatch: Record<string, any> = { ...personnelPatch };
-      if (avatar !== undefined) {
-        if (directusFileId) directusPersonnelPatch.avatar = directusFileId;
-        else if (!avatar) directusPersonnelPatch.avatar = null;
-        else delete directusPersonnelPatch.avatar;
-      }
+      // Note: Directus items/personnel does not have an avatar column, avatar is stored on directus_users
+      delete directusPersonnelPatch.avatar;
 
       if (foundPId) {
         const updatedRes = await directusFetch(`/items/personnel/${foundPId}`, {
           method: 'PATCH',
           body: JSON.stringify(directusPersonnelPatch)
-        });
+        }).catch(() => null);
         targetPersonnel = updatedRes?.data || { id: foundPId, ...personnelPatch };
       } else {
         const newPId = personnelId || crypto.randomUUID();
@@ -349,11 +346,26 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
             user_id: userId || null,
             ...directusPersonnelPatch
           })
-        });
+        }).catch(() => null);
         targetPersonnel = createdRes?.data || { id: newPId, ...personnelPatch };
       }
 
-      if (userId) {
+      // Determine the actual directus_users ID to patch avatar and first_name
+      let actualDirectusUserId: string | null = null;
+      if (userId && !String(userId).startsWith('p-')) {
+        const uCheck = await directusFetch(`/users/${userId}?fields=id`).catch(() => null);
+        if (uCheck?.data?.id) actualDirectusUserId = uCheck.data.id;
+      }
+      if (!actualDirectusUserId && targetPersonnel?.user_id) {
+        actualDirectusUserId = targetPersonnel.user_id;
+      }
+      if (!actualDirectusUserId && (userEmail || targetPersonnel?.email)) {
+        const em = (userEmail || targetPersonnel?.email || '').toLowerCase().trim();
+        const byEmail = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(em)}&fields=id&limit=1`).catch(() => null);
+        if (byEmail?.data?.[0]?.id) actualDirectusUserId = byEmail.data[0].id;
+      }
+
+      if (actualDirectusUserId) {
         const userPatch: Record<string, any> = {};
         if (name) userPatch.first_name = name;
         if (avatar !== undefined) {
@@ -361,10 +373,10 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
           else if (!avatar) userPatch.avatar = null;
         }
         if (Object.keys(userPatch).length > 0) {
-          await directusFetch(`/users/${userId}`, {
+          await directusFetch(`/users/${actualDirectusUserId}`, {
             method: 'PATCH',
             body: JSON.stringify(userPatch)
-          }).catch(() => {});
+          }).catch((e) => console.warn('Could not update directus user profile:', e.message));
         }
       }
     } catch (err: any) {
@@ -372,16 +384,25 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
     }
   }
 
+  const finalAvatarUrl = formatAvatarUrl(avatar) || (typeof avatar === 'string' ? avatar : undefined);
+  if (targetPersonnel) {
+    targetPersonnel.avatar = finalAvatarUrl || targetPersonnel.avatar || '';
+  }
+
   const targetId = personnelId || userId;
   const idx = personnelData.findIndex(
     p =>
-      (targetId && p.id === targetId) ||
-      (userId && p.user_id === userId) ||
+      (targetId && (p.id === targetId || p.user_id === targetId)) ||
       (userEmail && p.email?.toLowerCase() === userEmail?.toLowerCase())
   );
   if (idx >= 0) {
-    personnelData[idx] = { ...personnelData[idx], ...personnelPatch };
+    personnelData[idx] = {
+      ...personnelData[idx],
+      ...personnelPatch,
+      avatar: finalAvatarUrl || personnelData[idx].avatar || '',
+    };
     if (!targetPersonnel) targetPersonnel = personnelData[idx];
+    else targetPersonnel.avatar = personnelData[idx].avatar;
   } else {
     const newLocal: Personnel = {
       id: targetId || 'p-1',
@@ -391,7 +412,8 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
       role: 'marketer',
       status: 'active',
       active: true,
-      ...personnelPatch
+      ...personnelPatch,
+      avatar: finalAvatarUrl || '',
     };
     personnelData.push(newLocal);
     if (!targetPersonnel) targetPersonnel = newLocal;
@@ -526,35 +548,44 @@ router.post('/api/upload-avatar', async (req: Request, res: Response) => {
       localAvatarCacheMap.set(fileId, { buffer: fileBuffer, contentType: fileType });
       finalAvatarUrl = `/api/assets/${fileId}`;
 
-      // Update user avatar in directus_users
-      if (userId && directusUrl && directusAdminToken) {
-        await directusFetch(`/users/${userId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ avatar: fileId })
-        }).catch(() => {});
-      }
-
-      // Also find and update the personnel record in Directus
+      // Find and update the user record in directus_users
       if (directusUrl && directusAdminToken) {
+        let actualDirectusUserId: string | null = null;
+        if (userId && !String(userId).startsWith('p-')) {
+          const uCheck = await directusFetch(`/users/${userId}?fields=id`).catch(() => null);
+          if (uCheck?.data?.id) actualDirectusUserId = uCheck.data.id;
+        }
+
         let directusPersonnelId: string | null = null;
         if (personnelId) {
           const byPId = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
-          if (byPId?.data?.id) directusPersonnelId = byPId.data.id;
+          if (byPId?.data?.id) {
+            directusPersonnelId = byPId.data.id;
+            if (!actualDirectusUserId && byPId.data.user_id) actualDirectusUserId = byPId.data.user_id;
+          }
         }
         if (!directusPersonnelId && userId) {
           const byUser = await directusFetch(`/items/personnel?filter[user_id][_eq]=${userId}&limit=1`).catch(() => null);
           if (byUser?.data?.[0]?.id) directusPersonnelId = byUser.data[0].id;
         }
         if (!directusPersonnelId && userEmail) {
-          const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail)}&limit=1`).catch(() => null);
-          if (byEmail?.data?.[0]?.id) directusPersonnelId = byEmail.data[0].id;
+          const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail.toLowerCase().trim())}&limit=1`).catch(() => null);
+          if (byEmail?.data?.[0]?.id) {
+            directusPersonnelId = byEmail.data[0].id;
+            if (!actualDirectusUserId && byEmail.data[0].user_id) actualDirectusUserId = byEmail.data[0].user_id;
+          }
         }
 
-        if (directusPersonnelId) {
-          await directusFetch(`/items/personnel/${directusPersonnelId}`, {
+        if (!actualDirectusUserId && userEmail) {
+          const byEmail = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(userEmail.toLowerCase().trim())}&fields=id&limit=1`).catch(() => null);
+          if (byEmail?.data?.[0]?.id) actualDirectusUserId = byEmail.data[0].id;
+        }
+
+        if (actualDirectusUserId) {
+          await directusFetch(`/users/${actualDirectusUserId}`, {
             method: 'PATCH',
-            body: JSON.stringify({ avatar: fileId })
-          }).catch((e) => console.warn('Could not update personnel avatar in Directus:', e.message));
+            body: JSON.stringify({ avatar: fileId }),
+          }).catch((e) => console.warn('Could not update directus user avatar:', e.message));
         }
       }
     }

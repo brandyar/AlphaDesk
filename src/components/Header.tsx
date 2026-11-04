@@ -213,6 +213,7 @@ export const Header: React.FC<HeaderProps> = ({
                     key={getAvatarUrl(currentPersonnel?.avatar || currentUser?.avatar)}
                     src={getAvatarUrl(currentPersonnel?.avatar || currentUser?.avatar)}
                     alt={displayName}
+                    className="w-full h-full object-cover"
                     onLoad={(e) => {
                       (e.currentTarget as HTMLElement).style.display = 'block';
                       const parent = (e.currentTarget as HTMLElement).parentElement;

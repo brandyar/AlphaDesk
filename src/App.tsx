@@ -290,8 +290,17 @@ export default function App() {
           return;
         }
 
+        const effectiveAvatar = targetPersonnel.avatar || targetUser?.avatar || currentUser?.avatar || '';
+        if (effectiveAvatar) {
+          targetPersonnel = { ...targetPersonnel, avatar: effectiveAvatar };
+        }
+
         setCurrentPersonnel(targetPersonnel);
         setApiPersonnelContext(targetPersonnel);
+
+        if (effectiveAvatar && (!currentUser?.avatar || currentUser.avatar !== effectiveAvatar)) {
+          setCurrentUser((prev) => (prev ? { ...prev, avatar: effectiveAvatar } : prev));
+        }
 
         const allowedTenants = getUserAllowedTenants(targetPersonnel, targetUser, tData);
         const currentActive = getActiveTenantId();

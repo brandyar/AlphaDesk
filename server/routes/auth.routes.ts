@@ -168,26 +168,37 @@ router.post('/login', async (req: Request, res: Response) => {
 
       if (!cleanIdentifier.includes('@')) {
         const cleanDigits = rawIdentifier.replace(/\D/g, '');
-        let pRes = await directusFetch(
-          `/items/personnel?filter[_or][0][username][_ieq]=${encodeURIComponent(
-            rawIdentifier
-          )}&filter[_or][1][phone][_ieq]=${encodeURIComponent(rawIdentifier)}${
-            cleanDigits.length >= 7 ? `&filter[_or][2][phone][_icontains]=${encodeURIComponent(cleanDigits)}` : ''
-          }&limit=1`
-        ).catch(() => null);
+        // 1. Check local in-memory personnel first for fast accurate match
+        const localP = personnelData.find((p) => {
+          if (!p) return false;
+          const pUsername = p.username ? String(p.username).trim().toLowerCase() : '';
+          const pPhone = p.phone ? String(p.phone).trim() : '';
+          const pDigits = pPhone.replace(/\D/g, '');
+          if (pUsername && pUsername === cleanIdentifier) return true;
+          if (cleanDigits && cleanDigits.length >= 7 && pDigits && pDigits === cleanDigits) return true;
+          if (pPhone && pPhone === rawIdentifier) return true;
+          return false;
+        });
 
-        if (!pRes?.data || !Array.isArray(pRes.data) || pRes.data.length === 0) {
-          pRes = await directusFetch(
-            `/items/personnel?filter[_or][0][username][_ieq]=${encodeURIComponent(
-              cleanIdentifier
-            )}&filter[_or][1][phone][_ieq]=${encodeURIComponent(cleanIdentifier)}&limit=1`
+        if (localP?.email && localP.email.trim()) {
+          directusUserEmail = localP.email.toLowerCase().trim();
+        } else {
+          // Directus string filter uses _eq (Directus does not support _ieq on standard string fields)
+          let pRes = await directusFetch(
+            `/items/personnel?filter[username][_eq]=${encodeURIComponent(cleanIdentifier)}&limit=1`
           ).catch(() => null);
-        }
 
-        if (pRes?.data && Array.isArray(pRes.data) && pRes.data.length > 0) {
-          const foundPersonnel = pRes.data[0];
-          if (foundPersonnel.email && foundPersonnel.email.trim()) {
-            directusUserEmail = foundPersonnel.email.toLowerCase().trim();
+          if (!pRes?.data || !Array.isArray(pRes.data) || pRes.data.length === 0) {
+            pRes = await directusFetch(
+              `/items/personnel?filter[phone][_eq]=${encodeURIComponent(rawIdentifier)}&limit=1`
+            ).catch(() => null);
+          }
+
+          if (pRes?.data && Array.isArray(pRes.data) && pRes.data.length > 0) {
+            const foundPersonnel = pRes.data[0];
+            if (foundPersonnel.email && foundPersonnel.email.trim()) {
+              directusUserEmail = foundPersonnel.email.toLowerCase().trim();
+            }
           }
         }
       }
@@ -201,7 +212,7 @@ router.post('/login', async (req: Request, res: Response) => {
         const accessToken = loginRes.data.access_token;
 
         const meRes = await directusFetch(
-          '/users/me?fields=id,email,first_name,last_name,role.id,role.name,role.admin_access,avatar',
+          '/users/me?fields=id,email,first_name,last_name,role,avatar',
           {
             headers: { Authorization: `Bearer ${accessToken}` },
           }
@@ -209,20 +220,15 @@ router.post('/login', async (req: Request, res: Response) => {
 
         const meUser = meRes.data;
         let roleId = '';
-        let isDirectusAdmin = false;
-
         if (typeof meUser.role === 'object' && meUser.role !== null) {
           roleId = String(meUser.role.id || '');
-          isDirectusAdmin = Boolean(meUser.role.admin_access === true);
         } else if (typeof meUser.role === 'string') {
           roleId = meUser.role;
-          try {
-            const roleRes = await directusFetch(
-              `/roles/${encodeURIComponent(roleId)}?fields=id,name,admin_access`
-            );
-            isDirectusAdmin = Boolean(roleRes?.data?.admin_access === true);
-          } catch {}
         }
+        let isDirectusAdmin = Boolean(
+          DIRECTUS_ADMIN_ROLE_IDS.includes(roleId) ||
+          (typeof meUser.role === 'object' && String(meUser.role?.name || '').toLowerCase().includes('admin'))
+        );
 
         let pRes = await directusFetch(
           `/items/personnel?filter[user_id][_eq]=${encodeURIComponent(meUser.id)}`
@@ -230,7 +236,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
         if (!pRes?.data || !Array.isArray(pRes.data) || pRes.data.length === 0) {
           pRes = await directusFetch(
-            `/items/personnel?filter[email][_ieq]=${encodeURIComponent(meUser.email)}`
+            `/items/personnel?filter[email][_eq]=${encodeURIComponent(meUser.email)}`
           ).catch(() => null);
         }
 
@@ -300,7 +306,13 @@ router.post('/login', async (req: Request, res: Response) => {
           ? pItem.role
           : (isAdmin ? 'admin' : 'marketer');
 
-        let avatarUrl = formatAvatarUrl(meUser.avatar || pItem?.avatar);
+        let avatarUrl = formatAvatarUrl(meUser.avatar);
+        if (!avatarUrl && pItem?.avatar) {
+          avatarUrl = formatAvatarUrl(pItem.avatar);
+        }
+        if (pItem) {
+          pItem.avatar = avatarUrl;
+        }
 
         if (projectSettingsData.login_pattern) {
           const pInfo = await getPersonnelFullName(pItem?.id || meUser.id, pItem?.name);
@@ -354,7 +366,7 @@ router.post('/login', async (req: Request, res: Response) => {
             app_role: appRole,
           },
           personnel_id: pItem?.id,
-          personnel: pItem,
+          personnel: pItem ? { ...pItem, avatar: avatarUrl } : null,
         });
       }
     } catch (err: any) {
@@ -385,6 +397,25 @@ router.post('/login', async (req: Request, res: Response) => {
         error: 'ACCOUNT_INACTIVE',
         message: 'حساب کاربری شما توسط مدیریت غیرفعال شده است و امکان ورود به سامانه را ندارید. لطفاً با مدیر سیستم تماس بگیرید.',
       });
+    }
+
+    let avatarUrl = formatAvatarUrl(found.avatar);
+    if (!avatarUrl && directusUrl && directusAdminToken) {
+      try {
+        if (found.user_id) {
+          const uRes = await directusFetch(`/users/${found.user_id}?fields=avatar`);
+          if (uRes?.data?.avatar) avatarUrl = formatAvatarUrl(uRes.data.avatar);
+        }
+        if (!avatarUrl && found.email) {
+          const uRes = await directusFetch(
+            `/users?filter[email][_eq]=${encodeURIComponent(found.email.toLowerCase().trim())}&fields=avatar&limit=1`
+          );
+          if (uRes?.data?.[0]?.avatar) avatarUrl = formatAvatarUrl(uRes.data[0].avatar);
+        }
+      } catch {}
+    }
+    if (avatarUrl) {
+      found.avatar = avatarUrl;
     }
 
     if (projectSettingsData.login_pattern) {
@@ -434,10 +465,14 @@ router.post('/login', async (req: Request, res: Response) => {
         username: found.username,
         name: found.name,
         role_id: found.role === 'admin' ? DIRECTUS_ADMIN_ROLE_ID : DIRECTUS_STAFF_ROLE_ID,
+        avatar: avatarUrl,
         is_admin: found.role === 'admin',
         app_role: found.role,
       },
-      personnel: found,
+      personnel: {
+        ...found,
+        avatar: avatarUrl,
+      },
     });
   }
 
@@ -461,22 +496,53 @@ router.get('/me', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      if (userId) {
+      if (personnelId) {
+        const pRes = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
+        if (pRes?.data) pItem = pRes.data;
+      }
+      if (!pItem && userId) {
+        const pRes = await directusFetch(`/items/personnel/${userId}`).catch(() => null);
+        if (pRes?.data) pItem = pRes.data;
+      }
+      if (!pItem && userId) {
+        const pRes = await directusFetch(`/items/personnel?filter[user_id][_eq]=${encodeURIComponent(userId)}&limit=1`).catch(() => null);
+        if (pRes?.data?.[0]) pItem = pRes.data[0];
+      }
+      if (!pItem && userEmail) {
+        const pRes = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail.toLowerCase().trim())}&limit=1`).catch(() => null);
+        if (pRes?.data?.[0]) pItem = pRes.data[0];
+      }
+
+      // Query Directus User for avatar & role
+      const directusUserId = pItem?.user_id || (userId && !String(userId).startsWith('p-') ? userId : null);
+      if (directusUserId) {
         const uRes = await directusFetch(
-          `/users/${userId}?fields=id,email,avatar,first_name,last_name,role.id,role.name,role.admin_access`
-        );
+          `/users/${directusUserId}?fields=id,email,avatar,first_name,last_name,role`
+        ).catch(() => null);
         if (uRes?.data?.avatar) {
           avatarUrl = formatAvatarUrl(uRes.data.avatar);
         }
-        if (uRes?.data?.role?.admin_access === true) {
+        const uRoleId = typeof uRes?.data?.role === 'object' ? uRes.data.role?.id : uRes?.data?.role;
+        if (DIRECTUS_ADMIN_ROLE_IDS.includes(String(uRoleId))) {
           isDirectusAdmin = true;
         }
       }
-      if (personnelId) {
-        const pRes = await directusFetch(`/items/personnel/${personnelId}`);
-        if (pRes?.data) pItem = pRes.data;
+      if (!avatarUrl && (userEmail || pItem?.email)) {
+        const targetEmail = (userEmail || pItem?.email || '').toLowerCase().trim();
+        const uRes = await directusFetch(
+          `/users?filter[email][_eq]=${encodeURIComponent(targetEmail)}&fields=id,email,avatar,role&limit=1`
+        ).catch(() => null);
+        if (uRes?.data?.[0]?.avatar) {
+          avatarUrl = formatAvatarUrl(uRes.data[0].avatar);
+        }
+        const uRoleId = typeof uRes?.data?.[0]?.role === 'object' ? uRes.data[0].role?.id : uRes?.data?.[0]?.role;
+        if (DIRECTUS_ADMIN_ROLE_IDS.includes(String(uRoleId))) {
+          isDirectusAdmin = true;
+        }
       }
-    } catch {}
+    } catch (e: any) {
+      console.warn('Error in /me Directus lookup:', e.message);
+    }
   }
 
   if (!pItem) {
@@ -501,13 +567,14 @@ router.get('/me', async (req: Request, res: Response) => {
 
   if (pItem) {
     pItem = enrichPersonnel(pItem);
-    if (!avatarUrl && pItem.avatar) avatarUrl = pItem.avatar;
+    if (!avatarUrl && pItem.avatar) avatarUrl = formatAvatarUrl(pItem.avatar);
+    if (avatarUrl) pItem.avatar = avatarUrl;
   }
 
   const effectiveIsAdmin = Boolean(
     pItem
       ? (pItem.role === 'admin' || pItem.role === 'sales_manager')
-      : isDirectusAdmin
+      : isDirectusAdmin || isAdmin
   );
   const effectiveRole = pItem
     ? pItem.role
@@ -515,7 +582,7 @@ router.get('/me', async (req: Request, res: Response) => {
 
   res.json({
     user: {
-      id: userId || personnelId,
+      id: userId || personnelId || pItem?.id,
       name: userName || pItem?.name || 'کاربر سامانه',
       email: userEmail || pItem?.email,
       avatar: avatarUrl,
@@ -523,7 +590,7 @@ router.get('/me', async (req: Request, res: Response) => {
       app_role: effectiveRole,
     },
     personnel_id: personnelId || pItem?.id,
-    personnel: pItem,
+    personnel: pItem ? { ...pItem, avatar: avatarUrl || pItem.avatar } : null,
   });
 });
 

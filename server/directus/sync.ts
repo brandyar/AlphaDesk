@@ -9,6 +9,7 @@ import {
   setPersonnelData,
 } from '../config.ts';
 import { directusFetch } from './client.ts';
+import { formatAvatarUrl } from '../middlewares/auth.middleware.ts';
 import { Tenant } from '../types.ts';
 
 export function resolveDirectusTenantId(rawTenant: any): number | null {
@@ -171,11 +172,37 @@ export async function backfillNullTenantsDirectus(): Promise<{ updatedCustomers:
 export async function ensureDirectusPersonnel() {
   if (!directusUrl || !directusAdminToken) return;
   try {
+    // 1. Fetch user avatars first
+    const userAvatarMap: Record<string, string> = {};
+    const usersRes = await directusFetch('/users?fields=id,email,avatar&limit=500').catch(() => null);
+    if (usersRes?.data && Array.isArray(usersRes.data)) {
+      for (const u of usersRes.data) {
+        if (u.id && u.avatar) {
+          const formatted = formatAvatarUrl(u.avatar);
+          if (formatted) {
+            userAvatarMap[String(u.id)] = formatted;
+            if (u.email) userAvatarMap[u.email.toLowerCase().trim()] = formatted;
+          }
+        }
+      }
+    }
+
     const res = await directusFetch('/items/personnel?limit=500&sort=id');
     if (res && Array.isArray(res.data)) {
+      const attachAvatars = (list: any[]) =>
+        list.map((p: any) => {
+          let av = formatAvatarUrl(p.avatar);
+          if (!av && p.user_id && userAvatarMap[p.user_id]) av = userAvatarMap[p.user_id];
+          if (!av && p.email && userAvatarMap[p.email.toLowerCase().trim()]) av = userAvatarMap[p.email.toLowerCase().trim()];
+          return {
+            ...p,
+            avatar: av || '',
+          };
+        });
+
       if (res.data.length > 0) {
-        setPersonnelData(res.data);
-        console.log(`Directus personnel synchronized (${res.data.length} records).`);
+        setPersonnelData(attachAvatars(res.data));
+        console.log(`Directus personnel synchronized (${res.data.length} records, ${Object.keys(userAvatarMap).length} user avatars linked).`);
       }
       const existingIds = new Set(res.data.map((p: any) => String(p.id)));
       const missingPersonnel = initialPersonnel.filter((p) => !existingIds.has(String(p.id)));
@@ -199,7 +226,7 @@ export async function ensureDirectusPersonnel() {
         }
         const refreshed = await directusFetch('/items/personnel?limit=500&sort=id').catch(() => null);
         if (refreshed?.data && Array.isArray(refreshed.data)) {
-          setPersonnelData(refreshed.data);
+          setPersonnelData(attachAvatars(refreshed.data));
         }
       }
     }
