@@ -21,10 +21,21 @@ const router = Router();
 
 export function enrichPersonnel(p: any): any {
   if (!p) return p;
-  const tid =
-    p.tenant_id && typeof p.tenant_id === 'object'
-      ? String(p.tenant_id.id || p.tenant_id.name || 'default')
-      : String(p.tenant_id || 'default');
+  let tid = 'default';
+  let tName = p.tenant_name || '';
+
+  if (p.tenant_id && typeof p.tenant_id === 'object') {
+    tid = String(p.tenant_id.id || p.tenant_id.slug || 'default');
+    if (!tName && p.tenant_id.name) tName = p.tenant_id.name;
+  } else if (p.tenant_id !== undefined && p.tenant_id !== null) {
+    tid = String(p.tenant_id);
+  }
+
+  if (!tName) {
+    if (tid === 'default' || tid === '1') tName = 'سازمان مرکزی آلفادسک';
+    else tName = `سازمان / شعبه ${tid}`;
+  }
+
   const allowed = Array.isArray(p.allowed_tenant_ids)
     ? p.allowed_tenant_ids.map(String)
     : p.permissions?.allowed_tenant_ids && Array.isArray(p.permissions.allowed_tenant_ids)
@@ -37,6 +48,7 @@ export function enrichPersonnel(p: any): any {
     ...p,
     id: String(p.id),
     tenant_id: tid,
+    tenant_name: tName,
     allowed_tenant_ids: allowed,
     permissions: {
       ...(p.permissions || {}),
@@ -71,18 +83,31 @@ router.get('/', async (req: Request, res: Response) => {
       const resp = await directusFetch('/items/personnel?sort=id&limit=500');
       if (resp?.data && Array.isArray(resp.data)) {
         setPersonnelData(resp.data);
-        const mapped = resp.data.map((p: any) => {
-          const enriched = enrichPersonnel(p);
-          let avatar = enriched.avatar;
-          if (!avatar) {
-            if (enriched.user_id && userAvatarMap[enriched.user_id]) {
-              avatar = userAvatarMap[enriched.user_id];
-            } else if (enriched.email && userAvatarMap[enriched.email.toLowerCase().trim()]) {
-              avatar = userAvatarMap[enriched.email.toLowerCase().trim()];
+        const mapped = await Promise.all(
+          resp.data.map(async (p: any) => {
+            const enriched = enrichPersonnel(p);
+            let userAvatar = (enriched.user_id && userAvatarMap[enriched.user_id]) || (enriched.email && userAvatarMap[enriched.email.toLowerCase().trim()]);
+            if (!userAvatar && enriched.user_id && !String(enriched.user_id).startsWith('p-')) {
+              try {
+                const uRes = await directusFetch(`/users/${enriched.user_id}?fields=avatar`).catch(() => null);
+                if (uRes?.data?.avatar) {
+                  userAvatar = formatAvatarUrl(uRes.data.avatar);
+                }
+              } catch {}
             }
-          }
-          return { ...enriched, avatar };
-        });
+            if (!userAvatar && enriched.email) {
+              try {
+                const em = String(enriched.email).toLowerCase().trim();
+                const uRes = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(em)}&fields=avatar&limit=1`).catch(() => null);
+                if (uRes?.data?.[0]?.avatar) {
+                  userAvatar = formatAvatarUrl(uRes.data.avatar);
+                }
+              } catch {}
+            }
+            let avatar = userAvatar || formatAvatarUrl(enriched.avatar) || (typeof enriched.avatar === 'string' ? enriched.avatar : '');
+            return { ...enriched, avatar };
+          })
+        );
 
         if (tenantId && tenantId !== 'all') {
           const filtered = mapped.filter(
@@ -99,14 +124,8 @@ router.get('/', async (req: Request, res: Response) => {
 
   let list = personnelData.map((p) => {
     const enriched = enrichPersonnel(p);
-    let avatar = enriched.avatar;
-    if (!avatar) {
-      if (enriched.user_id && userAvatarMap[enriched.user_id]) {
-        avatar = userAvatarMap[enriched.user_id];
-      } else if (enriched.email && userAvatarMap[enriched.email.toLowerCase().trim()]) {
-        avatar = userAvatarMap[enriched.email.toLowerCase().trim()];
-      }
-    }
+    let userAvatar = (enriched.user_id && userAvatarMap[enriched.user_id]) || (enriched.email && userAvatarMap[enriched.email.toLowerCase().trim()]);
+    let avatar = userAvatar || formatAvatarUrl(enriched.avatar) || (typeof enriched.avatar === 'string' ? enriched.avatar : '');
     return { ...enriched, avatar };
   });
 

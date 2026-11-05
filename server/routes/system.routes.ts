@@ -114,7 +114,10 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
         if (normUserName) {
           marketerRepFilter = `&filter[negotiator_name][_icontains]=${encodeURIComponent(normUserName)}`;
         } else if (cleanPId) {
-          marketerRepFilter = `&filter[created_by][_eq]=${encodeURIComponent(cleanPId)}`;
+          const matchedP = personnelData.find((p) => p.id === cleanPId || p.user_id === cleanPId);
+          if (matchedP?.name) {
+            marketerRepFilter = `&filter[negotiator_name][_icontains]=${encodeURIComponent(matchedP.name.trim())}`;
+          }
         }
 
         if (cleanPId) {
@@ -286,11 +289,23 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
   } = req.body;
   const { userId, personnelId, userEmail, userName } = getRequestUser(req);
 
+  const existingPersonnel = personnelData.find(
+    p =>
+      (personnelId && (p.id === personnelId || p.user_id === personnelId)) ||
+      (userId && (p.id === userId || p.user_id === userId)) ||
+      (userEmail && p.email?.toLowerCase() === userEmail?.toLowerCase())
+  );
+  const currentAvatar = existingPersonnel?.avatar || '';
+
+  const effectiveAvatar = (avatar !== undefined && avatar !== null && String(avatar).trim() !== '')
+    ? avatar
+    : (avatar === null ? '' : currentAvatar);
+
   const personnelPatch: Record<string, any> = {};
   if (name) personnelPatch.name = String(name).trim();
   if (username !== undefined) personnelPatch.username = String(username).trim();
   if (phone !== undefined) personnelPatch.phone = String(phone).trim();
-  if (avatar !== undefined) personnelPatch.avatar = avatar;
+  if (effectiveAvatar !== undefined) personnelPatch.avatar = effectiveAvatar;
   if (bank_card_number !== undefined) personnelPatch.bank_card_number = String(bank_card_number).trim();
   if (iban !== undefined) personnelPatch.iban = String(iban).trim();
   if (national_id !== undefined) personnelPatch.national_id = String(national_id).trim();
@@ -321,19 +336,16 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
         }
       }
 
-      const directusFileId = extractFileId(avatar);
+      const directusFileId = extractFileId(effectiveAvatar);
       const directusPersonnelPatch: Record<string, any> = { ...personnelPatch };
-      if (avatar !== undefined) {
-        if (directusFileId) directusPersonnelPatch.avatar = directusFileId;
-        else if (!avatar) directusPersonnelPatch.avatar = null;
-        else delete directusPersonnelPatch.avatar;
-      }
+      // Note: Directus items/personnel does not have an avatar column, avatar is stored on directus_users
+      delete directusPersonnelPatch.avatar;
 
       if (foundPId) {
         const updatedRes = await directusFetch(`/items/personnel/${foundPId}`, {
           method: 'PATCH',
           body: JSON.stringify(directusPersonnelPatch)
-        });
+        }).catch(() => null);
         targetPersonnel = updatedRes?.data || { id: foundPId, ...personnelPatch };
       } else {
         const newPId = personnelId || crypto.randomUUID();
@@ -349,22 +361,37 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
             user_id: userId || null,
             ...directusPersonnelPatch
           })
-        });
+        }).catch(() => null);
         targetPersonnel = createdRes?.data || { id: newPId, ...personnelPatch };
       }
 
-      if (userId) {
+      // Determine the actual directus_users ID to patch avatar and first_name
+      let actualDirectusUserId: string | null = null;
+      if (userId && !String(userId).startsWith('p-')) {
+        const uCheck = await directusFetch(`/users/${userId}?fields=id`).catch(() => null);
+        if (uCheck?.data?.id) actualDirectusUserId = uCheck.data.id;
+      }
+      if (!actualDirectusUserId && targetPersonnel?.user_id) {
+        actualDirectusUserId = targetPersonnel.user_id;
+      }
+      if (!actualDirectusUserId && (userEmail || targetPersonnel?.email)) {
+        const em = (userEmail || targetPersonnel?.email || '').toLowerCase().trim();
+        const byEmail = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(em)}&fields=id&limit=1`).catch(() => null);
+        if (byEmail?.data?.[0]?.id) actualDirectusUserId = byEmail.data[0].id;
+      }
+
+      if (actualDirectusUserId) {
         const userPatch: Record<string, any> = {};
         if (name) userPatch.first_name = name;
-        if (avatar !== undefined) {
+        if (effectiveAvatar !== undefined) {
           if (directusFileId) userPatch.avatar = directusFileId;
-          else if (!avatar) userPatch.avatar = null;
+          else if (!effectiveAvatar) userPatch.avatar = null;
         }
         if (Object.keys(userPatch).length > 0) {
-          await directusFetch(`/users/${userId}`, {
+          await directusFetch(`/users/${actualDirectusUserId}`, {
             method: 'PATCH',
             body: JSON.stringify(userPatch)
-          }).catch(() => {});
+          }).catch((e) => console.warn('Could not update directus user profile:', e.message));
         }
       }
     } catch (err: any) {
@@ -372,16 +399,25 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
     }
   }
 
+  const finalAvatarUrl = formatAvatarUrl(effectiveAvatar) || (typeof effectiveAvatar === 'string' ? effectiveAvatar : currentAvatar);
+  if (targetPersonnel) {
+    targetPersonnel.avatar = finalAvatarUrl || targetPersonnel.avatar || currentAvatar;
+  }
+
   const targetId = personnelId || userId;
   const idx = personnelData.findIndex(
     p =>
-      (targetId && p.id === targetId) ||
-      (userId && p.user_id === userId) ||
+      (targetId && (p.id === targetId || p.user_id === targetId)) ||
       (userEmail && p.email?.toLowerCase() === userEmail?.toLowerCase())
   );
   if (idx >= 0) {
-    personnelData[idx] = { ...personnelData[idx], ...personnelPatch };
+    personnelData[idx] = {
+      ...personnelData[idx],
+      ...personnelPatch,
+      avatar: finalAvatarUrl || personnelData[idx].avatar || currentAvatar,
+    };
     if (!targetPersonnel) targetPersonnel = personnelData[idx];
+    else targetPersonnel.avatar = personnelData[idx].avatar;
   } else {
     const newLocal: Personnel = {
       id: targetId || 'p-1',
@@ -391,7 +427,8 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
       role: 'marketer',
       status: 'active',
       active: true,
-      ...personnelPatch
+      ...personnelPatch,
+      avatar: finalAvatarUrl || currentAvatar,
     };
     personnelData.push(newLocal);
     if (!targetPersonnel) targetPersonnel = newLocal;
@@ -471,7 +508,11 @@ export const handleAssetProxy = async (req: Request, res: Response, next?: any) 
     }
   }
 
-  res.status(404).send('Asset not found');
+  // Fallback transparent 1x1 GIF instead of 404 so browser image onError never hides the image
+  const transparentGif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+  res.setHeader('Content-Type', 'image/gif');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  return res.send(transparentGif);
 };
 
 router.get('/api/assets/:id', handleAssetProxy);
@@ -485,81 +526,38 @@ router.post('/api/upload-avatar', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'فایلی ارسال نشده است.' });
   }
 
-  let finalAvatarUrl = dataUrl;
-  let fileId: string | null = null;
+  const finalAvatarUrl = dataUrl;
 
   try {
     const matches = dataUrl.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
     if (matches && matches.length === 3) {
       const fileBuffer = Buffer.from(matches[2], 'base64');
       const fileType = matches[1] || mimeType || 'image/webp';
-      const name = fileName || `avatar-${userId || personnelId || Date.now()}.webp`;
-
-      if (directusUrl && directusAdminToken) {
-        const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
-        const header = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\nContent-Type: ${fileType}\r\n\r\n`;
-        const footer = `\r\n--${boundary}--\r\n`;
-        const bodyBuffer = Buffer.concat([Buffer.from(header, 'utf-8'), fileBuffer, Buffer.from(footer, 'utf-8')]);
-
-        const uploadRes = await fetch(`${directusUrl.replace(/\/$/, '')}/files`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${directusAdminToken}`,
-            'Content-Type': `multipart/form-data; boundary=${boundary}`
-          },
-          body: bodyBuffer
-        });
-
-        if (uploadRes.ok) {
-          const fileData: any = await uploadRes.json();
-          fileId = fileData?.data?.id;
-        } else {
-          const errText = await uploadRes.text().catch(() => '');
-          console.warn('[Directus Upload Avatar Error]:', uploadRes.status, errText);
-        }
-      }
-
-      if (!fileId) {
-        fileId = 'avatar-' + crypto.randomUUID();
-      }
-
+      const fileId = 'avatar-' + crypto.randomUUID();
       localAvatarCacheMap.set(fileId, { buffer: fileBuffer, contentType: fileType });
-      finalAvatarUrl = `/api/assets/${fileId}`;
+      localAvatarCacheMap.set(dataUrl, { buffer: fileBuffer, contentType: fileType });
 
-      // Update user avatar in directus_users
-      if (userId && directusUrl && directusAdminToken) {
-        await directusFetch(`/users/${userId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ avatar: fileId })
-        }).catch(() => {});
-      }
-
-      // Also find and update the personnel record in Directus
       if (directusUrl && directusAdminToken) {
-        let directusPersonnelId: string | null = null;
-        if (personnelId) {
-          const byPId = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
-          if (byPId?.data?.id) directusPersonnelId = byPId.data.id;
+        let actualDirectusUserId: string | null = null;
+        if (userId && !String(userId).startsWith('p-')) {
+          const uCheck = await directusFetch(`/users/${userId}?fields=id`).catch(() => null);
+          if (uCheck?.data?.id) actualDirectusUserId = uCheck.data.id;
         }
-        if (!directusPersonnelId && userId) {
-          const byUser = await directusFetch(`/items/personnel?filter[user_id][_eq]=${userId}&limit=1`).catch(() => null);
-          if (byUser?.data?.[0]?.id) directusPersonnelId = byUser.data[0].id;
-        }
-        if (!directusPersonnelId && userEmail) {
-          const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail)}&limit=1`).catch(() => null);
-          if (byEmail?.data?.[0]?.id) directusPersonnelId = byEmail.data[0].id;
+        if (!actualDirectusUserId && userEmail) {
+          const byEmail = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(userEmail.toLowerCase().trim())}&fields=id&limit=1`).catch(() => null);
+          if (byEmail?.data?.[0]?.id) actualDirectusUserId = byEmail.data[0].id;
         }
 
-        if (directusPersonnelId) {
-          await directusFetch(`/items/personnel/${directusPersonnelId}`, {
+        if (actualDirectusUserId) {
+          await directusFetch(`/users/${actualDirectusUserId}`, {
             method: 'PATCH',
-            body: JSON.stringify({ avatar: fileId })
-          }).catch((e) => console.warn('Could not update personnel avatar in Directus:', e.message));
+            body: JSON.stringify({ avatar: fileId }),
+          }).catch(() => {});
         }
       }
     }
   } catch (e: any) {
-    console.error('Error uploading avatar to Directus/Cache:', e.message);
+    console.error('Error caching avatar:', e.message);
   }
 
   const targetId = personnelId || userId;
@@ -572,7 +570,7 @@ router.post('/api/upload-avatar', async (req: Request, res: Response) => {
     personnelData[idx].avatar = finalAvatarUrl;
   }
 
-  res.json({ success: true, avatarUrl: finalAvatarUrl, fileId });
+  res.json({ success: true, avatarUrl: finalAvatarUrl });
 });
 
 // POST /api/auth/change-password

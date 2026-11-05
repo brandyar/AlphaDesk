@@ -23,7 +23,7 @@ var DIRECTUS_ADMIN_ROLE_IDS = [
   "59e261e1-56f4-401e-9889-4971e2c3c4ce"
 ];
 var DIRECTUS_ADMIN_ROLE_ID = "59e261e1-56f4-401e-9889-4971e2c3c4ce";
-var DIRECTUS_STAFF_ROLE_ID = "b9c11357-4926-47ad-b020-6080cb2a62df";
+var DIRECTUS_STAFF_ROLE_ID = "a45beaec-0272-4c29-89ee-122dce37f565";
 var initialPersonnel = [
   {
     id: "p-1",
@@ -325,19 +325,22 @@ async function directusFetchAllPages(basePath, options = {}, maxTotal = 5e4) {
   const targetCount = Math.min(totalCount, maxTotal);
   if (targetCount > page1Res.data.length && page1Res.data.length > 0) {
     const totalPages = Math.ceil(targetCount / PAGE_SIZE);
-    const pagePromises = [];
-    for (let p = 2; p <= totalPages; p++) {
-      const pParams = new URLSearchParams(queryString || "");
-      pParams.set("limit", String(PAGE_SIZE));
-      pParams.set("page", String(p));
-      if (!pParams.has("meta")) pParams.set("meta", "*");
-      const pUrl = `${pathOnly}?${pParams.toString()}`;
-      pagePromises.push(directusFetch(pUrl, options, 2).catch(() => null));
-    }
-    const pagesRes = await Promise.all(pagePromises);
-    for (const res of pagesRes) {
-      if (res && Array.isArray(res.data)) {
-        allItems.push(...res.data);
+    const CONCURRENCY = 6;
+    for (let p = 2; p <= totalPages; p += CONCURRENCY) {
+      const pagePromises = [];
+      for (let cp = p; cp < p + CONCURRENCY && cp <= totalPages; cp++) {
+        const pParams = new URLSearchParams(queryString || "");
+        pParams.set("limit", String(PAGE_SIZE));
+        pParams.set("page", String(cp));
+        if (!pParams.has("meta")) pParams.set("meta", "*");
+        const pUrl = `${pathOnly}?${pParams.toString()}`;
+        pagePromises.push(directusFetch(pUrl, options, 2).catch(() => null));
+      }
+      const batchRes = await Promise.all(pagePromises);
+      for (const res of batchRes) {
+        if (res && Array.isArray(res.data)) {
+          allItems.push(...res.data);
+        }
       }
     }
   }
@@ -466,6 +469,270 @@ async function directusSafeBatchPatch(collection, patchMap, chunkSize = 50) {
 
 // server/directus/sync.ts
 import crypto from "crypto";
+
+// server/directus/cache.ts
+var customersCache = null;
+var reportsCache = null;
+var CACHE_TTL_MS = 3e5;
+function invalidateCustomersCache() {
+  customersCache = null;
+}
+function invalidateReportsCache() {
+  reportsCache = null;
+}
+async function ensureCustomersCache(forceRefresh = false) {
+  const now2 = Date.now();
+  if (!forceRefresh && customersCache && now2 - customersCache.timestamp < CACHE_TTL_MS) {
+    return customersCache.data;
+  }
+  const res = await directusFetch("/items/customers?limit=5000&sort=-date_created").catch(() => null);
+  const items = res?.data || [];
+  if (items && items.length > 0) {
+    customersCache = {
+      timestamp: Date.now(),
+      data: items,
+      meta: { total_count: items.length }
+    };
+    return items;
+  }
+  return customersCache?.data || customersData;
+}
+async function ensureReportsCache(forceRefresh = false) {
+  const now2 = Date.now();
+  if (!forceRefresh && reportsCache && now2 - reportsCache.timestamp < CACHE_TTL_MS) {
+    return reportsCache.data;
+  }
+  const res = await directusFetch("/items/customer_reports?limit=500&sort=-date_created").catch(() => null);
+  const items = res?.data || [];
+  if (items && items.length > 0) {
+    reportsCache = {
+      timestamp: Date.now(),
+      data: items,
+      meta: { total_count: items.length }
+    };
+    return items;
+  }
+  return reportsCache?.data || reportsData;
+}
+function computeCustomerExpiration(c) {
+  if (!c) return c;
+  const isExpired = Boolean(
+    c.assignment_deadline && c.status !== "\u0642\u0631\u0627\u0631\u062F\u0627\u062F" && c.status !== "\u0644\u06CC\u0633\u062A \u0633\u06CC\u0627\u0647" && (/* @__PURE__ */ new Date()).getTime() > new Date(c.assignment_deadline).getTime()
+  );
+  const rawTenant = c.tenant_id;
+  const tId = typeof rawTenant === "object" && rawTenant !== null ? String(rawTenant.id) : rawTenant !== null && rawTenant !== void 0 ? String(rawTenant) : "default";
+  const tObj = tenantsData.find((t) => String(t.id) === tId || t.slug === tId);
+  const contacts = Array.isArray(c.contacts) ? c.contacts : [];
+  const rawMobiles = Array.isArray(c.mobile_numbers) ? c.mobile_numbers : typeof c.mobile_numbers === "string" ? [c.mobile_numbers] : [];
+  const mobileNumbers = rawMobiles.length > 0 ? rawMobiles : contacts.filter((ct) => ct.channel_type === "mobile").map((ct) => ct.normalized_value || ct.value);
+  const rawLandlines = Array.isArray(c.landline_numbers) ? c.landline_numbers : typeof c.landline_numbers === "string" ? [c.landline_numbers] : [];
+  const landlineNumbers = rawLandlines.length > 0 ? rawLandlines : contacts.filter((ct) => ct.channel_type === "landline").map((ct) => ct.normalized_value || ct.value);
+  const rawTelegram = Array.isArray(c.telegram_ids) ? c.telegram_ids : typeof c.telegram_ids === "string" ? [c.telegram_ids] : [];
+  const telegramIds = rawTelegram.length > 0 ? rawTelegram : contacts.filter((ct) => ct.channel_type === "telegram").map((ct) => ct.value);
+  const rawInstagram = Array.isArray(c.instagram_ids) ? c.instagram_ids : typeof c.instagram_ids === "string" ? [c.instagram_ids] : [];
+  const instagramIds = rawInstagram.length > 0 ? rawInstagram : contacts.filter((ct) => ct.channel_type === "instagram").map((ct) => ct.value);
+  const rawEmails = Array.isArray(c.emails) ? c.emails : typeof c.emails === "string" ? [c.emails] : [];
+  const emails = rawEmails.length > 0 ? rawEmails : contacts.filter((ct) => ct.channel_type === "email").map((ct) => ct.value);
+  const rawWebsites = Array.isArray(c.websites) ? c.websites : typeof c.websites === "string" ? [c.websites] : [];
+  const websites = rawWebsites.length > 0 ? rawWebsites : contacts.filter((ct) => ct.channel_type === "website").map((ct) => ct.value);
+  return {
+    ...c,
+    company_name: c.company_name || "\u0628\u062F\u0648\u0646 \u0646\u0627\u0645",
+    business_type: c.business_type || "",
+    city: c.city || "\u0646\u0627\u0645\u0634\u062E\u0635",
+    province: c.province || "",
+    status: c.status || "\u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647",
+    assigned_marketer_name: c.assigned_marketer_name || "\u062A\u062E\u0635\u06CC\u0635 \u0646\u06CC\u0627\u0641\u062A\u0647",
+    mobile_numbers: mobileNumbers,
+    landline_numbers: landlineNumbers,
+    telegram_ids: telegramIds,
+    instagram_ids: instagramIds,
+    emails,
+    websites,
+    manager_phones: Array.isArray(c.manager_phones) ? c.manager_phones : typeof c.manager_phones === "string" ? [c.manager_phones] : [],
+    negotiator_phones: Array.isArray(c.negotiator_phones) ? c.negotiator_phones : typeof c.negotiator_phones === "string" ? [c.negotiator_phones] : [],
+    contacts,
+    is_expired: isExpired,
+    claimed_from_pool: Boolean(c.claimed_from_pool),
+    claimed_from_pool_at: c.claimed_from_pool_at || null,
+    tenant_id: tId,
+    tenant_name: typeof rawTenant === "object" && rawTenant?.name || (tObj ? tObj.name : "\u0633\u0627\u0632\u0645\u0627\u0646 \u0645\u0631\u06A9\u0632\u06CC")
+  };
+}
+function updateExpirationFlags() {
+  setCustomersData(customersData.map((c) => computeCustomerExpiration(c)));
+}
+var activeCustomerCreationLocks = /* @__PURE__ */ new Set();
+var recentCustomerCreations = [];
+
+// server/middlewares/auth.middleware.ts
+function matchesTenant(itemTenantId, activeTenantId) {
+  if (!activeTenantId || activeTenantId === "all") return true;
+  const itemStr = typeof itemTenantId === "object" && itemTenantId !== null ? String(itemTenantId.id) : itemTenantId !== null && itemTenantId !== void 0 ? String(itemTenantId) : "all";
+  if (itemStr === "all" || itemStr === "null" || itemStr === "undefined" || itemStr === "") return true;
+  if (itemStr === activeTenantId) return true;
+  if (activeTenantId === "default" || activeTenantId === "1") {
+    if (itemStr === "default" || itemStr === "1") return true;
+    if (tenantsData.length > 0) {
+      if (itemStr === String(tenantsData[0].id) || tenantsData[0].slug && itemStr === tenantsData[0].slug) {
+        return true;
+      }
+    }
+  }
+  const activeTenant = tenantsData.find(
+    (t) => String(t.id) === activeTenantId || t.slug === activeTenantId
+  );
+  if (activeTenant) {
+    if (itemStr === String(activeTenant.id) || activeTenant.slug && itemStr === activeTenant.slug) {
+      return true;
+    }
+  }
+  return false;
+}
+function getRequestTenantId(req) {
+  const headerTenant = req.headers["x-tenant-id"];
+  if (headerTenant && typeof headerTenant === "string" && headerTenant.trim()) {
+    return headerTenant.trim();
+  }
+  const queryTenant = req.query.tenant_id;
+  if (queryTenant && typeof queryTenant === "string" && queryTenant.trim()) {
+    return queryTenant.trim();
+  }
+  return "all";
+}
+function safeDecodeURIComponent(str) {
+  if (!str) return "";
+  try {
+    return decodeURIComponent(str);
+  } catch {
+    return String(str);
+  }
+}
+function formatAvatarUrl(avatar) {
+  if (!avatar) return void 0;
+  let raw = "";
+  if (typeof avatar === "object" && avatar !== null) {
+    raw = avatar.id || avatar.url || avatar.filename_disk || "";
+  } else if (typeof avatar === "string") {
+    raw = avatar.trim();
+  }
+  if (!raw) return void 0;
+  if (raw.startsWith("data:")) return raw;
+  if (raw.startsWith("/api/assets/")) return raw;
+  if (raw.startsWith("/assets/")) return `/api${raw}`;
+  const directusAssetsMatch = raw.match(/\/assets\/([a-zA-Z0-9\-_]+)/);
+  if (directusAssetsMatch && directusAssetsMatch[1]) {
+    return `/api/assets/${directusAssetsMatch[1]}`;
+  }
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return raw;
+  }
+  if (raw.startsWith("/")) return raw;
+  return `/api/assets/${raw}`;
+}
+function extractFileId(avatar) {
+  if (!avatar) return null;
+  if (typeof avatar === "object" && avatar !== null) {
+    return avatar.id || avatar.fileId || null;
+  }
+  if (typeof avatar !== "string") return null;
+  const str = avatar.trim();
+  if (!str) return null;
+  if (str.startsWith("data:")) return null;
+  const match = str.match(/\/api\/assets\/([a-zA-Z0-9\-_]+)/) || str.match(/\/assets\/([a-zA-Z0-9\-_]+)/);
+  if (match && match[1]) return match[1];
+  if (!str.startsWith("http://") && !str.startsWith("https://") && !str.startsWith("/")) {
+    return str;
+  }
+  return null;
+}
+function getRequestUser(req) {
+  const userId = req.headers["x-user-id"] || req.query.user_id || "";
+  const personnelId = req.headers["x-personnel-id"] || req.query.personnel_id || userId;
+  const userRole = req.headers["x-user-role"] || req.query.user_role || "";
+  const roleId = req.headers["x-role-id"] || req.query.role_id || "";
+  const rawUserName = req.headers["x-user-name"];
+  let userName = safeDecodeURIComponent(rawUserName);
+  const userEmail = req.headers["x-user-email"] || "";
+  const tenantId = getRequestTenantId(req);
+  const rawSessionIat = req.headers["x-session-iat"];
+  const sessionIat = rawSessionIat ? parseInt(rawSessionIat, 10) : 0;
+  const isSessionRevoked = Boolean(
+    globalSessionRevocationTimestamp > 0 && (!sessionIat || sessionIat < globalSessionRevocationTimestamp)
+  );
+  const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : "";
+  const rawUid = cleanPId ? cleanPId.replace(/^p-/, "") : "";
+  const cleanUId = userId ? String(userId).trim().toLowerCase() : "";
+  const cleanEmail = userEmail ? String(userEmail).trim().toLowerCase() : "";
+  const pMatch = personnelData.find((p) => {
+    if (!p) return false;
+    const pId = p.id ? String(p.id).trim().toLowerCase() : "";
+    const pUserId = p.user_id ? String(p.user_id).trim().toLowerCase() : "";
+    const pEmail = p.email ? String(p.email).trim().toLowerCase() : "";
+    if (cleanPId && pId && pId === cleanPId) return true;
+    if (cleanPId && rawUid && pId && (pId === `p-${rawUid}` || pId === rawUid)) return true;
+    if (cleanUId && pUserId && pUserId === cleanUId) return true;
+    if (cleanUId && pId && pId === cleanUId) return true;
+    if (cleanEmail && pEmail && pEmail === cleanEmail) return true;
+    return false;
+  });
+  if (!userName && pMatch?.name) {
+    userName = pMatch.name;
+  }
+  const isInactive = Boolean(
+    pMatch && (pMatch.status === "inactive" || pMatch.active === false)
+  );
+  const hasUserContext = Boolean(
+    (userId || personnelId || userEmail || req.headers["authorization"]) && !isSessionRevoked && !isInactive
+  );
+  const isDirectusSystemAdmin = Boolean(
+    DIRECTUS_ADMIN_ROLE_IDS.includes(roleId)
+  );
+  const isSystemAdmin = Boolean(
+    hasUserContext && (pMatch ? pMatch.role === "admin" : isDirectusSystemAdmin || userRole === "admin")
+  );
+  const isPersonnelAdmin = Boolean(
+    hasUserContext && (isSystemAdmin || pMatch?.role === "sales_manager")
+  );
+  const canViewAllCustomers = Boolean(
+    isSystemAdmin || pMatch?.permissions?.can_view_all_customers === true || pMatch?.role === "sales_manager" && pMatch?.permissions?.can_view_all_customers !== false
+  );
+  const reportViewScope = isSystemAdmin ? "all" : pMatch?.permissions?.report_view_scope || (pMatch?.role === "sales_manager" && pMatch?.permissions?.report_view_scope !== "own_only" ? "all" : "own_only");
+  const visibleReportPersonnelIds = pMatch?.permissions?.visible_report_personnel_ids || [];
+  return {
+    userId: isSessionRevoked || isInactive ? "" : userId,
+    personnelId: isSessionRevoked || isInactive ? "" : personnelId,
+    userRole: pMatch ? pMatch.role : userRole || "marketer",
+    roleId,
+    isAdmin: isSystemAdmin,
+    isPersonnelAdmin,
+    canViewAllCustomers,
+    reportViewScope,
+    visibleReportPersonnelIds,
+    userName: isSessionRevoked || isInactive ? "" : userName,
+    userEmail: isSessionRevoked || isInactive ? "" : userEmail,
+    tenantId,
+    isAuthenticated: hasUserContext,
+    isSessionRevoked,
+    isInactive
+  };
+}
+function checkInactivePersonnel(req, res, next) {
+  const path2 = req.path || "";
+  if (path2.startsWith("/health") || path2.startsWith("/api/health") || path2.startsWith("/api/auth/login") || path2.startsWith("/auth/login") || path2.startsWith("/api/assets") || path2.startsWith("/assets")) {
+    return next();
+  }
+  const user = getRequestUser(req);
+  if (user.isInactive) {
+    return res.status(403).json({
+      error: "ACCOUNT_INACTIVE",
+      message: "\u062D\u0633\u0627\u0628 \u06A9\u0627\u0631\u0628\u0631\u06CC \u0634\u0645\u0627 \u062A\u0648\u0633\u0637 \u0645\u062F\u06CC\u0631\u06CC\u062A \u063A\u06CC\u0631\u0641\u0639\u0627\u0644 \u0634\u062F\u0647 \u0627\u0633\u062A \u0648 \u0627\u0645\u06A9\u0627\u0646 \u0627\u0633\u062A\u0641\u0627\u062F\u0647 \u0627\u0632 \u0633\u0627\u0645\u0627\u0646\u0647 \u0631\u0627 \u0646\u062F\u0627\u0631\u06CC\u062F. \u0644\u0637\u0641\u0627\u064B \u0628\u0627 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u062A\u0645\u0627\u0633 \u0628\u06AF\u06CC\u0631\u06CC\u062F."
+    });
+  }
+  next();
+}
+
+// server/directus/sync.ts
 function resolveDirectusTenantId(rawTenant) {
   const validIds = tenantsData.map((t) => Number(t.id)).filter((n) => !isNaN(n) && isFinite(n) && n > 0);
   if (rawTenant === null || rawTenant === void 0 || rawTenant === "" || rawTenant === "all") {
@@ -599,11 +866,33 @@ async function backfillNullTenantsDirectus() {
 async function ensureDirectusPersonnel() {
   if (!directusUrl || !directusAdminToken) return;
   try {
+    const userAvatarMap = {};
+    const usersRes = await directusFetch("/users?fields=id,email,avatar&limit=500").catch(() => null);
+    if (usersRes?.data && Array.isArray(usersRes.data)) {
+      for (const u of usersRes.data) {
+        if (u.id && u.avatar) {
+          const formatted = formatAvatarUrl(u.avatar);
+          if (formatted) {
+            userAvatarMap[String(u.id)] = formatted;
+            if (u.email) userAvatarMap[u.email.toLowerCase().trim()] = formatted;
+          }
+        }
+      }
+    }
     const res = await directusFetch("/items/personnel?limit=500&sort=id");
     if (res && Array.isArray(res.data)) {
+      const attachAvatars = (list) => list.map((p) => {
+        let av = formatAvatarUrl(p.avatar);
+        if (!av && p.user_id && userAvatarMap[p.user_id]) av = userAvatarMap[p.user_id];
+        if (!av && p.email && userAvatarMap[p.email.toLowerCase().trim()]) av = userAvatarMap[p.email.toLowerCase().trim()];
+        return {
+          ...p,
+          avatar: av || ""
+        };
+      });
       if (res.data.length > 0) {
-        setPersonnelData(res.data);
-        console.log(`Directus personnel synchronized (${res.data.length} records).`);
+        setPersonnelData(attachAvatars(res.data));
+        console.log(`Directus personnel synchronized (${res.data.length} records, ${Object.keys(userAvatarMap).length} user avatars linked).`);
       }
       const existingIds = new Set(res.data.map((p) => String(p.id)));
       const missingPersonnel = initialPersonnel.filter((p) => !existingIds.has(String(p.id)));
@@ -627,7 +916,7 @@ async function ensureDirectusPersonnel() {
         }
         const refreshed = await directusFetch("/items/personnel?limit=500&sort=id").catch(() => null);
         if (refreshed?.data && Array.isArray(refreshed.data)) {
-          setPersonnelData(refreshed.data);
+          setPersonnelData(attachAvatars(refreshed.data));
         }
       }
     }
@@ -794,6 +1083,93 @@ async function resolvePersonnelId(rawIdentifier, fallbackName) {
   }
   return { personnelId: null, personnelName: fallbackName };
 }
+var isSyncingFollowups = false;
+async function syncAllCustomersFollowupFromReports() {
+  if (isSyncingFollowups) {
+    console.log("[AlphaDesk] syncAllCustomersFollowupFromReports is already running, skipping overlapping invocation.");
+    return { totalCustomers: 0, updatedCount: 0 };
+  }
+  isSyncingFollowups = true;
+  console.log("[AlphaDesk] Starting synchronization of customer next_followup_date from latest reports...");
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  let updatedCount = 0;
+  let totalCustomers = 0;
+  try {
+    if (directusUrl && directusAdminToken) {
+      const reportsRes = await directusFetchAllPages(
+        "/items/customer_reports?fields=id,customer_id,next_followup_date,date_created&sort=-date_created",
+        {},
+        1e5
+      );
+      const allReports = reportsRes.data || [];
+      const latestReportByCustId = /* @__PURE__ */ new Map();
+      for (const rep of allReports) {
+        if (!rep) continue;
+        const rawCId = rep.customer_id;
+        const cId = typeof rawCId === "object" && rawCId !== null ? String(rawCId.id) : rawCId !== null && rawCId !== void 0 ? String(rawCId) : "";
+        if (cId && !latestReportByCustId.has(cId)) {
+          latestReportByCustId.set(cId, rep);
+        }
+      }
+      const custsRes = await directusFetchAllPages(
+        "/items/customers?fields=id,company_name,next_followup_date",
+        {},
+        1e5
+      );
+      const allCustomers = custsRes.data || [];
+      totalCustomers = allCustomers.length;
+      const patchMap = /* @__PURE__ */ new Map();
+      for (const cust of allCustomers) {
+        if (!cust || !cust.id) continue;
+        const strId = String(cust.id);
+        const latestRep = latestReportByCustId.get(strId);
+        if (latestRep) {
+          const repFollowup = latestRep.next_followup_date ? new Date(latestRep.next_followup_date).toISOString() : null;
+          const custFollowup = cust.next_followup_date ? new Date(cust.next_followup_date).toISOString() : null;
+          if (repFollowup !== custFollowup) {
+            patchMap.set(strId, {
+              id: cust.id,
+              next_followup_date: repFollowup,
+              date_updated: nowIso
+            });
+          }
+        }
+      }
+      if (patchMap.size > 0) {
+        console.log(`[AlphaDesk] Found ${patchMap.size} customer followup date mismatches in Directus. Patching...`);
+        await directusSafeBatchPatch("customers", patchMap, 50);
+        updatedCount = patchMap.size;
+        console.log(`[AlphaDesk] Successfully patched ${updatedCount} customers with their latest report followup date.`);
+        invalidateCustomersCache();
+      } else {
+        console.log("[AlphaDesk] All customers in Directus are already in sync with their latest reports.");
+      }
+    }
+    const localReportsSorted = [...reportsData].sort(
+      (a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
+    );
+    const localLatestByCust = /* @__PURE__ */ new Map();
+    for (const r of localReportsSorted) {
+      const cId = String(r.customer_id || "");
+      if (cId && !localLatestByCust.has(cId)) {
+        localLatestByCust.set(cId, r);
+      }
+    }
+    for (const c of customersData) {
+      const lr = localLatestByCust.get(String(c.id));
+      if (lr) {
+        const repDate = lr.next_followup_date ? new Date(lr.next_followup_date).toISOString() : null;
+        c.next_followup_date = repDate;
+      }
+    }
+    return { totalCustomers, updatedCount };
+  } catch (err) {
+    console.error("[AlphaDesk] Error syncing customer followups from latest reports:", err.message);
+    return { totalCustomers, updatedCount, error: err.message };
+  } finally {
+    isSyncingFollowups = false;
+  }
+}
 
 // server/middlewares/rateLimit.middleware.ts
 var rateLimitWindowMs = 60 * 1e3;
@@ -827,161 +1203,9 @@ function rateLimiter(req, res, next) {
   next();
 }
 
-// server/middlewares/auth.middleware.ts
-function matchesTenant(itemTenantId, activeTenantId) {
-  if (!activeTenantId || activeTenantId === "all") return true;
-  const itemStr = typeof itemTenantId === "object" && itemTenantId !== null ? String(itemTenantId.id) : itemTenantId !== null && itemTenantId !== void 0 ? String(itemTenantId) : "all";
-  if (itemStr === "all" || itemStr === "null" || itemStr === "undefined" || itemStr === "") return true;
-  if (itemStr === activeTenantId) return true;
-  if (activeTenantId === "default" || activeTenantId === "1") {
-    if (itemStr === "default" || itemStr === "1") return true;
-    if (tenantsData.length > 0) {
-      if (itemStr === String(tenantsData[0].id) || tenantsData[0].slug && itemStr === tenantsData[0].slug) {
-        return true;
-      }
-    }
-  }
-  const activeTenant = tenantsData.find(
-    (t) => String(t.id) === activeTenantId || t.slug === activeTenantId
-  );
-  if (activeTenant) {
-    if (itemStr === String(activeTenant.id) || activeTenant.slug && itemStr === activeTenant.slug) {
-      return true;
-    }
-  }
-  return false;
-}
-function getRequestTenantId(req) {
-  const headerTenant = req.headers["x-tenant-id"];
-  if (headerTenant && typeof headerTenant === "string" && headerTenant.trim()) {
-    return headerTenant.trim();
-  }
-  const queryTenant = req.query.tenant_id;
-  if (queryTenant && typeof queryTenant === "string" && queryTenant.trim()) {
-    return queryTenant.trim();
-  }
-  return "all";
-}
-function safeDecodeURIComponent(str) {
-  if (!str) return "";
-  try {
-    return decodeURIComponent(str);
-  } catch {
-    return String(str);
-  }
-}
-function formatAvatarUrl(avatar) {
-  if (!avatar) return void 0;
-  let raw = "";
-  if (typeof avatar === "object" && avatar !== null) {
-    raw = avatar.id || avatar.url || avatar.filename_disk || "";
-  } else if (typeof avatar === "string") {
-    raw = avatar.trim();
-  }
-  if (!raw) return void 0;
-  if (raw.startsWith("data:")) return raw;
-  if (raw.startsWith("/api/assets/")) return raw;
-  if (raw.startsWith("/assets/")) return `/api${raw}`;
-  const directusAssetsMatch = raw.match(/\/assets\/([a-zA-Z0-9\-_]+)/);
-  if (directusAssetsMatch && directusAssetsMatch[1]) {
-    return `/api/assets/${directusAssetsMatch[1]}`;
-  }
-  if (raw.startsWith("http://") || raw.startsWith("https://")) {
-    return raw;
-  }
-  if (raw.startsWith("/")) return raw;
-  return `/api/assets/${raw}`;
-}
-function getRequestUser(req) {
-  const userId = req.headers["x-user-id"] || req.query.user_id || "";
-  const personnelId = req.headers["x-personnel-id"] || req.query.personnel_id || userId;
-  const userRole = req.headers["x-user-role"] || req.query.user_role || "";
-  const roleId = req.headers["x-role-id"] || req.query.role_id || "";
-  const rawUserName = req.headers["x-user-name"];
-  let userName = safeDecodeURIComponent(rawUserName);
-  const userEmail = req.headers["x-user-email"] || "";
-  const tenantId = getRequestTenantId(req);
-  const rawSessionIat = req.headers["x-session-iat"];
-  const sessionIat = rawSessionIat ? parseInt(rawSessionIat, 10) : 0;
-  const isSessionRevoked = Boolean(
-    globalSessionRevocationTimestamp > 0 && (!sessionIat || sessionIat < globalSessionRevocationTimestamp)
-  );
-  const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : "";
-  const rawUid = cleanPId ? cleanPId.replace(/^p-/, "") : "";
-  const cleanUId = userId ? String(userId).trim().toLowerCase() : "";
-  const cleanEmail = userEmail ? String(userEmail).trim().toLowerCase() : "";
-  const pMatch = personnelData.find((p) => {
-    if (!p) return false;
-    const pId = p.id ? String(p.id).trim().toLowerCase() : "";
-    const pUserId = p.user_id ? String(p.user_id).trim().toLowerCase() : "";
-    const pEmail = p.email ? String(p.email).trim().toLowerCase() : "";
-    if (cleanPId && pId && pId === cleanPId) return true;
-    if (cleanPId && rawUid && pId && (pId === `p-${rawUid}` || pId === rawUid)) return true;
-    if (cleanUId && pUserId && pUserId === cleanUId) return true;
-    if (cleanUId && pId && pId === cleanUId) return true;
-    if (cleanEmail && pEmail && pEmail === cleanEmail) return true;
-    return false;
-  });
-  if (!userName && pMatch?.name) {
-    userName = pMatch.name;
-  }
-  const isInactive = Boolean(
-    pMatch && (pMatch.status === "inactive" || pMatch.active === false)
-  );
-  const hasUserContext = Boolean(
-    (userId || personnelId || userEmail || req.headers["authorization"]) && !isSessionRevoked && !isInactive
-  );
-  const resolvedRole = pMatch?.role || userRole || "";
-  const isDirectusSystemAdmin = Boolean(
-    DIRECTUS_ADMIN_ROLE_IDS.includes(roleId) || userRole === "admin"
-  );
-  const isSystemAdmin = Boolean(
-    hasUserContext && (isDirectusSystemAdmin || userRole === "admin" || pMatch?.role === "admin")
-  );
-  const isPersonnelAdmin = Boolean(
-    hasUserContext && (isSystemAdmin || pMatch?.role === "sales_manager")
-  );
-  const canViewAllCustomers = Boolean(
-    isSystemAdmin || pMatch?.permissions?.can_view_all_customers === true || pMatch?.role === "sales_manager" && pMatch?.permissions?.can_view_all_customers !== false
-  );
-  const reportViewScope = isSystemAdmin ? "all" : pMatch?.permissions?.report_view_scope || (pMatch?.role === "sales_manager" && pMatch?.permissions?.report_view_scope !== "own_only" ? "all" : "own_only");
-  const visibleReportPersonnelIds = pMatch?.permissions?.visible_report_personnel_ids || [];
-  return {
-    userId: isSessionRevoked || isInactive ? "" : userId,
-    personnelId: isSessionRevoked || isInactive ? "" : personnelId,
-    userRole: isPersonnelAdmin ? pMatch?.role === "sales_manager" ? "sales_manager" : "admin" : resolvedRole || "marketer",
-    roleId,
-    isAdmin: isSystemAdmin,
-    isPersonnelAdmin,
-    canViewAllCustomers,
-    reportViewScope,
-    visibleReportPersonnelIds,
-    userName: isSessionRevoked || isInactive ? "" : userName,
-    userEmail: isSessionRevoked || isInactive ? "" : userEmail,
-    tenantId,
-    isAuthenticated: hasUserContext,
-    isSessionRevoked,
-    isInactive
-  };
-}
-function checkInactivePersonnel(req, res, next) {
-  const path2 = req.path || "";
-  if (path2.startsWith("/health") || path2.startsWith("/api/health") || path2.startsWith("/api/auth/login") || path2.startsWith("/auth/login") || path2.startsWith("/api/assets") || path2.startsWith("/assets")) {
-    return next();
-  }
-  const user = getRequestUser(req);
-  if (user.isInactive) {
-    return res.status(403).json({
-      error: "ACCOUNT_INACTIVE",
-      message: "\u062D\u0633\u0627\u0628 \u06A9\u0627\u0631\u0628\u0631\u06CC \u0634\u0645\u0627 \u062A\u0648\u0633\u0637 \u0645\u062F\u06CC\u0631\u06CC\u062A \u063A\u06CC\u0631\u0641\u0639\u0627\u0644 \u0634\u062F\u0647 \u0627\u0633\u062A \u0648 \u0627\u0645\u06A9\u0627\u0646 \u0627\u0633\u062A\u0641\u0627\u062F\u0647 \u0627\u0632 \u0633\u0627\u0645\u0627\u0646\u0647 \u0631\u0627 \u0646\u062F\u0627\u0631\u06CC\u062F. \u0644\u0637\u0641\u0627\u064B \u0628\u0627 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u062A\u0645\u0627\u0633 \u0628\u06AF\u06CC\u0631\u06CC\u062F."
-    });
-  }
-  next();
-}
-
 // server/routes/auth.routes.ts
-import { Router as Router2 } from "express";
-import crypto3 from "crypto";
+import { Router as Router3 } from "express";
+import crypto5 from "crypto";
 
 // server/services/sms.service.ts
 async function getPersonnelFullName(identifier, fallback) {
@@ -1027,9 +1251,9 @@ async function getPersonnelFullName(identifier, fallback) {
         const queryParts = [
           `filter[_or][0][id][_eq]=${encodeURIComponent(clean)}`,
           `filter[_or][1][user_id][_eq]=${encodeURIComponent(clean)}`,
-          `filter[_or][2][email][_ieq]=${encodeURIComponent(clean)}`,
-          `filter[_or][3][username][_ieq]=${encodeURIComponent(clean)}`,
-          `filter[_or][4][name][_ieq]=${encodeURIComponent(clean)}`
+          `filter[_or][2][email][_eq]=${encodeURIComponent(clean)}`,
+          `filter[_or][3][username][_eq]=${encodeURIComponent(clean)}`,
+          `filter[_or][4][name][_eq]=${encodeURIComponent(clean)}`
         ];
         if (cleanDigits.length >= 7) {
           queryParts.push(`filter[_or][5][phone][_icontains]=${encodeURIComponent(cleanDigits)}`);
@@ -1048,7 +1272,7 @@ async function getPersonnelFullName(identifier, fallback) {
       }
       if (searchFallback && searchFallback.length > 2) {
         const dNameRes = await directusFetch(
-          `/items/personnel?filter[name][_ieq]=${encodeURIComponent(searchFallback)}&limit=1`
+          `/items/personnel?filter[name][_eq]=${encodeURIComponent(searchFallback)}&limit=1`
         ).catch(() => null);
         if (dNameRes?.data && Array.isArray(dNameRes.data) && dNameRes.data.length > 0) {
           const item = dNameRes.data[0];
@@ -1431,6 +1655,7 @@ function enrichPersonnel(p) {
   if (!p) return p;
   const tid = p.tenant_id && typeof p.tenant_id === "object" ? String(p.tenant_id.id || p.tenant_id.name || "default") : String(p.tenant_id || "default");
   const allowed = Array.isArray(p.allowed_tenant_ids) ? p.allowed_tenant_ids.map(String) : p.permissions?.allowed_tenant_ids && Array.isArray(p.permissions.allowed_tenant_ids) ? p.permissions.allowed_tenant_ids.map(String) : [tid];
+  const formattedAvatar = formatAvatarUrl(p.avatar) || (typeof p.avatar === "string" ? p.avatar : "");
   return {
     ...p,
     id: String(p.id),
@@ -1440,7 +1665,8 @@ function enrichPersonnel(p) {
       ...p.permissions || {},
       allowed_tenant_ids: allowed
     },
-    active: p.active !== false && p.status !== "inactive"
+    active: p.active !== false && p.status !== "inactive",
+    avatar: formattedAvatar
   };
 }
 router.get("/", async (req, res) => {
@@ -1770,12 +1996,35 @@ router.post("/me/profile", async (req, res) => {
   let targetPersonnel = null;
   if (directusUrl && directusAdminToken && targetId) {
     try {
+      const directusPersonnelPatch = { ...personnelPatch };
+      if (avatar !== void 0) {
+        const fileId = extractFileId(avatar);
+        if (fileId) directusPersonnelPatch.avatar = fileId;
+        else if (!avatar) directusPersonnelPatch.avatar = null;
+        else delete directusPersonnelPatch.avatar;
+      }
       const patched = await directusFetch(`/items/personnel/${encodeURIComponent(targetId)}`, {
         method: "PATCH",
-        body: JSON.stringify(personnelPatch)
+        body: JSON.stringify(directusPersonnelPatch)
       });
       if (patched?.data) {
         targetPersonnel = enrichPersonnel(patched.data);
+      }
+      if (userId) {
+        const fileId = extractFileId(avatar);
+        const userPatch = {};
+        if (name !== void 0) userPatch.first_name = String(name).trim();
+        if (avatar !== void 0) {
+          if (fileId) userPatch.avatar = fileId;
+          else if (!avatar) userPatch.avatar = null;
+        }
+        if (Object.keys(userPatch).length > 0) {
+          await directusFetch(`/users/${userId}`, {
+            method: "PATCH",
+            body: JSON.stringify(userPatch)
+          }).catch(() => {
+          });
+        }
       }
     } catch (err) {
       console.warn("Directus personnel profile PATCH warning:", err.message);
@@ -1809,600 +2058,12 @@ router.post("/me/profile", async (req, res) => {
 });
 var personnel_routes_default = router;
 
-// server/routes/auth.routes.ts
-var router2 = Router2();
-var handleAssetProxy = async (req, res, next) => {
-  const assetId = req.params.id;
-  if (assetId && /\.(js|css|map|woff2?|ttf|eot|ico|svg)$/i.test(assetId)) {
-    return next();
-  }
-  if (directusUrl) {
-    try {
-      const assetUrl = `${directusUrl.replace(/\/$/, "")}/assets/${assetId}`;
-      const headers = {};
-      if (directusAdminToken) {
-        headers["Authorization"] = `Bearer ${directusAdminToken}`;
-      }
-      const fetchRes = await fetch(assetUrl, { headers });
-      if (fetchRes.ok) {
-        const contentType = fetchRes.headers.get("content-type") || "image/jpeg";
-        res.setHeader("Content-Type", contentType);
-        res.setHeader("Cache-Control", "public, max-age=86400");
-        const buffer = Buffer.from(await fetchRes.arrayBuffer());
-        return res.send(buffer);
-      }
-    } catch (e) {
-      console.warn("Asset proxy error:", e.message);
-    }
-  }
-  return res.status(404).send("Asset not found");
-};
-router2.get("/assets/:id", handleAssetProxy);
-router2.get("/api/assets/:id", handleAssetProxy);
-router2.post("/register", async (req, res) => {
-  const { email, password, name, phone, first_name, last_name } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: "\u0627\u06CC\u0645\u06CC\u0644 \u0648 \u06A9\u0644\u0645\u0647 \u0639\u0628\u0648\u0631 \u0627\u0644\u0632\u0627\u0645\u06CC \u0647\u0633\u062A\u0646\u062F." });
-  }
-  if (String(password).length < 6) {
-    return res.status(400).json({ error: "\u06A9\u0644\u0645\u0647 \u0639\u0628\u0648\u0631 \u0628\u0627\u06CC\u062F \u062D\u062F\u0627\u0642\u0644 \u06F6 \u06A9\u0627\u0631\u0627\u06A9\u062A\u0631 \u0628\u0627\u0634\u062F." });
-  }
-  const cleanEmail = String(email).trim().toLowerCase();
-  const fullName = (name || `${first_name || ""} ${last_name || ""}`).trim() || cleanEmail.split("@")[0];
-  const fName = (first_name || fullName.split(" ")[0] || "\u06A9\u0627\u0631\u0628\u0631").trim();
-  const lName = (last_name || fullName.split(" ").slice(1).join(" ") || "\u062C\u062F\u06CC\u062F").trim();
-  const cleanPhone = (phone || "").trim();
-  if (directusUrl && directusAdminToken) {
-    try {
-      const existingRes = await directusFetch(
-        `/users?filter[email][_eq]=${encodeURIComponent(cleanEmail)}`
-      );
-      if (existingRes && Array.isArray(existingRes.data) && existingRes.data.length > 0) {
-        return res.status(400).json({ error: "\u0627\u06CC\u0646 \u0627\u06CC\u0645\u06CC\u0644 \u0642\u0628\u0644\u0627\u064B \u062F\u0631 \u0633\u0627\u0645\u0627\u0646\u0647 \u062B\u0628\u062A \u0634\u062F\u0647 \u0627\u0633\u062A. \u0644\u0637\u0641\u0627\u064B \u0648\u0627\u0631\u062F \u0634\u0648\u06CC\u062F." });
-      }
-      const newUserPayload = {
-        email: cleanEmail,
-        password: String(password),
-        first_name: fName,
-        last_name: lName,
-        role: DIRECTUS_STAFF_ROLE_ID,
-        status: "active"
-      };
-      const createdUserRes = await directusFetch("/users", {
-        method: "POST",
-        body: JSON.stringify(newUserPayload)
-      });
-      const createdUser = createdUserRes.data;
-      const cleanUsername2 = String(req.body.username || "").trim() || cleanEmail.split("@")[0];
-      const personnelId = crypto3.randomUUID();
-      const personnelPayload = {
-        id: personnelId,
-        name: fullName,
-        username: cleanUsername2,
-        email: cleanEmail,
-        phone: cleanPhone,
-        role: "marketer",
-        status: "active",
-        user_id: createdUser.id
-      };
-      await directusFetch("/items/personnel", {
-        method: "POST",
-        body: JSON.stringify(personnelPayload)
-      }).catch(async () => {
-        const existP = await directusFetch(
-          `/items/personnel?filter[email][_eq]=${encodeURIComponent(cleanEmail)}`
-        ).catch(() => null);
-        if (existP?.data && Array.isArray(existP.data) && existP.data.length > 0) {
-          await directusFetch(`/items/personnel/${existP.data[0].id}`, {
-            method: "PATCH",
-            body: JSON.stringify({ user_id: createdUser.id })
-          }).catch(() => {
-          });
-        }
-      });
-      const pObj = {
-        id: personnelId,
-        name: fullName,
-        username: cleanUsername2,
-        role: "marketer",
-        email: cleanEmail,
-        phone: cleanPhone,
-        status: "active",
-        active: true,
-        user_id: createdUser.id
-      };
-      personnelData.push(pObj);
-      return res.status(201).json({
-        success: true,
-        message: "\u062B\u0628\u062A\u200C\u0646\u0627\u0645 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0627\u0646\u062C\u0627\u0645 \u0634\u062F. \u0627\u06A9\u0646\u0648\u0646 \u0645\u06CC\u200C\u062A\u0648\u0627\u0646\u06CC\u062F \u0648\u0627\u0631\u062F \u062D\u0633\u0627\u0628 \u062E\u0648\u062F \u0634\u0648\u06CC\u062F.",
-        user: {
-          id: createdUser.id,
-          email: createdUser.email,
-          first_name: createdUser.first_name,
-          last_name: createdUser.last_name
-        },
-        personnel: pObj
-      });
-    } catch (err) {
-      return res.status(400).json({
-        error: `\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A\u200C\u0646\u0627\u0645 \u06A9\u0627\u0631\u0628\u0631 \u062F\u0631 \u067E\u0627\u06CC\u06AF\u0627\u0647 \u062F\u0627\u062F\u0647: ${err.message || "\u0645\u0634\u06A9\u0644 \u062F\u0631 \u0628\u0631\u0642\u0631\u0627\u0631\u06CC \u0627\u0631\u062A\u0628\u0627\u0637"}`
-      });
-    }
-  }
-  const existingLocal = personnelData.find((p) => p.email?.toLowerCase() === cleanEmail);
-  if (existingLocal) {
-    return res.status(400).json({ error: "\u0627\u06CC\u0646 \u0627\u06CC\u0645\u06CC\u0644 \u0642\u0628\u0644\u0627\u064B \u062B\u0628\u062A \u0634\u062F\u0647 \u0627\u0633\u062A." });
-  }
-  const newId = "p-" + Date.now();
-  const cleanUsername = String(req.body.username || "").trim() || cleanEmail.split("@")[0];
-  const newP = {
-    id: newId,
-    name: fullName,
-    username: cleanUsername,
-    role: "marketer",
-    email: cleanEmail,
-    phone: cleanPhone,
-    status: "active",
-    active: true
-  };
-  personnelData.push(newP);
-  res.status(201).json({
-    success: true,
-    message: "\u062B\u0628\u062A\u200C\u0646\u0627\u0645 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0627\u0646\u062C\u0627\u0645 \u0634\u062F.",
-    user: { id: newId, email: cleanEmail, name: fullName },
-    personnel: newP
-  });
-});
-router2.post("/login", async (req, res) => {
-  const { email, username, phone, password } = req.body;
-  const rawIdentifier = (email || username || phone || "").trim();
-  if (!rawIdentifier || !password) {
-    return res.status(400).json({ error: "\u0627\u06CC\u0645\u06CC\u0644/\u0646\u0627\u0645 \u06A9\u0627\u0631\u0628\u0631\u06CC/\u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0628\u0627\u06CC\u0644 \u0648 \u06A9\u0644\u0645\u0647 \u0639\u0628\u0648\u0631 \u0627\u0644\u0632\u0627\u0645\u06CC \u0627\u0633\u062A." });
-  }
-  const cleanIdentifier = rawIdentifier.toLowerCase();
-  if (directusUrl && directusAdminToken) {
-    try {
-      let directusUserEmail = cleanIdentifier;
-      if (!cleanIdentifier.includes("@")) {
-        const cleanDigits2 = rawIdentifier.replace(/\D/g, "");
-        let pRes = await directusFetch(
-          `/items/personnel?filter[_or][0][username][_ieq]=${encodeURIComponent(
-            rawIdentifier
-          )}&filter[_or][1][phone][_ieq]=${encodeURIComponent(rawIdentifier)}${cleanDigits2.length >= 7 ? `&filter[_or][2][phone][_icontains]=${encodeURIComponent(cleanDigits2)}` : ""}&limit=1`
-        ).catch(() => null);
-        if (!pRes?.data || !Array.isArray(pRes.data) || pRes.data.length === 0) {
-          pRes = await directusFetch(
-            `/items/personnel?filter[_or][0][username][_ieq]=${encodeURIComponent(
-              cleanIdentifier
-            )}&filter[_or][1][phone][_ieq]=${encodeURIComponent(cleanIdentifier)}&limit=1`
-          ).catch(() => null);
-        }
-        if (pRes?.data && Array.isArray(pRes.data) && pRes.data.length > 0) {
-          const foundPersonnel = pRes.data[0];
-          if (foundPersonnel.email && foundPersonnel.email.trim()) {
-            directusUserEmail = foundPersonnel.email.toLowerCase().trim();
-          }
-        }
-      }
-      const loginRes = await directusFetch("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email: directusUserEmail, password })
-      });
-      if (loginRes?.data?.access_token) {
-        const accessToken = loginRes.data.access_token;
-        const meRes = await directusFetch(
-          "/users/me?fields=id,email,first_name,last_name,role.id,role.name,role.admin_access,avatar",
-          {
-            headers: { Authorization: `Bearer ${accessToken}` }
-          }
-        );
-        const meUser = meRes.data;
-        let roleId = "";
-        let isDirectusAdmin = false;
-        if (typeof meUser.role === "object" && meUser.role !== null) {
-          roleId = String(meUser.role.id || "");
-          isDirectusAdmin = Boolean(meUser.role.admin_access === true);
-        } else if (typeof meUser.role === "string") {
-          roleId = meUser.role;
-          try {
-            const roleRes = await directusFetch(
-              `/roles/${encodeURIComponent(roleId)}?fields=id,name,admin_access`
-            );
-            isDirectusAdmin = Boolean(roleRes?.data?.admin_access === true);
-          } catch {
-          }
-        }
-        let pRes = await directusFetch(
-          `/items/personnel?filter[user_id][_eq]=${encodeURIComponent(meUser.id)}`
-        ).catch(() => null);
-        if (!pRes?.data || !Array.isArray(pRes.data) || pRes.data.length === 0) {
-          pRes = await directusFetch(
-            `/items/personnel?filter[email][_ieq]=${encodeURIComponent(meUser.email)}`
-          ).catch(() => null);
-        }
-        let pItem = pRes?.data?.[0] || null;
-        if (pItem) {
-          if (!pItem.user_id || pItem.user_id !== meUser.id) {
-            pItem.user_id = meUser.id;
-            await directusFetch(`/items/personnel/${pItem.id}`, {
-              method: "PATCH",
-              body: JSON.stringify({ user_id: meUser.id })
-            }).catch(() => {
-            });
-          }
-          const pIdx = personnelData.findIndex(
-            (p) => String(p.id) === String(pItem.id) || p.email && p.email.toLowerCase() === meUser.email.toLowerCase()
-          );
-          if (pIdx >= 0) {
-            personnelData[pIdx] = { ...personnelData[pIdx], ...pItem, user_id: meUser.id };
-          } else {
-            personnelData.push({ ...pItem, user_id: meUser.id });
-          }
-        }
-        if (!pItem) {
-          const cleanPName = `${meUser.first_name || ""} ${meUser.last_name || ""}`.trim() || meUser.email;
-          const newPId = crypto3.randomUUID();
-          const newPersonnelPayload = {
-            id: newPId,
-            name: cleanPName,
-            username: meUser.email.split("@")[0],
-            email: meUser.email,
-            phone: "",
-            role: isDirectusAdmin ? "admin" : "marketer",
-            status: "active",
-            user_id: meUser.id
-          };
-          const createdPRes = await directusFetch("/items/personnel", {
-            method: "POST",
-            body: JSON.stringify(newPersonnelPayload)
-          }).catch(() => null);
-          pItem = createdPRes?.data || newPersonnelPayload;
-          personnelData.push(pItem);
-        }
-        pItem = enrichPersonnel(pItem);
-        if (pItem && (pItem.status === "inactive" || pItem.active === false)) {
-          return res.status(403).json({
-            error: "ACCOUNT_INACTIVE",
-            message: "\u062D\u0633\u0627\u0628 \u06A9\u0627\u0631\u0628\u0631\u06CC \u0634\u0645\u0627 \u062A\u0648\u0633\u0637 \u0645\u062F\u06CC\u0631\u06CC\u062A \u063A\u06CC\u0631\u0641\u0639\u0627\u0644 \u0634\u062F\u0647 \u0627\u0633\u062A \u0648 \u0627\u0645\u06A9\u0627\u0646 \u0648\u0631\u0648\u062F \u0628\u0647 \u0633\u0627\u0645\u0627\u0646\u0647 \u0631\u0627 \u0646\u062F\u0627\u0631\u06CC\u062F. \u0644\u0637\u0641\u0627\u064B \u0628\u0627 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u062A\u0645\u0627\u0633 \u0628\u06AF\u06CC\u0631\u06CC\u062F."
-          });
-        }
-        const isAdmin = Boolean(
-          pItem ? pItem.role === "admin" || pItem.role === "sales_manager" : isDirectusAdmin
-        );
-        const appRole = pItem ? pItem.role : isAdmin ? "admin" : "marketer";
-        let avatarUrl = formatAvatarUrl(meUser.avatar || pItem?.avatar);
-        if (projectSettingsData.login_pattern) {
-          const pInfo = await getPersonnelFullName(pItem?.id || meUser.id, pItem?.name);
-          const fullName = pInfo.fullName || pItem?.name || `${meUser.first_name || ""} ${meUser.last_name || ""}`.trim() || meUser.email;
-          const uPhone = pInfo.phone || pItem?.phone || "";
-          const parts = fullName.split(" ");
-          const fName = parts[0] || "\u0647\u0645\u06A9\u0627\u0631";
-          const lName = parts.length > 1 ? parts.slice(1).join(" ") : "\u06AF\u0631\u0627\u0645\u06CC";
-          const now2 = /* @__PURE__ */ new Date();
-          const loginVars = {
-            name: fullName,
-            fullName,
-            user_name: fullName,
-            personnel_name: fullName,
-            family: lName,
-            first_name: fName,
-            mobile: uPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
-            phone: uPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
-            date: now2.toLocaleDateString("fa-IR"),
-            time: now2.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" }),
-            ip: req.headers["x-forwarded-for"] || req.ip || "127.0.0.1",
-            device: req.headers["user-agent"] ? "\u0645\u0631\u0648\u0631\u06AF\u0631 \u0648\u0628" : "\u0633\u0627\u0645\u0627\u0646\u0647 \u0648\u0628",
-            username: meUser.email
-          };
-          if (uPhone) {
-            sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars).catch(
-              (e) => console.warn("Login SMS pattern send to user warning:", e.message)
-            );
-          }
-          sendTenantAdminsSmsPattern(
-            pItem?.tenant_id || "default",
-            projectSettingsData.login_pattern,
-            loginVars
-          ).catch((e) => console.warn("Login SMS pattern send to admin warning:", e.message));
-        }
-        return res.json({
-          success: true,
-          access_token: accessToken,
-          refresh_token: loginRes.data.refresh_token,
-          user: {
-            id: meUser.id,
-            email: meUser.email,
-            name: `${meUser.first_name || ""} ${meUser.last_name || ""}`.trim() || meUser.email,
-            role_id: roleId,
-            avatar: avatarUrl,
-            is_admin: isAdmin,
-            app_role: appRole
-          },
-          personnel_id: pItem?.id,
-          personnel: pItem
-        });
-      }
-    } catch (err) {
-      console.warn("Directus auth login failed, trying local fallback:", err.message);
-    }
-  }
-  const cleanDigits = cleanIdentifier.replace(/\D/g, "");
-  const found = personnelData.find((p) => {
-    if (!p) return false;
-    const pEmail = p.email ? String(p.email).trim().toLowerCase() : "";
-    const pUsername = p.username ? String(p.username).trim().toLowerCase() : "";
-    const pPhone = p.phone ? String(p.phone).trim() : "";
-    const pPhoneDigits = pPhone.replace(/\D/g, "");
-    if (cleanIdentifier && pEmail && pEmail === cleanIdentifier) return true;
-    if (cleanIdentifier && pUsername && pUsername === cleanIdentifier) return true;
-    if (cleanDigits && cleanDigits.length >= 7 && pPhoneDigits && pPhoneDigits === cleanDigits) return true;
-    if (cleanIdentifier && pPhone && pPhone.replace(/[\s\-_()]/g, "").toLowerCase() === cleanIdentifier.replace(/[\s\-_()]/g, "")) return true;
-    return false;
-  });
-  if (found) {
-    if (found.status === "inactive" || found.active === false) {
-      return res.status(403).json({
-        error: "ACCOUNT_INACTIVE",
-        message: "\u062D\u0633\u0627\u0628 \u06A9\u0627\u0631\u0628\u0631\u06CC \u0634\u0645\u0627 \u062A\u0648\u0633\u0637 \u0645\u062F\u06CC\u0631\u06CC\u062A \u063A\u06CC\u0631\u0641\u0639\u0627\u0644 \u0634\u062F\u0647 \u0627\u0633\u062A \u0648 \u0627\u0645\u06A9\u0627\u0646 \u0648\u0631\u0648\u062F \u0628\u0647 \u0633\u0627\u0645\u0627\u0646\u0647 \u0631\u0627 \u0646\u062F\u0627\u0631\u06CC\u062F. \u0644\u0637\u0641\u0627\u064B \u0628\u0627 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u062A\u0645\u0627\u0633 \u0628\u06AF\u06CC\u0631\u06CC\u062F."
-      });
-    }
-    if (projectSettingsData.login_pattern) {
-      const pInfo = await getPersonnelFullName(found.id, found.name);
-      const fullName = pInfo.fullName || found.name || found.email;
-      const uPhone = pInfo.phone || found.phone || "";
-      const parts = fullName.split(" ");
-      const fName = parts[0] || "\u0647\u0645\u06A9\u0627\u0631";
-      const lName = parts.length > 1 ? parts.slice(1).join(" ") : "\u06AF\u0631\u0627\u0645\u06CC";
-      const now2 = /* @__PURE__ */ new Date();
-      const loginVars = {
-        name: fullName,
-        fullName,
-        user_name: fullName,
-        personnel_name: fullName,
-        family: lName,
-        first_name: fName,
-        mobile: uPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
-        phone: uPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
-        date: now2.toLocaleDateString("fa-IR"),
-        time: now2.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" }),
-        ip: req.headers["x-forwarded-for"] || req.ip || "127.0.0.1",
-        device: "\u0633\u0627\u0645\u0627\u0646\u0647 \u0648\u0628 \u0622\u0644\u0641\u0627\u062F\u0633\u06A9",
-        username: found.username || found.email
-      };
-      if (uPhone) {
-        sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars).catch(
-          (e) => console.warn("Login SMS pattern send to user warning:", e.message)
-        );
-      }
-      sendTenantAdminsSmsPattern(
-        found.tenant_id || "default",
-        projectSettingsData.login_pattern,
-        loginVars
-      ).catch((e) => console.warn("Login SMS pattern send to admin warning:", e.message));
-    }
-    return res.json({
-      success: true,
-      access_token: "local-token-" + found.id,
-      user: {
-        id: found.id,
-        email: found.email,
-        username: found.username,
-        name: found.name,
-        role_id: found.role === "admin" ? DIRECTUS_ADMIN_ROLE_ID : DIRECTUS_STAFF_ROLE_ID,
-        is_admin: found.role === "admin",
-        app_role: found.role
-      },
-      personnel: found
-    });
-  }
-  res.status(401).json({ error: "\u06A9\u0627\u0631\u0628\u0631\u06CC \u0628\u0627 \u0627\u06CC\u0646 \u0645\u0634\u062E\u0635\u0627\u062A \u06CC\u0627\u0641\u062A \u0646\u0634\u062F." });
-});
-router2.get("/me", async (req, res) => {
-  const { userId, personnelId, userRole, isAdmin, userName, userEmail, isSessionRevoked } = getRequestUser(req);
-  if (isSessionRevoked || !userId && !personnelId && !userEmail) {
-    return res.status(401).json({
-      error: "ALL_SESSIONS_REVOKED",
-      message: "\u0646\u0634\u0633\u062A\u200C\u0647\u0627\u06CC \u06A9\u0627\u0631\u06CC \u062A\u0645\u0627\u0645\u06CC \u06A9\u0627\u0631\u0628\u0631\u0627\u0646 \u062A\u0648\u0633\u0637 \u0645\u062F\u06CC\u0631\u06CC\u062A \u0644\u063A\u0648 \u0634\u062F\u0647 \u0627\u0633\u062A. \u0644\u0637\u0641\u0627\u064B \u0645\u062C\u062F\u062F\u0627\u064B \u0648\u0627\u0631\u062F \u0634\u0648\u06CC\u062F."
-    });
-  }
-  let avatarUrl = void 0;
-  let pItem = null;
-  let isDirectusAdmin = false;
-  if (directusUrl && directusAdminToken) {
-    try {
-      if (userId) {
-        const uRes = await directusFetch(
-          `/users/${userId}?fields=id,email,avatar,first_name,last_name,role.id,role.name,role.admin_access`
-        );
-        if (uRes?.data?.avatar) {
-          avatarUrl = formatAvatarUrl(uRes.data.avatar);
-        }
-        if (uRes?.data?.role?.admin_access === true) {
-          isDirectusAdmin = true;
-        }
-      }
-      if (personnelId) {
-        const pRes = await directusFetch(`/items/personnel/${personnelId}`);
-        if (pRes?.data) pItem = pRes.data;
-      }
-    } catch {
-    }
-  }
-  if (!pItem) {
-    pItem = personnelData.find((p) => {
-      if (!p) return false;
-      const pId = p.id ? String(p.id).trim().toLowerCase() : "";
-      const pUserId = p.user_id ? String(p.user_id).trim().toLowerCase() : "";
-      const pEmail = p.email ? String(p.email).trim().toLowerCase() : "";
-      const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : "";
-      const cleanUId = userId ? String(userId).trim().toLowerCase() : "";
-      const cleanUEmail = userEmail ? String(userEmail).trim().toLowerCase() : "";
-      if (cleanPId && pId && pId === cleanPId) return true;
-      if (cleanUId && pUserId && pUserId === cleanUId) return true;
-      if (cleanUId && pId && pId === cleanUId) return true;
-      if (cleanUEmail && pEmail && pEmail === cleanUEmail) return true;
-      return false;
-    });
-  }
-  if (pItem) {
-    pItem = enrichPersonnel(pItem);
-    if (!avatarUrl && pItem.avatar) avatarUrl = pItem.avatar;
-  }
-  const effectiveIsAdmin = Boolean(
-    pItem ? pItem.role === "admin" || pItem.role === "sales_manager" : isDirectusAdmin
-  );
-  const effectiveRole = pItem ? pItem.role : effectiveIsAdmin ? "admin" : "marketer";
-  res.json({
-    user: {
-      id: userId || personnelId,
-      name: userName || pItem?.name || "\u06A9\u0627\u0631\u0628\u0631 \u0633\u0627\u0645\u0627\u0646\u0647",
-      email: userEmail || pItem?.email,
-      avatar: avatarUrl,
-      is_admin: effectiveIsAdmin,
-      app_role: effectiveRole
-    },
-    personnel_id: personnelId || pItem?.id,
-    personnel: pItem
-  });
-});
-router2.post("/change-password", async (req, res) => {
-  const { current_password, new_password } = req.body;
-  const { userId } = getRequestUser(req);
-  if (!new_password || new_password.length < 6) {
-    return res.status(400).json({ error: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u062C\u062F\u06CC\u062F \u0628\u0627\u06CC\u062F \u062D\u062F\u0627\u0642\u0644 \u06F6 \u06A9\u0627\u0631\u0627\u06A9\u062A\u0631 \u0628\u0627\u0634\u062F." });
-  }
-  if (directusUrl && directusAdminToken && userId) {
-    try {
-      await directusFetch(`/users/${userId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ password: new_password })
-      });
-      return res.json({ success: true, message: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062A\u063A\u06CC\u06CC\u0631 \u06CC\u0627\u0641\u062A." });
-    } catch (err) {
-      return res.status(500).json({ error: `\u062E\u0637\u0627 \u062F\u0631 \u062A\u063A\u06CC\u06CC\u0631 \u0631\u0645\u0632 \u0639\u0628\u0648\u0631: ${err.message}` });
-    }
-  }
-  res.json({ success: true, message: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062A\u063A\u06CC\u06CC\u0631 \u06CC\u0627\u0641\u062A." });
-});
-router2.post("/logout-all", async (req, res) => {
-  const { isAdmin } = getRequestUser(req);
-  if (!isAdmin) {
-    return res.status(403).json({
-      error: "FORBIDDEN",
-      message: "\u0641\u0642\u0637 \u0645\u062F\u06CC\u0631 \u0627\u0631\u0634\u062F \u0633\u06CC\u0633\u062A\u0645 \u0645\u062C\u0627\u0632 \u0628\u0647 \u062E\u0631\u0648\u062C \u0647\u0645\u06AF\u0627\u0646\u06CC \u06A9\u0627\u0631\u0628\u0631\u0627\u0646 \u0627\u0633\u062A."
-    });
-  }
-  const revTs = Date.now();
-  setGlobalSessionRevocationTimestamp(revTs);
-  return res.json({
-    success: true,
-    revocationTimestamp: revTs,
-    message: "\u062A\u0645\u0627\u0645\u06CC \u0646\u0634\u0633\u062A\u200C\u0647\u0627\u06CC \u06A9\u0627\u0631\u06CC \u0641\u0639\u0627\u0644 \u062F\u0631 \u0633\u0627\u0645\u0627\u0646\u0647 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0644\u063A\u0648 \u0634\u062F\u0646\u062F \u0648 \u062A\u0645\u0627\u0645\u06CC \u06A9\u0627\u0631\u0628\u0631\u0627\u0646 \u0644\u0627\u06AF\u06CC\u0646\u200C\u0634\u062F\u0647 \u062E\u0627\u0631\u062C \u06AF\u0631\u062F\u06CC\u062F\u0646\u062F."
-  });
-});
-var auth_routes_default = router2;
-
-// server/routes/customers.routes.ts
-import { Router as Router3 } from "express";
-import crypto5 from "crypto";
-
-// server/directus/cache.ts
-var customersCache = null;
-var reportsCache = null;
-var CACHE_TTL_MS = 3e5;
-function invalidateCustomersCache() {
-  customersCache = null;
-}
-function invalidateReportsCache() {
-  reportsCache = null;
-}
-async function ensureCustomersCache(forceRefresh = false) {
-  const now2 = Date.now();
-  if (!forceRefresh && customersCache && now2 - customersCache.timestamp < CACHE_TTL_MS) {
-    return customersCache.data;
-  }
-  const res = await directusFetch("/items/customers?limit=5000&sort=-date_created").catch(() => null);
-  const items = res?.data || [];
-  if (items && items.length > 0) {
-    customersCache = {
-      timestamp: Date.now(),
-      data: items,
-      meta: { total_count: items.length }
-    };
-    return items;
-  }
-  return customersCache?.data || customersData;
-}
-async function ensureReportsCache(forceRefresh = false) {
-  const now2 = Date.now();
-  if (!forceRefresh && reportsCache && now2 - reportsCache.timestamp < CACHE_TTL_MS) {
-    return reportsCache.data;
-  }
-  const res = await directusFetch("/items/customer_reports?limit=500&sort=-date_created").catch(() => null);
-  const items = res?.data || [];
-  if (items && items.length > 0) {
-    reportsCache = {
-      timestamp: Date.now(),
-      data: items,
-      meta: { total_count: items.length }
-    };
-    return items;
-  }
-  return reportsCache?.data || reportsData;
-}
-function computeCustomerExpiration(c) {
-  if (!c) return c;
-  const isExpired = Boolean(
-    c.assignment_deadline && c.status !== "\u0642\u0631\u0627\u0631\u062F\u0627\u062F" && c.status !== "\u0644\u06CC\u0633\u062A \u0633\u06CC\u0627\u0647" && (/* @__PURE__ */ new Date()).getTime() > new Date(c.assignment_deadline).getTime()
-  );
-  const rawTenant = c.tenant_id;
-  const tId = typeof rawTenant === "object" && rawTenant !== null ? String(rawTenant.id) : rawTenant !== null && rawTenant !== void 0 ? String(rawTenant) : "default";
-  const tObj = tenantsData.find((t) => String(t.id) === tId || t.slug === tId);
-  const contacts = Array.isArray(c.contacts) ? c.contacts : [];
-  const rawMobiles = Array.isArray(c.mobile_numbers) ? c.mobile_numbers : typeof c.mobile_numbers === "string" ? [c.mobile_numbers] : [];
-  const mobileNumbers = rawMobiles.length > 0 ? rawMobiles : contacts.filter((ct) => ct.channel_type === "mobile").map((ct) => ct.normalized_value || ct.value);
-  const rawLandlines = Array.isArray(c.landline_numbers) ? c.landline_numbers : typeof c.landline_numbers === "string" ? [c.landline_numbers] : [];
-  const landlineNumbers = rawLandlines.length > 0 ? rawLandlines : contacts.filter((ct) => ct.channel_type === "landline").map((ct) => ct.normalized_value || ct.value);
-  const rawTelegram = Array.isArray(c.telegram_ids) ? c.telegram_ids : typeof c.telegram_ids === "string" ? [c.telegram_ids] : [];
-  const telegramIds = rawTelegram.length > 0 ? rawTelegram : contacts.filter((ct) => ct.channel_type === "telegram").map((ct) => ct.value);
-  const rawInstagram = Array.isArray(c.instagram_ids) ? c.instagram_ids : typeof c.instagram_ids === "string" ? [c.instagram_ids] : [];
-  const instagramIds = rawInstagram.length > 0 ? rawInstagram : contacts.filter((ct) => ct.channel_type === "instagram").map((ct) => ct.value);
-  const rawEmails = Array.isArray(c.emails) ? c.emails : typeof c.emails === "string" ? [c.emails] : [];
-  const emails = rawEmails.length > 0 ? rawEmails : contacts.filter((ct) => ct.channel_type === "email").map((ct) => ct.value);
-  const rawWebsites = Array.isArray(c.websites) ? c.websites : typeof c.websites === "string" ? [c.websites] : [];
-  const websites = rawWebsites.length > 0 ? rawWebsites : contacts.filter((ct) => ct.channel_type === "website").map((ct) => ct.value);
-  return {
-    ...c,
-    company_name: c.company_name || "\u0628\u062F\u0648\u0646 \u0646\u0627\u0645",
-    business_type: c.business_type || "",
-    city: c.city || "\u0646\u0627\u0645\u0634\u062E\u0635",
-    province: c.province || "",
-    status: c.status || "\u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647",
-    assigned_marketer_name: c.assigned_marketer_name || "\u062A\u062E\u0635\u06CC\u0635 \u0646\u06CC\u0627\u0641\u062A\u0647",
-    mobile_numbers: mobileNumbers,
-    landline_numbers: landlineNumbers,
-    telegram_ids: telegramIds,
-    instagram_ids: instagramIds,
-    emails,
-    websites,
-    manager_phones: Array.isArray(c.manager_phones) ? c.manager_phones : typeof c.manager_phones === "string" ? [c.manager_phones] : [],
-    negotiator_phones: Array.isArray(c.negotiator_phones) ? c.negotiator_phones : typeof c.negotiator_phones === "string" ? [c.negotiator_phones] : [],
-    contacts,
-    is_expired: isExpired,
-    claimed_from_pool: Boolean(c.claimed_from_pool),
-    claimed_from_pool_at: c.claimed_from_pool_at || null,
-    tenant_id: tId,
-    tenant_name: typeof rawTenant === "object" && rawTenant?.name || (tObj ? tObj.name : "\u0633\u0627\u0632\u0645\u0627\u0646 \u0645\u0631\u06A9\u0632\u06CC")
-  };
-}
-function updateExpirationFlags() {
-  setCustomersData(customersData.map((c) => computeCustomerExpiration(c)));
-}
-var activeCustomerCreationLocks = /* @__PURE__ */ new Set();
-var recentCustomerCreations = [];
+// server/routes/system.routes.ts
+import { Router as Router2 } from "express";
+import crypto4 from "crypto";
 
 // server/services/phoneNormalizer.ts
-import crypto4 from "crypto";
+import crypto3 from "crypto";
 function normalizePersianString(str) {
   if (!str) return "";
   return String(str).replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/ي/g, "\u06CC").replace(/ك/g, "\u06A9").replace(/ة/g, "\u0647").replace(/ؤ/g, "\u0648").replace(/إ|أ|آ/g, "\u0627").replace(/\s+/g, " ").trim().toLowerCase();
@@ -2513,7 +2174,7 @@ function extractCustomerContacts(payload, customerId) {
     seenContacts.add(key);
     const isUuid = c.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id);
     list.push({
-      id: isUuid ? c.id : crypto4.randomUUID(),
+      id: isUuid ? c.id : crypto3.randomUUID(),
       customer_id: customerId,
       channel_type: chType,
       value: val,
@@ -2699,8 +2360,1936 @@ async function asyncCheckContactDuplicate(value, channelType, currentCustomerId)
   };
 }
 
-// server/routes/customers.routes.ts
+// server/routes/system.routes.ts
+var router2 = Router2();
+router2.get("/api/health", (req, res) => {
+  res.json({ status: "ok", uptime: process.uptime(), timestamp: (/* @__PURE__ */ new Date()).toISOString() });
+});
+router2.get("/health", (req, res) => {
+  res.json({ status: "ok", uptime: process.uptime(), timestamp: (/* @__PURE__ */ new Date()).toISOString() });
+});
+router2.get("/bff-status", (req, res) => {
+  res.json({
+    online: Boolean(directusUrl && directusAdminToken),
+    url: directusUrl || "",
+    database: "Directus"
+  });
+});
+router2.get("/api/bff-status", (req, res) => {
+  res.json({
+    online: Boolean(directusUrl && directusAdminToken),
+    url: directusUrl || "",
+    database: "Directus"
+  });
+});
+var dashboardSummaryCacheMap = /* @__PURE__ */ new Map();
+var globalCallIdToUUIDMap = /* @__PURE__ */ new Map();
+var uidToPersonnelMap = /* @__PURE__ */ new Map();
+var migrationPersonnelCache = null;
+var migrationCustomersCache = null;
+var migrationCacheLastFetch = 0;
+var DASHBOARD_CACHE_TTL_MS = 3e4;
+var handleDashboardSummary = async (req, res) => {
+  const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, reportViewScope, userName, tenantId } = getRequestUser(req);
+  const canViewAll = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers || reportViewScope === "all");
+  const cacheKey = `${tenantId || "all"}_${canViewAll ? "admin" : userId || userName || "staff"}`;
+  const now2 = Date.now();
+  const cached = dashboardSummaryCacheMap.get(cacheKey);
+  if (cached && now2 - cached.timestamp < DASHBOARD_CACHE_TTL_MS) {
+    return res.json(cached.data);
+  }
+  if (directusUrl && directusAdminToken) {
+    try {
+      let tenantFilterStr = "";
+      if (tenantId && tenantId !== "all") {
+        const tenantNum = resolveDirectusTenantId(tenantId);
+        if (tenantNum && tenantNum > 1) {
+          tenantFilterStr = `&filter[tenant_id][_eq]=${tenantNum}`;
+        }
+      }
+      const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : "";
+      const rawUid = cleanPId.replace(/^p-/, "");
+      const cleanUId = userId ? String(userId).trim().toLowerCase() : "";
+      const normUserName = userName ? userName.trim() : "";
+      let marketerCustFilter = "";
+      let marketerRepFilter = "";
+      let marketerLeadFilter = "";
+      if (!canViewAll) {
+        if (cleanPId) {
+          marketerCustFilter = `&filter[_or][0][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`;
+          if (rawUid && rawUid !== cleanPId) {
+            marketerCustFilter += `&filter[_or][1][assigned_marketer_id][_eq]=${encodeURIComponent(rawUid)}`;
+            marketerCustFilter += `&filter[_or][2][assigned_marketer_id][_eq]=${encodeURIComponent("p-" + rawUid)}`;
+          }
+          if (normUserName) {
+            marketerCustFilter += `&filter[_or][3][assigned_marketer_name][_icontains]=${encodeURIComponent(normUserName)}`;
+          }
+        } else if (normUserName) {
+          marketerCustFilter = `&filter[assigned_marketer_name][_icontains]=${encodeURIComponent(normUserName)}`;
+        }
+        if (normUserName) {
+          marketerRepFilter = `&filter[negotiator_name][_icontains]=${encodeURIComponent(normUserName)}`;
+        } else if (cleanPId) {
+          marketerRepFilter = `&filter[created_by][_eq]=${encodeURIComponent(cleanPId)}`;
+        }
+        if (cleanPId) {
+          marketerLeadFilter = `&filter[assigned_to][_eq]=${encodeURIComponent(cleanPId)}`;
+        }
+      }
+      const [
+        totalCustomersRes,
+        freeCustomersRes,
+        expiredCustomersRes,
+        contractsWonCustomersRes,
+        reportsAggregateRes,
+        totalColdLeadsRes,
+        adminReportsRes,
+        pendingLeavesRes,
+        pendingAdvancesRes
+      ] = await Promise.all([
+        directusFetch(`/items/customers?limit=1&meta=filter_count${tenantFilterStr}${marketerCustFilter}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[is_expired][_eq]=true${tenantFilterStr}${marketerCustFilter}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}${marketerCustFilter}`).catch(() => null),
+        directusFetch(`/items/customer_reports?aggregate[count]=*&aggregate[sum]=contract_amount&aggregate[avg]=negotiation_score${tenantFilterStr}${marketerRepFilter}`).catch(() => null),
+        directusFetch(`/items/cold_leads?limit=1&meta=filter_count${tenantFilterStr}${marketerLeadFilter}`).catch(() => null),
+        directusFetch(`/items/administrative_reports?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/leave_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/advance_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null)
+      ]);
+      const totalCustomers = totalCustomersRes?.meta?.filter_count ?? totalCustomersRes?.meta?.total_count ?? 0;
+      const freeCustomers = freeCustomersRes?.meta?.filter_count ?? 0;
+      const expiredCustomers = expiredCustomersRes?.meta?.filter_count ?? 0;
+      const contractsWon = contractsWonCustomersRes?.meta?.filter_count ?? 0;
+      let totalReports = 0;
+      let totalRevenue = 0;
+      let avgScore = 8.5;
+      if (reportsAggregateRes?.data && Array.isArray(reportsAggregateRes.data) && reportsAggregateRes.data.length > 0) {
+        const repItem = reportsAggregateRes.data[0];
+        totalReports = Number(repItem.count || 0);
+        totalRevenue = Number(repItem.sum?.contract_amount || 0);
+        const rawAvg = Number(repItem.avg?.negotiation_score);
+        if (!isNaN(rawAvg) && rawAvg > 0) {
+          avgScore = Math.round(rawAvg * 10) / 10;
+        }
+      }
+      const totalColdLeads = totalColdLeadsRes?.meta?.filter_count ?? totalColdLeadsRes?.meta?.total_count ?? 0;
+      const adminReportsCount = adminReportsRes?.meta?.filter_count ?? adminReportsRes?.meta?.total_count ?? 0;
+      const pendingLeaves = pendingLeavesRes?.meta?.filter_count ?? 0;
+      const pendingAdvances = pendingAdvancesRes?.meta?.filter_count ?? 0;
+      const upcomingFollowups = [];
+      const urgentExpiringCustomers = [];
+      const inNegotiationCount = Math.max(0, totalCustomers - contractsWon);
+      const resultPayload = {
+        total_customers: totalCustomers,
+        contracts_won_count: contractsWon,
+        in_negotiation_count: inNegotiationCount,
+        expired_customers_count: expiredCustomers,
+        free_customers_count: freeCustomers,
+        total_reports_count: totalReports,
+        total_cold_leads_count: totalColdLeads,
+        admin_reports_count: adminReportsCount,
+        pending_leave_count: pendingLeaves,
+        pending_advance_count: pendingAdvances,
+        total_contract_revenue: totalRevenue,
+        avg_negotiation_score: avgScore,
+        upcoming_followups: upcomingFollowups,
+        urgent_expiring_customers: urgentExpiringCustomers
+      };
+      dashboardSummaryCacheMap.set(cacheKey, { data: resultPayload, timestamp: Date.now() });
+      return res.json(resultPayload);
+    } catch (err) {
+      console.warn("Dashboard summary error:", err.message);
+    }
+  }
+  res.json({
+    total_customers: customersData.length,
+    contracts_won_count: customersData.filter((c) => c.status === "\u0642\u0631\u0627\u0631\u062F\u0627\u062F").length,
+    in_negotiation_count: customersData.filter((c) => c.status !== "\u0642\u0631\u0627\u0631\u062F\u0627\u062F").length,
+    expired_customers_count: customersData.filter((c) => c.is_expired).length,
+    free_customers_count: customersData.filter((c) => !c.assigned_marketer_id || c.is_expired).length,
+    total_reports_count: reportsData.length,
+    total_cold_leads_count: 0,
+    admin_reports_count: 0,
+    pending_leave_count: 0,
+    pending_advance_count: 0,
+    total_contract_revenue: 0,
+    avg_negotiation_score: 8.5,
+    upcoming_followups: customersData.slice(0, 5),
+    urgent_expiring_customers: customersData.slice(0, 5)
+  });
+};
+router2.get("/api/dashboard-summary", handleDashboardSummary);
+router2.get("/api/dashboard/summary", handleDashboardSummary);
+router2.get("/api/project-settings", async (req, res) => {
+  if (directusUrl && directusAdminToken) {
+    try {
+      const resp = await directusFetch("/items/project_settings").catch(() => null);
+      if (resp?.data) {
+        const item = Array.isArray(resp.data) ? resp.data[0] : resp.data;
+        if (item) {
+          updateProjectSettingsData(item);
+        }
+      }
+    } catch {
+    }
+  }
+  res.json(projectSettingsData);
+});
+router2.patch("/api/project-settings", async (req, res) => {
+  const payload = req.body;
+  const { isAdmin } = getRequestUser(req);
+  if (!isAdmin) {
+    return res.status(403).json({ error: "\u062A\u0646\u0647\u0627 \u0645\u062F\u06CC\u0631 \u06A9\u0644 \u0633\u06CC\u0633\u062A\u0645 \u062F\u0633\u062A\u0631\u0633\u06CC \u0628\u0647 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u062A\u0646\u0638\u06CC\u0645\u0627\u062A \u067E\u0631\u0648\u0698\u0647\u200C\u0647\u0627 \u0648 \u067E\u062A\u0631\u0646\u200C\u0647\u0627\u06CC \u067E\u06CC\u0627\u0645\u06A9 \u0631\u0627 \u062F\u0627\u0631\u062F." });
+  }
+  updateProjectSettingsData(payload);
+  if (directusUrl && directusAdminToken) {
+    try {
+      const fetchExist = await directusFetch("/items/project_settings").catch(() => null);
+      const existingList = fetchExist?.data;
+      if (Array.isArray(existingList) && existingList.length > 0) {
+        const existingId = existingList[0].id;
+        await directusFetch(`/items/project_settings/${existingId}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload)
+        });
+      } else {
+        await directusFetch("/items/project_settings", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+      }
+    } catch (err) {
+      console.warn("Directus project_settings save error:", err.message);
+    }
+  }
+  res.json({ success: true, settings: projectSettingsData });
+});
+router2.post("/api/auth/update-profile", async (req, res) => {
+  const {
+    name,
+    username,
+    phone,
+    avatar,
+    bank_card_number,
+    iban,
+    national_id,
+    emergency_contact_name,
+    emergency_contact_phone,
+    emergency_contact_relation,
+    family_contacts
+  } = req.body;
+  const { userId, personnelId, userEmail, userName } = getRequestUser(req);
+  const personnelPatch = {};
+  if (name) personnelPatch.name = String(name).trim();
+  if (username !== void 0) personnelPatch.username = String(username).trim();
+  if (phone !== void 0) personnelPatch.phone = String(phone).trim();
+  if (avatar !== void 0) personnelPatch.avatar = avatar;
+  if (bank_card_number !== void 0) personnelPatch.bank_card_number = String(bank_card_number).trim();
+  if (iban !== void 0) personnelPatch.iban = String(iban).trim();
+  if (national_id !== void 0) personnelPatch.national_id = String(national_id).trim();
+  if (emergency_contact_name !== void 0) personnelPatch.emergency_contact_name = String(emergency_contact_name).trim();
+  if (emergency_contact_phone !== void 0) personnelPatch.emergency_contact_phone = String(emergency_contact_phone).trim();
+  if (emergency_contact_relation !== void 0) personnelPatch.emergency_contact_relation = String(emergency_contact_relation).trim();
+  if (family_contacts !== void 0) personnelPatch.family_contacts = family_contacts;
+  let targetPersonnel = null;
+  if (directusUrl && directusAdminToken) {
+    try {
+      let foundPId = null;
+      if (personnelId) {
+        const byId = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
+        if (byId?.data?.id) foundPId = byId.data.id;
+      }
+      if (!foundPId && userId) {
+        const byUser = await directusFetch(`/items/personnel?filter[user_id][_eq]=${userId}`).catch(() => null);
+        if (byUser?.data && Array.isArray(byUser.data) && byUser.data.length > 0) {
+          foundPId = byUser.data[0].id;
+        }
+      }
+      if (!foundPId && userEmail) {
+        const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail)}`).catch(() => null);
+        if (byEmail?.data && Array.isArray(byEmail.data) && byEmail.data.length > 0) {
+          foundPId = byEmail.data[0].id;
+        }
+      }
+      const directusFileId = extractFileId(avatar);
+      const directusPersonnelPatch = { ...personnelPatch };
+      delete directusPersonnelPatch.avatar;
+      if (foundPId) {
+        const updatedRes = await directusFetch(`/items/personnel/${foundPId}`, {
+          method: "PATCH",
+          body: JSON.stringify(directusPersonnelPatch)
+        }).catch(() => null);
+        targetPersonnel = updatedRes?.data || { id: foundPId, ...personnelPatch };
+      } else {
+        const newPId = personnelId || crypto4.randomUUID();
+        const createdRes = await directusFetch("/items/personnel", {
+          method: "POST",
+          body: JSON.stringify({
+            id: newPId,
+            name: name || userName || "\u06A9\u0627\u0631\u0628\u0631 \u0633\u06CC\u0633\u062A\u0645",
+            email: userEmail || "",
+            phone: phone || "",
+            role: "marketer",
+            status: "active",
+            user_id: userId || null,
+            ...directusPersonnelPatch
+          })
+        }).catch(() => null);
+        targetPersonnel = createdRes?.data || { id: newPId, ...personnelPatch };
+      }
+      let actualDirectusUserId = null;
+      if (userId && !String(userId).startsWith("p-")) {
+        const uCheck = await directusFetch(`/users/${userId}?fields=id`).catch(() => null);
+        if (uCheck?.data?.id) actualDirectusUserId = uCheck.data.id;
+      }
+      if (!actualDirectusUserId && targetPersonnel?.user_id) {
+        actualDirectusUserId = targetPersonnel.user_id;
+      }
+      if (!actualDirectusUserId && (userEmail || targetPersonnel?.email)) {
+        const em = (userEmail || targetPersonnel?.email || "").toLowerCase().trim();
+        const byEmail = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(em)}&fields=id&limit=1`).catch(() => null);
+        if (byEmail?.data?.[0]?.id) actualDirectusUserId = byEmail.data[0].id;
+      }
+      if (actualDirectusUserId) {
+        const userPatch = {};
+        if (name) userPatch.first_name = name;
+        if (avatar !== void 0) {
+          if (directusFileId) userPatch.avatar = directusFileId;
+          else if (!avatar) userPatch.avatar = null;
+        }
+        if (Object.keys(userPatch).length > 0) {
+          await directusFetch(`/users/${actualDirectusUserId}`, {
+            method: "PATCH",
+            body: JSON.stringify(userPatch)
+          }).catch((e) => console.warn("Could not update directus user profile:", e.message));
+        }
+      }
+    } catch (err) {
+      console.error("Directus personnel profile update error:", err.message);
+    }
+  }
+  const finalAvatarUrl = formatAvatarUrl(avatar) || (typeof avatar === "string" ? avatar : void 0);
+  if (targetPersonnel) {
+    targetPersonnel.avatar = finalAvatarUrl || targetPersonnel.avatar || "";
+  }
+  const targetId = personnelId || userId;
+  const idx = personnelData.findIndex(
+    (p) => targetId && (p.id === targetId || p.user_id === targetId) || userEmail && p.email?.toLowerCase() === userEmail?.toLowerCase()
+  );
+  if (idx >= 0) {
+    personnelData[idx] = {
+      ...personnelData[idx],
+      ...personnelPatch,
+      avatar: finalAvatarUrl || personnelData[idx].avatar || ""
+    };
+    if (!targetPersonnel) targetPersonnel = personnelData[idx];
+    else targetPersonnel.avatar = personnelData[idx].avatar;
+  } else {
+    const newLocal = {
+      id: targetId || "p-1",
+      name: name || userName || "\u06A9\u0627\u0631\u0628\u0631 \u0633\u06CC\u0633\u062A\u0645",
+      email: userEmail || "",
+      phone: phone || "",
+      role: "marketer",
+      status: "active",
+      active: true,
+      ...personnelPatch,
+      avatar: finalAvatarUrl || ""
+    };
+    personnelData.push(newLocal);
+    if (!targetPersonnel) targetPersonnel = newLocal;
+  }
+  res.json({ success: true, personnel: targetPersonnel, message: "\u0645\u0634\u062E\u0635\u0627\u062A \u067E\u0631\u0648\u0641\u0627\u06CC\u0644 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062F\u0631 \u067E\u0627\u06CC\u06AF\u0627\u0647 \u062F\u0627\u062F\u0647 \u0645\u0631\u06A9\u0632\u06CC \u0630\u062E\u06CC\u0631\u0647 \u0634\u062F." });
+});
+var localAvatarCacheMap = /* @__PURE__ */ new Map();
+var handleAssetProxy = async (req, res, next) => {
+  const { id } = req.params;
+  if (!id) {
+    return res.status(400).send("Asset ID is required");
+  }
+  if (id && /\.(js|css|map|woff2?|ttf|eot|ico|svg)$/i.test(id)) {
+    if (typeof next === "function") return next();
+    return res.status(404).send("Not static asset");
+  }
+  const cleanId = id.replace(/\.[a-zA-Z0-9]+$/, "");
+  const cached = localAvatarCacheMap.get(cleanId) || localAvatarCacheMap.get(id);
+  if (cached) {
+    res.setHeader("Content-Type", cached.contentType);
+    res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+    return res.send(cached.buffer);
+  }
+  if (directusUrl) {
+    try {
+      const tokenToUse = directusAdminToken || process.env.DIRECTUS_ADMIN_TOKEN || "";
+      const urlToUse = directusUrl || process.env.DIRECTUS_URL || "";
+      const cleanBaseUrl = urlToUse.replace(/\/$/, "");
+      const headers = {};
+      if (tokenToUse) {
+        headers["Authorization"] = `Bearer ${tokenToUse}`;
+      }
+      const thumbUrl = `${cleanBaseUrl}/assets/${cleanId}?width=250&height=250&quality=80&format=webp`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4e3);
+      let assetRes = await fetch(thumbUrl, { headers, signal: controller.signal }).catch(() => null);
+      clearTimeout(timeoutId);
+      if (!assetRes || !assetRes.ok) {
+        const rawController = new AbortController();
+        const rawTimeoutId = setTimeout(() => rawController.abort(), 5e3);
+        assetRes = await fetch(`${cleanBaseUrl}/assets/${cleanId}`, { headers, signal: rawController.signal }).catch(() => null);
+        clearTimeout(rawTimeoutId);
+      }
+      if (assetRes && assetRes.ok) {
+        const contentType = assetRes.headers.get("content-type") || "image/jpeg";
+        const buffer = Buffer.from(await assetRes.arrayBuffer());
+        localAvatarCacheMap.set(cleanId, { buffer, contentType });
+        localAvatarCacheMap.set(id, { buffer, contentType });
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
+        return res.send(buffer);
+      } else if (assetRes) {
+        console.warn(`[Asset Proxy] Directus asset ${cleanId} returned HTTP ${assetRes.status}`);
+      }
+    } catch (err) {
+      console.warn(`[Asset Proxy] Error fetching asset ${cleanId}:`, err.message);
+    }
+  }
+  res.status(404).send("Asset not found");
+};
+router2.get("/api/assets/:id", handleAssetProxy);
+router2.post("/api/upload-avatar", async (req, res) => {
+  const { dataUrl, fileName, mimeType } = req.body;
+  const { userId, personnelId, userEmail, userName } = getRequestUser(req);
+  if (!dataUrl) {
+    return res.status(400).json({ error: "\u0641\u0627\u06CC\u0644\u06CC \u0627\u0631\u0633\u0627\u0644 \u0646\u0634\u062F\u0647 \u0627\u0633\u062A." });
+  }
+  let finalAvatarUrl = dataUrl;
+  let fileId = null;
+  try {
+    const matches = dataUrl.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
+    if (matches && matches.length === 3) {
+      const fileBuffer = Buffer.from(matches[2], "base64");
+      const fileType = matches[1] || mimeType || "image/webp";
+      const name = fileName || `avatar-${userId || personnelId || Date.now()}.webp`;
+      if (directusUrl && directusAdminToken) {
+        const boundary = "----WebKitFormBoundary" + Math.random().toString(36).substring(2);
+        const header = `--${boundary}\r
+Content-Disposition: form-data; name="file"; filename="${name}"\r
+Content-Type: ${fileType}\r
+\r
+`;
+        const footer = `\r
+--${boundary}--\r
+`;
+        const bodyBuffer = Buffer.concat([Buffer.from(header, "utf-8"), fileBuffer, Buffer.from(footer, "utf-8")]);
+        const uploadRes = await fetch(`${directusUrl.replace(/\/$/, "")}/files`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${directusAdminToken}`,
+            "Content-Type": `multipart/form-data; boundary=${boundary}`
+          },
+          body: bodyBuffer
+        });
+        if (uploadRes.ok) {
+          const fileData = await uploadRes.json();
+          fileId = fileData?.data?.id;
+        } else {
+          const errText = await uploadRes.text().catch(() => "");
+          console.warn("[Directus Upload Avatar Error]:", uploadRes.status, errText);
+        }
+      }
+      if (!fileId) {
+        fileId = "avatar-" + crypto4.randomUUID();
+      }
+      localAvatarCacheMap.set(fileId, { buffer: fileBuffer, contentType: fileType });
+      finalAvatarUrl = `/api/assets/${fileId}`;
+      if (directusUrl && directusAdminToken) {
+        let actualDirectusUserId = null;
+        if (userId && !String(userId).startsWith("p-")) {
+          const uCheck = await directusFetch(`/users/${userId}?fields=id`).catch(() => null);
+          if (uCheck?.data?.id) actualDirectusUserId = uCheck.data.id;
+        }
+        let directusPersonnelId = null;
+        if (personnelId) {
+          const byPId = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
+          if (byPId?.data?.id) {
+            directusPersonnelId = byPId.data.id;
+            if (!actualDirectusUserId && byPId.data.user_id) actualDirectusUserId = byPId.data.user_id;
+          }
+        }
+        if (!directusPersonnelId && userId) {
+          const byUser = await directusFetch(`/items/personnel?filter[user_id][_eq]=${userId}&limit=1`).catch(() => null);
+          if (byUser?.data?.[0]?.id) directusPersonnelId = byUser.data[0].id;
+        }
+        if (!directusPersonnelId && userEmail) {
+          const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail.toLowerCase().trim())}&limit=1`).catch(() => null);
+          if (byEmail?.data?.[0]?.id) {
+            directusPersonnelId = byEmail.data[0].id;
+            if (!actualDirectusUserId && byEmail.data[0].user_id) actualDirectusUserId = byEmail.data[0].user_id;
+          }
+        }
+        if (!actualDirectusUserId && userEmail) {
+          const byEmail = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(userEmail.toLowerCase().trim())}&fields=id&limit=1`).catch(() => null);
+          if (byEmail?.data?.[0]?.id) actualDirectusUserId = byEmail.data[0].id;
+        }
+        if (actualDirectusUserId) {
+          await directusFetch(`/users/${actualDirectusUserId}`, {
+            method: "PATCH",
+            body: JSON.stringify({ avatar: fileId })
+          }).catch((e) => console.warn("Could not update directus user avatar:", e.message));
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Error uploading avatar to Directus/Cache:", e.message);
+  }
+  const targetId = personnelId || userId;
+  const idx = personnelData.findIndex(
+    (p) => targetId && (p.id === targetId || p.user_id === targetId) || userEmail && p.email?.toLowerCase() === userEmail.toLowerCase() || userName && p.name === userName
+  );
+  if (idx >= 0) {
+    personnelData[idx].avatar = finalAvatarUrl;
+  }
+  res.json({ success: true, avatarUrl: finalAvatarUrl, fileId });
+});
+router2.post("/api/auth/change-password", async (req, res) => {
+  const { current_password, new_password } = req.body;
+  const { userId } = getRequestUser(req);
+  if (!new_password || new_password.length < 6) {
+    return res.status(400).json({ error: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u062C\u062F\u06CC\u062F \u0628\u0627\u06CC\u062F \u062D\u062F\u0627\u0642\u0644 \u06F6 \u06A9\u0627\u0631\u0627\u06A9\u062A\u0631 \u0628\u0627\u0634\u062F." });
+  }
+  if (directusUrl && directusAdminToken && userId) {
+    try {
+      await directusFetch(`/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ password: new_password })
+      });
+      return res.json({ success: true, message: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062A\u063A\u06CC\u06CC\u0631 \u06CC\u0627\u0641\u062A." });
+    } catch (err) {
+      return res.status(500).json({ error: `\u062E\u0637\u0627 \u062F\u0631 \u062A\u063A\u06CC\u06CC\u0631 \u0631\u0645\u0632 \u0639\u0628\u0648\u0631: ${err.message}` });
+    }
+  }
+  res.json({ success: true, message: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062A\u063A\u06CC\u06CC\u0631 \u06CC\u0627\u0641\u062A." });
+});
+router2.post("/api/check-expirations", (req, res) => {
+  res.json({ success: true });
+});
+var handleResetMigrationCache = (req, res) => {
+  setCustomersData([]);
+  setReportsData([]);
+  setContactsData([]);
+  setPersonnelData([...initialPersonnel]);
+  migrationPersonnelCache = null;
+  migrationCustomersCache = null;
+  migrationCacheLastFetch = 0;
+  globalCallIdToUUIDMap.clear();
+  uidToPersonnelMap.clear();
+  invalidateCustomersCache();
+  invalidateReportsCache();
+  return res.json({ success: true, message: "\u062D\u0627\u0641\u0638\u0647 \u0645\u0648\u0642\u062A \u06A9\u0634 \u062F\u0631\u0648\u0646\u200C\u0631\u06CC\u0632\u06CC \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u067E\u0627\u06A9\u0633\u0627\u0632\u06CC \u0634\u062F." });
+};
+router2.post("/api/migration/reset-cache", handleResetMigrationCache);
+router2.post("/migration/reset-cache", handleResetMigrationCache);
+function jalaliToGregorian(jy, jm, jd) {
+  let gy = jy <= 979 ? 621 : 1600;
+  jy -= jy <= 979 ? 0 : 979;
+  let days = 365 * jy + Math.floor(jy / 33) * 8 + Math.floor((jy % 33 + 3) / 4) + 78 + jd + (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
+  gy += 400 * Math.floor(days / 146097);
+  days %= 146097;
+  if (days > 36524) {
+    gy += 100 * Math.floor(--days / 36524);
+    days %= 36524;
+    if (days >= 365) days++;
+  }
+  gy += 4 * Math.floor(days / 1461);
+  days %= 1461;
+  if (days > 365) {
+    gy += Math.floor((days - 1) / 365);
+    days = (days - 1) % 365;
+  }
+  const gd = days + 1;
+  const sal_a = [
+    0,
+    31,
+    gy % 4 === 0 && gy % 100 !== 0 || gy % 400 === 0 ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31
+  ];
+  let gm = 0;
+  for (gm = 0; gm < 13; gm++) {
+    const v = sal_a[gm];
+    if (days < v) break;
+    days -= v;
+  }
+  return new Date(Date.UTC(gy, gm - 1, gd));
+}
+function parseLegacyDate(dateVal) {
+  if (!dateVal) return null;
+  const str = String(dateVal).trim();
+  if (!str || str === "NULL" || str === "null") return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  if (/^\d{8}$/.test(str)) {
+    const jy = parseInt(str.substring(0, 4), 10);
+    const jm = parseInt(str.substring(4, 6), 10);
+    const jd = parseInt(str.substring(6, 8), 10);
+    try {
+      return jalaliToGregorian(jy, jm, jd).toISOString();
+    } catch {
+    }
+  }
+  const slashMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2}))?/);
+  if (slashMatch) {
+    const jy = parseInt(slashMatch[1], 10);
+    const jm = parseInt(slashMatch[2], 10);
+    const jd = parseInt(slashMatch[3], 10);
+    const hour = slashMatch[4] ? parseInt(slashMatch[4], 10) : 12;
+    const min = slashMatch[5] ? parseInt(slashMatch[5], 10) : 0;
+    try {
+      const gDate = jalaliToGregorian(jy, jm, jd);
+      gDate.setUTCHours(hour, min, 0, 0);
+      return gDate.toISOString();
+    } catch {
+    }
+  }
+  const dashTimeMatch = str.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/);
+  if (dashTimeMatch) {
+    const jy = parseInt(dashTimeMatch[1], 10);
+    const jm = parseInt(dashTimeMatch[2], 10);
+    const jd = parseInt(dashTimeMatch[3], 10);
+    const hour = parseInt(dashTimeMatch[4], 10);
+    const min = parseInt(dashTimeMatch[5], 10);
+    try {
+      const gDate = jalaliToGregorian(jy, jm, jd);
+      gDate.setUTCHours(hour, min, 0, 0);
+      return gDate.toISOString();
+    } catch {
+    }
+  }
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  } catch {
+  }
+  return null;
+}
+function normalizeLegacyStatus(rawStatus) {
+  if (!rawStatus) return "\u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647";
+  const s = String(rawStatus).trim();
+  if (s === "\u0627\u0635\u0644\u0627 \u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647" || s === "\u062A\u0645\u0627\u0633 \u0646\u06AF\u0631\u0641\u062A\u0647" || s === "\u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647" || s === "\u0628\u062F\u0648\u0646 \u062A\u0645\u0627\u0633" || s === "\u0627\u0635\u0644\u0627\u064B \u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647") {
+    return "\u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647";
+  }
+  if (s === "\u067E\u0627\u0633\u062E \u0646\u0645\u06CC\u062F\u0647\u062F" || s === "\u067E\u0627\u0633\u062E \u0646\u0645\u06CC\u200C\u062F\u0647\u062F" || s === "\u067E\u0627\u0633\u062E \u0646\u062F\u0627\u062F" || s === "\u062C\u0648\u0627\u0628 \u0646\u0645\u06CC\u062F\u0647\u062F") {
+    return "\u067E\u0627\u0633\u062E \u0646\u0645\u06CC\u062F\u0647\u062F";
+  }
+  if (s === "\u0646\u0645\u06CC\u062E\u0648\u0627\u062F" || s === "\u0646\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u062F" || s === "\u0639\u062F\u0645 \u062A\u0645\u0627\u06CC\u0644" || s === "\u0646\u0645\u06CC \u062E\u0648\u0627\u0647\u062F") {
+    return "\u0646\u0645\u06CC\u062E\u0648\u0627\u062F";
+  }
+  if (s === "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0628\u0644 \u0627\u0632 \u0627\u0646\u0642\u0636\u0627" || s === "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0628\u0644 \u0627\u0632 \u0627\u0646\u0642\u0636\u0627\u0621") {
+    return "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0628\u0644 \u0627\u0632 \u0627\u0646\u0642\u0636\u0627";
+  }
+  if (s === "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0628\u0644\u0646\u062F \u0645\u062F\u062A" || s === "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0628\u0644\u0646\u062F\u0645\u062F\u062A") {
+    return "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0628\u0644\u0646\u062F \u0645\u062F\u062A";
+  }
+  if (s === "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0631\u0627\u0631\u062F\u0627\u062F") {
+    return "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0631\u0627\u0631\u062F\u0627\u062F";
+  }
+  if (s === "\u067E\u06CC\u0634 \u0646\u0648\u06CC\u0633 \u0642\u0631\u0627\u0631\u062F\u0627\u062F" || s === "\u067E\u06CC\u0634\u200C\u0646\u0648\u06CC\u0633 \u0642\u0631\u0627\u0631\u062F\u0627\u062F") {
+    return "\u067E\u06CC\u0634 \u0646\u0648\u06CC\u0633 \u0642\u0631\u0627\u0631\u062F\u0627\u062F";
+  }
+  if (s === "\u0642\u0631\u0627\u0631\u062F\u0627\u062F" || s === "\u0642\u0631\u0627\u0631\u062F\u0627\u062F / \u0641\u0627\u06A9\u062A\u0648\u0631" || s === "\u0642\u0631\u0627\u0631\u062F\u0627\u062F/\u0641\u0627\u06A9\u062A\u0648\u0631" || s === "\u0641\u0627\u06A9\u062A\u0648\u0631") {
+    return "\u0642\u0631\u0627\u0631\u062F\u0627\u062F";
+  }
+  if (s === "\u0644\u06CC\u0633\u062A \u0633\u06CC\u0627\u0647") {
+    return "\u0644\u06CC\u0633\u062A \u0633\u06CC\u0627\u0647";
+  }
+  if (s === "\u062B\u0628\u062A \u0634\u0645\u0627\u0631\u0647") {
+    return "\u062B\u0628\u062A \u0634\u0645\u0627\u0631\u0647";
+  }
+  return s;
+}
+function isValidUUID(str) {
+  if (typeof str !== "string") return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str.trim());
+}
+function deterministicUUID(input) {
+  if (!input) return crypto4.randomUUID();
+  const cleanInput = String(input).trim();
+  if (isValidUUID(cleanInput)) return cleanInput;
+  const hash = crypto4.createHash("md5").update("alphadesk-crm:" + cleanInput).digest("hex");
+  return `${hash.substring(0, 8)}-${hash.substring(8, 12)}-4${hash.substring(13, 16)}-a${hash.substring(17, 20)}-${hash.substring(20, 32)}`;
+}
+function sanitizeCustomerForDirectus(cust, validPersonnelIds) {
+  const tNum = cust.tenant_id !== void 0 && cust.tenant_id !== null ? Number(cust.tenant_id) : 1;
+  const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
+  let assignedMarketerId = cust.assigned_marketer_id || null;
+  if (assignedMarketerId && validPersonnelIds && validPersonnelIds.size > 0 && !validPersonnelIds.has(assignedMarketerId)) {
+    assignedMarketerId = null;
+  }
+  return {
+    id: cust.id,
+    company_name: cust.company_name || "\u0628\u062F\u0648\u0646 \u0646\u0627\u0645",
+    business_type: cust.business_type || "",
+    province: cust.province || "",
+    city: cust.city || "",
+    manager_name: cust.manager_name || "",
+    mobile_numbers: Array.isArray(cust.mobile_numbers) ? cust.mobile_numbers : [],
+    landline_numbers: Array.isArray(cust.landline_numbers) ? cust.landline_numbers : [],
+    assigned_marketer_id: assignedMarketerId,
+    assigned_marketer_name: cust.assigned_marketer_name || null,
+    assignment_deadline: cust.assignment_deadline || null,
+    status: cust.status || "\u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647",
+    is_expired: Boolean(cust.is_expired),
+    tenant_id: tenantNum,
+    date_created: cust.date_created || (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+function sanitizeContactForDirectus(c) {
+  const tNum = c.tenant_id !== void 0 && c.tenant_id !== null ? Number(c.tenant_id) : 1;
+  const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
+  return {
+    id: isValidUUID(c.id) ? c.id : deterministicUUID(`${c.customer_id}-${c.channel_type}-${c.value}`),
+    customer_id: c.customer_id,
+    channel_type: c.channel_type || "mobile",
+    value: String(c.value || "").trim(),
+    normalized_value: c.normalized_value ? String(c.normalized_value).trim() : null,
+    contact_name: c.contact_name ? String(c.contact_name).trim() : null,
+    is_primary: Boolean(c.is_primary),
+    tenant_id: tenantNum,
+    date_created: c.date_created || (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+function sanitizeReportForDirectus(rep) {
+  const tNum = rep.tenant_id !== void 0 && rep.tenant_id !== null ? Number(rep.tenant_id) : 1;
+  const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
+  return {
+    id: rep.id,
+    customer_id: rep.customer_id,
+    report_text: rep.report_text || "",
+    negotiator_name: rep.negotiator_name || "\u06A9\u0627\u0631\u0634\u0646\u0627\u0633",
+    negotiation_phone: rep.negotiation_phone || "",
+    negotiation_status: rep.negotiation_status || "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0628\u0644 \u0627\u0632 \u0627\u0646\u0642\u0636\u0627",
+    negotiation_score: typeof rep.negotiation_score === "number" ? rep.negotiation_score : 8,
+    next_followup_date: rep.next_followup_date || null,
+    tenant_id: tenantNum,
+    date_created: rep.date_created || (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+function sanitizePersonnelForDirectus(p) {
+  const tNum = p.tenant_id !== void 0 && p.tenant_id !== null ? Number(p.tenant_id) : 1;
+  const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
+  return {
+    id: p.id,
+    name: p.name || "\u06A9\u0627\u0631\u0634\u0646\u0627\u0633",
+    username: p.username || "",
+    email: p.email || "",
+    phone: p.phone || "",
+    role: p.role || "marketer",
+    status: p.status || "active",
+    tenant_id: tenantNum,
+    national_id: p.national_id || null
+  };
+}
+var handleMigrationImport = async (req, res) => {
+  const { tenant_id, personnelRows, customerRows, reportRows } = req.body;
+  const { tenantId: authTenantId } = getRequestUser(req);
+  const targetTenantId = tenant_id || authTenantId || "default";
+  const targetTenantNum = resolveDirectusTenantId(targetTenantId);
+  let importedPersonnelCount = 0;
+  let importedCustomersCount = 0;
+  let importedReportsCount = 0;
+  let skippedCount = 0;
+  const skippedDetails = [];
+  const errors = [];
+  if (!migrationPersonnelCache || !migrationCustomersCache || Date.now() - migrationCacheLastFetch > 3e5) {
+    migrationPersonnelCache = [...personnelData];
+    migrationCustomersCache = [...customersData];
+    if (directusUrl && directusAdminToken) {
+      try {
+        const [pRes, cRes] = await Promise.all([
+          directusFetchAllPages("/items/personnel?fields=id,username,email,name,phone&limit=1000").catch(() => null),
+          directusFetch("/items/customers?fields=id,assigned_marketer_id,assigned_marketer_name&limit=5000").catch(() => null)
+        ]);
+        const pList = Array.isArray(pRes) ? pRes : pRes?.data || [];
+        const cList = Array.isArray(cRes) ? cRes : cRes?.data || [];
+        for (const p of pList) {
+          if (!migrationPersonnelCache.some((ep) => ep.id === p.id || p.username && ep.username === p.username)) {
+            migrationPersonnelCache.push(p);
+          }
+        }
+        for (const c of cList) {
+          if (!migrationCustomersCache.some((ec) => ec.id === c.id)) {
+            migrationCustomersCache.push(c);
+          }
+        }
+        migrationCacheLastFetch = Date.now();
+      } catch (e) {
+        console.warn("Warning pre-fetching Directus records for migration:", e.message);
+      }
+    }
+  }
+  const existingPersonnel = migrationPersonnelCache;
+  const existingCustomers = migrationCustomersCache;
+  const existingCustomerIdsSet = /* @__PURE__ */ new Set();
+  for (const c of existingCustomers) {
+    if (c.id) existingCustomerIdsSet.add(c.id);
+  }
+  const directusPersonnelIdsSet = /* @__PURE__ */ new Set();
+  for (const p of existingPersonnel) {
+    if (p.id) directusPersonnelIdsSet.add(String(p.id).trim());
+  }
+  for (const c of existingCustomers) {
+    if (c.id) {
+      if (c.legacyCallId) globalCallIdToUUIDMap.set(c.legacyCallId, c.id);
+      if (c.id.startsWith("c-")) globalCallIdToUUIDMap.set(c.id.substring(2), c.id);
+      globalCallIdToUUIDMap.set(c.id, c.id);
+    }
+  }
+  for (const p of existingPersonnel) {
+    if (p.id) {
+      const cleanId = String(p.id).trim();
+      uidToPersonnelMap.set(cleanId, p);
+      const rawNum = cleanId.replace(/^p-/, "");
+      uidToPersonnelMap.set(rawNum, p);
+      uidToPersonnelMap.set(`p-${rawNum}`, p);
+    }
+    if (p.username) {
+      uidToPersonnelMap.set(String(p.username).trim().toLowerCase(), p);
+    }
+    if (p.legacyUid) {
+      uidToPersonnelMap.set(String(p.legacyUid).trim(), p);
+    }
+    if (p.name) {
+      const normName = normalizePersianString(p.name);
+      if (normName) uidToPersonnelMap.set(normName, p);
+    }
+  }
+  const personnelToInsert = [];
+  if (Array.isArray(personnelRows) && personnelRows.length > 0) {
+    for (const r of personnelRows) {
+      const rawUid = String(r.uid || r.id || "").trim();
+      if (!rawUid) continue;
+      const cleanUsername = String(r.username || `user_${rawUid}`).trim();
+      const fullName = String(
+        r.fname ? `${r.fname} ${r.lname || ""}` : r.name || cleanUsername || `\u06A9\u0627\u0631\u0634\u0646\u0627\u0633 ${rawUid}`
+      ).trim();
+      const cleanEmail = String(r.email || `${cleanUsername}@alphadesk.ir`).trim().toLowerCase();
+      const rawPhones = String(r.contacts || r.phone || "").split(/[,\s]+/);
+      const normPhone = normalizeContactValue(rawPhones[0] || "");
+      const normFullName = normalizePersianString(fullName);
+      const existIdx = existingPersonnel.findIndex(
+        (p) => cleanUsername && p.username && p.username.toLowerCase() === cleanUsername.toLowerCase() || normFullName && p.name && normalizePersianString(p.name) === normFullName || p.id === rawUid || p.id === `p-${rawUid}` || p.id && String(p.id).replace(/^p-/, "") === rawUid.replace(/^p-/, "") || p.username && p.username.toLowerCase() === rawUid.toLowerCase() || cleanEmail && p.email && p.email.toLowerCase() === cleanEmail.toLowerCase()
+      );
+      const targetPId = existIdx >= 0 ? existingPersonnel[existIdx].id : rawUid.startsWith("p-") ? rawUid : `p-${rawUid}`;
+      const pObj = {
+        id: targetPId,
+        name: fullName,
+        username: cleanUsername,
+        email: cleanEmail,
+        phone: normPhone,
+        role: r.userlevel === "0" || r.userlevel === 0 || r.role === "admin" ? "admin" : "marketer",
+        status: r.active === "0" || r.active === 0 || r.status === "inactive" ? "inactive" : "active",
+        tenant_id: targetTenantNum || 1,
+        national_id: String(r.code || r.shenasname || "").trim() || null,
+        legacyUid: rawUid
+      };
+      if (existIdx >= 0) {
+        existingPersonnel[existIdx] = { ...existingPersonnel[existIdx], ...pObj };
+        const localIdx = personnelData.findIndex((p) => p.id === targetPId || p.username === cleanUsername);
+        if (localIdx >= 0) personnelData[localIdx] = { ...personnelData[localIdx], ...pObj };
+        uidToPersonnelMap.set(rawUid, existingPersonnel[existIdx]);
+        uidToPersonnelMap.set(targetPId, existingPersonnel[existIdx]);
+        if (cleanUsername) uidToPersonnelMap.set(cleanUsername.toLowerCase(), existingPersonnel[existIdx]);
+        if (fullName) uidToPersonnelMap.set(normalizePersianString(fullName), existingPersonnel[existIdx]);
+        if (directusUrl && directusAdminToken && !directusPersonnelIdsSet.has(targetPId)) {
+          personnelToInsert.push(pObj);
+          directusPersonnelIdsSet.add(targetPId);
+        } else {
+          skippedCount++;
+        }
+      } else {
+        existingPersonnel.push(pObj);
+        personnelData.push(pObj);
+        personnelToInsert.push(pObj);
+        directusPersonnelIdsSet.add(targetPId);
+        uidToPersonnelMap.set(rawUid, pObj);
+        uidToPersonnelMap.set(targetPId, pObj);
+        if (cleanUsername) uidToPersonnelMap.set(cleanUsername.toLowerCase(), pObj);
+        if (fullName) uidToPersonnelMap.set(normalizePersianString(fullName), pObj);
+        importedPersonnelCount++;
+      }
+    }
+    if (directusUrl && directusAdminToken && personnelToInsert.length > 0) {
+      const sanitizedPersonnel = personnelToInsert.map(sanitizePersonnelForDirectus);
+      await directusSafeBatchInsert("personnel", sanitizedPersonnel, 25).catch((err) => {
+        errors.push(`\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u067E\u0631\u0633\u0646\u0644 \u062F\u0631 \u062F\u0627\u06CC\u0631\u06A9\u062A\u0648\u0633: ${err.message}`);
+      });
+      personnelToInsert.length = 0;
+    }
+  }
+  const customersToInsert = [];
+  const contactsToInsert = [];
+  if (Array.isArray(customerRows) && customerRows.length > 0) {
+    for (const r of customerRows) {
+      const callId = String(r.CallID || r.callid || r.id || "").trim();
+      const companyName = String(r.CompanyName || r.marketName || r.company_name || "\u0628\u062F\u0648\u0646 \u0646\u0627\u0645").trim();
+      const managerName = String(r.managerName || r.manager_name || "").trim();
+      const businessType = String(r.job || r.business_type || "").trim();
+      const province = String(r.province || "").trim();
+      const city = String(r.city || "").trim();
+      const rawMobiles = String(r.mobiles || r.mobile_numbers || r.managerPhone || r.phone || "").split(
+        /[,;\n]+/
+      );
+      const mobileNumbers = [];
+      for (const m of rawMobiles) {
+        const norm = normalizeContactValue(m);
+        if (norm && norm.length >= 8 && !mobileNumbers.includes(norm)) {
+          mobileNumbers.push(norm);
+        }
+      }
+      const rawLandlines = String(r.phonelines || r.landline_numbers || "").split(/[,;\n]+/);
+      const landlineNumbers = [];
+      for (const l of rawLandlines) {
+        const norm = normalizeContactValue(l);
+        if (norm && norm.length >= 4 && !landlineNumbers.includes(norm)) {
+          landlineNumbers.push(norm);
+        }
+      }
+      const rawStatus = r.lastStat || r.status || r.ClosedContact || "";
+      const status = normalizeLegacyStatus(rawStatus);
+      const rawMarketerUid = String(r.uid || r.assigned_marketer_id || "").trim();
+      let assignedMarketerId = null;
+      let assignedMarketerName = null;
+      if (rawMarketerUid && rawMarketerUid !== "0" && rawMarketerUid !== "NULL" && rawMarketerUid !== "null") {
+        let matchedP = uidToPersonnelMap.get(rawMarketerUid) || uidToPersonnelMap.get(rawMarketerUid.replace(/^p-/, "")) || uidToPersonnelMap.get(`p-${rawMarketerUid}`) || uidToPersonnelMap.get(rawMarketerUid.toLowerCase());
+        if (!matchedP) {
+          matchedP = existingPersonnel.find(
+            (p) => p.legacyUid === rawMarketerUid || p.id === rawMarketerUid || p.id === `p-${rawMarketerUid}` || p.id && String(p.id).replace(/^p-/, "") === rawMarketerUid.replace(/^p-/, "") || p.username && p.username.toLowerCase() === rawMarketerUid.toLowerCase() || p.name && (p.name === rawMarketerUid || p.name.includes(rawMarketerUid) || rawMarketerUid.includes(p.name))
+          );
+        }
+        if (!matchedP && rawMarketerUid === "1") {
+          matchedP = existingPersonnel.find((p) => p.role === "admin" || p.username === "admin");
+        }
+        if (matchedP) {
+          assignedMarketerId = matchedP.id;
+          assignedMarketerName = matchedP.name;
+        } else {
+          assignedMarketerId = rawMarketerUid.startsWith("p-") ? rawMarketerUid : `p-${rawMarketerUid}`;
+          assignedMarketerName = `\u06A9\u0627\u0631\u0634\u0646\u0627\u0633 ${rawMarketerUid}`;
+          const newPlaceholderP = {
+            id: assignedMarketerId,
+            name: assignedMarketerName,
+            username: `user_${rawMarketerUid}`,
+            email: `user_${rawMarketerUid}@alphadesk.ir`,
+            phone: "",
+            role: "marketer",
+            status: "active",
+            tenant_id: targetTenantNum || 1,
+            legacyUid: rawMarketerUid
+          };
+          existingPersonnel.push(newPlaceholderP);
+          personnelData.push(newPlaceholderP);
+          personnelToInsert.push(newPlaceholderP);
+          uidToPersonnelMap.set(rawMarketerUid, newPlaceholderP);
+          uidToPersonnelMap.set(assignedMarketerId, newPlaceholderP);
+        }
+      }
+      const deadlineIso = parseLegacyDate(r.expire || r.assignment_deadline);
+      const isExpired = Boolean(
+        status !== "\u0642\u0631\u0627\u0631\u062F\u0627\u062F" && status !== "\u0644\u06CC\u0633\u062A \u0633\u06CC\u0627\u0647" && deadlineIso && (/* @__PURE__ */ new Date()).getTime() > new Date(deadlineIso).getTime()
+      );
+      let custId;
+      if (isValidUUID(r.id)) {
+        custId = String(r.id).trim();
+      } else if (callId) {
+        custId = deterministicUUID(callId);
+      } else {
+        custId = crypto4.randomUUID();
+      }
+      if (callId) {
+        globalCallIdToUUIDMap.set(callId, custId);
+      }
+      globalCallIdToUUIDMap.set(custId, custId);
+      if (existingCustomerIdsSet.has(custId)) {
+        skippedCount++;
+      } else {
+        existingCustomerIdsSet.add(custId);
+        const custObj = {
+          id: custId,
+          company_name: companyName,
+          business_type: businessType,
+          province,
+          city,
+          manager_name: managerName,
+          mobile_numbers: mobileNumbers,
+          landline_numbers: landlineNumbers,
+          assigned_marketer_id: assignedMarketerId,
+          assigned_marketer_name: assignedMarketerName,
+          assignment_deadline: deadlineIso,
+          status,
+          is_expired: isExpired,
+          tenant_id: targetTenantNum || 1,
+          legacyCallId: callId || null,
+          date_created: parseLegacyDate(r.created || r.InsertRecDate) || (/* @__PURE__ */ new Date()).toISOString()
+        };
+        existingCustomers.push(custObj);
+        customersData.push(custObj);
+        customersToInsert.push(custObj);
+        importedCustomersCount++;
+        for (const m of mobileNumbers) {
+          const cObj = {
+            id: crypto4.randomUUID(),
+            customer_id: custId,
+            channel_type: "mobile",
+            value: m,
+            normalized_value: m,
+            contact_name: managerName || companyName,
+            is_primary: true,
+            tenant_id: targetTenantNum || 1,
+            date_created: custObj.date_created
+          };
+          contactsToInsert.push(cObj);
+          contactsData.push(cObj);
+        }
+        for (const l of landlineNumbers) {
+          const cObj = {
+            id: crypto4.randomUUID(),
+            customer_id: custId,
+            channel_type: "landline",
+            value: l,
+            normalized_value: l,
+            contact_name: managerName || companyName,
+            is_primary: false,
+            tenant_id: targetTenantNum || 1,
+            date_created: custObj.date_created
+          };
+          contactsToInsert.push(cObj);
+          contactsData.push(cObj);
+        }
+        const insta = String(r.instaID || r.instagram_ids || "").trim();
+        if (insta && insta !== "NULL" && insta !== "null") {
+          const cObj = {
+            id: crypto4.randomUUID(),
+            customer_id: custId,
+            channel_type: "instagram",
+            value: insta,
+            normalized_value: insta.replace(/^@/, ""),
+            contact_name: managerName || companyName,
+            is_primary: false,
+            tenant_id: targetTenantNum || 1,
+            date_created: custObj.date_created
+          };
+          contactsToInsert.push(cObj);
+          contactsData.push(cObj);
+        }
+        const teleg = String(r.telegID || r.telegram_ids || r.tlgMobile || r.telegram_phone || "").trim();
+        if (teleg && teleg !== "NULL" && teleg !== "null") {
+          const cObj = {
+            id: crypto4.randomUUID(),
+            customer_id: custId,
+            channel_type: "telegram",
+            value: teleg,
+            normalized_value: teleg.replace(/^@/, ""),
+            contact_name: managerName || companyName,
+            is_primary: false,
+            tenant_id: targetTenantNum || 1,
+            date_created: custObj.date_created
+          };
+          contactsToInsert.push(cObj);
+          contactsData.push(cObj);
+        }
+        const emails = String(r.emails || r.email || "").trim();
+        if (emails && emails !== "NULL" && emails !== "null") {
+          for (const em of emails.split(/[,;\s]+/)) {
+            if (em && em.includes("@")) {
+              const cObj = {
+                id: crypto4.randomUUID(),
+                customer_id: custId,
+                channel_type: "email",
+                value: em.toLowerCase(),
+                normalized_value: em.toLowerCase(),
+                contact_name: managerName || companyName,
+                is_primary: false,
+                tenant_id: targetTenantNum || 1,
+                date_created: custObj.date_created
+              };
+              contactsToInsert.push(cObj);
+              contactsData.push(cObj);
+            }
+          }
+        }
+        const web = String(r.website || r.websites || r.marketingWebsite || "").trim();
+        if (web && web !== "NULL" && web !== "null") {
+          const cObj = {
+            id: crypto4.randomUUID(),
+            customer_id: custId,
+            channel_type: "website",
+            value: web,
+            normalized_value: web.replace(/^https?:\/\//i, ""),
+            contact_name: managerName || companyName,
+            is_primary: false,
+            tenant_id: targetTenantNum || 1,
+            date_created: custObj.date_created
+          };
+          contactsToInsert.push(cObj);
+          contactsData.push(cObj);
+        }
+      }
+    }
+  }
+  if (Array.isArray(reportRows) && reportRows.length > 0) {
+    const reportsToInsert = [];
+    for (const r of reportRows) {
+      const callId = String(r.CallID || r.callid || "").trim();
+      const repText = String(r.report || r.report_text || "\u062B\u0628\u062A \u067E\u06CC\u06AF\u06CC\u0631\u06CC").trim();
+      const uidRef = String(r.uid || r.user_id || "").trim();
+      const rawNegotiator = String(r.negotiator || r.negotiator_name || "").trim();
+      const callNum = normalizeContactValue(r.callNum || r.negotiation_phone || "");
+      const status = normalizeLegacyStatus(r.status || r.negotiation_status);
+      const rawRating = parseFloat(String(r.rating ?? "").trim());
+      const score = !isNaN(rawRating) ? Math.round(rawRating) : 8;
+      const nextFollow = parseLegacyDate(r.nextFollow || r.next_followup_date);
+      const dateCreated = parseLegacyDate(r.insertDate || r.dateTime || r.date_created) || (/* @__PURE__ */ new Date()).toISOString();
+      let matchedCustomerId = null;
+      if (callId) {
+        const deterministicId = deterministicUUID(callId);
+        if (existingCustomerIdsSet.has(deterministicId) || existingCustomers.some((c) => c.id === deterministicId)) {
+          matchedCustomerId = deterministicId;
+        } else if (globalCallIdToUUIDMap.has(callId)) {
+          matchedCustomerId = globalCallIdToUUIDMap.get(callId);
+        } else {
+          const byCallId = existingCustomers.find((c) => c.id === callId || c.legacyCallId === callId || c.id === deterministicId);
+          if (byCallId) matchedCustomerId = byCallId.id;
+        }
+      }
+      if (!matchedCustomerId && callNum && globalCallIdToUUIDMap.has(callNum)) {
+        matchedCustomerId = globalCallIdToUUIDMap.get(callNum);
+      }
+      if (!matchedCustomerId && callNum) {
+        const byPhone = existingCustomers.find(
+          (c) => c.mobile_numbers?.includes(callNum) || c.landline_numbers?.includes(callNum)
+        );
+        if (byPhone) matchedCustomerId = byPhone.id;
+      }
+      if (!matchedCustomerId) {
+        matchedCustomerId = callId ? deterministicUUID(callId) : crypto4.randomUUID();
+        if (callId) globalCallIdToUUIDMap.set(callId, matchedCustomerId);
+        const orphanCust = {
+          id: matchedCustomerId,
+          company_name: callNum ? `\u0645\u0634\u062A\u0631\u06CC \u067E\u06CC\u06AF\u06CC\u0631\u06CC ${callNum}` : `\u0645\u0634\u062A\u0631\u06CC \u06A9\u062F ${callId || "\u062C\u062F\u06CC\u062F"}`,
+          mobile_numbers: callNum ? [callNum] : [],
+          status: status || "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0628\u0644 \u0627\u0632 \u0627\u0646\u0642\u0636\u0627",
+          is_expired: false,
+          tenant_id: targetTenantNum || 1,
+          date_created: dateCreated
+        };
+        existingCustomers.push(orphanCust);
+        customersData.push(orphanCust);
+        customersToInsert.push(orphanCust);
+        existingCustomerIdsSet.add(matchedCustomerId);
+        importedCustomersCount++;
+      }
+      const targetCust = existingCustomers.find((c) => c.id === matchedCustomerId);
+      let matchedP = uidRef ? uidToPersonnelMap.get(uidRef) : null;
+      if (!matchedP && rawNegotiator) {
+        matchedP = uidToPersonnelMap.get(rawNegotiator) || uidToPersonnelMap.get(normalizePersianString(rawNegotiator));
+      }
+      if (!matchedP && targetCust && targetCust.assigned_marketer_id) {
+        matchedP = uidToPersonnelMap.get(targetCust.assigned_marketer_id) || existingPersonnel.find((p) => p.id === targetCust.assigned_marketer_id);
+      }
+      const createdBy = matchedP ? matchedP.id : targetCust?.assigned_marketer_id || null;
+      const negotiatorName = matchedP ? matchedP.name : targetCust?.assigned_marketer_name || rawNegotiator || "\u06A9\u0627\u0631\u0634\u0646\u0627\u0633";
+      const repId = isValidUUID(r.ID || r.id) ? String(r.ID || r.id).trim() : deterministicUUID(`${callId || ""}-${r.ID || r.id || ""}-${dateCreated}`);
+      const repObj = {
+        id: repId,
+        customer_id: matchedCustomerId,
+        report_text: repText,
+        negotiator_name: negotiatorName,
+        created_by: createdBy,
+        negotiation_phone: callNum,
+        negotiation_status: status,
+        negotiation_score: score,
+        next_followup_date: nextFollow,
+        tenant_id: targetTenantNum || 1,
+        date_created: dateCreated
+      };
+      reportsData.push(repObj);
+      reportsToInsert.push(repObj);
+      importedReportsCount++;
+    }
+    if (directusUrl && directusAdminToken) {
+      if (personnelToInsert.length > 0) {
+        const sanitizedPersonnel = personnelToInsert.map(sanitizePersonnelForDirectus);
+        await directusSafeBatchInsert("personnel", sanitizedPersonnel, 25).catch((err) => {
+          errors.push(`\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u067E\u0631\u0633\u0646\u0644 \u062F\u0631 \u062F\u0627\u06CC\u0631\u06A9\u062A\u0648\u0633: ${err.message}`);
+        });
+        personnelToInsert.length = 0;
+      }
+      if (customersToInsert.length > 0) {
+        const sanitizedCusts = customersToInsert.map((c) => sanitizeCustomerForDirectus(c, directusPersonnelIdsSet));
+        await directusSafeBatchInsert("customers", sanitizedCusts, 50).catch((err) => {
+          errors.push(`\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u0645\u0634\u062A\u0631\u06CC\u0627\u0646 \u062F\u0631 \u062F\u0627\u06CC\u0631\u06A9\u062A\u0648\u0633: ${err.message}`);
+        });
+        customersToInsert.length = 0;
+      }
+      if (contactsToInsert.length > 0) {
+        const sanitizedContacts = contactsToInsert.map(sanitizeContactForDirectus);
+        await directusSafeBatchInsert("customer_contacts", sanitizedContacts, 50).catch((err) => {
+          console.warn("Customer contacts insert warning:", err.message);
+        });
+        contactsToInsert.length = 0;
+      }
+      if (reportsToInsert.length > 0) {
+        const sanitizedReps = reportsToInsert.map(sanitizeReportForDirectus);
+        await directusSafeBatchInsert("customer_reports", sanitizedReps, 50).catch((err) => {
+          errors.push(`\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u06AF\u0632\u0627\u0631\u0634\u200C\u0647\u0627 \u062F\u0631 \u062F\u0627\u06CC\u0631\u06A9\u062A\u0648\u0633: ${err.message}`);
+        });
+        reportsToInsert.length = 0;
+      }
+    }
+  }
+  if (directusUrl && directusAdminToken) {
+    if (personnelToInsert.length > 0) {
+      const sanitizedPersonnel = personnelToInsert.map(sanitizePersonnelForDirectus);
+      await directusSafeBatchInsert("personnel", sanitizedPersonnel, 25).catch((err) => {
+        errors.push(`\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u067E\u0631\u0633\u0646\u0644 \u062F\u0631 \u062F\u0627\u06CC\u0631\u06A9\u062A\u0648\u0633: ${err.message}`);
+      });
+      personnelToInsert.length = 0;
+    }
+    if (customersToInsert.length > 0) {
+      const sanitizedCusts = customersToInsert.map((c) => sanitizeCustomerForDirectus(c, directusPersonnelIdsSet));
+      await directusSafeBatchInsert("customers", sanitizedCusts, 50).catch((err) => {
+        errors.push(`\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u0645\u0634\u062A\u0631\u06CC\u0627\u0646 \u062F\u0631 \u062F\u0627\u06CC\u0631\u06A9\u062A\u0648\u0633: ${err.message}`);
+      });
+      customersToInsert.length = 0;
+    }
+    if (contactsToInsert.length > 0) {
+      const sanitizedContacts = contactsToInsert.map(sanitizeContactForDirectus);
+      await directusSafeBatchInsert("customer_contacts", sanitizedContacts, 50).catch((err) => {
+        console.warn("Customer contacts insert warning:", err.message);
+      });
+      contactsToInsert.length = 0;
+    }
+  }
+  let autoAssignedCount = 0;
+  if (req.body.autoAssign === true) {
+    try {
+      const autoRes = await autoAssignFreeCustomersWithReports(targetTenantId);
+      autoAssignedCount = autoRes.reassignedCount;
+    } catch (autoErr) {
+      console.warn("Auto-assign free customers post-import warning:", autoErr.message);
+    }
+  }
+  invalidateCustomersCache();
+  invalidateReportsCache();
+  return res.json({
+    success: errors.length === 0 || importedCustomersCount > 0 || importedReportsCount > 0 || importedPersonnelCount > 0,
+    importedPersonnelCount,
+    importedCustomersCount,
+    importedReportsCount,
+    autoAssignedCount,
+    skippedCount,
+    skippedDetails,
+    errors,
+    message: `\u062F\u0631\u0648\u0646\u200C\u0631\u06CC\u0632\u06CC \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0627\u0646\u062C\u0627\u0645 \u0634\u062F: ${importedPersonnelCount} \u06A9\u0627\u0631\u0634\u0646\u0627\u0633 \u062C\u062F\u06CC\u062F\u060C ${importedCustomersCount} \u0645\u0634\u062A\u0631\u06CC \u062C\u062F\u06CC\u062F\u060C \u0648 ${importedReportsCount} \u06AF\u0632\u0627\u0631\u0634 \u062B\u0628\u062A \u0634\u062F\u0646\u062F. (${skippedCount} \u0631\u06A9\u0648\u0631\u062F \u0645\u0648\u062C\u0648\u062F \u0646\u0627\u062F\u06CC\u062F\u0647 \u06AF\u0631\u0641\u062A\u0647 \u0634\u062F) ${autoAssignedCount > 0 ? `\u062A\u0639\u062F\u0627\u062F ${autoAssignedCount} \u0645\u0634\u062A\u0631\u06CC \u0622\u0632\u0627\u062F \u06AF\u0632\u0627\u0631\u0634\u200C\u062F\u0627\u0631 \u0628\u0647 \u0622\u062E\u0631\u06CC\u0646 \u0628\u0627\u0632\u0627\u0631\u06CC\u0627\u0628 \u0645\u0631\u0628\u0648\u0637\u0647 \u0645\u062A\u0635\u0644 \u06AF\u0631\u062F\u06CC\u062F\u0646\u062F.` : ""}`
+  });
+};
+router2.post("/api/migration/import", handleMigrationImport);
+router2.post("/migration/import", handleMigrationImport);
+router2.post("/api/migration/reset-cache", handleResetMigrationCache);
+router2.post("/migration/reset-cache", handleResetMigrationCache);
+async function autoAssignFreeCustomersWithReports(targetTenantId) {
+  let reassignedCount = 0;
+  const reassignedDetails = [];
+  let allCustomersList = [...customersData];
+  let allReportsList = [...reportsData];
+  let allPersonnelList = [...personnelData];
+  if (directusUrl && directusAdminToken) {
+    try {
+      const [cRes, rRes, pRes] = await Promise.all([
+        directusFetchAllPages("/items/customers?limit=10000").catch(() => null),
+        directusFetchAllPages("/items/customer_reports?limit=50000&sort=-date_created").catch(() => null),
+        directusFetchAllPages("/items/personnel?limit=1000").catch(() => null)
+      ]);
+      if (cRes?.data && Array.isArray(cRes.data)) allCustomersList = cRes.data;
+      if (rRes?.data && Array.isArray(rRes.data)) allReportsList = rRes.data;
+      if (pRes?.data && Array.isArray(pRes.data)) allPersonnelList = pRes.data;
+    } catch (e) {
+      console.warn("Error fetching data for auto-assignment:", e.message);
+    }
+  }
+  const freeCustomers = allCustomersList.filter((c) => {
+    if (c.status === "\u0642\u0631\u0627\u0631\u062F\u0627\u062F" || c.status === "\u0644\u06CC\u0633\u062A \u0633\u06CC\u0627\u0647") return false;
+    const isUnassigned = !c.assigned_marketer_id || c.assigned_marketer_name === "\u062A\u062E\u0635\u06CC\u0635 \u0646\u06CC\u0627\u0641\u062A\u0647" || !c.assigned_marketer_name;
+    const isExpired = Boolean(c.is_expired);
+    return isUnassigned || isExpired;
+  });
+  const nowMs = Date.now();
+  const defaultDeadlineIso = new Date(nowMs + 10 * 86400 * 1e3).toISOString();
+  const patchesMap = /* @__PURE__ */ new Map();
+  for (const cust of freeCustomers) {
+    const custId = String(cust.id);
+    const custMobiles = Array.isArray(cust.mobile_numbers) ? cust.mobile_numbers : [];
+    const custLandlines = Array.isArray(cust.landline_numbers) ? cust.landline_numbers : [];
+    const custReports = allReportsList.filter((r) => {
+      if (String(r.customer_id) === custId || typeof r.customer_id === "object" && r.customer_id !== null && String(r.customer_id.id) === custId) {
+        return true;
+      }
+      if (r.negotiation_phone) {
+        const normPhone = normalizeContactValue(r.negotiation_phone);
+        if (normPhone && (custMobiles.includes(normPhone) || custLandlines.includes(normPhone))) {
+          return true;
+        }
+      }
+      return false;
+    });
+    if (custReports.length === 0) continue;
+    custReports.sort((a, b) => {
+      const tA = new Date(a.date_created || 0).getTime();
+      const tB = new Date(b.date_created || 0).getTime();
+      return tB - tA;
+    });
+    const lastReport = custReports[0];
+    const negotiatorName = String(lastReport?.negotiator_name || lastReport?.negotiator || "").trim();
+    if (!negotiatorName || negotiatorName === "\u06A9\u0627\u0631\u0634\u0646\u0627\u0633") continue;
+    const normNegotiator = normalizePersianString(negotiatorName);
+    const matchedP = allPersonnelList.find((p) => {
+      const normPName = normalizePersianString(p.name);
+      if (normPName && normNegotiator && (normPName === normNegotiator || normPName.includes(normNegotiator) || normNegotiator.includes(normPName))) {
+        return true;
+      }
+      if (p.username && normalizePersianString(p.username) === normNegotiator) return true;
+      if (String(p.id) === String(lastReport.created_by) || String(p.user_id) === String(lastReport.created_by)) return true;
+      return false;
+    });
+    const targetMarketerId = matchedP ? String(matchedP.id) : lastReport.created_by ? String(lastReport.created_by) : `p-${negotiatorName}`;
+    const targetMarketerName = matchedP ? String(matchedP.name) : negotiatorName;
+    const custPatch = {
+      id: custId,
+      assigned_marketer_id: targetMarketerId,
+      assigned_marketer_name: targetMarketerName,
+      assignment_deadline: defaultDeadlineIso,
+      is_expired: false,
+      claimed_from_pool: false,
+      date_updated: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    patchesMap.set(custId, custPatch);
+    const localIdx = customersData.findIndex((c) => String(c.id) === custId);
+    if (localIdx >= 0) {
+      customersData[localIdx] = {
+        ...customersData[localIdx],
+        ...custPatch
+      };
+    }
+    reassignedCount++;
+    reassignedDetails.push({
+      customerId: custId,
+      companyName: cust.company_name || "\u0628\u062F\u0648\u0646 \u0646\u0627\u0645",
+      marketerName: targetMarketerName
+    });
+  }
+  if (directusUrl && directusAdminToken && patchesMap.size > 0) {
+    try {
+      await directusSafeBatchPatch("customers", patchesMap, 50);
+    } catch (err) {
+      console.warn(`Failed to auto-reassign free customers batch in Directus:`, err.message);
+    }
+  }
+  invalidateCustomersCache();
+  invalidateReportsCache();
+  return {
+    success: true,
+    reassignedCount,
+    details: reassignedDetails,
+    message: `\u0639\u0645\u0644\u06CC\u0627\u062A \u062E\u0648\u062F\u06A9\u0627\u0631 \u062A\u06A9\u0645\u06CC\u0644 \u0634\u062F: ${reassignedCount} \u0645\u0634\u062A\u0631\u06CC \u0622\u0632\u0627\u062F \u06AF\u0632\u0627\u0631\u0634\u200C\u062F\u0627\u0631 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0628\u0647 \u0622\u062E\u0631\u06CC\u0646 \u0628\u0627\u0632\u0627\u0631\u06CC\u0627\u0628 \u06AF\u0632\u0627\u0631\u0634\u200C\u062F\u0647\u0646\u062F\u0647 \u0645\u062A\u0635\u0644 \u06AF\u0631\u062F\u06CC\u062F\u0646\u062F.`
+  };
+}
+var handleAutoAssignFreeWithReports = async (req, res) => {
+  const { tenant_id } = req.body;
+  const result = await autoAssignFreeCustomersWithReports(tenant_id);
+  res.json(result);
+};
+router2.post("/api/migration/auto-assign-free-with-reports", handleAutoAssignFreeWithReports);
+router2.post("/migration/auto-assign-free-with-reports", handleAutoAssignFreeWithReports);
+var handleBackfillTenants = async (req, res) => {
+  const result = await backfillNullTenantsDirectus();
+  invalidateCustomersCache();
+  invalidateReportsCache();
+  res.json({
+    success: true,
+    ...result,
+    message: `\u0627\u0635\u0644\u0627\u062D \u0634\u0646\u0627\u0633\u0647 \u0633\u0627\u0632\u0645\u0627\u0646 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0627\u0646\u062C\u0627\u0645 \u0634\u062F: ${result.updatedCustomers} \u0645\u0634\u062A\u0631\u06CC \u0648 ${result.updatedReports} \u06AF\u0632\u0627\u0631\u0634 \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F\u0646\u062F.`
+  });
+};
+router2.post("/api/migration/backfill-tenants", handleBackfillTenants);
+router2.post("/migration/backfill-tenants", handleBackfillTenants);
+var system_routes_default = router2;
+
+// server/routes/auth.routes.ts
 var router3 = Router3();
+router3.get("/assets/:id", handleAssetProxy);
+router3.get("/api/assets/:id", handleAssetProxy);
+router3.post("/register", async (req, res) => {
+  const { email, password, name, phone, first_name, last_name } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: "\u0627\u06CC\u0645\u06CC\u0644 \u0648 \u06A9\u0644\u0645\u0647 \u0639\u0628\u0648\u0631 \u0627\u0644\u0632\u0627\u0645\u06CC \u0647\u0633\u062A\u0646\u062F." });
+  }
+  if (String(password).length < 6) {
+    return res.status(400).json({ error: "\u06A9\u0644\u0645\u0647 \u0639\u0628\u0648\u0631 \u0628\u0627\u06CC\u062F \u062D\u062F\u0627\u0642\u0644 \u06F6 \u06A9\u0627\u0631\u0627\u06A9\u062A\u0631 \u0628\u0627\u0634\u062F." });
+  }
+  const cleanEmail = String(email).trim().toLowerCase();
+  const fullName = (name || `${first_name || ""} ${last_name || ""}`).trim() || cleanEmail.split("@")[0];
+  const fName = (first_name || fullName.split(" ")[0] || "\u06A9\u0627\u0631\u0628\u0631").trim();
+  const lName = (last_name || fullName.split(" ").slice(1).join(" ") || "\u062C\u062F\u06CC\u062F").trim();
+  const cleanPhone = (phone || "").trim();
+  if (directusUrl && directusAdminToken) {
+    try {
+      const existingRes = await directusFetch(
+        `/users?filter[email][_eq]=${encodeURIComponent(cleanEmail)}`
+      );
+      if (existingRes && Array.isArray(existingRes.data) && existingRes.data.length > 0) {
+        return res.status(400).json({ error: "\u0627\u06CC\u0646 \u0627\u06CC\u0645\u06CC\u0644 \u0642\u0628\u0644\u0627\u064B \u062F\u0631 \u0633\u0627\u0645\u0627\u0646\u0647 \u062B\u0628\u062A \u0634\u062F\u0647 \u0627\u0633\u062A. \u0644\u0637\u0641\u0627\u064B \u0648\u0627\u0631\u062F \u0634\u0648\u06CC\u062F." });
+      }
+      const newUserPayload = {
+        email: cleanEmail,
+        password: String(password),
+        first_name: fName,
+        last_name: lName,
+        role: DIRECTUS_STAFF_ROLE_ID,
+        status: "active"
+      };
+      const createdUserRes = await directusFetch("/users", {
+        method: "POST",
+        body: JSON.stringify(newUserPayload)
+      });
+      const createdUser = createdUserRes.data;
+      const cleanUsername2 = String(req.body.username || "").trim() || cleanEmail.split("@")[0];
+      const personnelId = crypto5.randomUUID();
+      const personnelPayload = {
+        id: personnelId,
+        name: fullName,
+        username: cleanUsername2,
+        email: cleanEmail,
+        phone: cleanPhone,
+        role: "marketer",
+        status: "active",
+        user_id: createdUser.id
+      };
+      await directusFetch("/items/personnel", {
+        method: "POST",
+        body: JSON.stringify(personnelPayload)
+      }).catch(async () => {
+        const existP = await directusFetch(
+          `/items/personnel?filter[email][_eq]=${encodeURIComponent(cleanEmail)}`
+        ).catch(() => null);
+        if (existP?.data && Array.isArray(existP.data) && existP.data.length > 0) {
+          await directusFetch(`/items/personnel/${existP.data[0].id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ user_id: createdUser.id })
+          }).catch(() => {
+          });
+        }
+      });
+      const pObj = {
+        id: personnelId,
+        name: fullName,
+        username: cleanUsername2,
+        role: "marketer",
+        email: cleanEmail,
+        phone: cleanPhone,
+        status: "active",
+        active: true,
+        user_id: createdUser.id
+      };
+      personnelData.push(pObj);
+      return res.status(201).json({
+        success: true,
+        message: "\u062B\u0628\u062A\u200C\u0646\u0627\u0645 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0627\u0646\u062C\u0627\u0645 \u0634\u062F. \u0627\u06A9\u0646\u0648\u0646 \u0645\u06CC\u200C\u062A\u0648\u0627\u0646\u06CC\u062F \u0648\u0627\u0631\u062F \u062D\u0633\u0627\u0628 \u062E\u0648\u062F \u0634\u0648\u06CC\u062F.",
+        user: {
+          id: createdUser.id,
+          email: createdUser.email,
+          first_name: createdUser.first_name,
+          last_name: createdUser.last_name
+        },
+        personnel: pObj
+      });
+    } catch (err) {
+      return res.status(400).json({
+        error: `\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A\u200C\u0646\u0627\u0645 \u06A9\u0627\u0631\u0628\u0631 \u062F\u0631 \u067E\u0627\u06CC\u06AF\u0627\u0647 \u062F\u0627\u062F\u0647: ${err.message || "\u0645\u0634\u06A9\u0644 \u062F\u0631 \u0628\u0631\u0642\u0631\u0627\u0631\u06CC \u0627\u0631\u062A\u0628\u0627\u0637"}`
+      });
+    }
+  }
+  const existingLocal = personnelData.find((p) => p.email?.toLowerCase() === cleanEmail);
+  if (existingLocal) {
+    return res.status(400).json({ error: "\u0627\u06CC\u0646 \u0627\u06CC\u0645\u06CC\u0644 \u0642\u0628\u0644\u0627\u064B \u062B\u0628\u062A \u0634\u062F\u0647 \u0627\u0633\u062A." });
+  }
+  const newId = "p-" + Date.now();
+  const cleanUsername = String(req.body.username || "").trim() || cleanEmail.split("@")[0];
+  const newP = {
+    id: newId,
+    name: fullName,
+    username: cleanUsername,
+    role: "marketer",
+    email: cleanEmail,
+    phone: cleanPhone,
+    status: "active",
+    active: true
+  };
+  personnelData.push(newP);
+  res.status(201).json({
+    success: true,
+    message: "\u062B\u0628\u062A\u200C\u0646\u0627\u0645 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0627\u0646\u062C\u0627\u0645 \u0634\u062F.",
+    user: { id: newId, email: cleanEmail, name: fullName },
+    personnel: newP
+  });
+});
+router3.post("/login", async (req, res) => {
+  const { email, username, phone, password } = req.body;
+  const rawIdentifier = (email || username || phone || "").trim();
+  if (!rawIdentifier || !password) {
+    return res.status(400).json({ error: "\u0627\u06CC\u0645\u06CC\u0644/\u0646\u0627\u0645 \u06A9\u0627\u0631\u0628\u0631\u06CC/\u0634\u0645\u0627\u0631\u0647 \u0645\u0648\u0628\u0627\u06CC\u0644 \u0648 \u06A9\u0644\u0645\u0647 \u0639\u0628\u0648\u0631 \u0627\u0644\u0632\u0627\u0645\u06CC \u0627\u0633\u062A." });
+  }
+  const cleanIdentifier = rawIdentifier.toLowerCase();
+  if (directusUrl && directusAdminToken) {
+    try {
+      let directusUserEmail = cleanIdentifier;
+      if (!cleanIdentifier.includes("@")) {
+        const cleanDigits2 = rawIdentifier.replace(/\D/g, "");
+        const localP = personnelData.find((p) => {
+          if (!p) return false;
+          const pUsername = p.username ? String(p.username).trim().toLowerCase() : "";
+          const pPhone = p.phone ? String(p.phone).trim() : "";
+          const pDigits = pPhone.replace(/\D/g, "");
+          if (pUsername && pUsername === cleanIdentifier) return true;
+          if (cleanDigits2 && cleanDigits2.length >= 7 && pDigits && pDigits === cleanDigits2) return true;
+          if (pPhone && pPhone === rawIdentifier) return true;
+          return false;
+        });
+        if (localP?.email && localP.email.trim()) {
+          directusUserEmail = localP.email.toLowerCase().trim();
+        } else {
+          let pRes = await directusFetch(
+            `/items/personnel?filter[username][_eq]=${encodeURIComponent(cleanIdentifier)}&limit=1`
+          ).catch(() => null);
+          if (!pRes?.data || !Array.isArray(pRes.data) || pRes.data.length === 0) {
+            pRes = await directusFetch(
+              `/items/personnel?filter[phone][_eq]=${encodeURIComponent(rawIdentifier)}&limit=1`
+            ).catch(() => null);
+          }
+          if (pRes?.data && Array.isArray(pRes.data) && pRes.data.length > 0) {
+            const foundPersonnel = pRes.data[0];
+            if (foundPersonnel.email && foundPersonnel.email.trim()) {
+              directusUserEmail = foundPersonnel.email.toLowerCase().trim();
+            }
+          }
+        }
+      }
+      const loginRes = await directusFetch("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email: directusUserEmail, password })
+      });
+      if (loginRes?.data?.access_token) {
+        const accessToken = loginRes.data.access_token;
+        const meRes = await directusFetch(
+          "/users/me?fields=id,email,first_name,last_name,role,avatar",
+          {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          }
+        );
+        const meUser = meRes.data;
+        let roleId = "";
+        if (typeof meUser.role === "object" && meUser.role !== null) {
+          roleId = String(meUser.role.id || "");
+        } else if (typeof meUser.role === "string") {
+          roleId = meUser.role;
+        }
+        let isDirectusAdmin = Boolean(
+          DIRECTUS_ADMIN_ROLE_IDS.includes(roleId) || typeof meUser.role === "object" && String(meUser.role?.name || "").toLowerCase().includes("admin")
+        );
+        let pRes = await directusFetch(
+          `/items/personnel?filter[user_id][_eq]=${encodeURIComponent(meUser.id)}`
+        ).catch(() => null);
+        if (!pRes?.data || !Array.isArray(pRes.data) || pRes.data.length === 0) {
+          pRes = await directusFetch(
+            `/items/personnel?filter[email][_eq]=${encodeURIComponent(meUser.email)}`
+          ).catch(() => null);
+        }
+        let pItem = pRes?.data?.[0] || null;
+        if (pItem) {
+          if (!pItem.user_id || pItem.user_id !== meUser.id) {
+            pItem.user_id = meUser.id;
+            await directusFetch(`/items/personnel/${pItem.id}`, {
+              method: "PATCH",
+              body: JSON.stringify({ user_id: meUser.id })
+            }).catch(() => {
+            });
+          }
+          const pIdx = personnelData.findIndex(
+            (p) => String(p.id) === String(pItem.id) || p.email && p.email.toLowerCase() === meUser.email.toLowerCase()
+          );
+          if (pIdx >= 0) {
+            personnelData[pIdx] = { ...personnelData[pIdx], ...pItem, user_id: meUser.id };
+          } else {
+            personnelData.push({ ...pItem, user_id: meUser.id });
+          }
+        }
+        if (!pItem) {
+          const cleanPName = `${meUser.first_name || ""} ${meUser.last_name || ""}`.trim() || meUser.email;
+          const newPId = crypto5.randomUUID();
+          const newPersonnelPayload = {
+            id: newPId,
+            name: cleanPName,
+            username: meUser.email.split("@")[0],
+            email: meUser.email,
+            phone: "",
+            role: isDirectusAdmin ? "admin" : "marketer",
+            status: "active",
+            user_id: meUser.id
+          };
+          const createdPRes = await directusFetch("/items/personnel", {
+            method: "POST",
+            body: JSON.stringify(newPersonnelPayload)
+          }).catch(() => null);
+          pItem = createdPRes?.data || newPersonnelPayload;
+          personnelData.push(pItem);
+        }
+        pItem = enrichPersonnel(pItem);
+        if (pItem && (pItem.status === "inactive" || pItem.active === false)) {
+          return res.status(403).json({
+            error: "ACCOUNT_INACTIVE",
+            message: "\u062D\u0633\u0627\u0628 \u06A9\u0627\u0631\u0628\u0631\u06CC \u0634\u0645\u0627 \u062A\u0648\u0633\u0637 \u0645\u062F\u06CC\u0631\u06CC\u062A \u063A\u06CC\u0631\u0641\u0639\u0627\u0644 \u0634\u062F\u0647 \u0627\u0633\u062A \u0648 \u0627\u0645\u06A9\u0627\u0646 \u0648\u0631\u0648\u062F \u0628\u0647 \u0633\u0627\u0645\u0627\u0646\u0647 \u0631\u0627 \u0646\u062F\u0627\u0631\u06CC\u062F. \u0644\u0637\u0641\u0627\u064B \u0628\u0627 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u062A\u0645\u0627\u0633 \u0628\u06AF\u06CC\u0631\u06CC\u062F."
+          });
+        }
+        const isAdmin = Boolean(
+          pItem ? pItem.role === "admin" : isDirectusAdmin
+        );
+        const appRole = pItem ? pItem.role : isAdmin ? "admin" : "marketer";
+        let avatarUrl = formatAvatarUrl(meUser.avatar);
+        if (!avatarUrl && pItem?.avatar) {
+          avatarUrl = formatAvatarUrl(pItem.avatar);
+        }
+        if (pItem) {
+          pItem.avatar = avatarUrl;
+        }
+        if (projectSettingsData.login_pattern) {
+          const pInfo = await getPersonnelFullName(pItem?.id || meUser.id, pItem?.name);
+          const fullName = pInfo.fullName || pItem?.name || `${meUser.first_name || ""} ${meUser.last_name || ""}`.trim() || meUser.email;
+          const uPhone = pInfo.phone || pItem?.phone || "";
+          const parts = fullName.split(" ");
+          const fName = parts[0] || "\u0647\u0645\u06A9\u0627\u0631";
+          const lName = parts.length > 1 ? parts.slice(1).join(" ") : "\u06AF\u0631\u0627\u0645\u06CC";
+          const now2 = /* @__PURE__ */ new Date();
+          const loginVars = {
+            name: fullName,
+            fullName,
+            user_name: fullName,
+            personnel_name: fullName,
+            family: lName,
+            first_name: fName,
+            mobile: uPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
+            phone: uPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
+            date: now2.toLocaleDateString("fa-IR"),
+            time: now2.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" }),
+            ip: req.headers["x-forwarded-for"] || req.ip || "127.0.0.1",
+            device: req.headers["user-agent"] ? "\u0645\u0631\u0648\u0631\u06AF\u0631 \u0648\u0628" : "\u0633\u0627\u0645\u0627\u0646\u0647 \u0648\u0628",
+            username: meUser.email
+          };
+          if (uPhone) {
+            sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars).catch(
+              (e) => console.warn("Login SMS pattern send to user warning:", e.message)
+            );
+          }
+          sendTenantAdminsSmsPattern(
+            pItem?.tenant_id || "default",
+            projectSettingsData.login_pattern,
+            loginVars
+          ).catch((e) => console.warn("Login SMS pattern send to admin warning:", e.message));
+        }
+        return res.json({
+          success: true,
+          access_token: accessToken,
+          refresh_token: loginRes.data.refresh_token,
+          user: {
+            id: meUser.id,
+            email: meUser.email,
+            name: `${meUser.first_name || ""} ${meUser.last_name || ""}`.trim() || meUser.email,
+            role_id: roleId,
+            avatar: avatarUrl,
+            is_admin: isAdmin,
+            app_role: appRole
+          },
+          personnel_id: pItem?.id,
+          personnel: pItem ? { ...pItem, avatar: avatarUrl } : null
+        });
+      }
+    } catch (err) {
+      console.warn("Directus auth login failed, trying local fallback:", err.message);
+    }
+  }
+  const cleanDigits = cleanIdentifier.replace(/\D/g, "");
+  const found = personnelData.find((p) => {
+    if (!p) return false;
+    const pEmail = p.email ? String(p.email).trim().toLowerCase() : "";
+    const pUsername = p.username ? String(p.username).trim().toLowerCase() : "";
+    const pPhone = p.phone ? String(p.phone).trim() : "";
+    const pPhoneDigits = pPhone.replace(/\D/g, "");
+    if (cleanIdentifier && pEmail && pEmail === cleanIdentifier) return true;
+    if (cleanIdentifier && pUsername && pUsername === cleanIdentifier) return true;
+    if (cleanDigits && cleanDigits.length >= 7 && pPhoneDigits && pPhoneDigits === cleanDigits) return true;
+    if (cleanIdentifier && pPhone && pPhone.replace(/[\s\-_()]/g, "").toLowerCase() === cleanIdentifier.replace(/[\s\-_()]/g, "")) return true;
+    return false;
+  });
+  if (found) {
+    if (found.status === "inactive" || found.active === false) {
+      return res.status(403).json({
+        error: "ACCOUNT_INACTIVE",
+        message: "\u062D\u0633\u0627\u0628 \u06A9\u0627\u0631\u0628\u0631\u06CC \u0634\u0645\u0627 \u062A\u0648\u0633\u0637 \u0645\u062F\u06CC\u0631\u06CC\u062A \u063A\u06CC\u0631\u0641\u0639\u0627\u0644 \u0634\u062F\u0647 \u0627\u0633\u062A \u0648 \u0627\u0645\u06A9\u0627\u0646 \u0648\u0631\u0648\u062F \u0628\u0647 \u0633\u0627\u0645\u0627\u0646\u0647 \u0631\u0627 \u0646\u062F\u0627\u0631\u06CC\u062F. \u0644\u0637\u0641\u0627\u064B \u0628\u0627 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u062A\u0645\u0627\u0633 \u0628\u06AF\u06CC\u0631\u06CC\u062F."
+      });
+    }
+    let avatarUrl = formatAvatarUrl(found.avatar);
+    if (!avatarUrl && directusUrl && directusAdminToken) {
+      try {
+        if (found.user_id) {
+          const uRes = await directusFetch(`/users/${found.user_id}?fields=avatar`);
+          if (uRes?.data?.avatar) avatarUrl = formatAvatarUrl(uRes.data.avatar);
+        }
+        if (!avatarUrl && found.email) {
+          const uRes = await directusFetch(
+            `/users?filter[email][_eq]=${encodeURIComponent(found.email.toLowerCase().trim())}&fields=avatar&limit=1`
+          );
+          if (uRes?.data?.[0]?.avatar) avatarUrl = formatAvatarUrl(uRes.data[0].avatar);
+        }
+      } catch {
+      }
+    }
+    if (avatarUrl) {
+      found.avatar = avatarUrl;
+    }
+    if (projectSettingsData.login_pattern) {
+      const pInfo = await getPersonnelFullName(found.id, found.name);
+      const fullName = pInfo.fullName || found.name || found.email;
+      const uPhone = pInfo.phone || found.phone || "";
+      const parts = fullName.split(" ");
+      const fName = parts[0] || "\u0647\u0645\u06A9\u0627\u0631";
+      const lName = parts.length > 1 ? parts.slice(1).join(" ") : "\u06AF\u0631\u0627\u0645\u06CC";
+      const now2 = /* @__PURE__ */ new Date();
+      const loginVars = {
+        name: fullName,
+        fullName,
+        user_name: fullName,
+        personnel_name: fullName,
+        family: lName,
+        first_name: fName,
+        mobile: uPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
+        phone: uPhone || "\u0646\u0627\u0645\u0634\u062E\u0635",
+        date: now2.toLocaleDateString("fa-IR"),
+        time: now2.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" }),
+        ip: req.headers["x-forwarded-for"] || req.ip || "127.0.0.1",
+        device: "\u0633\u0627\u0645\u0627\u0646\u0647 \u0648\u0628 \u0622\u0644\u0641\u0627\u062F\u0633\u06A9",
+        username: found.username || found.email
+      };
+      if (uPhone) {
+        sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars).catch(
+          (e) => console.warn("Login SMS pattern send to user warning:", e.message)
+        );
+      }
+      sendTenantAdminsSmsPattern(
+        found.tenant_id || "default",
+        projectSettingsData.login_pattern,
+        loginVars
+      ).catch((e) => console.warn("Login SMS pattern send to admin warning:", e.message));
+    }
+    return res.json({
+      success: true,
+      access_token: "local-token-" + found.id,
+      user: {
+        id: found.id,
+        email: found.email,
+        username: found.username,
+        name: found.name,
+        role_id: found.role === "admin" ? DIRECTUS_ADMIN_ROLE_ID : DIRECTUS_STAFF_ROLE_ID,
+        avatar: avatarUrl,
+        is_admin: found.role === "admin",
+        app_role: found.role
+      },
+      personnel: {
+        ...found,
+        avatar: avatarUrl
+      }
+    });
+  }
+  res.status(401).json({ error: "\u06A9\u0627\u0631\u0628\u0631\u06CC \u0628\u0627 \u0627\u06CC\u0646 \u0645\u0634\u062E\u0635\u0627\u062A \u06CC\u0627\u0641\u062A \u0646\u0634\u062F." });
+});
+router3.get("/me", async (req, res) => {
+  const { userId, personnelId, userRole, isAdmin, userName, userEmail, isSessionRevoked } = getRequestUser(req);
+  if (isSessionRevoked || !userId && !personnelId && !userEmail) {
+    return res.status(401).json({
+      error: "ALL_SESSIONS_REVOKED",
+      message: "\u0646\u0634\u0633\u062A\u200C\u0647\u0627\u06CC \u06A9\u0627\u0631\u06CC \u062A\u0645\u0627\u0645\u06CC \u06A9\u0627\u0631\u0628\u0631\u0627\u0646 \u062A\u0648\u0633\u0637 \u0645\u062F\u06CC\u0631\u06CC\u062A \u0644\u063A\u0648 \u0634\u062F\u0647 \u0627\u0633\u062A. \u0644\u0637\u0641\u0627\u064B \u0645\u062C\u062F\u062F\u0627\u064B \u0648\u0627\u0631\u062F \u0634\u0648\u06CC\u062F."
+    });
+  }
+  let avatarUrl = void 0;
+  let pItem = null;
+  let isDirectusAdmin = false;
+  if (directusUrl && directusAdminToken) {
+    try {
+      if (personnelId) {
+        const pRes = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
+        if (pRes?.data) pItem = pRes.data;
+      }
+      if (!pItem && userId) {
+        const pRes = await directusFetch(`/items/personnel/${userId}`).catch(() => null);
+        if (pRes?.data) pItem = pRes.data;
+      }
+      if (!pItem && userId) {
+        const pRes = await directusFetch(`/items/personnel?filter[user_id][_eq]=${encodeURIComponent(userId)}&limit=1`).catch(() => null);
+        if (pRes?.data?.[0]) pItem = pRes.data[0];
+      }
+      if (!pItem && userEmail) {
+        const pRes = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail.toLowerCase().trim())}&limit=1`).catch(() => null);
+        if (pRes?.data?.[0]) pItem = pRes.data[0];
+      }
+      const directusUserId = pItem?.user_id || (userId && !String(userId).startsWith("p-") ? userId : null);
+      if (directusUserId) {
+        const uRes = await directusFetch(
+          `/users/${directusUserId}?fields=id,email,avatar,first_name,last_name,role`
+        ).catch(() => null);
+        if (uRes?.data?.avatar) {
+          avatarUrl = formatAvatarUrl(uRes.data.avatar);
+        }
+        const uRoleId = typeof uRes?.data?.role === "object" ? uRes.data.role?.id : uRes?.data?.role;
+        if (DIRECTUS_ADMIN_ROLE_IDS.includes(String(uRoleId))) {
+          isDirectusAdmin = true;
+        }
+      }
+      if (!avatarUrl && (userEmail || pItem?.email)) {
+        const targetEmail = (userEmail || pItem?.email || "").toLowerCase().trim();
+        const uRes = await directusFetch(
+          `/users?filter[email][_eq]=${encodeURIComponent(targetEmail)}&fields=id,email,avatar,role&limit=1`
+        ).catch(() => null);
+        if (uRes?.data?.[0]?.avatar) {
+          avatarUrl = formatAvatarUrl(uRes.data[0].avatar);
+        }
+        const uRoleId = typeof uRes?.data?.[0]?.role === "object" ? uRes.data[0].role?.id : uRes?.data?.[0]?.role;
+        if (DIRECTUS_ADMIN_ROLE_IDS.includes(String(uRoleId))) {
+          isDirectusAdmin = true;
+        }
+      }
+    } catch (e) {
+      console.warn("Error in /me Directus lookup:", e.message);
+    }
+  }
+  if (!pItem) {
+    pItem = personnelData.find((p) => {
+      if (!p) return false;
+      const pId = p.id ? String(p.id).trim().toLowerCase() : "";
+      const pUserId = p.user_id ? String(p.user_id).trim().toLowerCase() : "";
+      const pEmail = p.email ? String(p.email).trim().toLowerCase() : "";
+      const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : "";
+      const cleanUId = userId ? String(userId).trim().toLowerCase() : "";
+      const cleanUEmail = userEmail ? String(userEmail).trim().toLowerCase() : "";
+      if (cleanPId && pId && pId === cleanPId) return true;
+      if (cleanUId && pUserId && pUserId === cleanUId) return true;
+      if (cleanUId && pId && pId === cleanUId) return true;
+      if (cleanUEmail && pEmail && pEmail === cleanUEmail) return true;
+      return false;
+    });
+  }
+  if (pItem) {
+    pItem = enrichPersonnel(pItem);
+    if (!avatarUrl && pItem.avatar) avatarUrl = formatAvatarUrl(pItem.avatar);
+    if (avatarUrl) pItem.avatar = avatarUrl;
+  }
+  const effectiveIsAdmin = Boolean(
+    pItem ? pItem.role === "admin" || pItem.role === "sales_manager" : isDirectusAdmin || isAdmin
+  );
+  const effectiveRole = pItem ? pItem.role : effectiveIsAdmin ? "admin" : "marketer";
+  res.json({
+    user: {
+      id: userId || personnelId || pItem?.id,
+      name: userName || pItem?.name || "\u06A9\u0627\u0631\u0628\u0631 \u0633\u0627\u0645\u0627\u0646\u0647",
+      email: userEmail || pItem?.email,
+      avatar: avatarUrl,
+      is_admin: effectiveIsAdmin,
+      app_role: effectiveRole
+    },
+    personnel_id: personnelId || pItem?.id,
+    personnel: pItem ? { ...pItem, avatar: avatarUrl || pItem.avatar } : null
+  });
+});
+router3.post("/change-password", async (req, res) => {
+  const { current_password, new_password } = req.body;
+  const { userId, personnelId, userEmail } = getRequestUser(req);
+  if (!new_password || String(new_password).trim().length < 6) {
+    return res.status(400).json({ error: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u062C\u062F\u06CC\u062F \u0628\u0627\u06CC\u062F \u062D\u062F\u0627\u0642\u0644 \u06F6 \u06A9\u0627\u0631\u0627\u06A9\u062A\u0631 \u0628\u0627\u0634\u062F." });
+  }
+  if (directusUrl && directusAdminToken) {
+    try {
+      let targetDirectusUserId = null;
+      if (userId && !String(userId).startsWith("p-")) {
+        targetDirectusUserId = String(userId);
+      }
+      if (!targetDirectusUserId && (personnelId || userEmail)) {
+        const pMatch = personnelData.find(
+          (p) => personnelId && String(p.id).toLowerCase() === String(personnelId).toLowerCase() || userEmail && p.email && p.email.toLowerCase() === userEmail.toLowerCase()
+        );
+        if (pMatch?.user_id) {
+          targetDirectusUserId = String(pMatch.user_id);
+        }
+      }
+      if (!targetDirectusUserId && userEmail) {
+        const uRes = await directusFetch(
+          `/users?filter[email][_eq]=${encodeURIComponent(userEmail.toLowerCase())}`
+        ).catch(() => null);
+        if (uRes?.data && uRes.data.length > 0) {
+          targetDirectusUserId = String(uRes.data[0].id);
+        }
+      }
+      if (targetDirectusUserId) {
+        await directusFetch(`/users/${targetDirectusUserId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ password: String(new_password).trim() })
+        });
+        return res.json({ success: true, message: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062A\u063A\u06CC\u06CC\u0631 \u06CC\u0627\u0641\u062A." });
+      }
+    } catch (err) {
+      console.warn("Change password Directus warning:", err.message);
+    }
+  }
+  res.json({ success: true, message: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062A\u063A\u06CC\u06CC\u0631 \u06CC\u0627\u0641\u062A." });
+});
+router3.post("/logout-all", async (req, res) => {
+  const { isAdmin } = getRequestUser(req);
+  if (!isAdmin) {
+    return res.status(403).json({
+      error: "FORBIDDEN",
+      message: "\u0641\u0642\u0637 \u0645\u062F\u06CC\u0631 \u0627\u0631\u0634\u062F \u0633\u06CC\u0633\u062A\u0645 \u0645\u062C\u0627\u0632 \u0628\u0647 \u062E\u0631\u0648\u062C \u0647\u0645\u06AF\u0627\u0646\u06CC \u06A9\u0627\u0631\u0628\u0631\u0627\u0646 \u0627\u0633\u062A."
+    });
+  }
+  const revTs = Date.now();
+  setGlobalSessionRevocationTimestamp(revTs);
+  return res.json({
+    success: true,
+    revocationTimestamp: revTs,
+    message: "\u062A\u0645\u0627\u0645\u06CC \u0646\u0634\u0633\u062A\u200C\u0647\u0627\u06CC \u06A9\u0627\u0631\u06CC \u0641\u0639\u0627\u0644 \u062F\u0631 \u0633\u0627\u0645\u0627\u0646\u0647 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0644\u063A\u0648 \u0634\u062F\u0646\u062F \u0648 \u062A\u0645\u0627\u0645\u06CC \u06A9\u0627\u0631\u0628\u0631\u0627\u0646 \u0644\u0627\u06AF\u06CC\u0646\u200C\u0634\u062F\u0647 \u062E\u0627\u0631\u062C \u06AF\u0631\u062F\u06CC\u062F\u0646\u062F."
+  });
+});
+var auth_routes_default = router3;
+
+// server/routes/customers.routes.ts
+import { Router as Router4 } from "express";
+import crypto6 from "crypto";
+var router4 = Router4();
 async function computePersonnelFreeQuota(targetPersonnelId, claimLimit = 20, targetPersonnelName) {
   const normTargetName = normalizePersianString(targetPersonnelName);
   if (directusUrl && directusAdminToken) {
@@ -2756,7 +4345,7 @@ async function computePersonnelFreeQuota(targetPersonnelId, claimLimit = 20, tar
     requiresSuccessToUnlock: activeUnclosedCount >= claimLimit && successfulCount === 0
   };
 }
-router3.get("/free-quota", async (req, res) => {
+router4.get("/free-quota", async (req, res) => {
   const { personnelId, userId, userName } = getRequestUser(req);
   const targetId = req.query.personnel_id || personnelId || userId;
   const targetName = req.query.personnel_name || userName;
@@ -2774,7 +4363,7 @@ router3.get("/free-quota", async (req, res) => {
   const quota = await computePersonnelFreeQuota(targetId, limit, targetName);
   res.json(quota);
 });
-router3.post("/check-duplicate", async (req, res) => {
+router4.post("/check-duplicate", async (req, res) => {
   const { value, channel_type, customer_id } = req.body;
   if (!value || typeof value !== "string") {
     return res.json({ isDuplicate: false });
@@ -2831,23 +4420,86 @@ function matchesCustomerSearch(c, searchStr) {
   }
   return false;
 }
+async function enrichCustomersWithLatestReportFollowup(items) {
+  if (!items || items.length === 0) return items || [];
+  const itemIds = items.map((c) => String(c.id)).filter(Boolean);
+  if (itemIds.length === 0) return items;
+  if (directusUrl && directusAdminToken) {
+    try {
+      const chunks = chunkArray(itemIds, 50);
+      const latestMap = /* @__PURE__ */ new Map();
+      await Promise.all(
+        chunks.map(async (chunk) => {
+          const repRes = await directusFetch(
+            `/items/customer_reports?filter[customer_id][_in]=${encodeURIComponent(
+              chunk.join(",")
+            )}&sort=-date_created&fields=id,customer_id,next_followup_date,date_created&limit=1000`
+          ).catch(() => null);
+          if (repRes?.data && Array.isArray(repRes.data)) {
+            for (const r of repRes.data) {
+              const rawC = r.customer_id;
+              const cId = typeof rawC === "object" && rawC !== null ? String(rawC.id) : String(rawC);
+              if (cId && !latestMap.has(cId)) {
+                latestMap.set(cId, r.next_followup_date || null);
+              }
+            }
+          }
+        })
+      );
+      for (const c of items) {
+        const cIdStr = String(c.id);
+        if (latestMap.has(cIdStr)) {
+          c.next_followup_date = latestMap.get(cIdStr);
+        }
+      }
+    } catch (e) {
+      console.warn("Error enriching customers with latest report followup:", e.message);
+    }
+  } else {
+    const inMemLatestMap = /* @__PURE__ */ new Map();
+    const sortedInMemReports = [...reportsData].sort(
+      (a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
+    );
+    for (const r of sortedInMemReports) {
+      const cId = String(r.customer_id || "");
+      if (cId && !inMemLatestMap.has(cId)) {
+        inMemLatestMap.set(cId, r.next_followup_date || null);
+      }
+    }
+    for (const c of items) {
+      const cIdStr = String(c.id);
+      if (inMemLatestMap.has(cIdStr)) {
+        c.next_followup_date = inMemLatestMap.get(cIdStr);
+      }
+    }
+  }
+  return items;
+}
 function sortCustomersList(items, sortKey) {
   if (!items || items.length <= 1) return items || [];
   const list = [...items];
   if (sortKey === "next_followup_asc" || sortKey === "next_followup_date") {
     return list.sort((a, b) => {
-      if (!a.next_followup_date && !b.next_followup_date) return 0;
-      if (!a.next_followup_date) return 1;
-      if (!b.next_followup_date) return -1;
-      return new Date(a.next_followup_date).getTime() - new Date(b.next_followup_date).getTime();
+      const aTime = a.next_followup_date ? new Date(a.next_followup_date).getTime() : NaN;
+      const bTime = b.next_followup_date ? new Date(b.next_followup_date).getTime() : NaN;
+      const aValid = !isNaN(aTime);
+      const bValid = !isNaN(bTime);
+      if (!aValid && !bValid) return 0;
+      if (!aValid) return 1;
+      if (!bValid) return -1;
+      return aTime - bTime;
     });
   }
   if (sortKey === "next_followup_desc" || sortKey === "-next_followup_date") {
     return list.sort((a, b) => {
-      if (!a.next_followup_date && !b.next_followup_date) return 0;
-      if (!a.next_followup_date) return 1;
-      if (!b.next_followup_date) return -1;
-      return new Date(b.next_followup_date).getTime() - new Date(a.next_followup_date).getTime();
+      const aTime = a.next_followup_date ? new Date(a.next_followup_date).getTime() : NaN;
+      const bTime = b.next_followup_date ? new Date(b.next_followup_date).getTime() : NaN;
+      const aValid = !isNaN(aTime);
+      const bValid = !isNaN(bTime);
+      if (!aValid && !bValid) return 0;
+      if (!aValid) return 1;
+      if (!bValid) return -1;
+      return bTime - aTime;
     });
   }
   if (sortKey === "company_name_asc") {
@@ -2865,14 +4517,23 @@ function sortCustomersList(items, sortKey) {
     (a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
   );
 }
-router3.get("/", async (req, res) => {
-  const { search, status, marketer_id, expired_only, page, limit, free_only, all, sort } = req.query;
+router4.get("/", async (req, res) => {
+  const { search, status, marketer_id, expired_only, page, limit, free_only, all, sort, followup_filter } = req.query;
   const { userId, personnelId, isAdmin, userName, tenantId, canViewAllCustomers } = getRequestUser(req);
   const isUnlimited = all === "true" || limit === "all" || limit === "20000";
   const reqLimit = isUnlimited ? 500 : limit ? Math.min(Math.max(1, parseInt(String(limit), 10)), 500) : 25;
   const reqPage = page ? Math.max(1, parseInt(String(page), 10)) : 1;
   const isFreeOnly = free_only === "true";
   const sortKey = typeof sort === "string" && sort.trim() ? sort.trim() : "next_followup_asc";
+  const startOfToday = /* @__PURE__ */ new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfTodayIso = startOfToday.toISOString();
+  const endOfToday = /* @__PURE__ */ new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+  const endOfTodayIso = endOfToday.toISOString();
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  const in3DaysIso = new Date(Date.now() + 3 * 864e5).toISOString();
+  const in7DaysIso = new Date(Date.now() + 7 * 864e5).toISOString();
   if (!isAdmin && !canViewAllCustomers && !userId && !personnelId && !isFreeOnly) {
     return res.json({
       data: [],
@@ -2906,6 +4567,25 @@ router3.get("/", async (req, res) => {
     if (isFreeOnly) {
       list2 = list2.filter((c) => !c.assigned_marketer_id || c.is_expired);
     }
+    if (followup_filter && followup_filter !== "\u0647\u0645\u0647" && followup_filter !== "all") {
+      const ff = String(followup_filter);
+      const startTodayMs = startOfToday.getTime();
+      const endTodayMs = endOfToday.getTime();
+      const nowMs = Date.now();
+      list2 = list2.filter((c) => {
+        if (!c.next_followup_date) return ff === "no_followup";
+        const fTime = new Date(c.next_followup_date).getTime();
+        if (isNaN(fTime)) return ff === "no_followup";
+        if (ff === "active") return fTime >= startTodayMs;
+        if (ff === "today") return fTime >= startTodayMs && fTime <= endTodayMs;
+        if (ff === "due_3_days") return fTime >= nowMs && fTime <= nowMs + 3 * 864e5;
+        if (ff === "due_7_days") return fTime >= nowMs && fTime <= nowMs + 7 * 864e5;
+        if (ff === "overdue") return fTime < startTodayMs;
+        if (ff === "no_followup") return false;
+        return true;
+      });
+    }
+    list2 = await enrichCustomersWithLatestReportFollowup(list2);
     list2 = sortCustomersList(list2, sortKey);
     return res.json(list2);
   }
@@ -2958,6 +4638,26 @@ router3.get("/", async (req, res) => {
       if (isFreeOnly) {
         directusPath += `&filter[_and][${andIdx}][_or][0][assigned_marketer_id][_null]=true&filter[_and][${andIdx}][_or][1][is_expired][_eq]=true`;
         andIdx++;
+      }
+      if (followup_filter && followup_filter !== "\u0647\u0645\u0647" && followup_filter !== "all") {
+        const ff = String(followup_filter);
+        if (ff === "active") {
+          directusPath += `&filter[_and][${andIdx++}][next_followup_date][_gte]=${encodeURIComponent(startOfTodayIso)}`;
+        } else if (ff === "today") {
+          directusPath += `&filter[_and][${andIdx}][next_followup_date][_gte]=${encodeURIComponent(startOfTodayIso)}&filter[_and][${andIdx}][next_followup_date][_lte]=${encodeURIComponent(endOfTodayIso)}`;
+          andIdx++;
+        } else if (ff === "due_3_days") {
+          directusPath += `&filter[_and][${andIdx}][next_followup_date][_gte]=${encodeURIComponent(nowIso)}&filter[_and][${andIdx}][next_followup_date][_lte]=${encodeURIComponent(in3DaysIso)}`;
+          andIdx++;
+        } else if (ff === "due_7_days") {
+          directusPath += `&filter[_and][${andIdx}][next_followup_date][_gte]=${encodeURIComponent(nowIso)}&filter[_and][${andIdx}][next_followup_date][_lte]=${encodeURIComponent(in7DaysIso)}`;
+          andIdx++;
+        } else if (ff === "overdue") {
+          directusPath += `&filter[_and][${andIdx}][next_followup_date][_nnull]=true&filter[_and][${andIdx}][next_followup_date][_lt]=${encodeURIComponent(startOfTodayIso)}`;
+          andIdx++;
+        } else if (ff === "no_followup") {
+          directusPath += `&filter[_and][${andIdx++}][next_followup_date][_null]=true`;
+        }
       }
       let contactMatchedCustomerIds = [];
       if (search && typeof search === "string" && search.trim()) {
@@ -3018,6 +4718,7 @@ router3.get("/", async (req, res) => {
         if (search && typeof search === "string" && search.trim()) {
           items = items.filter((c) => matchesCustomerSearch(c, search));
         }
+        items = await enrichCustomersWithLatestReportFollowup(items);
         items = sortCustomersList(items, sortKey);
         const filterCount = resData.meta?.filter_count ?? items.length;
         const totalCount2 = resData.meta?.total_count ?? filterCount;
@@ -3069,6 +4770,25 @@ router3.get("/", async (req, res) => {
   if (isFreeOnly) {
     list = list.filter((c) => !c.assigned_marketer_id || c.is_expired);
   }
+  list = await enrichCustomersWithLatestReportFollowup(list);
+  if (followup_filter && followup_filter !== "\u0647\u0645\u0647" && followup_filter !== "all") {
+    const ff = String(followup_filter);
+    const startTodayMs = startOfToday.getTime();
+    const endTodayMs = endOfToday.getTime();
+    const nowMs = Date.now();
+    list = list.filter((c) => {
+      if (!c.next_followup_date) return ff === "no_followup";
+      const fTime = new Date(c.next_followup_date).getTime();
+      if (isNaN(fTime)) return ff === "no_followup";
+      if (ff === "active") return fTime >= startTodayMs;
+      if (ff === "today") return fTime >= startTodayMs && fTime <= endTodayMs;
+      if (ff === "due_3_days") return fTime >= nowMs && fTime <= nowMs + 3 * 864e5;
+      if (ff === "due_7_days") return fTime >= nowMs && fTime <= nowMs + 7 * 864e5;
+      if (ff === "overdue") return fTime < startTodayMs;
+      if (ff === "no_followup") return false;
+      return true;
+    });
+  }
   list = sortCustomersList(list, sortKey);
   const totalCount = list.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / reqLimit));
@@ -3085,7 +4805,7 @@ router3.get("/", async (req, res) => {
     }
   });
 });
-router3.get("/:id", async (req, res) => {
+router4.get("/:id", async (req, res) => {
   const { id } = req.params;
   if (directusUrl && directusAdminToken) {
     try {
@@ -3106,6 +4826,25 @@ router3.get("/:id", async (req, res) => {
             customerReports = cachedReports;
           }
         }
+        if (customerReports.length > 0) {
+          customerReports.sort(
+            (a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
+          );
+          const latestFollowup = customerReports[0].next_followup_date || null;
+          cust2.next_followup_date = latestFollowup;
+          const currentCustFollowup = custRes.data.next_followup_date ? new Date(custRes.data.next_followup_date).toISOString() : null;
+          const targetFollowupIso = latestFollowup ? new Date(latestFollowup).toISOString() : null;
+          if (currentCustFollowup !== targetFollowupIso) {
+            directusFetch(`/items/customers/${encodeURIComponent(id)}`, {
+              method: "PATCH",
+              body: JSON.stringify({
+                next_followup_date: targetFollowupIso,
+                date_updated: (/* @__PURE__ */ new Date()).toISOString()
+              })
+            }).catch(() => {
+            });
+          }
+        }
         cust2.reports = customerReports;
         cust2.contacts = customerContacts;
         return res.json(cust2);
@@ -3120,11 +4859,24 @@ router3.get("/:id", async (req, res) => {
     return res.status(404).json({ error: "Customer not found" });
   }
   const cust = computeCustomerExpiration(found);
-  cust.reports = reportsData.filter((r) => String(r.customer_id) === String(id));
+  const foundReports = reportsData.filter((r) => String(r.customer_id) === String(id)).sort((a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime());
+  if (foundReports.length > 0) {
+    cust.next_followup_date = foundReports[0].next_followup_date || null;
+  }
+  cust.reports = foundReports;
   cust.contacts = contactsData.filter((ct) => String(ct.customer_id) === String(id));
   res.json(cust);
 });
-router3.get("/:id/contacts", async (req, res) => {
+router4.post("/sync-followups", async (req, res) => {
+  res.json({
+    success: true,
+    message: "\u0647\u0645\u06AF\u0627\u0645\u200C\u0633\u0627\u0632\u06CC \u0645\u0648\u0639\u062F \u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0645\u0634\u062A\u0631\u06CC\u0627\u0646 \u0628\u0631 \u0627\u0633\u0627\u0633 \u0622\u062E\u0631\u06CC\u0646 \u06AF\u0632\u0627\u0631\u0634 \u062F\u0631 \u067E\u0633\u200C\u0632\u0645\u06CC\u0646\u0647 \u0622\u063A\u0627\u0632 \u0634\u062F."
+  });
+  syncAllCustomersFollowupFromReports().catch((err) => {
+    console.error("[AlphaDesk] Background followup sync error:", err.message);
+  });
+});
+router4.get("/:id/contacts", async (req, res) => {
   const { id } = req.params;
   if (directusUrl && directusAdminToken) {
     try {
@@ -3141,7 +4893,7 @@ router3.get("/:id/contacts", async (req, res) => {
   const filtered = contactsData.filter((ct) => String(ct.customer_id) === String(id));
   return res.json(filtered);
 });
-router3.post("/bulk-set-deadline", async (req, res) => {
+router4.post("/bulk-set-deadline", async (req, res) => {
   const { target = "all", marketer_id, customer_ids, days = 30 } = req.body;
   const daysCount = parseInt(String(days), 10) || 30;
   const nowMs = Date.now();
@@ -3193,7 +4945,7 @@ router3.post("/bulk-set-deadline", async (req, res) => {
     message: `\u0645\u0647\u0644\u062A \u0645\u0627\u0644\u06A9\u06CC\u062A ${targetCustomerIds.length || updatedCount} \u067E\u0631\u0648\u0646\u062F\u0647 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0628\u0647 ${daysCount} \u0631\u0648\u0632 (\u062A\u0627 \u062A\u0627\u0631\u06CC\u062E \u0633\u0631\u0631\u0633\u06CC\u062F \u062C\u062F\u06CC\u062F) \u062A\u0646\u0638\u06CC\u0645 \u06AF\u0631\u062F\u06CC\u062F.`
   });
 });
-router3.post("/bulk-extend", async (req, res) => {
+router4.post("/bulk-extend", async (req, res) => {
   const { customer_ids, extend_days = 7 } = req.body;
   const daysCount = parseInt(String(extend_days), 10) || 7;
   const nowMs = Date.now();
@@ -3230,7 +4982,7 @@ router3.post("/bulk-extend", async (req, res) => {
     message: `\u0645\u0647\u0644\u062A \u0645\u0627\u0644\u06A9\u06CC\u062A ${targetIds.length} \u067E\u0631\u0648\u0646\u062F\u0647 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0628\u0647 \u0645\u062F\u062A ${daysCount} \u0631\u0648\u0632 \u062A\u0645\u062F\u06CC\u062F \u06AF\u0631\u062F\u06CC\u062F.`
   });
 });
-router3.post("/bulk-switch", async (req, res) => {
+router4.post("/bulk-switch", async (req, res) => {
   const { customer_ids, new_marketer_id, new_marketer_name, duration_days = 7 } = req.body;
   const daysCount = parseInt(String(duration_days), 10) || 7;
   const nowTime = /* @__PURE__ */ new Date();
@@ -3274,7 +5026,7 @@ router3.post("/bulk-switch", async (req, res) => {
     message: `\u062A\u0639\u062F\u0627\u062F ${targetIds.length} \u067E\u0631\u0648\u0646\u062F\u0647 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0628\u0647 \xAB${targetPName}\xBB \u0648\u0627\u06AF\u0630\u0627\u0631 \u0634\u062F.`
   });
 });
-router3.post("/", async (req, res) => {
+router4.post("/", async (req, res) => {
   const { userId, personnelId, userName, tenantId } = getRequestUser(req);
   const payload = req.body;
   if (!payload.company_name) {
@@ -3318,7 +5070,7 @@ router3.post("/", async (req, res) => {
         }
       }
     }
-    const newId = payload.id || crypto5.randomUUID();
+    const newId = payload.id || crypto6.randomUUID();
     let marketerId = payload.assigned_marketer_id || personnelId || userId || null;
     let marketerName = payload.assigned_marketer_name || userName || "\u062A\u062E\u0635\u06CC\u0635 \u0646\u06CC\u0627\u0641\u062A\u0647";
     if (marketerId) {
@@ -3396,7 +5148,7 @@ router3.post("/", async (req, res) => {
     activeCustomerCreationLocks.delete(phoneLockKey);
   }
 });
-router3.patch("/:id", async (req, res) => {
+router4.patch("/:id", async (req, res) => {
   const { id } = req.params;
   const payload = req.body;
   if (payload.contacts && Array.isArray(payload.contacts)) {
@@ -3485,7 +5237,7 @@ router3.patch("/:id", async (req, res) => {
   invalidateCustomersCache();
   res.json(updatedCustomer);
 });
-router3.delete("/:id", async (req, res) => {
+router4.delete("/:id", async (req, res) => {
   const { id } = req.params;
   const { isAdmin, isPersonnelAdmin } = getRequestUser(req);
   if (!isAdmin && !isPersonnelAdmin) {
@@ -3551,7 +5303,7 @@ router3.delete("/:id", async (req, res) => {
   invalidateReportsCache();
   res.status(204).send();
 });
-router3.post("/:id/claim-free", async (req, res) => {
+router4.post("/:id/claim-free", async (req, res) => {
   const { userId, personnelId, userName } = getRequestUser(req);
   const targetPersonnelId = req.body.personnel_id || personnelId || userId;
   const targetPersonnelName = req.body.personnel_name || userName;
@@ -3632,7 +5384,7 @@ router3.post("/:id/claim-free", async (req, res) => {
         body: JSON.stringify(patchData)
       });
       const auditReport = {
-        id: crypto5.randomUUID(),
+        id: crypto6.randomUUID(),
         customer_id: req.params.id,
         negotiator_name: patchData.assigned_marketer_name,
         negotiation_phone: targetCustomer.manager_phones?.[0] || targetCustomer.mobile_numbers?.[0] || "-",
@@ -3678,7 +5430,7 @@ router3.post("/:id/claim-free", async (req, res) => {
     customer: customersData[idx]
   });
 });
-router3.post("/merge", async (req, res) => {
+router4.post("/merge", async (req, res) => {
   const { primary_customer_id, merged_customer_ids, assigned_marketer_id, assigned_marketer_name } = req.body;
   const { isAdmin, userName } = getRequestUser(req);
   if (!isAdmin) {
@@ -3770,7 +5522,7 @@ router3.post("/merge", async (req, res) => {
       await directusFetch("/items/customer_reports", {
         method: "POST",
         body: JSON.stringify({
-          id: crypto5.randomUUID(),
+          id: crypto6.randomUUID(),
           customer_id: primary_customer_id,
           negotiator_name: userName || "\u0645\u062F\u06CC\u0631\u06CC\u062A \u0633\u06CC\u0633\u062A\u0645",
           negotiation_phone: primaryCust2.manager_phones?.[0] || primaryCust2.mobile_numbers?.[0] || "-",
@@ -3863,13 +5615,109 @@ router3.post("/merge", async (req, res) => {
     customer: customersData[primaryIndex]
   });
 });
-var customers_routes_default = router3;
+var customers_routes_default = router4;
 
 // server/routes/reports.routes.ts
-import { Router as Router4 } from "express";
-import crypto6 from "crypto";
-var router4 = Router4();
-router4.get("/", async (req, res) => {
+import { Router as Router5 } from "express";
+import crypto7 from "crypto";
+function normalizeToIsoDateTime(dateVal) {
+  if (dateVal === void 0 || dateVal === null || dateVal === "") return null;
+  const num = typeof dateVal === "number" ? dateVal : Number(String(dateVal).trim());
+  if (!isNaN(num) && num > 2e4 && num < 6e4) {
+    try {
+      const ms = Math.round((num - 25569) * 86400 * 1e3);
+      const d2 = new Date(ms);
+      if (!isNaN(d2.getTime())) return d2.toISOString();
+    } catch {
+    }
+  }
+  const str = String(dateVal).trim();
+  if (/^1[34]\d\d[\/\-]/.test(str)) {
+    try {
+      const parts = str.split(/\s+/);
+      const datePart = parts[0];
+      const timePart = parts[1] || "00:00:00";
+      const [jy, jm, jd] = datePart.split(/[\/\-]/).map((p) => parseInt(p, 10));
+      if (!isNaN(jy) && !isNaN(jm) && !isNaN(jd)) {
+        let y = jy - 979, m = jm - 1, d2 = jd - 1;
+        let j_day_no = 365 * y + Math.floor(y / 33) * 8 + Math.floor((y % 33 + 3) / 4);
+        for (let i = 0; i < m; ++i) j_day_no += i < 6 ? 31 : 30;
+        j_day_no += d2;
+        let g_day_no = j_day_no + 79;
+        let gy = 1600 + 400 * Math.floor(g_day_no / 146097);
+        g_day_no = g_day_no % 146097;
+        let leap = true;
+        if (g_day_no >= 36525) {
+          g_day_no--;
+          gy += 100 * Math.floor(g_day_no / 36524);
+          g_day_no = g_day_no % 36524;
+          if (g_day_no >= 365) gy++;
+          else leap = false;
+        }
+        gy += 4 * Math.floor(g_day_no / 1461);
+        g_day_no %= 1461;
+        if (g_day_no >= 366) {
+          leap = false;
+          g_day_no--;
+          gy += Math.floor(g_day_no / 365);
+          g_day_no = g_day_no % 365;
+        }
+        const g_days_in_month = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+        let gm = 0;
+        while (gm < 12 && g_day_no >= g_days_in_month[gm]) {
+          g_day_no -= g_days_in_month[gm];
+          gm++;
+        }
+        const isoStr = `${gy}-${String(gm + 1).padStart(2, "0")}-${String(g_day_no + 1).padStart(2, "0")}T${timePart}`;
+        const dt = new Date(isoStr);
+        if (!isNaN(dt.getTime())) return dt.toISOString();
+      }
+    } catch {
+    }
+  }
+  let d = new Date(str);
+  if (isNaN(d.getTime())) d = new Date(str.replace(" ", "T"));
+  if (!isNaN(d.getTime())) return d.toISOString();
+  return null;
+}
+async function syncCustomerFollowupFromLatestReport(customerId) {
+  if (!customerId) return null;
+  let latestFollowupDate = null;
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+  if (directusUrl && directusAdminToken) {
+    try {
+      const res = await directusFetch(
+        `/items/customer_reports?filter[customer_id][_eq]=${encodeURIComponent(customerId)}&sort=-date_created&limit=1&fields=id,next_followup_date,date_created`
+      ).catch(() => null);
+      if (res?.data && res.data.length > 0) {
+        latestFollowupDate = res.data[0].next_followup_date || null;
+      }
+      await directusFetch(`/items/customers/${encodeURIComponent(customerId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          next_followup_date: latestFollowupDate,
+          date_updated: nowIso
+        })
+      }).catch(() => {
+      });
+      invalidateCustomersCache();
+    } catch (e) {
+      console.warn(`Failed to sync customer followup for ${customerId}:`, e.message);
+    }
+  }
+  const cIdx = customersData.findIndex((c) => String(c.id) === String(customerId));
+  if (cIdx >= 0) {
+    const localReports = reportsData.filter((r) => String(r.customer_id) === String(customerId)).sort((a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime());
+    if (localReports.length > 0) {
+      latestFollowupDate = localReports[0].next_followup_date || null;
+    }
+    customersData[cIdx].next_followup_date = latestFollowupDate;
+    customersData[cIdx].date_updated = nowIso;
+  }
+  return latestFollowupDate;
+}
+var router5 = Router5();
+router5.get("/", async (req, res) => {
   const {
     customer_id,
     page,
@@ -4296,14 +6144,14 @@ router4.get("/", async (req, res) => {
     }
   });
 });
-router4.post("/", async (req, res) => {
+router5.post("/", async (req, res) => {
   const { userId, personnelId, userName } = getRequestUser(req);
   const payload = req.body;
   if (!payload.customer_id || !payload.report_text) {
     return res.status(400).json({ error: "\u0634\u0646\u0627\u0633\u0647 \u0645\u0634\u062A\u0631\u06CC \u0648 \u0645\u062A\u0646 \u06AF\u0632\u0627\u0631\u0634 \u0627\u0644\u0632\u0627\u0645\u06CC \u0627\u0633\u062A." });
   }
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
-  const newReportId = payload.id || crypto6.randomUUID();
+  const newReportId = payload.id || crypto7.randomUUID();
   let rawCreatorId = payload.created_by || personnelId || userId || null;
   const safeCreatedByFk = await getSafeDirectusPersonnelForeignKey(
     rawCreatorId,
@@ -4331,13 +6179,14 @@ router4.post("/", async (req, res) => {
     id: newReportId,
     customer_id: payload.customer_id,
     negotiator_name: (payload.negotiator_name || userName || "\u06A9\u0627\u0631\u0634\u0646\u0627\u0633").trim(),
+    customer_negotiator_name: payload.customer_negotiator_name ? String(payload.customer_negotiator_name).trim() : null,
     negotiation_phone: (payload.negotiation_phone || "").trim(),
     report_text: (payload.report_text || "").trim(),
     negotiation_score: Number(payload.negotiation_score) || 5,
     next_followup_date: nextFollowupIso,
     negotiation_status: payload.negotiation_status || "\u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647",
     created_by: safeCreatedByFk || void 0,
-    date_created: payload.date_created || nowIso,
+    date_created: (payload.date_created ? normalizeToIsoDateTime(payload.date_created) : null) || nowIso,
     contract_number: payload.contract_number ? String(payload.contract_number).trim() : null,
     contract_date: contractDateIso,
     contract_items: payload.contract_items ? String(payload.contract_items).trim() : null,
@@ -4356,17 +6205,18 @@ router4.post("/", async (req, res) => {
         method: "POST",
         body: JSON.stringify(directusReportPayload)
       });
+      if (payload.customer_id) {
+        await syncCustomerFollowupFromLatestReport(payload.customer_id);
+      }
       const custRes = await directusFetch(`/items/customers/${payload.customer_id}`).catch(
         () => null
       );
       if (custRes?.data) {
         const custPatch = {
           status: payload.negotiation_status || custRes.data.status,
+          next_followup_date: nextFollowupIso,
           date_updated: nowIso
         };
-        if (nextFollowupIso) {
-          custPatch.next_followup_date = nextFollowupIso;
-        }
         const cleanCustPatch = cleanCustomerPayloadForDirectus(
           { ...custRes.data, ...custPatch },
           payload.customer_id
@@ -4377,6 +6227,9 @@ router4.post("/", async (req, res) => {
           body: JSON.stringify(cleanCustPatch)
         }).catch(() => {
         });
+      }
+      if (payload.customer_id) {
+        await syncCustomerFollowupFromLatestReport(payload.customer_id);
       }
       invalidateCustomersCache();
       invalidateReportsCache();
@@ -4390,27 +6243,35 @@ router4.post("/", async (req, res) => {
     }
   }
   reportsData.unshift(newReport);
-  const custIdx = customersData.findIndex((c) => c.id === payload.customer_id);
+  const custIdx = customersData.findIndex((c) => String(c.id) === String(payload.customer_id));
   if (custIdx >= 0) {
     customersData[custIdx].status = payload.negotiation_status || customersData[custIdx].status;
-    if (nextFollowupIso) {
-      customersData[custIdx].next_followup_date = nextFollowupIso;
-    }
+    customersData[custIdx].next_followup_date = nextFollowupIso;
     customersData[custIdx].date_updated = nowIso;
   }
   invalidateCustomersCache();
   invalidateReportsCache();
   res.status(201).json(newReport);
 });
-router4.delete("/:id", async (req, res) => {
+router5.delete("/:id", async (req, res) => {
   const { id } = req.params;
   const { isAdmin, isPersonnelAdmin } = getRequestUser(req);
   if (!isAdmin && !isPersonnelAdmin) {
     return res.status(403).json({ error: "\u0641\u0642\u0637 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u0627\u062C\u0627\u0632\u0647 \u062D\u0630\u0641 \u06AF\u0632\u0627\u0631\u0634 \u0645\u0630\u0627\u06A9\u0631\u0647 \u0631\u0627 \u062F\u0627\u0631\u062F." });
   }
+  let deletedCustId = null;
+  const foundReport = reportsData.find((r) => r.id === id);
+  if (foundReport) deletedCustId = String(foundReport.customer_id);
   if (directusUrl && directusAdminToken) {
     try {
+      const repRes = await directusFetch(`/items/customer_reports/${id}?fields=customer_id`).catch(() => null);
+      if (repRes?.data?.customer_id) {
+        deletedCustId = typeof repRes.data.customer_id === "object" ? repRes.data.customer_id.id : repRes.data.customer_id;
+      }
       await directusFetch(`/items/customer_reports/${id}`, { method: "DELETE" });
+      if (deletedCustId) {
+        await syncCustomerFollowupFromLatestReport(deletedCustId);
+      }
       invalidateReportsCache();
       return res.status(204).send();
     } catch (err) {
@@ -4424,16 +6285,21 @@ router4.delete("/:id", async (req, res) => {
   if (idx >= 0) {
     reportsData.splice(idx, 1);
   }
+  if (deletedCustId) {
+    await syncCustomerFollowupFromLatestReport(deletedCustId);
+  }
   invalidateReportsCache();
   res.status(204).send();
 });
 var repairReportsCache = null;
 var repairReportsCacheTime = 0;
-router4.post("/repair-negotiators", async (req, res) => {
-  const { items, dry_run } = req.body;
+router5.post("/repair-negotiators", async (req, res) => {
+  const { items, dry_run, repair_negotiators, repair_followups, repair_type } = req.body;
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "\u0622\u0631\u0627\u06CC\u0647 \u0631\u06A9\u0648\u0631\u062F\u0647\u0627\u06CC \u0641\u0627\u06CC\u0644 \u0627\u0631\u0633\u0627\u0644 \u0646\u0634\u062F\u0647 \u0627\u0633\u062A." });
   }
+  const repairNegotiatorsOpt = repair_negotiators !== false && repair_type !== "followup_date";
+  const repairFollowupsOpt = repair_followups !== false && repair_type !== "negotiator";
   const isDryRun = dry_run !== false;
   let existingReports = [];
   if (repairReportsCache && Date.now() - repairReportsCacheTime < 5 * 60 * 1e3) {
@@ -4441,7 +6307,7 @@ router4.post("/repair-negotiators", async (req, res) => {
   } else if (directusUrl && directusAdminToken) {
     try {
       const directusRes = await directusFetchAllPages(
-        "/items/customer_reports?fields=id,negotiation_phone,date_created,negotiator_name,report_text",
+        "/items/customer_reports?fields=id,negotiation_phone,date_created,negotiator_name,customer_negotiator_name,next_followup_date,report_text",
         {},
         1e5
       );
@@ -4465,9 +6331,113 @@ router4.post("/repair-negotiators", async (req, res) => {
     }
     return clean.replace(/^0+/, "");
   };
-  const parseTimeMs = (dateStr) => {
-    if (!dateStr) return NaN;
-    const str = String(dateStr).trim();
+  const CP1252_REVERSE_MAP = {
+    8364: 128,
+    8218: 130,
+    402: 131,
+    8222: 132,
+    8230: 133,
+    8224: 134,
+    8225: 135,
+    710: 136,
+    8240: 137,
+    352: 138,
+    8249: 139,
+    338: 140,
+    381: 142,
+    8216: 145,
+    8217: 146,
+    8220: 147,
+    8221: 148,
+    8226: 149,
+    8211: 150,
+    8212: 151,
+    732: 152,
+    8482: 153,
+    353: 154,
+    8250: 155,
+    339: 156,
+    382: 158,
+    376: 159
+  };
+  const fixMojibake = (str) => {
+    if (!str || typeof str !== "string") return "";
+    if (/[ØÙÛÚ]/.test(str)) {
+      try {
+        const bytes = new Uint8Array(
+          [...str].map((ch) => {
+            const code = ch.charCodeAt(0);
+            return CP1252_REVERSE_MAP[code] || (code <= 255 ? code : 63);
+          })
+        );
+        const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        if (decoded && !/[\uFFFD]/.test(decoded)) {
+          return decoded;
+        }
+      } catch {
+      }
+    }
+    return str;
+  };
+  const jalaliToGregorian2 = (jy, jm, jd) => {
+    jy = jy - 979;
+    jm = jm - 1;
+    jd = jd - 1;
+    let j_day_no = 365 * jy + Math.floor(jy / 33) * 8 + Math.floor((jy % 33 + 3) / 4);
+    for (let i = 0; i < jm; ++i) j_day_no += i < 6 ? 31 : 30;
+    j_day_no += jd;
+    let g_day_no = j_day_no + 79;
+    let gy = 1600 + 400 * Math.floor(g_day_no / 146097);
+    g_day_no = g_day_no % 146097;
+    let leap = true;
+    if (g_day_no >= 36525) {
+      g_day_no--;
+      gy += 100 * Math.floor(g_day_no / 36524);
+      g_day_no = g_day_no % 36524;
+      if (g_day_no >= 365) g_day_no++;
+      else leap = false;
+    }
+    gy += 4 * Math.floor(g_day_no / 1461);
+    g_day_no %= 1461;
+    if (g_day_no >= 366) {
+      leap = false;
+      g_day_no--;
+      gy += Math.floor(g_day_no / 365);
+      g_day_no = g_day_no % 365;
+    }
+    const g_days_in_month = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let gm = 0;
+    while (gm < 12 && g_day_no >= g_days_in_month[gm]) {
+      g_day_no -= g_days_in_month[gm];
+      gm++;
+    }
+    return { gy, gm: gm + 1, gd: g_day_no + 1 };
+  };
+  const parseTimeMs = (dateVal) => {
+    if (!dateVal) return NaN;
+    if (typeof dateVal === "number" && dateVal > 2e4 && dateVal < 6e4) {
+      return Math.round((dateVal - 25569) * 86400 * 1e3);
+    }
+    const str = String(dateVal).trim();
+    const num = Number(str);
+    if (!isNaN(num) && num > 2e4 && num < 6e4) {
+      return Math.round((num - 25569) * 86400 * 1e3);
+    }
+    if (/^1[34]\d\d[\/\-]/.test(str)) {
+      try {
+        const parts = str.split(/\s+/);
+        const datePart = parts[0];
+        const timePart = parts[1] || "00:00:00";
+        const [jy, jm, jd] = datePart.split(/[\/\-]/).map((p) => parseInt(p, 10));
+        if (!isNaN(jy) && !isNaN(jm) && !isNaN(jd)) {
+          const g = jalaliToGregorian2(jy, jm, jd);
+          const iso = `${g.gy}-${String(g.gm).padStart(2, "0")}-${String(g.gd).padStart(2, "0")}T${timePart}`;
+          const t = new Date(iso).getTime();
+          if (!isNaN(t)) return t;
+        }
+      } catch {
+      }
+    }
     let ms = new Date(str).getTime();
     if (isNaN(ms)) {
       ms = new Date(str.replace(" ", "T")).getTime();
@@ -4475,6 +6445,7 @@ router4.post("/repair-negotiators", async (req, res) => {
     return ms;
   };
   const phoneMap = /* @__PURE__ */ new Map();
+  const minuteMap = /* @__PURE__ */ new Map();
   for (const rep of existingReports) {
     const pDigits = getPhoneDigits(rep.negotiation_phone);
     if (pDigits) {
@@ -4484,6 +6455,14 @@ router4.post("/repair-negotiators", async (req, res) => {
         const last10 = pDigits.slice(-10);
         if (!phoneMap.has(last10)) phoneMap.set(last10, []);
         phoneMap.get(last10).push(rep);
+      }
+    }
+    if (rep.date_created) {
+      const ms = parseTimeMs(rep.date_created);
+      if (!isNaN(ms)) {
+        const minKey = Math.floor(ms / 6e4);
+        if (!minuteMap.has(minKey)) minuteMap.set(minKey, []);
+        minuteMap.get(minKey).push(rep);
       }
     }
   }
@@ -4512,22 +6491,51 @@ router4.post("/repair-negotiators", async (req, res) => {
     const rawDate = getVal(["insertDate", "insert_date", "date_created", "dateTime", "datetime", "updateDate", "\u062A\u0627\u0631\u06CC\u062E \u062B\u0628\u062A", "\u062A\u0627\u0631\u06CC\u062E"]);
     const rawNegotiator = getVal(["negotiator", "negotiator_name", "user", "personnel_name", "\u0645\u0630\u0627\u06A9\u0631\u0647\u200C\u06A9\u0646\u0646\u062F\u0647", "\u0645\u0630\u0627\u06A9\u0631\u0647 \u06A9\u0646\u0646\u062F\u0647", "\u0646\u0627\u0645 \u0645\u0630\u0627\u06A9\u0631\u0647 \u06A9\u0646\u0646\u062F\u0647", "\u0637\u0631\u0641 \u0645\u0630\u0627\u06A9\u0631\u0647"]);
     const rawReportSnippet = getVal(["report", "report_text", "\u06AF\u0632\u0627\u0631\u0634", "\u0645\u062A\u0646 \u06AF\u0632\u0627\u0631\u0634", "\u0634\u0631\u062D \u0645\u0630\u0627\u06A9\u0631\u0647"]);
-    if (!rawNegotiator) {
+    let rawNextDate = getVal([
+      "nextFollow",
+      "next_followup_date",
+      "next_followup",
+      "next_date",
+      "nextDate",
+      "next_follow",
+      "\u062A\u0627\u0631\u06CC\u062E \u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0628\u0639\u062F\u06CC",
+      "\u062A\u0627\u0631\u06CC\u062E \u067E\u06CC\u06AF\u06CC\u0631\u06CC",
+      "\u0645\u0648\u0639\u062F \u067E\u06CC\u06AF\u06CC\u0631\u06CC"
+    ]);
+    if (!rawNextDate) {
+      const nextP = getVal(["next", "\u062A\u0627\u0631\u06CC\u062E \u067E\u06CC\u06AF\u06CC\u0631\u06CC"]);
+      const followP = getVal(["follow", "\u0632\u0645\u0627\u0646 \u067E\u06CC\u06AF\u06CC\u0631\u06CC", "\u0633\u0627\u0639\u062A \u067E\u06CC\u06AF\u06CC\u0631\u06CC"]);
+      if (nextP) {
+        rawNextDate = followP ? `${nextP} ${followP}` : nextP;
+      }
+    }
+    if (!rawNegotiator && !rawNextDate) {
       unmatchedCount++;
-      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: "\u0646\u0627\u0645 \u0645\u0630\u0627\u06A9\u0631\u0647\u200C\u06A9\u0646\u0646\u062F\u0647 \u0645\u0648\u062C\u0648\u062F \u0646\u06CC\u0633\u062A" });
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: "\u0627\u0637\u0644\u0627\u0639\u0627\u062A \u0646\u0627\u0645 \u06CC\u0627 \u062A\u0627\u0631\u06CC\u062E \u067E\u06CC\u06AF\u06CC\u0631\u06CC \u062F\u0631 \u0641\u0627\u06CC\u0644 \u0645\u0648\u062C\u0648\u062F \u0646\u06CC\u0633\u062A" });
       continue;
     }
-    const cleanTargetNegotiator = rawNegotiator.trim();
+    const cleanTargetNegotiator = fixMojibake(rawNegotiator.trim());
+    const normNextDate = normalizeToIsoDateTime(rawNextDate);
     const pDigits = getPhoneDigits(rawPhone);
-    if (!pDigits) {
-      unmatchedCount++;
-      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: "\u0634\u0645\u0627\u0631\u0647 \u062A\u0644\u0641\u0646 \u0645\u0639\u062A\u0628\u0631 \u0646\u06CC\u0633\u062A" });
-      continue;
+    let candidates = [];
+    if (pDigits) {
+      candidates = phoneMap.get(pDigits) || (pDigits.length > 10 ? phoneMap.get(pDigits.slice(-10)) : void 0) || [];
     }
-    const candidates = phoneMap.get(pDigits) || (pDigits.length > 10 ? phoneMap.get(pDigits.slice(-10)) : void 0) || [];
+    if (candidates.length === 0) {
+      const incomingTime2 = parseTimeMs(rawDate);
+      if (!isNaN(incomingTime2)) {
+        const incMin = Math.floor(incomingTime2 / 6e4);
+        for (let m = incMin - 15; m <= incMin + 15; m++) {
+          const list = minuteMap.get(m);
+          if (list) {
+            candidates.push(...list);
+          }
+        }
+      }
+    }
     if (candidates.length === 0) {
       unmatchedCount++;
-      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: "\u06AF\u0632\u0627\u0631\u0634\u06CC \u0628\u0627 \u0627\u06CC\u0646 \u0634\u0645\u0627\u0631\u0647 \u062F\u0631 \u0633\u06CC\u0633\u062A\u0645 \u067E\u06CC\u062F\u0627 \u0646\u0634\u062F" });
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: "\u06AF\u0632\u0627\u0631\u0634\u06CC \u0628\u0627 \u0627\u06CC\u0646 \u0634\u0645\u0627\u0631\u0647 \u06CC\u0627 \u062A\u0627\u0631\u06CC\u062E \u062F\u0631 \u0633\u06CC\u0633\u062A\u0645 \u067E\u06CC\u062F\u0627 \u0646\u0634\u062F" });
       continue;
     }
     let bestMatch = null;
@@ -4535,54 +6543,82 @@ router4.post("/repair-negotiators", async (req, res) => {
     const incomingTime = parseTimeMs(rawDate);
     for (const c of candidates) {
       let score = 0;
+      if (pDigits && c.negotiation_phone) {
+        const cPhoneDigits = getPhoneDigits(c.negotiation_phone);
+        if (cPhoneDigits && (cPhoneDigits === pDigits || cPhoneDigits.endsWith(pDigits) || pDigits.endsWith(cPhoneDigits))) {
+          score += 100;
+        }
+      }
       if (!isNaN(incomingTime) && c.date_created) {
         const cTime = parseTimeMs(c.date_created);
         if (!isNaN(cTime)) {
-          const diffMs = Math.abs(cTime - incomingTime);
-          if (diffMs <= 1e3 * 60) {
-            score += 100;
-          } else if (diffMs <= 1e3 * 3600) {
-            score += 80;
-          } else if (diffMs <= 1e3 * 3600 * 24) {
+          const diffMinutes = Math.abs(Math.round((cTime - incomingTime) / 6e4));
+          if (diffMinutes === 0) {
+            score += 120;
+          } else if (diffMinutes <= 2) {
+            score += 90;
+          } else if (diffMinutes <= 10) {
             score += 50;
-          } else if (diffMs <= 1e3 * 3600 * 24 * 7) {
+          } else if (diffMinutes <= 60) {
             score += 20;
           }
         }
       }
       if (rawReportSnippet && c.report_text) {
-        const snippet = rawReportSnippet.slice(0, 20).trim();
-        if (snippet && c.report_text.includes(snippet)) {
+        const cleanSnippet = rawReportSnippet.slice(0, 15).replace(/[^\w\u0600-\u06FF]/g, "").trim();
+        const cleanCReport = c.report_text.slice(0, 30).replace(/[^\w\u0600-\u06FF]/g, "").trim();
+        if (cleanSnippet && cleanCReport && (cleanCReport.includes(cleanSnippet) || cleanSnippet.includes(cleanCReport))) {
           score += 150;
         }
       }
-      if (candidates.length === 1 && score === 0) {
-        score = 10;
+      if (rawNegotiator && c.negotiator_name) {
+        const normN1 = fixMojibake(rawNegotiator).trim();
+        const normN2 = fixMojibake(c.negotiator_name).trim();
+        if (normN1 && normN2 && (normN1 === normN2 || normN1.includes(normN2) || normN2.includes(normN1))) {
+          score += 30;
+        }
       }
       if (score > bestScore) {
         bestScore = score;
         bestMatch = c;
       }
     }
+    if (!pDigits && bestScore < 80) {
+      unmatchedCount++;
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: "\u06AF\u0632\u0627\u0631\u0634 \u0628\u062F\u0648\u0646 \u0634\u0645\u0627\u0631\u0647 \u062A\u0644\u0641\u0646\u060C \u062A\u0637\u0628\u06CC\u0642 \u0632\u0645\u0627\u0646 \u06CC\u0627 \u0645\u062A\u0646 \u06A9\u0627\u0641\u06CC \u062F\u0631 \u0633\u06CC\u0633\u062A\u0645 \u0646\u062F\u0627\u0634\u062A" });
+      continue;
+    }
     if (!bestMatch) {
-      bestMatch = candidates[0];
+      unmatchedCount++;
+      if (unmatchedSamples.length < 20) unmatchedSamples.push({ ...r, reason: "\u0647\u06CC\u0686 \u0631\u06A9\u0648\u0631\u062F\u06CC \u0628\u0631\u0627\u06CC \u062A\u0637\u0628\u06CC\u0642 \u06CC\u0627\u0641\u062A \u0646\u0634\u062F" });
+      continue;
     }
     matchedCount++;
-    const currentNegotiatorName = (bestMatch.negotiator_name || "").trim();
-    if (currentNegotiatorName !== cleanTargetNegotiator) {
+    const currentCustomerNegotiator = (bestMatch.customer_negotiator_name || "").trim();
+    const currentFollowupDate = bestMatch.next_followup_date || null;
+    const negotiatorNeedsUpdate = repairNegotiatorsOpt && Boolean(cleanTargetNegotiator) && currentCustomerNegotiator !== cleanTargetNegotiator;
+    const followupNeedsUpdate = repairFollowupsOpt && Boolean(normNextDate) && currentFollowupDate !== normNextDate;
+    if (negotiatorNeedsUpdate || followupNeedsUpdate) {
       needsUpdateCount++;
-      const patchObj = {
-        id: bestMatch.id,
-        negotiator_name: cleanTargetNegotiator
-      };
+      const patchObj = { id: bestMatch.id };
+      if (negotiatorNeedsUpdate) {
+        patchObj.customer_negotiator_name = cleanTargetNegotiator;
+      }
+      if (followupNeedsUpdate) {
+        patchObj.next_followup_date = normNextDate;
+      }
       patchItemsMap.set(bestMatch.id, patchObj);
       if (previewUpdates.length < 100) {
         previewUpdates.push({
           id: bestMatch.id,
           phone: bestMatch.negotiation_phone || rawPhone,
-          insertDate: rawDate || bestMatch.date_created,
-          current_negotiator: currentNegotiatorName || "(\u062E\u0627\u0644\u06CC)",
-          new_negotiator: cleanTargetNegotiator
+          insertDate: bestMatch.date_created || rawDate,
+          current_negotiator: fixMojibake(currentCustomerNegotiator) || "(\u062E\u0627\u0644\u06CC)",
+          new_negotiator: fixMojibake(cleanTargetNegotiator),
+          current_followup_date: currentFollowupDate,
+          new_followup_date: normNextDate,
+          negotiator_changed: negotiatorNeedsUpdate,
+          followup_changed: followupNeedsUpdate
         });
       }
     } else {
@@ -4607,7 +6643,12 @@ router4.post("/repair-negotiators", async (req, res) => {
   for (const [id, patch] of patchItemsMap.entries()) {
     const idx = reportsData.findIndex((r) => r.id === id);
     if (idx >= 0) {
-      reportsData[idx].negotiator_name = patch.negotiator_name;
+      if (patch.customer_negotiator_name !== void 0) {
+        reportsData[idx].customer_negotiator_name = patch.customer_negotiator_name;
+      }
+      if (patch.next_followup_date !== void 0) {
+        reportsData[idx].next_followup_date = patch.next_followup_date;
+      }
     }
   }
   repairReportsCache = null;
@@ -4616,16 +6657,16 @@ router4.post("/repair-negotiators", async (req, res) => {
     dry_run: false,
     success: true,
     total_updated: patchItemsMap.size,
-    message: `\u0646\u0627\u0645 \u0645\u0630\u0627\u06A9\u0631\u0647\u200C\u06A9\u0646\u0646\u062F\u0647 ${patchItemsMap.size} \u06AF\u0632\u0627\u0631\u0634 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062F\u0631 \u067E\u0627\u06CC\u06AF\u0627\u0647 \u062F\u0627\u062F\u0647 \u0627\u0635\u0644\u0627\u062D \u0634\u062F.`
+    message: `\u0627\u0637\u0644\u0627\u0639\u0627\u062A (\u0637\u0631\u0641 \u0645\u0630\u0627\u06A9\u0631\u0647 \u0648 \u062A\u0627\u0631\u06CC\u062E \u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0628\u0639\u062F\u06CC) \u0628\u0631\u0627\u06CC ${patchItemsMap.size} \u06AF\u0632\u0627\u0631\u0634 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062F\u0631 \u067E\u0627\u06CC\u06AF\u0627\u0647 \u062F\u0627\u062F\u0647 \u062A\u0631\u0645\u06CC\u0645 \u0648 \u0630\u062E\u06CC\u0631\u0647 \u0634\u062F.`
   });
 });
-var reports_routes_default = router4;
+var reports_routes_default = router5;
 
 // server/routes/coldLeads.routes.ts
-import { Router as Router5 } from "express";
-import crypto7 from "crypto";
-var router5 = Router5();
-router5.get("/api/cold-leads", async (req, res) => {
+import { Router as Router6 } from "express";
+import crypto8 from "crypto";
+var router6 = Router6();
+router6.get("/api/cold-leads", async (req, res) => {
   const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, userName, tenantId } = getRequestUser(req);
   const canViewAllLeads = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers);
   if (directusUrl && directusAdminToken) {
@@ -4662,10 +6703,10 @@ router5.get("/api/cold-leads", async (req, res) => {
   }
   res.json(leads);
 });
-router5.post("/api/cold-leads", async (req, res) => {
+router6.post("/api/cold-leads", async (req, res) => {
   const payload = req.body;
   const { userId, personnelId, userName, isAdmin, tenantId } = getRequestUser(req);
-  const newLeadId = crypto7.randomUUID();
+  const newLeadId = crypto8.randomUUID();
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   let convertedCustId = payload.converted_customer_id || null;
   if (!convertedCustId || String(convertedCustId).trim() === "") {
@@ -4720,7 +6761,7 @@ router5.post("/api/cold-leads", async (req, res) => {
   });
   res.status(201).json(newLead);
 });
-router5.patch("/api/cold-leads/:id", async (req, res) => {
+router6.patch("/api/cold-leads/:id", async (req, res) => {
   const payload = req.body;
   const cleanPatch = { ...payload };
   if (cleanPatch.converted_customer_id === "") {
@@ -4755,7 +6796,7 @@ router5.patch("/api/cold-leads/:id", async (req, res) => {
   }
   res.status(404).json({ error: "Lead not found" });
 });
-router5.post("/api/cold-leads/bulk-assign", async (req, res) => {
+router6.post("/api/cold-leads/bulk-assign", async (req, res) => {
   const { lead_ids, target_marketer_id } = req.body;
   const { isAdmin, isPersonnelAdmin } = getRequestUser(req);
   if (!isAdmin && !isPersonnelAdmin) {
@@ -4792,7 +6833,7 @@ router5.post("/api/cold-leads/bulk-assign", async (req, res) => {
     message: `${updatedCount} \u0634\u0645\u0627\u0631\u0647 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0628\u0647 \xAB${targetMarketerName}\xBB \u062A\u062E\u0635\u06CC\u0635 \u062F\u0627\u062F\u0647 \u0634\u062F.`
   });
 });
-router5.delete("/api/cold-leads/:id", async (req, res) => {
+router6.delete("/api/cold-leads/:id", async (req, res) => {
   if (directusUrl && directusAdminToken) {
     try {
       await directusFetch(`/items/cold_leads/${req.params.id}`, { method: "DELETE" });
@@ -4802,8 +6843,8 @@ router5.delete("/api/cold-leads/:id", async (req, res) => {
   setColdLeadsData(coldLeadsData.filter((l) => l.id !== req.params.id));
   res.json({ success: true, message: "\u0634\u0645\u0627\u0631\u0647 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062D\u0630\u0641 \u0634\u062F." });
 });
-router5.post("/api/cold-leads/:id/convert", async (req, res) => {
-  const newCustId = crypto7.randomUUID();
+router6.post("/api/cold-leads/:id/convert", async (req, res) => {
+  const newCustId = crypto8.randomUUID();
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   let lead = null;
   if (directusUrl && directusAdminToken) {
@@ -4828,7 +6869,7 @@ router5.post("/api/cold-leads/:id/convert", async (req, res) => {
     status: "\u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647"
   }, newCustId);
   const contactItem = {
-    id: crypto7.randomUUID(),
+    id: crypto8.randomUUID(),
     customer_id: newCustId,
     channel_type: "mobile",
     value: phone,
@@ -4870,12 +6911,12 @@ router5.post("/api/cold-leads/:id/convert", async (req, res) => {
   }
   res.status(500).json({ error: "\u067E\u0627\u06CC\u06AF\u0627\u0647 \u062F\u0627\u062F\u0647 \u062F\u0631 \u062F\u0633\u062A\u0631\u0633 \u0646\u06CC\u0633\u062A." });
 });
-var coldLeads_routes_default = router5;
+var coldLeads_routes_default = router6;
 
 // server/routes/leaveRequests.routes.ts
-import { Router as Router6 } from "express";
-import crypto8 from "crypto";
-var router6 = Router6();
+import { Router as Router7 } from "express";
+import crypto9 from "crypto";
+var router7 = Router7();
 var getLeaveRequestsHandler = async (req, res) => {
   const { userId, personnelId, isAdmin, userRole, userName, tenantId } = getRequestUser(req);
   let list = [];
@@ -4921,12 +6962,12 @@ var getLeaveRequestsHandler = async (req, res) => {
   }
   res.json(list);
 };
-router6.get("/api/leave-requests", getLeaveRequestsHandler);
-router6.get("/leave-requests", getLeaveRequestsHandler);
-router6.post("/api/leave-requests", async (req, res) => {
+router7.get("/api/leave-requests", getLeaveRequestsHandler);
+router7.get("/leave-requests", getLeaveRequestsHandler);
+router7.post("/api/leave-requests", async (req, res) => {
   const payload = req.body;
   const { userId, personnelId, userName, tenantId } = getRequestUser(req);
-  const newId = crypto8.randomUUID();
+  const newId = crypto9.randomUUID();
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const rawPId = payload.personnel_id || personnelId || userId;
   const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
@@ -5109,7 +7150,7 @@ router6.post("/api/leave-requests", async (req, res) => {
   leaveRequestsData.unshift(newRequest);
   res.status(201).json(newRequest);
 });
-router6.patch("/api/leave-requests/:id", async (req, res) => {
+router7.patch("/api/leave-requests/:id", async (req, res) => {
   const { id } = req.params;
   const { status, manager_note } = req.body;
   const { userName, isAdmin, userRole, personnelId, userId } = getRequestUser(req);
@@ -5200,7 +7241,6 @@ router6.patch("/api/leave-requests/:id", async (req, res) => {
       if (applicantPhone) {
         sendIppanelSmsPattern(applicantPhone, patternToUse, statusVars).catch((e) => console.warn("Leave request status SMS error:", e.message));
       }
-      sendTenantAdminsSmsPattern(targetReq.tenant_id || "default", patternToUse, statusVars).catch((e) => console.warn("Leave status SMS to admin warning:", e.message));
     }
   }
   if (directusUrl && directusAdminToken) {
@@ -5233,7 +7273,7 @@ router6.patch("/api/leave-requests/:id", async (req, res) => {
   }
   res.status(404).json({ error: "\u062F\u0631\u062E\u0648\u0627\u0633\u062A \u0645\u0631\u062E\u0635\u06CC \u06CC\u0627\u0641\u062A \u0646\u0634\u062F" });
 });
-router6.delete("/api/leave-requests/:id", async (req, res) => {
+router7.delete("/api/leave-requests/:id", async (req, res) => {
   const { id } = req.params;
   const { userId, personnelId, isAdmin } = getRequestUser(req);
   if (directusUrl && directusAdminToken) {
@@ -5253,12 +7293,12 @@ router6.delete("/api/leave-requests/:id", async (req, res) => {
   }
   res.json({ success: true });
 });
-var leaveRequests_routes_default = router6;
+var leaveRequests_routes_default = router7;
 
 // server/routes/advanceRequests.routes.ts
-import { Router as Router7 } from "express";
-import crypto9 from "crypto";
-var router7 = Router7();
+import { Router as Router8 } from "express";
+import crypto10 from "crypto";
+var router8 = Router8();
 var getAdvanceRequestsHandler = async (req, res) => {
   const { userId, personnelId, isAdmin, userName, tenantId } = getRequestUser(req);
   let list = [];
@@ -5300,12 +7340,12 @@ var getAdvanceRequestsHandler = async (req, res) => {
   }
   res.json(list);
 };
-router7.get("/api/advance-requests", getAdvanceRequestsHandler);
-router7.get("/advance-requests", getAdvanceRequestsHandler);
-router7.post("/api/advance-requests", async (req, res) => {
+router8.get("/api/advance-requests", getAdvanceRequestsHandler);
+router8.get("/advance-requests", getAdvanceRequestsHandler);
+router8.post("/api/advance-requests", async (req, res) => {
   const payload = req.body;
   const { userId, personnelId, userName, tenantId } = getRequestUser(req);
-  const newId = crypto9.randomUUID();
+  const newId = crypto10.randomUUID();
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const rawPId = payload.personnel_id || personnelId || userId;
   const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
@@ -5433,7 +7473,7 @@ router7.post("/api/advance-requests", async (req, res) => {
   advanceRequestsData.unshift(newRequest);
   res.status(201).json(newRequest);
 });
-router7.patch("/api/advance-requests/:id", async (req, res) => {
+router8.patch("/api/advance-requests/:id", async (req, res) => {
   const { id } = req.params;
   const { status, approved_amount, manager_note } = req.body;
   const { userName, isAdmin, userRole, personnelId, userId } = getRequestUser(req);
@@ -5537,7 +7577,7 @@ router7.patch("/api/advance-requests/:id", async (req, res) => {
   }
   res.status(404).json({ error: "\u062F\u0631\u062E\u0648\u0627\u0633\u062A \u0645\u0633\u0627\u0639\u062F\u0647 \u06CC\u0627\u0641\u062A \u0646\u0634\u062F" });
 });
-router7.delete("/api/advance-requests/:id", async (req, res) => {
+router8.delete("/api/advance-requests/:id", async (req, res) => {
   const { id } = req.params;
   const { userId, personnelId, isAdmin } = getRequestUser(req);
   if (directusUrl && directusAdminToken) {
@@ -5557,12 +7597,12 @@ router7.delete("/api/advance-requests/:id", async (req, res) => {
   }
   res.json({ success: true });
 });
-var advanceRequests_routes_default = router7;
+var advanceRequests_routes_default = router8;
 
 // server/routes/tenants.routes.ts
-import { Router as Router8 } from "express";
-var router8 = Router8();
-router8.get("/", async (req, res) => {
+import { Router as Router9 } from "express";
+var router9 = Router9();
+router9.get("/", async (req, res) => {
   if (directusUrl && directusAdminToken) {
     try {
       const resp = await directusFetch("/items/tenants?sort=id");
@@ -5589,7 +7629,7 @@ router8.get("/", async (req, res) => {
   }
   res.json(tenantsData);
 });
-router8.post("/", async (req, res) => {
+router9.post("/", async (req, res) => {
   const { isAdmin } = getRequestUser(req);
   if (!isAdmin) {
     return res.status(403).json({ error: "FORBIDDEN", message: "\u0641\u0642\u0637 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u0645\u062C\u0627\u0632 \u0628\u0647 \u0627\u06CC\u062C\u0627\u062F \u0633\u0627\u0632\u0645\u0627\u0646 \u062C\u062F\u06CC\u062F \u0627\u0633\u062A." });
@@ -5648,7 +7688,7 @@ router8.post("/", async (req, res) => {
   tenantsData.push(newTenant);
   res.status(201).json(newTenant);
 });
-router8.patch("/:id", async (req, res) => {
+router9.patch("/:id", async (req, res) => {
   const { isAdmin } = getRequestUser(req);
   if (!isAdmin) {
     return res.status(403).json({ error: "FORBIDDEN", message: "\u0641\u0642\u0637 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u0645\u062C\u0627\u0632 \u0628\u0647 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u0633\u0627\u0632\u0645\u0627\u0646 \u0627\u0633\u062A." });
@@ -5689,7 +7729,7 @@ router8.patch("/:id", async (req, res) => {
   if (idx === -1) return res.status(404).json({ error: "\u0633\u0627\u0632\u0645\u0627\u0646 \u0645\u0648\u0631\u062F \u0646\u0638\u0631 \u06CC\u0627\u0641\u062A \u0646\u0634\u062F." });
   res.json(tenantsData[idx]);
 });
-router8.delete("/:id", async (req, res) => {
+router9.delete("/:id", async (req, res) => {
   const { isAdmin } = getRequestUser(req);
   if (!isAdmin) {
     return res.status(403).json({ error: "FORBIDDEN", message: "\u0641\u0642\u0637 \u0645\u062F\u06CC\u0631 \u0633\u06CC\u0633\u062A\u0645 \u0645\u062C\u0627\u0632 \u0628\u0647 \u062D\u0630\u0641 \u0633\u0627\u0632\u0645\u0627\u0646 \u0627\u0633\u062A." });
@@ -5708,12 +7748,12 @@ router8.delete("/:id", async (req, res) => {
   }
   res.json({ success: true });
 });
-var tenants_routes_default = router8;
+var tenants_routes_default = router9;
 
 // server/routes/adminReports.routes.ts
-import { Router as Router9 } from "express";
-import crypto10 from "crypto";
-var router9 = Router9();
+import { Router as Router10 } from "express";
+import crypto11 from "crypto";
+var router10 = Router10();
 function formatHourlyLogsForDb(hourlyLogs) {
   if (!hourlyLogs) return null;
   if (Array.isArray(hourlyLogs)) {
@@ -5798,12 +7838,12 @@ var getHandler = async (req, res) => {
   }
   res.json([]);
 };
-router9.get("/api/administrative-reports", getHandler);
-router9.get("/api/admin-reports", getHandler);
+router10.get("/api/administrative-reports", getHandler);
+router10.get("/api/admin-reports", getHandler);
 var postHandler = async (req, res) => {
   const payload = req.body;
   const { userId, personnelId, userName, tenantId } = getRequestUser(req);
-  const newAdmId = payload.id && typeof payload.id === "string" && payload.id.length >= 10 ? payload.id : crypto10.randomUUID();
+  const newAdmId = payload.id && typeof payload.id === "string" && payload.id.length >= 10 ? payload.id : crypto11.randomUUID();
   const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const rawPId = payload.personnel_id || personnelId || userId;
   const resolved = await resolvePersonnelId(rawPId, payload.personnel_name || userName);
@@ -5859,8 +7899,8 @@ var postHandler = async (req, res) => {
   }
   res.status(201).json(newReport);
 };
-router9.post("/api/administrative-reports", postHandler);
-router9.post("/api/admin-reports", postHandler);
+router10.post("/api/administrative-reports", postHandler);
+router10.post("/api/admin-reports", postHandler);
 var patchHandler = async (req, res) => {
   const { id } = req.params;
   const payload = req.body;
@@ -5941,16 +7981,16 @@ var patchHandler = async (req, res) => {
   }
   res.json(normalizeReport({ id, ...payload }));
 };
-router9.patch("/api/administrative-reports/:id", patchHandler);
-router9.patch("/api/admin-reports/:id", patchHandler);
-var adminReports_routes_default = router9;
+router10.patch("/api/administrative-reports/:id", patchHandler);
+router10.patch("/api/admin-reports/:id", patchHandler);
+var adminReports_routes_default = router10;
 
 // server/routes/analytics.routes.ts
-import { Router as Router10 } from "express";
-var router10 = Router10();
+import { Router as Router11 } from "express";
+var router11 = Router11();
 var analyticsCache = /* @__PURE__ */ new Map();
 var ANALYTICS_CACHE_TTL = 3e4;
-router10.get(["/stats", "/api/analytics/stats"], async (req, res) => {
+router11.get(["/stats", "/api/analytics/stats"], async (req, res) => {
   const { start_date, end_date, negotiator } = req.query;
   const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, reportViewScope, userName, tenantId } = getRequestUser(req);
   const canViewAllAnalytics = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers || reportViewScope === "all");
@@ -6176,7 +8216,7 @@ function gregorianIsoToJalali(isoString) {
     return "";
   }
 }
-router10.get(["/daily", "/api/analytics/daily"], async (req, res) => {
+router11.get(["/daily", "/api/analytics/daily"], async (req, res) => {
   const { days, start_date, end_date, negotiator } = req.query;
   const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, reportViewScope, userName, tenantId } = getRequestUser(req);
   const canViewAllAnalytics = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers || reportViewScope === "all");
@@ -6354,13 +8394,13 @@ router10.get(["/daily", "/api/analytics/daily"], async (req, res) => {
     avgPerActiveDay: "0"
   });
 });
-var analytics_routes_default = router10;
+var analytics_routes_default = router11;
 
 // server/routes/contacts.routes.ts
-import { Router as Router11 } from "express";
-import crypto11 from "crypto";
-var router11 = Router11();
-router11.get("/check-duplicate", async (req, res) => {
+import { Router as Router12 } from "express";
+import crypto12 from "crypto";
+var router12 = Router12();
+router12.get("/check-duplicate", async (req, res) => {
   try {
     const value = String(req.query.value || "").trim();
     const channelType = String(req.query.channel_type || "mobile").trim();
@@ -6378,7 +8418,7 @@ router11.get("/check-duplicate", async (req, res) => {
     return res.json({ isDuplicate: false });
   }
 });
-router11.get("/", async (req, res) => {
+router12.get("/", async (req, res) => {
   const { customer_id } = req.query;
   if (directusUrl && directusAdminToken) {
     try {
@@ -6402,7 +8442,7 @@ router11.get("/", async (req, res) => {
   }
   return res.json(filtered);
 });
-router11.get("/:id", async (req, res) => {
+router12.get("/:id", async (req, res) => {
   const { id } = req.params;
   if (directusUrl && directusAdminToken) {
     try {
@@ -6512,7 +8552,7 @@ async function syncContactToParentCustomer(customerId, channelType, value, conta
     console.warn("Error in syncContactToParentCustomer:", err.message);
   }
 }
-router11.post("/", async (req, res) => {
+router12.post("/", async (req, res) => {
   try {
     const {
       customer_id,
@@ -6548,7 +8588,7 @@ router11.post("/", async (req, res) => {
       }
     }
     const nowIso = (/* @__PURE__ */ new Date()).toISOString();
-    const newId = crypto11.randomUUID();
+    const newId = crypto12.randomUUID();
     const contactRecord = {
       id: newId,
       customer_id: String(customer_id).trim(),
@@ -6607,7 +8647,7 @@ router11.post("/", async (req, res) => {
     });
   }
 });
-router11.patch("/:id", async (req, res) => {
+router12.patch("/:id", async (req, res) => {
   const { id } = req.params;
   const payload = req.body;
   try {
@@ -6666,7 +8706,7 @@ router11.patch("/:id", async (req, res) => {
     });
   }
 });
-router11.delete("/:id", async (req, res) => {
+router12.delete("/:id", async (req, res) => {
   const { id } = req.params;
   try {
     if (directusUrl && directusAdminToken) {
@@ -6692,1322 +8732,7 @@ router11.delete("/:id", async (req, res) => {
     });
   }
 });
-var contacts_routes_default = router11;
-
-// server/routes/system.routes.ts
-import { Router as Router12 } from "express";
-import crypto12 from "crypto";
-var router12 = Router12();
-router12.get("/api/health", (req, res) => {
-  res.json({ status: "ok", uptime: process.uptime(), timestamp: (/* @__PURE__ */ new Date()).toISOString() });
-});
-router12.get("/health", (req, res) => {
-  res.json({ status: "ok", uptime: process.uptime(), timestamp: (/* @__PURE__ */ new Date()).toISOString() });
-});
-router12.get("/bff-status", (req, res) => {
-  res.json({
-    online: Boolean(directusUrl && directusAdminToken),
-    url: directusUrl || "",
-    database: "Directus"
-  });
-});
-router12.get("/api/bff-status", (req, res) => {
-  res.json({
-    online: Boolean(directusUrl && directusAdminToken),
-    url: directusUrl || "",
-    database: "Directus"
-  });
-});
-var dashboardSummaryCacheMap = /* @__PURE__ */ new Map();
-var globalCallIdToUUIDMap = /* @__PURE__ */ new Map();
-var uidToPersonnelMap = /* @__PURE__ */ new Map();
-var migrationPersonnelCache = null;
-var migrationCustomersCache = null;
-var migrationCacheLastFetch = 0;
-var DASHBOARD_CACHE_TTL_MS = 3e4;
-var handleDashboardSummary = async (req, res) => {
-  const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, reportViewScope, userName, tenantId } = getRequestUser(req);
-  const canViewAll = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers || reportViewScope === "all");
-  const cacheKey = `${tenantId || "all"}_${canViewAll ? "admin" : userId || userName || "staff"}`;
-  const now2 = Date.now();
-  const cached = dashboardSummaryCacheMap.get(cacheKey);
-  if (cached && now2 - cached.timestamp < DASHBOARD_CACHE_TTL_MS) {
-    return res.json(cached.data);
-  }
-  if (directusUrl && directusAdminToken) {
-    try {
-      let tenantFilterStr = "";
-      if (tenantId && tenantId !== "all") {
-        const tenantNum = resolveDirectusTenantId(tenantId);
-        if (tenantNum && tenantNum > 1) {
-          tenantFilterStr = `&filter[tenant_id][_eq]=${tenantNum}`;
-        }
-      }
-      const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : "";
-      const rawUid = cleanPId.replace(/^p-/, "");
-      const cleanUId = userId ? String(userId).trim().toLowerCase() : "";
-      const normUserName = userName ? userName.trim() : "";
-      let marketerCustFilter = "";
-      let marketerRepFilter = "";
-      let marketerLeadFilter = "";
-      if (!canViewAll) {
-        if (cleanPId) {
-          marketerCustFilter = `&filter[_or][0][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`;
-          if (rawUid && rawUid !== cleanPId) {
-            marketerCustFilter += `&filter[_or][1][assigned_marketer_id][_eq]=${encodeURIComponent(rawUid)}`;
-            marketerCustFilter += `&filter[_or][2][assigned_marketer_id][_eq]=${encodeURIComponent("p-" + rawUid)}`;
-          }
-          if (normUserName) {
-            marketerCustFilter += `&filter[_or][3][assigned_marketer_name][_icontains]=${encodeURIComponent(normUserName)}`;
-          }
-        } else if (normUserName) {
-          marketerCustFilter = `&filter[assigned_marketer_name][_icontains]=${encodeURIComponent(normUserName)}`;
-        }
-        if (normUserName) {
-          marketerRepFilter = `&filter[negotiator_name][_icontains]=${encodeURIComponent(normUserName)}`;
-        } else if (cleanPId) {
-          marketerRepFilter = `&filter[created_by][_eq]=${encodeURIComponent(cleanPId)}`;
-        }
-        if (cleanPId) {
-          marketerLeadFilter = `&filter[assigned_to][_eq]=${encodeURIComponent(cleanPId)}`;
-        }
-      }
-      const [
-        totalCustomersRes,
-        freeCustomersRes,
-        expiredCustomersRes,
-        contractsWonCustomersRes,
-        reportsAggregateRes,
-        totalColdLeadsRes,
-        adminReportsRes,
-        pendingLeavesRes,
-        pendingAdvancesRes
-      ] = await Promise.all([
-        directusFetch(`/items/customers?limit=1&meta=filter_count${tenantFilterStr}${marketerCustFilter}`).catch(() => null),
-        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[is_expired][_eq]=true${tenantFilterStr}${marketerCustFilter}`).catch(() => null),
-        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}${marketerCustFilter}`).catch(() => null),
-        directusFetch(`/items/customer_reports?aggregate[count]=*&aggregate[sum]=contract_amount&aggregate[avg]=negotiation_score${tenantFilterStr}${marketerRepFilter}`).catch(() => null),
-        directusFetch(`/items/cold_leads?limit=1&meta=filter_count${tenantFilterStr}${marketerLeadFilter}`).catch(() => null),
-        directusFetch(`/items/administrative_reports?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/leave_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/advance_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null)
-      ]);
-      const totalCustomers = totalCustomersRes?.meta?.filter_count ?? totalCustomersRes?.meta?.total_count ?? 0;
-      const freeCustomers = freeCustomersRes?.meta?.filter_count ?? 0;
-      const expiredCustomers = expiredCustomersRes?.meta?.filter_count ?? 0;
-      const contractsWon = contractsWonCustomersRes?.meta?.filter_count ?? 0;
-      let totalReports = 0;
-      let totalRevenue = 0;
-      let avgScore = 8.5;
-      if (reportsAggregateRes?.data && Array.isArray(reportsAggregateRes.data) && reportsAggregateRes.data.length > 0) {
-        const repItem = reportsAggregateRes.data[0];
-        totalReports = Number(repItem.count || 0);
-        totalRevenue = Number(repItem.sum?.contract_amount || 0);
-        const rawAvg = Number(repItem.avg?.negotiation_score);
-        if (!isNaN(rawAvg) && rawAvg > 0) {
-          avgScore = Math.round(rawAvg * 10) / 10;
-        }
-      }
-      const totalColdLeads = totalColdLeadsRes?.meta?.filter_count ?? totalColdLeadsRes?.meta?.total_count ?? 0;
-      const adminReportsCount = adminReportsRes?.meta?.filter_count ?? adminReportsRes?.meta?.total_count ?? 0;
-      const pendingLeaves = pendingLeavesRes?.meta?.filter_count ?? 0;
-      const pendingAdvances = pendingAdvancesRes?.meta?.filter_count ?? 0;
-      const upcomingFollowups = [];
-      const urgentExpiringCustomers = [];
-      const inNegotiationCount = Math.max(0, totalCustomers - contractsWon);
-      const resultPayload = {
-        total_customers: totalCustomers,
-        contracts_won_count: contractsWon,
-        in_negotiation_count: inNegotiationCount,
-        expired_customers_count: expiredCustomers,
-        free_customers_count: freeCustomers,
-        total_reports_count: totalReports,
-        total_cold_leads_count: totalColdLeads,
-        admin_reports_count: adminReportsCount,
-        pending_leave_count: pendingLeaves,
-        pending_advance_count: pendingAdvances,
-        total_contract_revenue: totalRevenue,
-        avg_negotiation_score: avgScore,
-        upcoming_followups: upcomingFollowups,
-        urgent_expiring_customers: urgentExpiringCustomers
-      };
-      dashboardSummaryCacheMap.set(cacheKey, { data: resultPayload, timestamp: Date.now() });
-      return res.json(resultPayload);
-    } catch (err) {
-      console.warn("Dashboard summary error:", err.message);
-    }
-  }
-  res.json({
-    total_customers: customersData.length,
-    contracts_won_count: customersData.filter((c) => c.status === "\u0642\u0631\u0627\u0631\u062F\u0627\u062F").length,
-    in_negotiation_count: customersData.filter((c) => c.status !== "\u0642\u0631\u0627\u0631\u062F\u0627\u062F").length,
-    expired_customers_count: customersData.filter((c) => c.is_expired).length,
-    free_customers_count: customersData.filter((c) => !c.assigned_marketer_id || c.is_expired).length,
-    total_reports_count: reportsData.length,
-    total_cold_leads_count: 0,
-    admin_reports_count: 0,
-    pending_leave_count: 0,
-    pending_advance_count: 0,
-    total_contract_revenue: 0,
-    avg_negotiation_score: 8.5,
-    upcoming_followups: customersData.slice(0, 5),
-    urgent_expiring_customers: customersData.slice(0, 5)
-  });
-};
-router12.get("/api/dashboard-summary", handleDashboardSummary);
-router12.get("/api/dashboard/summary", handleDashboardSummary);
-router12.get("/api/project-settings", async (req, res) => {
-  if (directusUrl && directusAdminToken) {
-    try {
-      const resp = await directusFetch("/items/project_settings").catch(() => null);
-      if (resp?.data) {
-        const item = Array.isArray(resp.data) ? resp.data[0] : resp.data;
-        if (item) {
-          updateProjectSettingsData(item);
-        }
-      }
-    } catch {
-    }
-  }
-  res.json(projectSettingsData);
-});
-router12.patch("/api/project-settings", async (req, res) => {
-  const payload = req.body;
-  const { isAdmin } = getRequestUser(req);
-  if (!isAdmin) {
-    return res.status(403).json({ error: "\u062A\u0646\u0647\u0627 \u0645\u062F\u06CC\u0631 \u06A9\u0644 \u0633\u06CC\u0633\u062A\u0645 \u062F\u0633\u062A\u0631\u0633\u06CC \u0628\u0647 \u0648\u06CC\u0631\u0627\u06CC\u0634 \u062A\u0646\u0638\u06CC\u0645\u0627\u062A \u067E\u0631\u0648\u0698\u0647\u200C\u0647\u0627 \u0648 \u067E\u062A\u0631\u0646\u200C\u0647\u0627\u06CC \u067E\u06CC\u0627\u0645\u06A9 \u0631\u0627 \u062F\u0627\u0631\u062F." });
-  }
-  updateProjectSettingsData(payload);
-  if (directusUrl && directusAdminToken) {
-    try {
-      const fetchExist = await directusFetch("/items/project_settings").catch(() => null);
-      const existingList = fetchExist?.data;
-      if (Array.isArray(existingList) && existingList.length > 0) {
-        const existingId = existingList[0].id;
-        await directusFetch(`/items/project_settings/${existingId}`, {
-          method: "PATCH",
-          body: JSON.stringify(payload)
-        });
-      } else {
-        await directusFetch("/items/project_settings", {
-          method: "POST",
-          body: JSON.stringify(payload)
-        });
-      }
-    } catch (err) {
-      console.warn("Directus project_settings save error:", err.message);
-    }
-  }
-  res.json({ success: true, settings: projectSettingsData });
-});
-router12.post("/api/auth/update-profile", async (req, res) => {
-  const {
-    name,
-    username,
-    phone,
-    avatar,
-    bank_card_number,
-    iban,
-    national_id,
-    emergency_contact_name,
-    emergency_contact_phone,
-    emergency_contact_relation,
-    family_contacts
-  } = req.body;
-  const { userId, personnelId, userEmail, userName } = getRequestUser(req);
-  const personnelPatch = {};
-  if (name) personnelPatch.name = String(name).trim();
-  if (username !== void 0) personnelPatch.username = String(username).trim();
-  if (phone !== void 0) personnelPatch.phone = String(phone).trim();
-  if (avatar !== void 0) personnelPatch.avatar = avatar;
-  if (bank_card_number !== void 0) personnelPatch.bank_card_number = String(bank_card_number).trim();
-  if (iban !== void 0) personnelPatch.iban = String(iban).trim();
-  if (national_id !== void 0) personnelPatch.national_id = String(national_id).trim();
-  if (emergency_contact_name !== void 0) personnelPatch.emergency_contact_name = String(emergency_contact_name).trim();
-  if (emergency_contact_phone !== void 0) personnelPatch.emergency_contact_phone = String(emergency_contact_phone).trim();
-  if (emergency_contact_relation !== void 0) personnelPatch.emergency_contact_relation = String(emergency_contact_relation).trim();
-  if (family_contacts !== void 0) personnelPatch.family_contacts = family_contacts;
-  let targetPersonnel = null;
-  if (directusUrl && directusAdminToken) {
-    try {
-      let foundPId = null;
-      if (personnelId) {
-        const byId = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
-        if (byId?.data?.id) foundPId = byId.data.id;
-      }
-      if (!foundPId && userId) {
-        const byUser = await directusFetch(`/items/personnel?filter[user_id][_eq]=${userId}`).catch(() => null);
-        if (byUser?.data && Array.isArray(byUser.data) && byUser.data.length > 0) {
-          foundPId = byUser.data[0].id;
-        }
-      }
-      if (!foundPId && userEmail) {
-        const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail)}`).catch(() => null);
-        if (byEmail?.data && Array.isArray(byEmail.data) && byEmail.data.length > 0) {
-          foundPId = byEmail.data[0].id;
-        }
-      }
-      if (foundPId) {
-        const updatedRes = await directusFetch(`/items/personnel/${foundPId}`, {
-          method: "PATCH",
-          body: JSON.stringify(personnelPatch)
-        });
-        targetPersonnel = updatedRes?.data || { id: foundPId, ...personnelPatch };
-      } else {
-        const newPId = personnelId || crypto12.randomUUID();
-        const createdRes = await directusFetch("/items/personnel", {
-          method: "POST",
-          body: JSON.stringify({
-            id: newPId,
-            name: name || userName || "\u06A9\u0627\u0631\u0628\u0631 \u0633\u06CC\u0633\u062A\u0645",
-            email: userEmail || "",
-            phone: phone || "",
-            role: "marketer",
-            status: "active",
-            user_id: userId || null,
-            ...personnelPatch
-          })
-        });
-        targetPersonnel = createdRes?.data || { id: newPId, ...personnelPatch };
-      }
-      if (userId) {
-        let directusAvatarId = void 0;
-        if (typeof avatar === "string") {
-          const match = avatar.match(/\/api\/assets\/([a-zA-Z0-9\-_]+)/);
-          directusAvatarId = match ? match[1] : !avatar.startsWith("http") && !avatar.startsWith("data:") && !avatar.startsWith("/") ? avatar : void 0;
-        }
-        await directusFetch(`/users/${userId}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            ...name ? { first_name: name } : {},
-            ...directusAvatarId ? { avatar: directusAvatarId } : {}
-          })
-        }).catch(() => {
-        });
-      }
-    } catch (err) {
-      console.error("Directus personnel profile update error:", err.message);
-    }
-  }
-  const targetId = personnelId || userId;
-  const idx = personnelData.findIndex(
-    (p) => targetId && p.id === targetId || userId && p.user_id === userId || userEmail && p.email?.toLowerCase() === userEmail?.toLowerCase()
-  );
-  if (idx >= 0) {
-    personnelData[idx] = { ...personnelData[idx], ...personnelPatch };
-    if (!targetPersonnel) targetPersonnel = personnelData[idx];
-  } else {
-    const newLocal = {
-      id: targetId || "p-1",
-      name: name || userName || "\u06A9\u0627\u0631\u0628\u0631 \u0633\u06CC\u0633\u062A\u0645",
-      email: userEmail || "",
-      phone: phone || "",
-      role: "marketer",
-      status: "active",
-      active: true,
-      ...personnelPatch
-    };
-    personnelData.push(newLocal);
-    if (!targetPersonnel) targetPersonnel = newLocal;
-  }
-  res.json({ success: true, personnel: targetPersonnel, message: "\u0645\u0634\u062E\u0635\u0627\u062A \u067E\u0631\u0648\u0641\u0627\u06CC\u0644 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062F\u0631 \u067E\u0627\u06CC\u06AF\u0627\u0647 \u062F\u0627\u062F\u0647 \u0645\u0631\u06A9\u0632\u06CC \u0630\u062E\u06CC\u0631\u0647 \u0634\u062F." });
-});
-var handleAssetProxy2 = async (req, res) => {
-  const { id } = req.params;
-  if (!id) {
-    return res.status(400).send("Asset ID is required");
-  }
-  const cleanId = id.replace(/\.[a-zA-Z0-9]+$/, "");
-  if (directusUrl && directusAdminToken) {
-    try {
-      const directusAssetUrl = `${directusUrl.replace(/\/$/, "")}/assets/${cleanId}`;
-      const assetRes = await fetch(directusAssetUrl, {
-        headers: {
-          "Authorization": `Bearer ${directusAdminToken}`
-        }
-      });
-      if (assetRes.ok) {
-        const contentType = assetRes.headers.get("content-type") || "image/jpeg";
-        res.setHeader("Content-Type", contentType);
-        res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=604800");
-        const buffer = await assetRes.arrayBuffer();
-        return res.send(Buffer.from(buffer));
-      } else {
-        console.warn(`[Asset Proxy] Directus asset ${cleanId} returned HTTP ${assetRes.status}`);
-      }
-    } catch (err) {
-      console.warn(`[Asset Proxy] Error fetching asset ${cleanId}:`, err.message);
-    }
-  }
-  res.status(404).send("Asset not found");
-};
-router12.get("/api/assets/:id", handleAssetProxy2);
-router12.post("/api/upload-avatar", async (req, res) => {
-  const { dataUrl, fileName, mimeType } = req.body;
-  const { userId, personnelId, userEmail, userName } = getRequestUser(req);
-  if (!dataUrl) {
-    return res.status(400).json({ error: "\u0641\u0627\u06CC\u0644\u06CC \u0627\u0631\u0633\u0627\u0644 \u0646\u0634\u062F\u0647 \u0627\u0633\u062A." });
-  }
-  let finalAvatarUrl = dataUrl;
-  let fileId = null;
-  if (directusUrl && directusAdminToken) {
-    try {
-      const matches = dataUrl.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
-      if (matches && matches.length === 3) {
-        const fileBuffer = Buffer.from(matches[2], "base64");
-        const fileType = matches[1] || mimeType || "image/webp";
-        const name = fileName || `avatar-${userId || personnelId || Date.now()}.webp`;
-        const boundary = "----WebKitFormBoundary" + Math.random().toString(36).substring(2);
-        const header = `--${boundary}\r
-Content-Disposition: form-data; name="file"; filename="${name}"\r
-Content-Type: ${fileType}\r
-\r
-`;
-        const footer = `\r
---${boundary}--\r
-`;
-        const bodyBuffer = Buffer.concat([Buffer.from(header, "utf-8"), fileBuffer, Buffer.from(footer, "utf-8")]);
-        const uploadRes = await fetch(`${directusUrl.replace(/\/$/, "")}/files`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${directusAdminToken}`,
-            "Content-Type": `multipart/form-data; boundary=${boundary}`
-          },
-          body: bodyBuffer
-        });
-        if (uploadRes.ok) {
-          const fileData = await uploadRes.json();
-          fileId = fileData?.data?.id;
-          if (fileId) {
-            finalAvatarUrl = `/api/assets/${fileId}`;
-            if (userId) {
-              await directusFetch(`/users/${userId}`, {
-                method: "PATCH",
-                body: JSON.stringify({ avatar: fileId })
-              }).catch(() => {
-              });
-            }
-            let directusPersonnelId = null;
-            if (personnelId) {
-              const byPId = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
-              if (byPId?.data?.id) directusPersonnelId = byPId.data.id;
-            }
-            if (!directusPersonnelId && userId) {
-              const byUser = await directusFetch(`/items/personnel?filter[user_id][_eq]=${userId}&limit=1`).catch(() => null);
-              if (byUser?.data?.[0]?.id) directusPersonnelId = byUser.data[0].id;
-            }
-            if (!directusPersonnelId && userEmail) {
-              const byEmail = await directusFetch(`/items/personnel?filter[email][_eq]=${encodeURIComponent(userEmail)}&limit=1`).catch(() => null);
-              if (byEmail?.data?.[0]?.id) directusPersonnelId = byEmail.data[0].id;
-            }
-            if (directusPersonnelId) {
-              await directusFetch(`/items/personnel/${directusPersonnelId}`, {
-                method: "PATCH",
-                body: JSON.stringify({ avatar: fileId })
-              }).catch((e) => console.warn("Could not update personnel avatar in Directus:", e.message));
-            }
-          }
-        } else {
-          const errText = await uploadRes.text().catch(() => "");
-          console.warn("[Directus Upload Avatar Error]:", uploadRes.status, errText);
-        }
-      }
-    } catch (e) {
-      console.error("Error uploading avatar to Directus:", e.message);
-    }
-  }
-  const targetId = personnelId || userId;
-  const idx = personnelData.findIndex(
-    (p) => targetId && (p.id === targetId || p.user_id === targetId) || userEmail && p.email?.toLowerCase() === userEmail.toLowerCase() || userName && p.name === userName
-  );
-  if (idx >= 0) {
-    personnelData[idx].avatar = finalAvatarUrl;
-  }
-  res.json({ success: true, avatarUrl: finalAvatarUrl, fileId });
-});
-router12.post("/api/auth/change-password", async (req, res) => {
-  const { current_password, new_password } = req.body;
-  const { userId } = getRequestUser(req);
-  if (!new_password || new_password.length < 6) {
-    return res.status(400).json({ error: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u062C\u062F\u06CC\u062F \u0628\u0627\u06CC\u062F \u062D\u062F\u0627\u0642\u0644 \u06F6 \u06A9\u0627\u0631\u0627\u06A9\u062A\u0631 \u0628\u0627\u0634\u062F." });
-  }
-  if (directusUrl && directusAdminToken && userId) {
-    try {
-      await directusFetch(`/users/${userId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ password: new_password })
-      });
-      return res.json({ success: true, message: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062A\u063A\u06CC\u06CC\u0631 \u06CC\u0627\u0641\u062A." });
-    } catch (err) {
-      return res.status(500).json({ error: `\u062E\u0637\u0627 \u062F\u0631 \u062A\u063A\u06CC\u06CC\u0631 \u0631\u0645\u0632 \u0639\u0628\u0648\u0631: ${err.message}` });
-    }
-  }
-  res.json({ success: true, message: "\u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u062A\u063A\u06CC\u06CC\u0631 \u06CC\u0627\u0641\u062A." });
-});
-router12.post("/api/check-expirations", (req, res) => {
-  res.json({ success: true });
-});
-var handleResetMigrationCache = (req, res) => {
-  setCustomersData([]);
-  setReportsData([]);
-  setContactsData([]);
-  setPersonnelData([...initialPersonnel]);
-  migrationPersonnelCache = null;
-  migrationCustomersCache = null;
-  migrationCacheLastFetch = 0;
-  globalCallIdToUUIDMap.clear();
-  uidToPersonnelMap.clear();
-  invalidateCustomersCache();
-  invalidateReportsCache();
-  return res.json({ success: true, message: "\u062D\u0627\u0641\u0638\u0647 \u0645\u0648\u0642\u062A \u06A9\u0634 \u062F\u0631\u0648\u0646\u200C\u0631\u06CC\u0632\u06CC \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u067E\u0627\u06A9\u0633\u0627\u0632\u06CC \u0634\u062F." });
-};
-router12.post("/api/migration/reset-cache", handleResetMigrationCache);
-router12.post("/migration/reset-cache", handleResetMigrationCache);
-function jalaliToGregorian(jy, jm, jd) {
-  let gy = jy <= 979 ? 621 : 1600;
-  jy -= jy <= 979 ? 0 : 979;
-  let days = 365 * jy + Math.floor(jy / 33) * 8 + Math.floor((jy % 33 + 3) / 4) + 78 + jd + (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
-  gy += 400 * Math.floor(days / 146097);
-  days %= 146097;
-  if (days > 36524) {
-    gy += 100 * Math.floor(--days / 36524);
-    days %= 36524;
-    if (days >= 365) days++;
-  }
-  gy += 4 * Math.floor(days / 1461);
-  days %= 1461;
-  if (days > 365) {
-    gy += Math.floor((days - 1) / 365);
-    days = (days - 1) % 365;
-  }
-  const gd = days + 1;
-  const sal_a = [
-    0,
-    31,
-    gy % 4 === 0 && gy % 100 !== 0 || gy % 400 === 0 ? 29 : 28,
-    31,
-    30,
-    31,
-    30,
-    31,
-    31,
-    30,
-    31,
-    30,
-    31
-  ];
-  let gm = 0;
-  for (gm = 0; gm < 13; gm++) {
-    const v = sal_a[gm];
-    if (days < v) break;
-    days -= v;
-  }
-  return new Date(Date.UTC(gy, gm - 1, gd));
-}
-function parseLegacyDate(dateVal) {
-  if (!dateVal) return null;
-  const str = String(dateVal).trim();
-  if (!str || str === "NULL" || str === "null") return null;
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
-    const d = new Date(str);
-    if (!isNaN(d.getTime())) return d.toISOString();
-  }
-  if (/^\d{8}$/.test(str)) {
-    const jy = parseInt(str.substring(0, 4), 10);
-    const jm = parseInt(str.substring(4, 6), 10);
-    const jd = parseInt(str.substring(6, 8), 10);
-    try {
-      return jalaliToGregorian(jy, jm, jd).toISOString();
-    } catch {
-    }
-  }
-  const slashMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s+(\d{1,2}):(\d{1,2}))?/);
-  if (slashMatch) {
-    const jy = parseInt(slashMatch[1], 10);
-    const jm = parseInt(slashMatch[2], 10);
-    const jd = parseInt(slashMatch[3], 10);
-    const hour = slashMatch[4] ? parseInt(slashMatch[4], 10) : 12;
-    const min = slashMatch[5] ? parseInt(slashMatch[5], 10) : 0;
-    try {
-      const gDate = jalaliToGregorian(jy, jm, jd);
-      gDate.setUTCHours(hour, min, 0, 0);
-      return gDate.toISOString();
-    } catch {
-    }
-  }
-  const dashTimeMatch = str.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/);
-  if (dashTimeMatch) {
-    const jy = parseInt(dashTimeMatch[1], 10);
-    const jm = parseInt(dashTimeMatch[2], 10);
-    const jd = parseInt(dashTimeMatch[3], 10);
-    const hour = parseInt(dashTimeMatch[4], 10);
-    const min = parseInt(dashTimeMatch[5], 10);
-    try {
-      const gDate = jalaliToGregorian(jy, jm, jd);
-      gDate.setUTCHours(hour, min, 0, 0);
-      return gDate.toISOString();
-    } catch {
-    }
-  }
-  try {
-    const d = new Date(str);
-    if (!isNaN(d.getTime())) return d.toISOString();
-  } catch {
-  }
-  return null;
-}
-function normalizeLegacyStatus(rawStatus) {
-  if (!rawStatus) return "\u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647";
-  const s = String(rawStatus).trim();
-  if (s === "\u0627\u0635\u0644\u0627 \u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647" || s === "\u062A\u0645\u0627\u0633 \u0646\u06AF\u0631\u0641\u062A\u0647" || s === "\u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647" || s === "\u0628\u062F\u0648\u0646 \u062A\u0645\u0627\u0633" || s === "\u0627\u0635\u0644\u0627\u064B \u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647") {
-    return "\u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647";
-  }
-  if (s === "\u067E\u0627\u0633\u062E \u0646\u0645\u06CC\u062F\u0647\u062F" || s === "\u067E\u0627\u0633\u062E \u0646\u0645\u06CC\u200C\u062F\u0647\u062F" || s === "\u067E\u0627\u0633\u062E \u0646\u062F\u0627\u062F" || s === "\u062C\u0648\u0627\u0628 \u0646\u0645\u06CC\u062F\u0647\u062F") {
-    return "\u067E\u0627\u0633\u062E \u0646\u0645\u06CC\u062F\u0647\u062F";
-  }
-  if (s === "\u0646\u0645\u06CC\u062E\u0648\u0627\u062F" || s === "\u0646\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u062F" || s === "\u0639\u062F\u0645 \u062A\u0645\u0627\u06CC\u0644" || s === "\u0646\u0645\u06CC \u062E\u0648\u0627\u0647\u062F") {
-    return "\u0646\u0645\u06CC\u062E\u0648\u0627\u062F";
-  }
-  if (s === "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0628\u0644 \u0627\u0632 \u0627\u0646\u0642\u0636\u0627" || s === "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0628\u0644 \u0627\u0632 \u0627\u0646\u0642\u0636\u0627\u0621") {
-    return "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0628\u0644 \u0627\u0632 \u0627\u0646\u0642\u0636\u0627";
-  }
-  if (s === "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0628\u0644\u0646\u062F \u0645\u062F\u062A" || s === "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0628\u0644\u0646\u062F\u0645\u062F\u062A") {
-    return "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0628\u0644\u0646\u062F \u0645\u062F\u062A";
-  }
-  if (s === "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0631\u0627\u0631\u062F\u0627\u062F") {
-    return "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0631\u0627\u0631\u062F\u0627\u062F";
-  }
-  if (s === "\u067E\u06CC\u0634 \u0646\u0648\u06CC\u0633 \u0642\u0631\u0627\u0631\u062F\u0627\u062F" || s === "\u067E\u06CC\u0634\u200C\u0646\u0648\u06CC\u0633 \u0642\u0631\u0627\u0631\u062F\u0627\u062F") {
-    return "\u067E\u06CC\u0634 \u0646\u0648\u06CC\u0633 \u0642\u0631\u0627\u0631\u062F\u0627\u062F";
-  }
-  if (s === "\u0642\u0631\u0627\u0631\u062F\u0627\u062F" || s === "\u0642\u0631\u0627\u0631\u062F\u0627\u062F / \u0641\u0627\u06A9\u062A\u0648\u0631" || s === "\u0642\u0631\u0627\u0631\u062F\u0627\u062F/\u0641\u0627\u06A9\u062A\u0648\u0631" || s === "\u0641\u0627\u06A9\u062A\u0648\u0631") {
-    return "\u0642\u0631\u0627\u0631\u062F\u0627\u062F";
-  }
-  if (s === "\u0644\u06CC\u0633\u062A \u0633\u06CC\u0627\u0647") {
-    return "\u0644\u06CC\u0633\u062A \u0633\u06CC\u0627\u0647";
-  }
-  if (s === "\u062B\u0628\u062A \u0634\u0645\u0627\u0631\u0647") {
-    return "\u062B\u0628\u062A \u0634\u0645\u0627\u0631\u0647";
-  }
-  return s;
-}
-function isValidUUID(str) {
-  if (typeof str !== "string") return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str.trim());
-}
-function deterministicUUID(input) {
-  if (!input) return crypto12.randomUUID();
-  const cleanInput = String(input).trim();
-  if (isValidUUID(cleanInput)) return cleanInput;
-  const hash = crypto12.createHash("md5").update("alphadesk-crm:" + cleanInput).digest("hex");
-  return `${hash.substring(0, 8)}-${hash.substring(8, 12)}-4${hash.substring(13, 16)}-a${hash.substring(17, 20)}-${hash.substring(20, 32)}`;
-}
-function sanitizeCustomerForDirectus(cust, validPersonnelIds) {
-  const tNum = cust.tenant_id !== void 0 && cust.tenant_id !== null ? Number(cust.tenant_id) : 1;
-  const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
-  let assignedMarketerId = cust.assigned_marketer_id || null;
-  if (assignedMarketerId && validPersonnelIds && validPersonnelIds.size > 0 && !validPersonnelIds.has(assignedMarketerId)) {
-    assignedMarketerId = null;
-  }
-  return {
-    id: cust.id,
-    company_name: cust.company_name || "\u0628\u062F\u0648\u0646 \u0646\u0627\u0645",
-    business_type: cust.business_type || "",
-    province: cust.province || "",
-    city: cust.city || "",
-    manager_name: cust.manager_name || "",
-    mobile_numbers: Array.isArray(cust.mobile_numbers) ? cust.mobile_numbers : [],
-    landline_numbers: Array.isArray(cust.landline_numbers) ? cust.landline_numbers : [],
-    assigned_marketer_id: assignedMarketerId,
-    assigned_marketer_name: cust.assigned_marketer_name || null,
-    assignment_deadline: cust.assignment_deadline || null,
-    status: cust.status || "\u062A\u0645\u0627\u0633 \u0628\u0631\u0642\u0631\u0627\u0631 \u0646\u0634\u062F\u0647",
-    is_expired: Boolean(cust.is_expired),
-    tenant_id: tenantNum,
-    date_created: cust.date_created || (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-function sanitizeContactForDirectus(c) {
-  const tNum = c.tenant_id !== void 0 && c.tenant_id !== null ? Number(c.tenant_id) : 1;
-  const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
-  return {
-    id: isValidUUID(c.id) ? c.id : deterministicUUID(`${c.customer_id}-${c.channel_type}-${c.value}`),
-    customer_id: c.customer_id,
-    channel_type: c.channel_type || "mobile",
-    value: String(c.value || "").trim(),
-    normalized_value: c.normalized_value ? String(c.normalized_value).trim() : null,
-    contact_name: c.contact_name ? String(c.contact_name).trim() : null,
-    is_primary: Boolean(c.is_primary),
-    tenant_id: tenantNum,
-    date_created: c.date_created || (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-function sanitizeReportForDirectus(rep) {
-  const tNum = rep.tenant_id !== void 0 && rep.tenant_id !== null ? Number(rep.tenant_id) : 1;
-  const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
-  return {
-    id: rep.id,
-    customer_id: rep.customer_id,
-    report_text: rep.report_text || "",
-    negotiator_name: rep.negotiator_name || "\u06A9\u0627\u0631\u0634\u0646\u0627\u0633",
-    negotiation_phone: rep.negotiation_phone || "",
-    negotiation_status: rep.negotiation_status || "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0628\u0644 \u0627\u0632 \u0627\u0646\u0642\u0636\u0627",
-    negotiation_score: typeof rep.negotiation_score === "number" ? rep.negotiation_score : 8,
-    next_followup_date: rep.next_followup_date || null,
-    tenant_id: tenantNum,
-    date_created: rep.date_created || (/* @__PURE__ */ new Date()).toISOString()
-  };
-}
-function sanitizePersonnelForDirectus(p) {
-  const tNum = p.tenant_id !== void 0 && p.tenant_id !== null ? Number(p.tenant_id) : 1;
-  const tenantNum = !isNaN(tNum) && tNum > 0 ? tNum : 1;
-  return {
-    id: p.id,
-    name: p.name || "\u06A9\u0627\u0631\u0634\u0646\u0627\u0633",
-    username: p.username || "",
-    email: p.email || "",
-    phone: p.phone || "",
-    role: p.role || "marketer",
-    status: p.status || "active",
-    tenant_id: tenantNum,
-    national_id: p.national_id || null
-  };
-}
-var handleMigrationImport = async (req, res) => {
-  const { tenant_id, personnelRows, customerRows, reportRows } = req.body;
-  const { tenantId: authTenantId } = getRequestUser(req);
-  const targetTenantId = tenant_id || authTenantId || "default";
-  const targetTenantNum = resolveDirectusTenantId(targetTenantId);
-  let importedPersonnelCount = 0;
-  let importedCustomersCount = 0;
-  let importedReportsCount = 0;
-  let skippedCount = 0;
-  const skippedDetails = [];
-  const errors = [];
-  if (!migrationPersonnelCache || !migrationCustomersCache || Date.now() - migrationCacheLastFetch > 3e5) {
-    migrationPersonnelCache = [...personnelData];
-    migrationCustomersCache = [...customersData];
-    if (directusUrl && directusAdminToken) {
-      try {
-        const [pRes, cRes] = await Promise.all([
-          directusFetchAllPages("/items/personnel?fields=id,username,email,name,phone&limit=1000").catch(() => null),
-          directusFetch("/items/customers?fields=id,assigned_marketer_id,assigned_marketer_name&limit=5000").catch(() => null)
-        ]);
-        const pList = Array.isArray(pRes) ? pRes : pRes?.data || [];
-        const cList = Array.isArray(cRes) ? cRes : cRes?.data || [];
-        for (const p of pList) {
-          if (!migrationPersonnelCache.some((ep) => ep.id === p.id || p.username && ep.username === p.username)) {
-            migrationPersonnelCache.push(p);
-          }
-        }
-        for (const c of cList) {
-          if (!migrationCustomersCache.some((ec) => ec.id === c.id)) {
-            migrationCustomersCache.push(c);
-          }
-        }
-        migrationCacheLastFetch = Date.now();
-      } catch (e) {
-        console.warn("Warning pre-fetching Directus records for migration:", e.message);
-      }
-    }
-  }
-  const existingPersonnel = migrationPersonnelCache;
-  const existingCustomers = migrationCustomersCache;
-  const existingCustomerIdsSet = /* @__PURE__ */ new Set();
-  for (const c of existingCustomers) {
-    if (c.id) existingCustomerIdsSet.add(c.id);
-  }
-  const directusPersonnelIdsSet = /* @__PURE__ */ new Set();
-  for (const p of existingPersonnel) {
-    if (p.id) directusPersonnelIdsSet.add(String(p.id).trim());
-  }
-  for (const c of existingCustomers) {
-    if (c.id) {
-      if (c.legacyCallId) globalCallIdToUUIDMap.set(c.legacyCallId, c.id);
-      if (c.id.startsWith("c-")) globalCallIdToUUIDMap.set(c.id.substring(2), c.id);
-      globalCallIdToUUIDMap.set(c.id, c.id);
-    }
-  }
-  for (const p of existingPersonnel) {
-    if (p.id) {
-      const cleanId = String(p.id).trim();
-      uidToPersonnelMap.set(cleanId, p);
-      const rawNum = cleanId.replace(/^p-/, "");
-      uidToPersonnelMap.set(rawNum, p);
-      uidToPersonnelMap.set(`p-${rawNum}`, p);
-    }
-    if (p.username) {
-      uidToPersonnelMap.set(String(p.username).trim().toLowerCase(), p);
-    }
-    if (p.legacyUid) {
-      uidToPersonnelMap.set(String(p.legacyUid).trim(), p);
-    }
-    if (p.name) {
-      const normName = normalizePersianString(p.name);
-      if (normName) uidToPersonnelMap.set(normName, p);
-    }
-  }
-  const personnelToInsert = [];
-  if (Array.isArray(personnelRows) && personnelRows.length > 0) {
-    for (const r of personnelRows) {
-      const rawUid = String(r.uid || r.id || "").trim();
-      if (!rawUid) continue;
-      const cleanUsername = String(r.username || `user_${rawUid}`).trim();
-      const fullName = String(
-        r.fname ? `${r.fname} ${r.lname || ""}` : r.name || cleanUsername || `\u06A9\u0627\u0631\u0634\u0646\u0627\u0633 ${rawUid}`
-      ).trim();
-      const cleanEmail = String(r.email || `${cleanUsername}@alphadesk.ir`).trim().toLowerCase();
-      const rawPhones = String(r.contacts || r.phone || "").split(/[,\s]+/);
-      const normPhone = normalizeContactValue(rawPhones[0] || "");
-      const normFullName = normalizePersianString(fullName);
-      const existIdx = existingPersonnel.findIndex(
-        (p) => cleanUsername && p.username && p.username.toLowerCase() === cleanUsername.toLowerCase() || normFullName && p.name && normalizePersianString(p.name) === normFullName || p.id === rawUid || p.id === `p-${rawUid}` || p.id && String(p.id).replace(/^p-/, "") === rawUid.replace(/^p-/, "") || p.username && p.username.toLowerCase() === rawUid.toLowerCase() || cleanEmail && p.email && p.email.toLowerCase() === cleanEmail.toLowerCase()
-      );
-      const targetPId = existIdx >= 0 ? existingPersonnel[existIdx].id : rawUid.startsWith("p-") ? rawUid : `p-${rawUid}`;
-      const pObj = {
-        id: targetPId,
-        name: fullName,
-        username: cleanUsername,
-        email: cleanEmail,
-        phone: normPhone,
-        role: r.userlevel === "0" || r.userlevel === 0 || r.role === "admin" ? "admin" : "marketer",
-        status: r.active === "0" || r.active === 0 || r.status === "inactive" ? "inactive" : "active",
-        tenant_id: targetTenantNum || 1,
-        national_id: String(r.code || r.shenasname || "").trim() || null,
-        legacyUid: rawUid
-      };
-      if (existIdx >= 0) {
-        existingPersonnel[existIdx] = { ...existingPersonnel[existIdx], ...pObj };
-        const localIdx = personnelData.findIndex((p) => p.id === targetPId || p.username === cleanUsername);
-        if (localIdx >= 0) personnelData[localIdx] = { ...personnelData[localIdx], ...pObj };
-        uidToPersonnelMap.set(rawUid, existingPersonnel[existIdx]);
-        uidToPersonnelMap.set(targetPId, existingPersonnel[existIdx]);
-        if (cleanUsername) uidToPersonnelMap.set(cleanUsername.toLowerCase(), existingPersonnel[existIdx]);
-        if (fullName) uidToPersonnelMap.set(normalizePersianString(fullName), existingPersonnel[existIdx]);
-        if (directusUrl && directusAdminToken && !directusPersonnelIdsSet.has(targetPId)) {
-          personnelToInsert.push(pObj);
-          directusPersonnelIdsSet.add(targetPId);
-        } else {
-          skippedCount++;
-        }
-      } else {
-        existingPersonnel.push(pObj);
-        personnelData.push(pObj);
-        personnelToInsert.push(pObj);
-        directusPersonnelIdsSet.add(targetPId);
-        uidToPersonnelMap.set(rawUid, pObj);
-        uidToPersonnelMap.set(targetPId, pObj);
-        if (cleanUsername) uidToPersonnelMap.set(cleanUsername.toLowerCase(), pObj);
-        if (fullName) uidToPersonnelMap.set(normalizePersianString(fullName), pObj);
-        importedPersonnelCount++;
-      }
-    }
-    if (directusUrl && directusAdminToken && personnelToInsert.length > 0) {
-      const sanitizedPersonnel = personnelToInsert.map(sanitizePersonnelForDirectus);
-      await directusSafeBatchInsert("personnel", sanitizedPersonnel, 25).catch((err) => {
-        errors.push(`\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u067E\u0631\u0633\u0646\u0644 \u062F\u0631 \u062F\u0627\u06CC\u0631\u06A9\u062A\u0648\u0633: ${err.message}`);
-      });
-      personnelToInsert.length = 0;
-    }
-  }
-  const customersToInsert = [];
-  const contactsToInsert = [];
-  if (Array.isArray(customerRows) && customerRows.length > 0) {
-    for (const r of customerRows) {
-      const callId = String(r.CallID || r.callid || r.id || "").trim();
-      const companyName = String(r.CompanyName || r.marketName || r.company_name || "\u0628\u062F\u0648\u0646 \u0646\u0627\u0645").trim();
-      const managerName = String(r.managerName || r.manager_name || "").trim();
-      const businessType = String(r.job || r.business_type || "").trim();
-      const province = String(r.province || "").trim();
-      const city = String(r.city || "").trim();
-      const rawMobiles = String(r.mobiles || r.mobile_numbers || r.managerPhone || r.phone || "").split(
-        /[,;\n]+/
-      );
-      const mobileNumbers = [];
-      for (const m of rawMobiles) {
-        const norm = normalizeContactValue(m);
-        if (norm && norm.length >= 8 && !mobileNumbers.includes(norm)) {
-          mobileNumbers.push(norm);
-        }
-      }
-      const rawLandlines = String(r.phonelines || r.landline_numbers || "").split(/[,;\n]+/);
-      const landlineNumbers = [];
-      for (const l of rawLandlines) {
-        const norm = normalizeContactValue(l);
-        if (norm && norm.length >= 4 && !landlineNumbers.includes(norm)) {
-          landlineNumbers.push(norm);
-        }
-      }
-      const rawStatus = r.lastStat || r.status || r.ClosedContact || "";
-      const status = normalizeLegacyStatus(rawStatus);
-      const rawMarketerUid = String(r.uid || r.assigned_marketer_id || "").trim();
-      let assignedMarketerId = null;
-      let assignedMarketerName = null;
-      if (rawMarketerUid && rawMarketerUid !== "0" && rawMarketerUid !== "NULL" && rawMarketerUid !== "null") {
-        let matchedP = uidToPersonnelMap.get(rawMarketerUid) || uidToPersonnelMap.get(rawMarketerUid.replace(/^p-/, "")) || uidToPersonnelMap.get(`p-${rawMarketerUid}`) || uidToPersonnelMap.get(rawMarketerUid.toLowerCase());
-        if (!matchedP) {
-          matchedP = existingPersonnel.find(
-            (p) => p.legacyUid === rawMarketerUid || p.id === rawMarketerUid || p.id === `p-${rawMarketerUid}` || p.id && String(p.id).replace(/^p-/, "") === rawMarketerUid.replace(/^p-/, "") || p.username && p.username.toLowerCase() === rawMarketerUid.toLowerCase() || p.name && (p.name === rawMarketerUid || p.name.includes(rawMarketerUid) || rawMarketerUid.includes(p.name))
-          );
-        }
-        if (!matchedP && rawMarketerUid === "1") {
-          matchedP = existingPersonnel.find((p) => p.role === "admin" || p.username === "admin");
-        }
-        if (matchedP) {
-          assignedMarketerId = matchedP.id;
-          assignedMarketerName = matchedP.name;
-        } else {
-          assignedMarketerId = rawMarketerUid.startsWith("p-") ? rawMarketerUid : `p-${rawMarketerUid}`;
-          assignedMarketerName = `\u06A9\u0627\u0631\u0634\u0646\u0627\u0633 ${rawMarketerUid}`;
-          const newPlaceholderP = {
-            id: assignedMarketerId,
-            name: assignedMarketerName,
-            username: `user_${rawMarketerUid}`,
-            email: `user_${rawMarketerUid}@alphadesk.ir`,
-            phone: "",
-            role: "marketer",
-            status: "active",
-            tenant_id: targetTenantNum || 1,
-            legacyUid: rawMarketerUid
-          };
-          existingPersonnel.push(newPlaceholderP);
-          personnelData.push(newPlaceholderP);
-          personnelToInsert.push(newPlaceholderP);
-          uidToPersonnelMap.set(rawMarketerUid, newPlaceholderP);
-          uidToPersonnelMap.set(assignedMarketerId, newPlaceholderP);
-        }
-      }
-      const deadlineIso = parseLegacyDate(r.expire || r.assignment_deadline);
-      const isExpired = Boolean(
-        status !== "\u0642\u0631\u0627\u0631\u062F\u0627\u062F" && status !== "\u0644\u06CC\u0633\u062A \u0633\u06CC\u0627\u0647" && deadlineIso && (/* @__PURE__ */ new Date()).getTime() > new Date(deadlineIso).getTime()
-      );
-      let custId;
-      if (isValidUUID(r.id)) {
-        custId = String(r.id).trim();
-      } else if (callId) {
-        custId = deterministicUUID(callId);
-      } else {
-        custId = crypto12.randomUUID();
-      }
-      if (callId) {
-        globalCallIdToUUIDMap.set(callId, custId);
-      }
-      globalCallIdToUUIDMap.set(custId, custId);
-      if (existingCustomerIdsSet.has(custId)) {
-        skippedCount++;
-      } else {
-        existingCustomerIdsSet.add(custId);
-        const custObj = {
-          id: custId,
-          company_name: companyName,
-          business_type: businessType,
-          province,
-          city,
-          manager_name: managerName,
-          mobile_numbers: mobileNumbers,
-          landline_numbers: landlineNumbers,
-          assigned_marketer_id: assignedMarketerId,
-          assigned_marketer_name: assignedMarketerName,
-          assignment_deadline: deadlineIso,
-          status,
-          is_expired: isExpired,
-          tenant_id: targetTenantNum || 1,
-          legacyCallId: callId || null,
-          date_created: parseLegacyDate(r.created || r.InsertRecDate) || (/* @__PURE__ */ new Date()).toISOString()
-        };
-        existingCustomers.push(custObj);
-        customersData.push(custObj);
-        customersToInsert.push(custObj);
-        importedCustomersCount++;
-        for (const m of mobileNumbers) {
-          const cObj = {
-            id: crypto12.randomUUID(),
-            customer_id: custId,
-            channel_type: "mobile",
-            value: m,
-            normalized_value: m,
-            contact_name: managerName || companyName,
-            is_primary: true,
-            tenant_id: targetTenantNum || 1,
-            date_created: custObj.date_created
-          };
-          contactsToInsert.push(cObj);
-          contactsData.push(cObj);
-        }
-        for (const l of landlineNumbers) {
-          const cObj = {
-            id: crypto12.randomUUID(),
-            customer_id: custId,
-            channel_type: "landline",
-            value: l,
-            normalized_value: l,
-            contact_name: managerName || companyName,
-            is_primary: false,
-            tenant_id: targetTenantNum || 1,
-            date_created: custObj.date_created
-          };
-          contactsToInsert.push(cObj);
-          contactsData.push(cObj);
-        }
-        const insta = String(r.instaID || r.instagram_ids || "").trim();
-        if (insta && insta !== "NULL" && insta !== "null") {
-          const cObj = {
-            id: crypto12.randomUUID(),
-            customer_id: custId,
-            channel_type: "instagram",
-            value: insta,
-            normalized_value: insta.replace(/^@/, ""),
-            contact_name: managerName || companyName,
-            is_primary: false,
-            tenant_id: targetTenantNum || 1,
-            date_created: custObj.date_created
-          };
-          contactsToInsert.push(cObj);
-          contactsData.push(cObj);
-        }
-        const teleg = String(r.telegID || r.telegram_ids || r.tlgMobile || r.telegram_phone || "").trim();
-        if (teleg && teleg !== "NULL" && teleg !== "null") {
-          const cObj = {
-            id: crypto12.randomUUID(),
-            customer_id: custId,
-            channel_type: "telegram",
-            value: teleg,
-            normalized_value: teleg.replace(/^@/, ""),
-            contact_name: managerName || companyName,
-            is_primary: false,
-            tenant_id: targetTenantNum || 1,
-            date_created: custObj.date_created
-          };
-          contactsToInsert.push(cObj);
-          contactsData.push(cObj);
-        }
-        const emails = String(r.emails || r.email || "").trim();
-        if (emails && emails !== "NULL" && emails !== "null") {
-          for (const em of emails.split(/[,;\s]+/)) {
-            if (em && em.includes("@")) {
-              const cObj = {
-                id: crypto12.randomUUID(),
-                customer_id: custId,
-                channel_type: "email",
-                value: em.toLowerCase(),
-                normalized_value: em.toLowerCase(),
-                contact_name: managerName || companyName,
-                is_primary: false,
-                tenant_id: targetTenantNum || 1,
-                date_created: custObj.date_created
-              };
-              contactsToInsert.push(cObj);
-              contactsData.push(cObj);
-            }
-          }
-        }
-        const web = String(r.website || r.websites || r.marketingWebsite || "").trim();
-        if (web && web !== "NULL" && web !== "null") {
-          const cObj = {
-            id: crypto12.randomUUID(),
-            customer_id: custId,
-            channel_type: "website",
-            value: web,
-            normalized_value: web.replace(/^https?:\/\//i, ""),
-            contact_name: managerName || companyName,
-            is_primary: false,
-            tenant_id: targetTenantNum || 1,
-            date_created: custObj.date_created
-          };
-          contactsToInsert.push(cObj);
-          contactsData.push(cObj);
-        }
-      }
-    }
-  }
-  if (Array.isArray(reportRows) && reportRows.length > 0) {
-    const reportsToInsert = [];
-    for (const r of reportRows) {
-      const callId = String(r.CallID || r.callid || "").trim();
-      const repText = String(r.report || r.report_text || "\u062B\u0628\u062A \u067E\u06CC\u06AF\u06CC\u0631\u06CC").trim();
-      const uidRef = String(r.uid || r.user_id || "").trim();
-      const rawNegotiator = String(r.negotiator || r.negotiator_name || "").trim();
-      const callNum = normalizeContactValue(r.callNum || r.negotiation_phone || "");
-      const status = normalizeLegacyStatus(r.status || r.negotiation_status);
-      const rawRating = parseFloat(String(r.rating ?? "").trim());
-      const score = !isNaN(rawRating) ? Math.round(rawRating) : 8;
-      const nextFollow = parseLegacyDate(r.nextFollow || r.next_followup_date);
-      const dateCreated = parseLegacyDate(r.insertDate || r.dateTime || r.date_created) || (/* @__PURE__ */ new Date()).toISOString();
-      let matchedCustomerId = null;
-      if (callId) {
-        const deterministicId = deterministicUUID(callId);
-        if (existingCustomerIdsSet.has(deterministicId) || existingCustomers.some((c) => c.id === deterministicId)) {
-          matchedCustomerId = deterministicId;
-        } else if (globalCallIdToUUIDMap.has(callId)) {
-          matchedCustomerId = globalCallIdToUUIDMap.get(callId);
-        } else {
-          const byCallId = existingCustomers.find((c) => c.id === callId || c.legacyCallId === callId || c.id === deterministicId);
-          if (byCallId) matchedCustomerId = byCallId.id;
-        }
-      }
-      if (!matchedCustomerId && callNum && globalCallIdToUUIDMap.has(callNum)) {
-        matchedCustomerId = globalCallIdToUUIDMap.get(callNum);
-      }
-      if (!matchedCustomerId && callNum) {
-        const byPhone = existingCustomers.find(
-          (c) => c.mobile_numbers?.includes(callNum) || c.landline_numbers?.includes(callNum)
-        );
-        if (byPhone) matchedCustomerId = byPhone.id;
-      }
-      if (!matchedCustomerId) {
-        matchedCustomerId = callId ? deterministicUUID(callId) : crypto12.randomUUID();
-        if (callId) globalCallIdToUUIDMap.set(callId, matchedCustomerId);
-        const orphanCust = {
-          id: matchedCustomerId,
-          company_name: callNum ? `\u0645\u0634\u062A\u0631\u06CC \u067E\u06CC\u06AF\u06CC\u0631\u06CC ${callNum}` : `\u0645\u0634\u062A\u0631\u06CC \u06A9\u062F ${callId || "\u062C\u062F\u06CC\u062F"}`,
-          mobile_numbers: callNum ? [callNum] : [],
-          status: status || "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0642\u0628\u0644 \u0627\u0632 \u0627\u0646\u0642\u0636\u0627",
-          is_expired: false,
-          tenant_id: targetTenantNum || 1,
-          date_created: dateCreated
-        };
-        existingCustomers.push(orphanCust);
-        customersData.push(orphanCust);
-        customersToInsert.push(orphanCust);
-        existingCustomerIdsSet.add(matchedCustomerId);
-        importedCustomersCount++;
-      }
-      const targetCust = existingCustomers.find((c) => c.id === matchedCustomerId);
-      let matchedP = uidRef ? uidToPersonnelMap.get(uidRef) : null;
-      if (!matchedP && rawNegotiator) {
-        matchedP = uidToPersonnelMap.get(rawNegotiator) || uidToPersonnelMap.get(normalizePersianString(rawNegotiator));
-      }
-      if (!matchedP && targetCust && targetCust.assigned_marketer_id) {
-        matchedP = uidToPersonnelMap.get(targetCust.assigned_marketer_id) || existingPersonnel.find((p) => p.id === targetCust.assigned_marketer_id);
-      }
-      const createdBy = matchedP ? matchedP.id : targetCust?.assigned_marketer_id || null;
-      const negotiatorName = matchedP ? matchedP.name : targetCust?.assigned_marketer_name || rawNegotiator || "\u06A9\u0627\u0631\u0634\u0646\u0627\u0633";
-      const repId = isValidUUID(r.ID || r.id) ? String(r.ID || r.id).trim() : deterministicUUID(`${callId || ""}-${r.ID || r.id || ""}-${dateCreated}`);
-      const repObj = {
-        id: repId,
-        customer_id: matchedCustomerId,
-        report_text: repText,
-        negotiator_name: negotiatorName,
-        created_by: createdBy,
-        negotiation_phone: callNum,
-        negotiation_status: status,
-        negotiation_score: score,
-        next_followup_date: nextFollow,
-        tenant_id: targetTenantNum || 1,
-        date_created: dateCreated
-      };
-      reportsData.push(repObj);
-      reportsToInsert.push(repObj);
-      importedReportsCount++;
-    }
-    if (directusUrl && directusAdminToken) {
-      if (personnelToInsert.length > 0) {
-        const sanitizedPersonnel = personnelToInsert.map(sanitizePersonnelForDirectus);
-        await directusSafeBatchInsert("personnel", sanitizedPersonnel, 25).catch((err) => {
-          errors.push(`\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u067E\u0631\u0633\u0646\u0644 \u062F\u0631 \u062F\u0627\u06CC\u0631\u06A9\u062A\u0648\u0633: ${err.message}`);
-        });
-        personnelToInsert.length = 0;
-      }
-      if (customersToInsert.length > 0) {
-        const sanitizedCusts = customersToInsert.map((c) => sanitizeCustomerForDirectus(c, directusPersonnelIdsSet));
-        await directusSafeBatchInsert("customers", sanitizedCusts, 50).catch((err) => {
-          errors.push(`\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u0645\u0634\u062A\u0631\u06CC\u0627\u0646 \u062F\u0631 \u062F\u0627\u06CC\u0631\u06A9\u062A\u0648\u0633: ${err.message}`);
-        });
-        customersToInsert.length = 0;
-      }
-      if (contactsToInsert.length > 0) {
-        const sanitizedContacts = contactsToInsert.map(sanitizeContactForDirectus);
-        await directusSafeBatchInsert("customer_contacts", sanitizedContacts, 50).catch((err) => {
-          console.warn("Customer contacts insert warning:", err.message);
-        });
-        contactsToInsert.length = 0;
-      }
-      if (reportsToInsert.length > 0) {
-        const sanitizedReps = reportsToInsert.map(sanitizeReportForDirectus);
-        await directusSafeBatchInsert("customer_reports", sanitizedReps, 50).catch((err) => {
-          errors.push(`\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u06AF\u0632\u0627\u0631\u0634\u200C\u0647\u0627 \u062F\u0631 \u062F\u0627\u06CC\u0631\u06A9\u062A\u0648\u0633: ${err.message}`);
-        });
-        reportsToInsert.length = 0;
-      }
-    }
-  }
-  if (directusUrl && directusAdminToken) {
-    if (personnelToInsert.length > 0) {
-      const sanitizedPersonnel = personnelToInsert.map(sanitizePersonnelForDirectus);
-      await directusSafeBatchInsert("personnel", sanitizedPersonnel, 25).catch((err) => {
-        errors.push(`\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u067E\u0631\u0633\u0646\u0644 \u062F\u0631 \u062F\u0627\u06CC\u0631\u06A9\u062A\u0648\u0633: ${err.message}`);
-      });
-      personnelToInsert.length = 0;
-    }
-    if (customersToInsert.length > 0) {
-      const sanitizedCusts = customersToInsert.map((c) => sanitizeCustomerForDirectus(c, directusPersonnelIdsSet));
-      await directusSafeBatchInsert("customers", sanitizedCusts, 50).catch((err) => {
-        errors.push(`\u062E\u0637\u0627 \u062F\u0631 \u062B\u0628\u062A \u0645\u0634\u062A\u0631\u06CC\u0627\u0646 \u062F\u0631 \u062F\u0627\u06CC\u0631\u06A9\u062A\u0648\u0633: ${err.message}`);
-      });
-      customersToInsert.length = 0;
-    }
-    if (contactsToInsert.length > 0) {
-      const sanitizedContacts = contactsToInsert.map(sanitizeContactForDirectus);
-      await directusSafeBatchInsert("customer_contacts", sanitizedContacts, 50).catch((err) => {
-        console.warn("Customer contacts insert warning:", err.message);
-      });
-      contactsToInsert.length = 0;
-    }
-  }
-  let autoAssignedCount = 0;
-  if (req.body.autoAssign === true) {
-    try {
-      const autoRes = await autoAssignFreeCustomersWithReports(targetTenantId);
-      autoAssignedCount = autoRes.reassignedCount;
-    } catch (autoErr) {
-      console.warn("Auto-assign free customers post-import warning:", autoErr.message);
-    }
-  }
-  invalidateCustomersCache();
-  invalidateReportsCache();
-  return res.json({
-    success: errors.length === 0 || importedCustomersCount > 0 || importedReportsCount > 0 || importedPersonnelCount > 0,
-    importedPersonnelCount,
-    importedCustomersCount,
-    importedReportsCount,
-    autoAssignedCount,
-    skippedCount,
-    skippedDetails,
-    errors,
-    message: `\u062F\u0631\u0648\u0646\u200C\u0631\u06CC\u0632\u06CC \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0627\u0646\u062C\u0627\u0645 \u0634\u062F: ${importedPersonnelCount} \u06A9\u0627\u0631\u0634\u0646\u0627\u0633 \u062C\u062F\u06CC\u062F\u060C ${importedCustomersCount} \u0645\u0634\u062A\u0631\u06CC \u062C\u062F\u06CC\u062F\u060C \u0648 ${importedReportsCount} \u06AF\u0632\u0627\u0631\u0634 \u062B\u0628\u062A \u0634\u062F\u0646\u062F. (${skippedCount} \u0631\u06A9\u0648\u0631\u062F \u0645\u0648\u062C\u0648\u062F \u0646\u0627\u062F\u06CC\u062F\u0647 \u06AF\u0631\u0641\u062A\u0647 \u0634\u062F) ${autoAssignedCount > 0 ? `\u062A\u0639\u062F\u0627\u062F ${autoAssignedCount} \u0645\u0634\u062A\u0631\u06CC \u0622\u0632\u0627\u062F \u06AF\u0632\u0627\u0631\u0634\u200C\u062F\u0627\u0631 \u0628\u0647 \u0622\u062E\u0631\u06CC\u0646 \u0628\u0627\u0632\u0627\u0631\u06CC\u0627\u0628 \u0645\u0631\u0628\u0648\u0637\u0647 \u0645\u062A\u0635\u0644 \u06AF\u0631\u062F\u06CC\u062F\u0646\u062F.` : ""}`
-  });
-};
-router12.post("/api/migration/import", handleMigrationImport);
-router12.post("/migration/import", handleMigrationImport);
-router12.post("/api/migration/reset-cache", handleResetMigrationCache);
-router12.post("/migration/reset-cache", handleResetMigrationCache);
-async function autoAssignFreeCustomersWithReports(targetTenantId) {
-  let reassignedCount = 0;
-  const reassignedDetails = [];
-  let allCustomersList = [...customersData];
-  let allReportsList = [...reportsData];
-  let allPersonnelList = [...personnelData];
-  if (directusUrl && directusAdminToken) {
-    try {
-      const [cRes, rRes, pRes] = await Promise.all([
-        directusFetchAllPages("/items/customers?limit=10000").catch(() => null),
-        directusFetchAllPages("/items/customer_reports?limit=50000&sort=-date_created").catch(() => null),
-        directusFetchAllPages("/items/personnel?limit=1000").catch(() => null)
-      ]);
-      if (cRes?.data && Array.isArray(cRes.data)) allCustomersList = cRes.data;
-      if (rRes?.data && Array.isArray(rRes.data)) allReportsList = rRes.data;
-      if (pRes?.data && Array.isArray(pRes.data)) allPersonnelList = pRes.data;
-    } catch (e) {
-      console.warn("Error fetching data for auto-assignment:", e.message);
-    }
-  }
-  const freeCustomers = allCustomersList.filter((c) => {
-    if (c.status === "\u0642\u0631\u0627\u0631\u062F\u0627\u062F" || c.status === "\u0644\u06CC\u0633\u062A \u0633\u06CC\u0627\u0647") return false;
-    const isUnassigned = !c.assigned_marketer_id || c.assigned_marketer_name === "\u062A\u062E\u0635\u06CC\u0635 \u0646\u06CC\u0627\u0641\u062A\u0647" || !c.assigned_marketer_name;
-    const isExpired = Boolean(c.is_expired);
-    return isUnassigned || isExpired;
-  });
-  const nowMs = Date.now();
-  const defaultDeadlineIso = new Date(nowMs + 10 * 86400 * 1e3).toISOString();
-  const patchesMap = /* @__PURE__ */ new Map();
-  for (const cust of freeCustomers) {
-    const custId = String(cust.id);
-    const custMobiles = Array.isArray(cust.mobile_numbers) ? cust.mobile_numbers : [];
-    const custLandlines = Array.isArray(cust.landline_numbers) ? cust.landline_numbers : [];
-    const custReports = allReportsList.filter((r) => {
-      if (String(r.customer_id) === custId || typeof r.customer_id === "object" && r.customer_id !== null && String(r.customer_id.id) === custId) {
-        return true;
-      }
-      if (r.negotiation_phone) {
-        const normPhone = normalizeContactValue(r.negotiation_phone);
-        if (normPhone && (custMobiles.includes(normPhone) || custLandlines.includes(normPhone))) {
-          return true;
-        }
-      }
-      return false;
-    });
-    if (custReports.length === 0) continue;
-    custReports.sort((a, b) => {
-      const tA = new Date(a.date_created || 0).getTime();
-      const tB = new Date(b.date_created || 0).getTime();
-      return tB - tA;
-    });
-    const lastReport = custReports[0];
-    const negotiatorName = String(lastReport?.negotiator_name || lastReport?.negotiator || "").trim();
-    if (!negotiatorName || negotiatorName === "\u06A9\u0627\u0631\u0634\u0646\u0627\u0633") continue;
-    const normNegotiator = normalizePersianString(negotiatorName);
-    const matchedP = allPersonnelList.find((p) => {
-      const normPName = normalizePersianString(p.name);
-      if (normPName && normNegotiator && (normPName === normNegotiator || normPName.includes(normNegotiator) || normNegotiator.includes(normPName))) {
-        return true;
-      }
-      if (p.username && normalizePersianString(p.username) === normNegotiator) return true;
-      if (String(p.id) === String(lastReport.created_by) || String(p.user_id) === String(lastReport.created_by)) return true;
-      return false;
-    });
-    const targetMarketerId = matchedP ? String(matchedP.id) : lastReport.created_by ? String(lastReport.created_by) : `p-${negotiatorName}`;
-    const targetMarketerName = matchedP ? String(matchedP.name) : negotiatorName;
-    const custPatch = {
-      id: custId,
-      assigned_marketer_id: targetMarketerId,
-      assigned_marketer_name: targetMarketerName,
-      assignment_deadline: defaultDeadlineIso,
-      is_expired: false,
-      claimed_from_pool: false,
-      date_updated: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    patchesMap.set(custId, custPatch);
-    const localIdx = customersData.findIndex((c) => String(c.id) === custId);
-    if (localIdx >= 0) {
-      customersData[localIdx] = {
-        ...customersData[localIdx],
-        ...custPatch
-      };
-    }
-    reassignedCount++;
-    reassignedDetails.push({
-      customerId: custId,
-      companyName: cust.company_name || "\u0628\u062F\u0648\u0646 \u0646\u0627\u0645",
-      marketerName: targetMarketerName
-    });
-  }
-  if (directusUrl && directusAdminToken && patchesMap.size > 0) {
-    try {
-      await directusSafeBatchPatch("customers", patchesMap, 50);
-    } catch (err) {
-      console.warn(`Failed to auto-reassign free customers batch in Directus:`, err.message);
-    }
-  }
-  invalidateCustomersCache();
-  invalidateReportsCache();
-  return {
-    success: true,
-    reassignedCount,
-    details: reassignedDetails,
-    message: `\u0639\u0645\u0644\u06CC\u0627\u062A \u062E\u0648\u062F\u06A9\u0627\u0631 \u062A\u06A9\u0645\u06CC\u0644 \u0634\u062F: ${reassignedCount} \u0645\u0634\u062A\u0631\u06CC \u0622\u0632\u0627\u062F \u06AF\u0632\u0627\u0631\u0634\u200C\u062F\u0627\u0631 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0628\u0647 \u0622\u062E\u0631\u06CC\u0646 \u0628\u0627\u0632\u0627\u0631\u06CC\u0627\u0628 \u06AF\u0632\u0627\u0631\u0634\u200C\u062F\u0647\u0646\u062F\u0647 \u0645\u062A\u0635\u0644 \u06AF\u0631\u062F\u06CC\u062F\u0646\u062F.`
-  };
-}
-var handleAutoAssignFreeWithReports = async (req, res) => {
-  const { tenant_id } = req.body;
-  const result = await autoAssignFreeCustomersWithReports(tenant_id);
-  res.json(result);
-};
-router12.post("/api/migration/auto-assign-free-with-reports", handleAutoAssignFreeWithReports);
-router12.post("/migration/auto-assign-free-with-reports", handleAutoAssignFreeWithReports);
-var handleBackfillTenants = async (req, res) => {
-  const result = await backfillNullTenantsDirectus();
-  invalidateCustomersCache();
-  invalidateReportsCache();
-  res.json({
-    success: true,
-    ...result,
-    message: `\u0627\u0635\u0644\u0627\u062D \u0634\u0646\u0627\u0633\u0647 \u0633\u0627\u0632\u0645\u0627\u0646 \u0628\u0627 \u0645\u0648\u0641\u0642\u06CC\u062A \u0627\u0646\u062C\u0627\u0645 \u0634\u062F: ${result.updatedCustomers} \u0645\u0634\u062A\u0631\u06CC \u0648 ${result.updatedReports} \u06AF\u0632\u0627\u0631\u0634 \u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06CC \u0634\u062F\u0646\u062F.`
-  });
-};
-router12.post("/api/migration/backfill-tenants", handleBackfillTenants);
-router12.post("/migration/backfill-tenants", handleBackfillTenants);
-var system_routes_default = router12;
+var contacts_routes_default = router12;
 
 // server/index.ts
 var __filename = fileURLToPath(import.meta.url);
@@ -8057,7 +8782,7 @@ async function startServer() {
         }
       } catch {
       }
-    }).catch((err) => console.warn("Database initialization warning:", err?.message || err));
+    }).then(() => syncAllCustomersFollowupFromReports()).catch((err) => console.warn("Database initialization warning:", err?.message || err));
   }
   const candidateDistDirs = [
     path.resolve(process.cwd(), "dist"),

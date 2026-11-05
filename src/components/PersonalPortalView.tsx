@@ -165,7 +165,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const avatarToUse = currentPersonnel?.avatar || currentUser?.avatar || '';
+    const avatarToUse = currentUser?.avatar || currentPersonnel?.avatar || '';
     if (avatarToUse) setProfileAvatar(avatarToUse);
     if (currentPersonnel?.name || currentUser?.name) setProfileName(currentPersonnel?.name || currentUser?.name || '');
     if (currentPersonnel?.username || currentUser?.username) setProfileUsername(currentPersonnel?.username || currentUser?.username || '');

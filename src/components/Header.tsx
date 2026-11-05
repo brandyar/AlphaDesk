@@ -84,8 +84,6 @@ export const Header: React.FC<HeaderProps> = ({
   const isAdmin = Boolean(
     currentUser?.is_admin ||
     currentUser?.app_role === 'admin' ||
-    currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-    currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
     currentPersonnel?.role === 'admin'
   );
 
@@ -136,7 +134,11 @@ export const Header: React.FC<HeaderProps> = ({
   const activeTenantName =
     activeTenantId === 'all'
       ? 'همه سازمان‌ها (تجمیعی)'
-      : activeTenant?.name || (userAllowedTenants[0]?.name ?? 'سازمان مرکزی');
+      : activeTenant?.name ||
+        (String(currentPersonnel?.tenant_id) === String(activeTenantId) ? currentPersonnel?.tenant_name : null) ||
+        userAllowedTenants.find(t => String(t.id) === String(activeTenantId))?.name ||
+        currentPersonnel?.tenant_name ||
+        (activeTenantId === 'default' || activeTenantId === '1' ? 'سازمان مرکزی آلفادسک' : `شعبه / سازمان ${activeTenantId}`);
 
 
   return (
@@ -208,10 +210,10 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'bg-emerald-100 text-emerald-800 dark:bg-[#282828] dark:text-[#1DB954] border border-emerald-200 dark:border-[#3e3e3e]'
                 }`}
               >
-                {(currentPersonnel?.avatar || currentUser?.avatar) ? (
+                {(currentUser?.avatar || currentPersonnel?.avatar) ? (
                   <img
-                    key={getAvatarUrl(currentPersonnel?.avatar || currentUser?.avatar)}
-                    src={getAvatarUrl(currentPersonnel?.avatar || currentUser?.avatar)}
+                    key={getAvatarUrl(currentUser?.avatar || currentPersonnel?.avatar)}
+                    src={getAvatarUrl(currentUser?.avatar || currentPersonnel?.avatar)}
                     alt={displayName}
                     onLoad={(e) => {
                       (e.currentTarget as HTMLElement).style.display = 'block';

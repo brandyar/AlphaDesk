@@ -7,8 +7,12 @@ import {
   initialPersonnel,
   personnelData,
   setPersonnelData,
+  customersData,
+  reportsData,
 } from '../config.ts';
-import { directusFetch } from './client.ts';
+import { directusFetch, directusFetchAllPages, fetchAllDirectusItems, directusSafeBatchPatch } from './client.ts';
+import { invalidateCustomersCache } from './cache.ts';
+import { formatAvatarUrl } from '../middlewares/auth.middleware.ts';
 import { Tenant } from '../types.ts';
 
 export function resolveDirectusTenantId(rawTenant: any): number | null {
@@ -171,11 +175,37 @@ export async function backfillNullTenantsDirectus(): Promise<{ updatedCustomers:
 export async function ensureDirectusPersonnel() {
   if (!directusUrl || !directusAdminToken) return;
   try {
+    // 1. Fetch user avatars first
+    const userAvatarMap: Record<string, string> = {};
+    const usersRes = await directusFetch('/users?fields=id,email,avatar&limit=500').catch(() => null);
+    if (usersRes?.data && Array.isArray(usersRes.data)) {
+      for (const u of usersRes.data) {
+        if (u.id && u.avatar) {
+          const formatted = formatAvatarUrl(u.avatar);
+          if (formatted) {
+            userAvatarMap[String(u.id)] = formatted;
+            if (u.email) userAvatarMap[u.email.toLowerCase().trim()] = formatted;
+          }
+        }
+      }
+    }
+
     const res = await directusFetch('/items/personnel?limit=500&sort=id');
     if (res && Array.isArray(res.data)) {
+      const attachAvatars = (list: any[]) =>
+        list.map((p: any) => {
+          let av = formatAvatarUrl(p.avatar);
+          if (!av && p.user_id && userAvatarMap[p.user_id]) av = userAvatarMap[p.user_id];
+          if (!av && p.email && userAvatarMap[p.email.toLowerCase().trim()]) av = userAvatarMap[p.email.toLowerCase().trim()];
+          return {
+            ...p,
+            avatar: av || '',
+          };
+        });
+
       if (res.data.length > 0) {
-        setPersonnelData(res.data);
-        console.log(`Directus personnel synchronized (${res.data.length} records).`);
+        setPersonnelData(attachAvatars(res.data));
+        console.log(`Directus personnel synchronized (${res.data.length} records, ${Object.keys(userAvatarMap).length} user avatars linked).`);
       }
       const existingIds = new Set(res.data.map((p: any) => String(p.id)));
       const missingPersonnel = initialPersonnel.filter((p) => !existingIds.has(String(p.id)));
@@ -199,7 +229,7 @@ export async function ensureDirectusPersonnel() {
         }
         const refreshed = await directusFetch('/items/personnel?limit=500&sort=id').catch(() => null);
         if (refreshed?.data && Array.isArray(refreshed.data)) {
-          setPersonnelData(refreshed.data);
+          setPersonnelData(attachAvatars(refreshed.data));
         }
       }
     }
@@ -413,3 +443,129 @@ export async function resolvePersonnelId(
 
   return { personnelId: null, personnelName: fallbackName };
 }
+
+let isSyncingFollowups = false;
+
+/**
+ * Synchronizes next_followup_date for all customers to match the follow-up date
+ * of their latest registered report (customer_reports sorted by -date_created).
+ * If a customer has reports, their next_followup_date is unconditionally updated to
+ * that latest report's next_followup_date (or null if the latest report left it blank).
+ * If a customer has no reports yet, their existing initial next_followup_date is preserved.
+ */
+export async function syncAllCustomersFollowupFromReports(): Promise<{
+  totalCustomers: number;
+  updatedCount: number;
+  error?: string;
+}> {
+  if (isSyncingFollowups) {
+    console.log('[AlphaDesk] syncAllCustomersFollowupFromReports is already running, skipping overlapping invocation.');
+    return { totalCustomers: 0, updatedCount: 0 };
+  }
+  isSyncingFollowups = true;
+  console.log('[AlphaDesk] Starting synchronization of customer next_followup_date from latest reports...');
+  const nowIso = new Date().toISOString();
+  let updatedCount = 0;
+  let totalCustomers = 0;
+
+  try {
+    if (directusUrl && directusAdminToken) {
+      // 1. Fetch all reports sorted by newest first
+      const reportsRes = await directusFetchAllPages(
+        '/items/customer_reports?fields=id,customer_id,next_followup_date,date_created&sort=-date_created',
+        {},
+        100000
+      );
+      const allReports = reportsRes.data || [];
+
+      // 2. Map latest report per customer
+      const latestReportByCustId = new Map<string, any>();
+      for (const rep of allReports) {
+        if (!rep) continue;
+        const rawCId = rep.customer_id;
+        const cId =
+          typeof rawCId === 'object' && rawCId !== null
+            ? String(rawCId.id)
+            : rawCId !== null && rawCId !== undefined
+            ? String(rawCId)
+            : '';
+        if (cId && !latestReportByCustId.has(cId)) {
+          latestReportByCustId.set(cId, rep);
+        }
+      }
+
+      // 3. Fetch all customers
+      const custsRes = await directusFetchAllPages(
+        '/items/customers?fields=id,company_name,next_followup_date',
+        {},
+        100000
+      );
+      const allCustomers = custsRes.data || [];
+      totalCustomers = allCustomers.length;
+
+      // 4. Identify mismatches
+      const patchMap = new Map<string, any>();
+      for (const cust of allCustomers) {
+        if (!cust || !cust.id) continue;
+        const strId = String(cust.id);
+        const latestRep = latestReportByCustId.get(strId);
+
+        if (latestRep) {
+          const repFollowup = latestRep.next_followup_date
+            ? new Date(latestRep.next_followup_date).toISOString()
+            : null;
+          const custFollowup = cust.next_followup_date
+            ? new Date(cust.next_followup_date).toISOString()
+            : null;
+
+          if (repFollowup !== custFollowup) {
+            patchMap.set(strId, {
+              id: cust.id,
+              next_followup_date: repFollowup,
+              date_updated: nowIso,
+            });
+          }
+        }
+      }
+
+      // 5. Batch patch mismatched customers in Directus
+      if (patchMap.size > 0) {
+        console.log(`[AlphaDesk] Found ${patchMap.size} customer followup date mismatches in Directus. Patching...`);
+        await directusSafeBatchPatch('customers', patchMap, 50);
+        updatedCount = patchMap.size;
+        console.log(`[AlphaDesk] Successfully patched ${updatedCount} customers with their latest report followup date.`);
+        invalidateCustomersCache();
+      } else {
+        console.log('[AlphaDesk] All customers in Directus are already in sync with their latest reports.');
+      }
+    }
+
+    // Also synchronize in-memory fallback store
+    const localReportsSorted = [...reportsData].sort(
+      (a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
+    );
+    const localLatestByCust = new Map<string, any>();
+    for (const r of localReportsSorted) {
+      const cId = String(r.customer_id || '');
+      if (cId && !localLatestByCust.has(cId)) {
+        localLatestByCust.set(cId, r);
+      }
+    }
+
+    for (const c of customersData) {
+      const lr = localLatestByCust.get(String(c.id));
+      if (lr) {
+        const repDate = lr.next_followup_date ? new Date(lr.next_followup_date).toISOString() : null;
+        c.next_followup_date = repDate;
+      }
+    }
+
+    return { totalCustomers, updatedCount };
+  } catch (err: any) {
+    console.error('[AlphaDesk] Error syncing customer followups from latest reports:', err.message);
+    return { totalCustomers, updatedCount, error: err.message };
+  } finally {
+    isSyncingFollowups = false;
+  }
+}
+

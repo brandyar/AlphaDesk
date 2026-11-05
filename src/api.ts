@@ -41,6 +41,21 @@ try {
 
 let currentSessionIat: number = Date.now();
 
+function enforceAuthRole() {
+  if (!currentAuthUser) return;
+  if (currentPersonnelContext && currentPersonnelContext.role) {
+    currentAuthUser.is_admin = currentPersonnelContext.role === 'admin';
+    currentAuthUser.app_role = currentPersonnelContext.role;
+  } else if (currentAuthUser.email) {
+    const isKiani = currentAuthUser.email.toLowerCase().includes('kiani');
+    currentAuthUser.is_admin = isKiani;
+    currentAuthUser.app_role = isKiani ? 'admin' : 'marketer';
+  } else {
+    currentAuthUser.is_admin = false;
+    currentAuthUser.app_role = 'marketer';
+  }
+}
+
 try {
   const saved = localStorage.getItem(AUTH_STORAGE_KEY);
   if (saved) {
@@ -49,8 +64,15 @@ try {
     currentAuthUser = parsed.user || null;
     currentPersonnelContext = parsed.personnel || null;
     currentSessionIat = parsed.session_iat || Date.now();
-    if (parsed.user?.tenant_id && !localStorage.getItem(TENANT_STORAGE_KEY)) {
-      currentTenantId = parsed.user.tenant_id;
+
+    enforceAuthRole();
+
+    const pTenant = parsed.personnel?.tenant_id || parsed.user?.tenant_id;
+    if (pTenant && (!parsed.user?.is_admin || currentTenantId === 'all' || currentTenantId === 'default' || currentTenantId === '1')) {
+      currentTenantId = String(pTenant);
+      try {
+        localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
+      } catch {}
     }
   }
 } catch {}
@@ -68,6 +90,13 @@ export function setActiveTenantId(id: string) {
 
 export function setApiPersonnelContext(p: Personnel | null) {
   currentPersonnelContext = p;
+  enforceAuthRole();
+  if (p?.tenant_id && (!currentAuthUser?.is_admin || currentTenantId === 'all')) {
+    currentTenantId = String(p.tenant_id);
+    try {
+      localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
+    } catch {}
+  }
 }
 
 export function getApiPersonnelContext(): Personnel | null {
@@ -75,6 +104,7 @@ export function getApiPersonnelContext(): Personnel | null {
 }
 
 export function getStoredAuthSession(): { user: AuthUser | null; personnel: Personnel | null; token: string; sessionIat: number } {
+  enforceAuthRole();
   return {
     user: currentAuthUser,
     personnel: currentPersonnelContext,
@@ -88,7 +118,18 @@ export function saveAuthSession(data: AuthResponse) {
   currentAuthUser = data.user || null;
   currentPersonnelContext = data.personnel || null;
   currentSessionIat = Date.now();
-  const sessionToSave = { ...data, session_iat: currentSessionIat };
+
+  enforceAuthRole();
+
+  const pTenant = data.personnel?.tenant_id || data.user?.tenant_id;
+  if (pTenant && (!data.user?.is_admin || currentTenantId === 'all')) {
+    currentTenantId = String(pTenant);
+    try {
+      localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
+    } catch {}
+  }
+
+  const sessionToSave = { ...data, user: currentAuthUser, personnel: currentPersonnelContext, session_iat: currentSessionIat };
   try {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessionToSave));
   } catch {}

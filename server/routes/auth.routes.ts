@@ -301,6 +301,9 @@ router.post('/login', async (req: Request, res: Response) => {
           : (isAdmin ? 'admin' : 'marketer');
 
         let avatarUrl = formatAvatarUrl(meUser.avatar || pItem?.avatar);
+        if (pItem && avatarUrl) {
+          pItem.avatar = avatarUrl;
+        }
 
         if (projectSettingsData.login_pattern) {
           const pInfo = await getPersonnelFullName(pItem?.id || meUser.id, pItem?.name);
@@ -501,7 +504,8 @@ router.get('/me', async (req: Request, res: Response) => {
 
   if (pItem) {
     pItem = enrichPersonnel(pItem);
-    if (!avatarUrl && pItem.avatar) avatarUrl = pItem.avatar;
+    if (!avatarUrl && pItem.avatar) avatarUrl = formatAvatarUrl(pItem.avatar);
+    if (avatarUrl) pItem.avatar = avatarUrl;
   }
 
   const effectiveIsAdmin = Boolean(

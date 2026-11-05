@@ -148,7 +148,13 @@ export default function App() {
 
   // Multi-Tenancy State
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [activeTenantId, setActiveTenantIdState] = useState<string>(() => getActiveTenantId() || 'all');
+  const [activeTenantId, setActiveTenantIdState] = useState<string>(() => {
+    const pTenant = initialSession.personnel?.tenant_id || initialSession.user?.tenant_id;
+    if (pTenant && !initialSession.user?.is_admin) {
+      return String(pTenant);
+    }
+    return getActiveTenantId() || 'all';
+  });
   const [isTenantsModalOpen, setIsTenantsModalOpen] = useState(false);
 
   // Filters & Search
@@ -185,17 +191,17 @@ export default function App() {
   };
 
   const canViewAllCustomers = Boolean(
-    currentUser?.is_admin ||
-      currentPersonnel?.permissions?.can_view_all_customers === true ||
-      ((currentPersonnel?.role === 'admin' || currentPersonnel?.role === 'sales_manager') &&
-        currentPersonnel?.permissions?.can_view_all_customers !== false)
+    currentPersonnel
+      ? (currentPersonnel.role === 'admin' ||
+         currentPersonnel.role === 'sales_manager' ||
+         currentPersonnel.permissions?.can_view_all_customers === true)
+      : currentUser?.is_admin
   );
 
   const isCurrentUserAdmin = Boolean(
-    currentUser?.is_admin ||
-      currentPersonnel?.role === 'admin' ||
-      currentPersonnel?.role === 'sales_manager' ||
-      currentPersonnel?.permissions?.can_manage_personnel === true
+    currentPersonnel
+      ? (currentPersonnel.role === 'admin' || currentPersonnel.permissions?.can_manage_personnel === true)
+      : Boolean(currentUser?.is_admin && currentUser?.app_role === 'admin')
   );
 
   const canAccessTenantsTab =
@@ -290,8 +296,17 @@ export default function App() {
           return;
         }
 
+        const effectiveAvatar = targetPersonnel.avatar || targetUser?.avatar || currentUser?.avatar || '';
+        if (effectiveAvatar) {
+          targetPersonnel = { ...targetPersonnel, avatar: effectiveAvatar };
+        }
+
         setCurrentPersonnel(targetPersonnel);
         setApiPersonnelContext(targetPersonnel);
+
+        if (effectiveAvatar && (!currentUser?.avatar || currentUser.avatar !== effectiveAvatar)) {
+          setCurrentUser((prev) => (prev ? { ...prev, avatar: effectiveAvatar } : prev));
+        }
 
         const allowedTenants = getUserAllowedTenants(targetPersonnel, targetUser, tData);
         const currentActive = getActiveTenantId();
@@ -1074,8 +1089,6 @@ export default function App() {
         isAdmin={Boolean(
           currentUser?.is_admin ||
           currentUser?.app_role === 'admin' ||
-          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
           currentPersonnel?.role === 'admin'
         )}
         isOpenMobile={isMobileMenuOpen}
@@ -1506,8 +1519,6 @@ export default function App() {
         isAdmin={Boolean(
           currentUser?.is_admin ||
           currentUser?.app_role === 'admin' ||
-          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
           currentPersonnel?.role === 'admin'
         )}
         onSaveReport={handleAddCustomerReport}
@@ -1539,8 +1550,6 @@ export default function App() {
         isAdmin={Boolean(
           currentUser?.is_admin ||
           currentUser?.app_role === 'admin' ||
-          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
           currentPersonnel?.role === 'admin'
         )}
         showToast={showToast}
@@ -1565,8 +1574,6 @@ export default function App() {
         isAdmin={Boolean(
           currentUser?.is_admin ||
           currentUser?.app_role === 'admin' ||
-          currentUser?.role_id === '59e261e1-56f4-401e-9889-4971e2c3c4ce' ||
-          currentUser?.role_id === 'a45beaec-0272-4c29-89ee-122dce37f565' ||
           currentPersonnel?.role === 'admin'
         )}
       />

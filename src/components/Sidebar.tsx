@@ -132,7 +132,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const activeTenantName =
     activeTenantId === 'all'
       ? 'همه سازمان‌ها (تجمیعی)'
-      : activeTenant?.name || (userAllowedTenants[0]?.name ?? 'سازمان مرکزی آلفادسک');
+      : activeTenant?.name ||
+        (String(currentPersonnel?.tenant_id) === String(activeTenantId) ? currentPersonnel?.tenant_name : null) ||
+        userAllowedTenants.find(t => String(t.id) === String(activeTenantId))?.name ||
+        currentPersonnel?.tenant_name ||
+        (activeTenantId === 'default' || activeTenantId === '1' ? 'سازمان مرکزی آلفادسک' : `شعبه / سازمان ${activeTenantId}`);
 
 
   const navItems: {
@@ -791,10 +795,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 dark:bg-[#282828] dark:text-[#1DB954] flex items-center justify-center font-bold text-xs border border-emerald-200 dark:border-[#3e3e3e] flex-shrink-0 overflow-hidden shadow-xs">
-              {(currentPersonnel?.avatar || currentUser?.avatar) ? (
+              {(currentUser?.avatar || currentPersonnel?.avatar) ? (
                 <img
-                  key={getAvatarUrl(currentPersonnel?.avatar || currentUser?.avatar)}
-                  src={getAvatarUrl(currentPersonnel?.avatar || currentUser?.avatar)}
+                  key={getAvatarUrl(currentUser?.avatar || currentPersonnel?.avatar)}
+                  src={getAvatarUrl(currentUser?.avatar || currentPersonnel?.avatar)}
                   alt="avatar"
                   className="w-full h-full object-cover"
                   onLoad={(e) => {
