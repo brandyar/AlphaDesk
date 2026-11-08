@@ -540,6 +540,28 @@ export const handleAssetProxy = async (req: Request, res: Response, next?: any) 
         clearTimeout(fTimeoutId);
       }
 
+      // Step 4.5: Search directus_files if cleanId might be filename_disk or filename_download
+      if (!assetRes || !assetRes.ok) {
+        try {
+          const fileSearch = await directusFetch(
+            `/files?filter[_or][0][id][_eq]=${encodeURIComponent(cleanId)}&filter[_or][1][filename_disk][_eq]=${encodeURIComponent(cleanId)}&filter[_or][2][filename_download][_eq]=${encodeURIComponent(cleanId)}&fields=id,filename_disk&limit=1`
+          ).catch(() => null);
+          if (fileSearch?.data?.[0]?.id) {
+            const resolvedFileId = fileSearch.data[0].id;
+            const fileUrl = `${cleanBaseUrl}/assets/${resolvedFileId}${tokenToUse ? '?access_token=' + encodeURIComponent(tokenToUse) : ''}`;
+            assetRes = await fetch(fileUrl, {
+              headers: tokenToUse ? { ...baseHeaders, Authorization: `Bearer ${tokenToUse}` } : baseHeaders,
+            }).catch(() => null);
+            if (!assetRes || !assetRes.ok) {
+              const downloadUrl = `${cleanBaseUrl}/files/${resolvedFileId}/download${tokenToUse ? '?access_token=' + encodeURIComponent(tokenToUse) : ''}`;
+              assetRes = await fetch(downloadUrl, {
+                headers: tokenToUse ? { ...baseHeaders, Authorization: `Bearer ${tokenToUse}` } : baseHeaders,
+              }).catch(() => null);
+            }
+          }
+        } catch {}
+      }
+
       // Step 5: If cleanId was actually a user_id, email, or personnel ID, resolve directus_users avatar UUID
       if (!assetRes || !assetRes.ok) {
         try {
@@ -581,6 +603,12 @@ export const handleAssetProxy = async (req: Request, res: Response, next?: any) 
             assetRes = await fetch(fileUrl, {
               headers: tokenToUse ? { ...baseHeaders, Authorization: `Bearer ${tokenToUse}` } : baseHeaders,
             }).catch(() => null);
+            if (!assetRes || !assetRes.ok) {
+              const downloadUrl = `${cleanBaseUrl}/files/${directusUserAvatarFileId}/download${tokenToUse ? '?access_token=' + encodeURIComponent(tokenToUse) : ''}`;
+              assetRes = await fetch(downloadUrl, {
+                headers: tokenToUse ? { ...baseHeaders, Authorization: `Bearer ${tokenToUse}` } : baseHeaders,
+              }).catch(() => null);
+            }
           }
         } catch {}
       }

@@ -6,6 +6,7 @@ import {
   globalSessionRevocationTimestamp,
   DIRECTUS_ADMIN_ROLE_IDS,
   latestAccessToken,
+  setLatestAccessToken,
 } from '../config.ts';
 import { RequestUserContext } from '../types.ts';
 
@@ -143,6 +144,12 @@ export function resolveUserAvatar(user?: any, personnel?: any): string {
 
 
 export function getRequestUser(req: Request): RequestUserContext {
+  const reqAuth = (req.headers['authorization'] as string) || '';
+  if (reqAuth) {
+    const token = reqAuth.replace(/^Bearer\s+/i, '').trim();
+    if (token) setLatestAccessToken(token);
+  }
+
   const userId =
     (req.headers['x-user-id'] as string) || (req.query.user_id as string) || '';
   const personnelId =

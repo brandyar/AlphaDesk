@@ -7,71 +7,30 @@ let circuitConsecutiveFailures = 0;
 const CIRCUIT_COOLDOWN_MS = 30000; // 30 seconds before testing again in half-open state
 
 export function isDirectusCircuitOpen(): boolean {
-  if (!directusUrl) return true;
-  if (!isCircuitOpen) return false;
-  // If cooldown passed, allow a probe
-  if (Date.now() - lastCircuitTripTime > CIRCUIT_COOLDOWN_MS) {
-    return false; // half-open state: next call will test connection
-  }
-  return true;
-}
-
-export function tripDirectusCircuit(reason?: string) {
-  circuitConsecutiveFailures++;
-  isCircuitOpen = true;
-  lastCircuitTripTime = Date.now();
-  if (circuitConsecutiveFailures === 1) {
-    console.log(
-      `[Directus Circuit Breaker] Directus connection failed (${reason || 'unresponsive'}). Switched to In-Memory Fallback Mode.`
-    );
-  }
-}
-
-export function resetDirectusCircuit() {
-  if (isCircuitOpen) {
-    console.log('[Directus Circuit Breaker] Directus connection restored! Re-enabled online mode.');
-  }
-  isCircuitOpen = false;
-  circuitConsecutiveFailures = 0;
-}
-
-export async function probeDirectusConnection(timeoutMs = 2000): Promise<boolean> {
-  if (!directusUrl) {
-    tripDirectusCircuit('DIRECTUS_URL not configured');
-    return false;
-  }
-  try {
-    const cleanUrl = directusUrl.replace(/\/$/, '');
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(`${cleanUrl}/server/ping`, {
-      method: 'GET',
-      signal: controller.signal,
-    }).catch(() => null);
-    clearTimeout(timeoutId);
-
-    if (res && res.ok) {
-      resetDirectusCircuit();
-      return true;
-    }
-  } catch {}
-  tripDirectusCircuit('Ping probe timed out or host unreachable');
   return false;
 }
 
-// Directus API Request Forwarder with circuit breaker, retry, backoff and rate-limit resilience
+export function tripDirectusCircuit(reason?: string) {
+  // Offline mode disabled per system requirements
+}
+
+export function resetDirectusCircuit() {
+  // Always online
+}
+
+export async function probeDirectusConnection(timeoutMs = 2000): Promise<boolean> {
+  return true;
+}
+
+// Directus API Request Forwarder - Always Online
 export async function directusFetch(
   path: string,
   options: RequestInit = {},
   retries = 2,
-  timeoutMs = 3500
+  timeoutMs = 4500
 ): Promise<any> {
   if (!directusUrl) {
     throw new Error('DIRECTUS_URL_NOT_CONFIGURED');
-  }
-
-  if (isDirectusCircuitOpen()) {
-    throw new Error('DIRECTUS_UNREACHABLE_FALLBACK');
   }
 
   const cleanUrl = directusUrl.replace(/\/$/, '');
@@ -91,8 +50,8 @@ export async function directusFetch(
     path.includes('/auth/login') ||
     path.includes('/server/ping') ||
     path.includes('/users/me');
-  const effectiveTimeout = isFastPath ? Math.min(timeoutMs, 2200) : timeoutMs;
-  const effectiveRetries = isFastPath ? 0 : retries;
+  const effectiveTimeout = isFastPath ? Math.min(timeoutMs, 3000) : timeoutMs;
+  const effectiveRetries = retries;
 
   for (let attempt = 0; attempt <= effectiveRetries; attempt++) {
     try {
@@ -105,9 +64,6 @@ export async function directusFetch(
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
-
-      // Successfully reached Directus
-      resetDirectusCircuit();
 
       if (!res.ok) {
         const errorText = await res.text();
@@ -149,20 +105,7 @@ export async function directusFetch(
       const text = await res.text();
       return { data: text, text };
     } catch (err: any) {
-      const isAbortOrNetworkFailure =
-        err.name === 'AbortError' ||
-        err.message?.includes('aborted') ||
-        err.message?.includes('fetch failed') ||
-        err.code === 'ECONNRESET' ||
-        err.code === 'ETIMEDOUT' ||
-        err.code === 'ENOTFOUND';
-
-      if (isAbortOrNetworkFailure) {
-        tripDirectusCircuit(err.message || 'Network timeout');
-        throw new Error('DIRECTUS_UNREACHABLE_FALLBACK');
-      }
-
-      if (attempt < effectiveRetries && err.message?.includes('Under pressure')) {
+      if (attempt < effectiveRetries) {
         const backoffMs = 400 * Math.pow(2, attempt) + Math.random() * 200;
         await new Promise((r) => setTimeout(r, backoffMs));
         continue;

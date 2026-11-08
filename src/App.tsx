@@ -236,7 +236,7 @@ export default function App() {
     const target = tenants.find((t) => String(t.id) === String(tenantId));
     const name = tenantId === 'all' ? 'همه سازمان‌ها (تجمیعی)' : target?.name || 'سازمان منتخب';
     showToast(`سازمان فعال: ${name}`, 'info');
-    setDashboardSummary(null);
+    setDashboardSummary((prev) => prev);
     loadAllData(currentPersonnel, currentUser);
   };
 
@@ -246,7 +246,9 @@ export default function App() {
   // Initial & Reactive Data Load with intelligent user-scoped querying and caching
   const loadAllData = async (activeP?: Personnel | null, activeUser?: AuthUser | null) => {
     const currentVersion = ++fetchVersionRef.current;
-    setLoading(true);
+    if (!customers || customers.length === 0) {
+      setLoading(true);
+    }
 
     try {
       const targetUser = activeUser !== undefined ? activeUser : currentUser;
@@ -267,14 +269,14 @@ export default function App() {
       // If a newer fetch was started, discard stale results
       if (currentVersion !== fetchVersionRef.current) return;
 
-      setPersonnelList(pData);
-      setTenants(tData);
-      setBffStatus(bStatus);
+      if (Array.isArray(pData) && pData.length > 0) setPersonnelList(pData);
+      if (Array.isArray(tData) && tData.length > 0) setTenants(tData);
+      if (bStatus) setBffStatus(bStatus);
       if (dSummary) setDashboardSummary(dSummary);
-      if (Array.isArray(lData)) setLeaveRequests(lData);
-      if (Array.isArray(aData)) setAdvanceRequests(aData);
-      if (Array.isArray(cData)) setCustomers(cData);
-      if (Array.isArray(rData)) setReports(rData);
+      if (Array.isArray(lData) && (lData.length > 0 || leaveRequests.length === 0)) setLeaveRequests(lData);
+      if (Array.isArray(aData) && (aData.length > 0 || advanceRequests.length === 0)) setAdvanceRequests(aData);
+      if (Array.isArray(cData) && (cData.length > 0 || customers.length === 0)) setCustomers(cData);
+      if (Array.isArray(rData) && (rData.length > 0 || reports.length === 0)) setReports(rData);
 
       // Accurately match logged-in user to their specific personnel record
       let targetPersonnel = activeP !== undefined ? activeP : null;
