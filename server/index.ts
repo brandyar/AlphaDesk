@@ -8,7 +8,7 @@ import {
   directusAdminToken,
   updateProjectSettingsData,
 } from './config.ts';
-import { directusFetch } from './directus/client.ts';
+import { directusFetch, probeDirectusConnection, isDirectusCircuitOpen } from './directus/client.ts';
 import { ensureDirectusTenants, ensureDirectusPersonnel, syncAllCustomersFollowupFromReports } from './directus/sync.ts';
 import { rateLimiter } from './middlewares/rateLimit.middleware.ts';
 import { checkInactivePersonnel } from './middlewares/auth.middleware.ts';
@@ -37,7 +37,7 @@ app.get(['/health', '/api/health'], (req, res) => {
     status: 'ok',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
-    directusConnected: Boolean(directusUrl && directusAdminToken),
+    directusConnected: Boolean(directusUrl && directusAdminToken && !isDirectusCircuitOpen()),
   });
 });
 
@@ -71,21 +71,28 @@ app.use(systemRoutes);
 
 export async function startServer() {
   if (directusUrl && directusAdminToken) {
-    ensureDirectusTenants()
-      .then(() => ensureDirectusPersonnel())
-      .then(async () => {
-        try {
-          const resp = await directusFetch('/items/project_settings').catch(() => null);
-          if (resp?.data) {
-            const item = Array.isArray(resp.data) ? resp.data[0] : resp.data;
-            if (item) {
-              updateProjectSettingsData(item);
+    // Fast probe connection with 2s timeout
+    const isDirectusOnline = await probeDirectusConnection(2000);
+    if (isDirectusOnline) {
+      console.log('Directus database reachable. Initializing data sync...');
+      ensureDirectusTenants()
+        .then(() => ensureDirectusPersonnel())
+        .then(async () => {
+          try {
+            const resp = await directusFetch('/items/project_settings').catch(() => null);
+            if (resp?.data) {
+              const item = Array.isArray(resp.data) ? resp.data[0] : resp.data;
+              if (item) {
+                updateProjectSettingsData(item);
+              }
             }
-          }
-        } catch {}
-      })
-      .then(() => syncAllCustomersFollowupFromReports())
-      .catch((err) => console.warn('Database initialization warning:', err?.message || err));
+          } catch {}
+        })
+        .then(() => syncAllCustomersFollowupFromReports())
+        .catch((err) => console.warn('Database initialization warning:', err?.message || err));
+    } else {
+      console.log('⚡ Directus server is unreachable or offline. Running immediately in In-Memory Fallback Mode (zero lag).');
+    }
   }
 
   // Robust dist folder discovery across root server.js, tsx, or custom working directories
@@ -145,7 +152,11 @@ export async function startServer() {
 
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on port ${PORT} (0.0.0.0)`);
-    console.log(`BFF Mode: ${directusUrl ? 'Online Database Connected' : 'Offline In-Memory Mode'}`);
+    console.log(
+      `BFF Mode: ${
+        directusUrl && !isDirectusCircuitOpen() ? 'Online Database Connected' : 'Offline In-Memory Mode'
+      }`
+    );
   });
 
   server.on('error', (err: any) => {

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { X, MessageSquareText, Building, User, Calendar, Phone, FileCheck2, Hash, DollarSign, PackageCheck } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { X, MessageSquareText, Building, User, Calendar, Phone, FileCheck2, Hash, DollarSign, PackageCheck, AlertCircle } from 'lucide-react';
 import { Customer, CustomerReport, Personnel, NegotiationStatus, AuthUser } from '../types';
 import { PersianDatePicker } from './PersianDatePicker';
-import { formatToman } from '../utils';
+import { formatToman, getCustomerPhoneOptions } from '../utils';
 
 interface AddReportModalProps {
   isOpen: boolean;
@@ -39,19 +39,31 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
   );
 
   const [customerId, setCustomerId] = useState(preselectedCustomerId || customers[0]?.id || '');
+  const selectedCustomer = useMemo(() => customers.find((c) => c.id === customerId), [customers, customerId]);
+  const customerPhoneOptions = useMemo(() => getCustomerPhoneOptions(selectedCustomer), [selectedCustomer]);
+
+  // Negotiator name for organization
   const [negotiatorName, setNegotiatorName] = useState(
     currentPersonnel?.name || currentUser?.name || 'کارشناس پیگیری'
   );
-  const [customerNegotiatorName, setCustomerNegotiatorName] = useState(
-    customers.find((c) => c.id === (preselectedCustomerId || customers[0]?.id))?.negotiator_name || ''
-  );
-  const [negotiationPhone, setNegotiationPhone] = useState('');
+
+  // Negotiator on customer side (must be initially EMPTY as requested)
+  const [customerNegotiatorName, setCustomerNegotiatorName] = useState('');
+
+  // Customer phone selection
+  const [negotiationPhone, setNegotiationPhone] = useState(customerPhoneOptions[0]?.number || '');
+  const [isCustomPhone, setIsCustomPhone] = useState(customerPhoneOptions.length === 0);
+
   const [reportText, setReportText] = useState('');
   const [negotiationScore, setNegotiationScore] = useState<number>(7);
   const [negotiationStatus, setNegotiationStatus] = useState<NegotiationStatus>('پیگیری قبل از انقضا');
-  const [nextFollowupDate, setNextFollowupDate] = useState(
-    new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-  );
+
+  // Next follow-up datetime (default: 2 hours from now)
+  const [nextFollowupDate, setNextFollowupDate] = useState(() => {
+    return new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+  });
+
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Contract / Invoice fields
   const [contractNumber, setContractNumber] = useState('');
@@ -61,19 +73,47 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
 
   const [saving, setSaving] = useState(false);
 
-  const selectedCustomer = customers.find((c) => c.id === customerId);
+  // When customer selection changes, update default phone
+  useEffect(() => {
+    if (customerPhoneOptions.length > 0) {
+      setNegotiationPhone(customerPhoneOptions[0].number);
+      setIsCustomPhone(false);
+    } else {
+      setNegotiationPhone('');
+      setIsCustomPhone(true);
+    }
+  }, [customerId, customerPhoneOptions]);
 
   const isContractStatus = negotiationStatus === 'قرارداد / فاکتور' || negotiationStatus === 'قرارداد';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
     if (!customerId) {
-      alert('لطفاً مشتری را انتخاب کنید.');
+      setFormError('لطفاً مشتری را انتخاب کنید.');
       return;
     }
     if (!reportText.trim()) {
-      alert('لطفاً متن گزارش مذاکره را وارد کنید.');
+      setFormError('لطفاً متن گزارش مذاکره را وارد کنید.');
       return;
+    }
+    if (!negotiationPhone.trim()) {
+      setFormError('لطفاً شماره تماس مذاکره را انتخاب یا وارد کنید.');
+      return;
+    }
+
+    // Validate next followup date/time cannot be in the past
+    if (nextFollowupDate) {
+      const followupTime = new Date(nextFollowupDate).getTime();
+      if (isNaN(followupTime)) {
+        setFormError('فرمت تاریخ و ساعت پیگیری بعدی نامعتبر است.');
+        return;
+      }
+      if (followupTime <= Date.now()) {
+        setFormError('تاریخ و ساعت پیگیری بعدی نمی‌تواند در گذشته باشد. لطفاً ساعت و زمان پیگیری را برای ساعتی در آینده تنظیم کنید.');
+        return;
+      }
     }
 
     setSaving(true);
@@ -88,7 +128,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
         customer_id: customerId,
         negotiator_name: finalNegotiator,
         customer_negotiator_name: customerNegotiatorName.trim() || undefined,
-        negotiation_phone: negotiationPhone || (Array.isArray(selectedCustomer?.mobile_numbers) ? selectedCustomer.mobile_numbers[0] : '') || '',
+        negotiation_phone: negotiationPhone.trim(),
         report_text: reportText.trim(),
         negotiation_score: Number(negotiationScore),
         next_followup_date: nextFollowupDate ? new Date(nextFollowupDate).toISOString() : '',
@@ -100,7 +140,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
       });
       onClose();
     } catch (err: any) {
-      alert('خطا در ثبت گزارش: ' + err.message);
+      setFormError('خطا در ثبت گزارش: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -121,7 +161,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
       <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-8 max-h-[95vh] flex flex-col text-slate-900 dark:text-white">
         <div className="p-4 sm:p-5 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-[#1DB954]/15 text-emerald-700 dark:text-[#1DB954] flex items-center justify-center border border-emerald-300 dark:border-[#1DB954]/30 flex-shrink-0">
+            <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-[#1DB954]/15 text-emerald-700 dark:text-[#1DB954] flex items-center justify-center border border-emerald-300 dark:border-[#1DB954]/30 shrink-0">
               <MessageSquareText className="w-4 h-4" />
             </div>
             <div>
@@ -131,13 +171,21 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+          {/* Error Message Banner */}
+          {formError && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-300 dark:bg-rose-950/40 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-400 font-bold flex items-center gap-2 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-[#E22134]" />
+              <span>{formError}</span>
+            </div>
+          )}
+
           {/* Customer Selection */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
@@ -147,13 +195,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
               value={customerId}
               onChange={(e) => {
                 setCustomerId(e.target.value);
-                const c = customers.find((cust) => cust.id === e.target.value);
-                if (c && Array.isArray(c.mobile_numbers) && c.mobile_numbers[0]) {
-                  setNegotiationPhone(c.mobile_numbers[0]);
-                }
-                if (c?.negotiator_name) {
-                  setCustomerNegotiatorName(c.negotiator_name);
-                }
+                setFormError(null);
               }}
               className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
             >
@@ -166,7 +208,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Customer Negotiator Name */}
+            {/* Customer Negotiator Name (Empty by default) */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                 طرف مذاکره سمت مشتری
@@ -174,37 +216,129 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
               <input
                 type="text"
                 value={customerNegotiatorName}
-                onChange={(e) => setCustomerNegotiatorName(e.target.value)}
+                onChange={(e) => {
+                  setCustomerNegotiatorName(e.target.value);
+                  setFormError(null);
+                }}
                 placeholder="نام طرف مذاکره سمت مشتری..."
                 className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
               />
+              {selectedCustomer && (selectedCustomer.manager_name || selectedCustomer.negotiator_name) && (
+                <div className="flex flex-wrap items-center gap-1 mt-1.5 text-[10px]">
+                  <span className="text-slate-400 dark:text-[#777]">پیشنهاد:</span>
+                  {selectedCustomer.manager_name && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomerNegotiatorName(selectedCustomer.manager_name)}
+                      className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-emerald-100 dark:bg-[#333] dark:hover:bg-[#1DB954]/20 text-slate-700 hover:text-emerald-700 dark:text-[#ccc] dark:hover:text-[#1DB954] transition-colors cursor-pointer"
+                    >
+                      {selectedCustomer.manager_name} (مدیر)
+                    </button>
+                  )}
+                  {selectedCustomer.negotiator_name && selectedCustomer.negotiator_name !== selectedCustomer.manager_name && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomerNegotiatorName(selectedCustomer.negotiator_name)}
+                      className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-emerald-100 dark:bg-[#333] dark:hover:bg-[#1DB954]/20 text-slate-700 hover:text-emerald-700 dark:text-[#ccc] dark:hover:text-[#1DB954] transition-colors cursor-pointer"
+                    >
+                      {selectedCustomer.negotiator_name}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Negotiation Phone */}
+            {/* Negotiation Phone (Selectable from Customer's phones) */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                 شماره تماس مذاکره
               </label>
-              <input
-                type="text"
-                dir="ltr"
-                value={negotiationPhone}
-                onChange={(e) => setNegotiationPhone(e.target.value)}
-                placeholder="0912..."
-                className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
-              />
+              {customerPhoneOptions.length > 0 ? (
+                <div className="space-y-1.5">
+                  <select
+                    value={isCustomPhone ? '__custom__' : negotiationPhone}
+                    onChange={(e) => {
+                      setFormError(null);
+                      if (e.target.value === '__custom__') {
+                        setIsCustomPhone(true);
+                        setNegotiationPhone('');
+                      } else {
+                        setIsCustomPhone(false);
+                        setNegotiationPhone(e.target.value);
+                      }
+                    }}
+                    className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                  >
+                    {customerPhoneOptions.map((opt) => (
+                      <option key={opt.number} value={opt.number}>
+                        {opt.number} ({opt.label})
+                      </option>
+                    ))}
+                    <option value="__custom__">➕ شماره دیگر / ورود دستی...</option>
+                  </select>
+
+                  {/* Quick clickable chips */}
+                  <div className="flex flex-wrap gap-1">
+                    {customerPhoneOptions.map((opt) => (
+                      <button
+                        key={opt.number}
+                        type="button"
+                        onClick={() => {
+                          setNegotiationPhone(opt.number);
+                          setIsCustomPhone(false);
+                          setFormError(null);
+                        }}
+                        className={`text-[10px] px-2 py-0.5 rounded-md border font-mono transition-colors cursor-pointer ${
+                          !isCustomPhone && negotiationPhone === opt.number
+                            ? 'bg-emerald-500 text-white border-emerald-500 font-bold dark:bg-[#1DB954] dark:text-black'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 dark:bg-[#282828] dark:hover:bg-[#333] dark:text-[#ccc] dark:border-[#383838]'
+                        }`}
+                        title={opt.label}
+                      >
+                        {opt.number}
+                      </button>
+                    ))}
+                  </div>
+
+                  {isCustomPhone && (
+                    <input
+                      type="text"
+                      dir="ltr"
+                      value={negotiationPhone}
+                      onChange={(e) => {
+                        setNegotiationPhone(e.target.value);
+                        setFormError(null);
+                      }}
+                      placeholder="0912..."
+                      className="w-full h-9 px-3 bg-white dark:bg-[#282828] border border-emerald-500 rounded-md text-xs text-slate-900 dark:text-white font-mono focus:outline-none mt-1 animate-in fade-in"
+                    />
+                  )}
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  dir="ltr"
+                  value={negotiationPhone}
+                  onChange={(e) => {
+                    setNegotiationPhone(e.target.value);
+                    setFormError(null);
+                  }}
+                  placeholder="0912..."
+                  className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954] font-mono"
+                />
+              )}
             </div>
           </div>
 
           {userIsAdmin && (
-            <div className="mb-2">
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#222] border border-slate-200 dark:border-[#333]">
               <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
-                کارشناس ثبت‌کننده (ویژه مدیر)
+                کارشناس ثبت‌کننده سازمان (ویژه مدیر)
               </label>
               <select
                 value={negotiatorName}
                 onChange={(e) => setNegotiatorName(e.target.value)}
-                className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
+                className="w-full h-9 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-[#444] rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
               >
                 {personnelList.map((p) => (
                   <option key={p.id} value={p.name}>
@@ -253,12 +387,18 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
               />
             </div>
 
-            {/* Next Follow-up Date */}
+            {/* Next Follow-up Date and Time */}
             <div>
               <PersianDatePicker
-                label="تاریخ پیگیری بعدی (شمسی)"
+                label="موعد پیگیری بعدی"
                 value={nextFollowupDate}
-                onChange={(iso) => setNextFollowupDate(iso)}
+                onChange={(iso) => {
+                  setNextFollowupDate(iso);
+                  setFormError(null);
+                }}
+                showTime={true}
+                disablePast={true}
+                showQuickPresets={false}
               />
             </div>
           </div>
@@ -347,7 +487,10 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
               rows={4}
               required
               value={reportText}
-              onChange={(e) => setReportText(e.target.value)}
+              onChange={(e) => {
+                setReportText(e.target.value);
+                setFormError(null);
+              }}
               placeholder="شرح دقیق مکالمه، پاسخ مشتری، نیازها و بندهای مورد مذاکره..."
               className="w-full p-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"
             />
@@ -358,14 +501,14 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="h-10 px-5 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#535353] dark:hover:border-white text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-[#B3B3B3] dark:hover:text-white transition-colors"
+              className="h-10 px-5 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#535353] dark:hover:border-white text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-[#B3B3B3] dark:hover:text-white transition-colors cursor-pointer"
             >
               انصراف
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="h-10 px-6 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20"
+              className="h-10 px-6 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 cursor-pointer"
             >
               {saving ? 'در حال ثبت...' : 'ثبت و اعمال گزارش'}
             </button>

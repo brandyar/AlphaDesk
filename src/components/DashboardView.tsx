@@ -24,7 +24,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Customer, CustomerReport, ColdLead, AdministrativeReport, Personnel, BffStatus } from '../types';
-import { formatTimeRemaining, formatPersianDate, formatToman, getStatusTheme, toPersianDigits } from '../utils';
+import { formatTimeRemaining, formatPersianDate, formatFollowupDateTime, formatToman, getStatusTheme, toPersianDigits } from '../utils';
 import { DashboardSummary, fetchDashboardSummary } from '../api';
 
 interface DashboardViewProps {
@@ -422,7 +422,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           {c.status}
                         </span>
                         <span className="text-xs text-slate-800 dark:text-white font-mono bg-slate-200/80 dark:bg-[#222] px-2.5 py-1 rounded-lg border border-slate-300 dark:border-[#333]">
-                          {formatPersianDate(c.next_followup_date)}
+                          {formatFollowupDateTime(c.next_followup_date)}
                         </span>
                       </div>
                     </div>

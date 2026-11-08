@@ -137,8 +137,9 @@ export const Header: React.FC<HeaderProps> = ({
       : activeTenant?.name ||
         (String(currentPersonnel?.tenant_id) === String(activeTenantId) ? currentPersonnel?.tenant_name : null) ||
         userAllowedTenants.find(t => String(t.id) === String(activeTenantId))?.name ||
+        tenants.find(t => String(t.id) === String(activeTenantId))?.name ||
         currentPersonnel?.tenant_name ||
-        (activeTenantId === 'default' || activeTenantId === '1' ? 'سازمان مرکزی آلفادسک' : `شعبه / سازمان ${activeTenantId}`);
+        (activeTenantId === 'default' || activeTenantId === '1' ? 'سازمان مرکزی آلفادسک' : 'سازمان مرکزی');
 
 
   return (
@@ -210,33 +211,33 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'bg-emerald-100 text-emerald-800 dark:bg-[#282828] dark:text-[#1DB954] border border-emerald-200 dark:border-[#3e3e3e]'
                 }`}
               >
-                {(currentUser?.avatar || currentPersonnel?.avatar) ? (
-                  <img
-                    key={getAvatarUrl(currentUser?.avatar || currentPersonnel?.avatar)}
-                    src={getAvatarUrl(currentUser?.avatar || currentPersonnel?.avatar)}
-                    alt={displayName}
-                    onLoad={(e) => {
-                      (e.currentTarget as HTMLElement).style.display = 'block';
-                      const parent = (e.currentTarget as HTMLElement).parentElement;
-                      if (parent) {
-                        const existing = parent.querySelector('.header-avatar-fallback');
-                        if (existing) existing.remove();
+                <img
+                  key={getAvatarUrl(currentUser?.avatar || currentPersonnel?.avatar, displayName)}
+                  src={getAvatarUrl(currentUser?.avatar || currentPersonnel?.avatar, displayName)}
+                  alt={displayName}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (!target.dataset.fallbackTried) {
+                      target.dataset.fallbackTried = 'true';
+                      const av = currentUser?.avatar || currentPersonnel?.avatar;
+                      let fileKey = typeof av === 'object' && av !== null ? ((av as any).id || (av as any).filename_disk || (av as any).filename_download) : av;
+                      if (fileKey && typeof fileKey === 'string') {
+                        const cleanKey = fileKey.replace(/^https?:\/\/[^\/]+\/assets\//i, '').replace(/^\/api\/assets\//i, '').replace(/^\/assets\//i, '').split('?')[0];
+                        if (cleanKey) {
+                          try {
+                            const saved = localStorage.getItem('crm_auth_session');
+                            const token = saved ? JSON.parse(saved)?.access_token || '' : '';
+                            const tQuery = token ? `?access_token=${encodeURIComponent(token)}` : '';
+                            target.src = `/api/assets/${encodeURIComponent(cleanKey)}${tQuery}`;
+                          } catch {
+                            target.src = `/api/assets/${encodeURIComponent(cleanKey)}`;
+                          }
+                        }
                       }
-                    }}
-                    onError={(e) => {
-                      (e.currentTarget as HTMLElement).style.display = 'none';
-                      const parent = (e.currentTarget as HTMLElement).parentElement;
-                      if (parent && !parent.querySelector('.header-avatar-fallback')) {
-                        const span = document.createElement('span');
-                        span.className = 'header-avatar-fallback font-bold text-xs';
-                        span.textContent = initial;
-                        parent.appendChild(span);
-                      }
-                    }}
-                  />
-                ) : (
-                  <span>{initial}</span>
-                )}
+                    }
+                  }}
+                />
               </div>
 
               <div className="hidden md:flex flex-col text-right leading-tight pr-0.5">

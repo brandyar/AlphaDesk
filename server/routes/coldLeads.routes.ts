@@ -5,6 +5,8 @@ import {
   directusAdminToken,
   coldLeadsData,
   setColdLeadsData,
+  customersData,
+  contactsData,
 } from '../config.ts';
 import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
 import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
@@ -112,11 +114,9 @@ router.post('/api/cold-leads', async (req: Request, res: Response) => {
         assigned_to_name: finalAssignedName
       });
     } catch (err: any) {
-      console.error('Cold lead error:', err.message);
-      return res.status(500).json({
-        error: 'LEAD_SAVE_FAILED',
-        message: `خطا در ثبت شماره در پایگاه داده مرکزی: ${err.message}`
-      });
+      if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
+        console.warn('Cold lead Directus notice, using local store:', err.message);
+      }
     }
   }
 
@@ -294,15 +294,21 @@ router.post('/api/cold-leads/:id/convert', async (req: Request, res: Response) =
       const fullCustomer = { ...finalCust, contacts: [contactItem] };
       return res.json({ success: true, customer: fullCustomer });
     } catch (err: any) {
-      console.error('Convert lead error:', err.message);
-      return res.status(500).json({
-        error: 'CONVERT_FAILED',
-        message: `خطا در تبدیل لید به مشتری در پایگاه داده مرکزی: ${err.message}`
-      });
+      if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
+        console.warn('Convert lead Directus notice, using local store:', err.message);
+      }
     }
   }
 
-  res.status(500).json({ error: 'پایگاه داده در دسترس نیست.' });
+  customersData.unshift(customerPayload as any);
+  contactsData.unshift(contactItem);
+  const leadIdx = coldLeadsData.findIndex((l) => String(l.id) === String(req.params.id));
+  if (leadIdx >= 0) {
+    coldLeadsData[leadIdx].status = 'تبدیل شده به مشتری';
+    coldLeadsData[leadIdx].converted_customer_id = newCustId;
+  }
+  const fullCustomer = { ...customerPayload, contacts: [contactItem] };
+  res.json({ success: true, customer: fullCustomer });
 });
 
 export default router;

@@ -15,8 +15,16 @@ import {
 
 dotenv.config();
 
-export let directusUrl = (process.env.DIRECTUS_URL || '').trim();
+export let directusUrl = (process.env.DIRECTUS_URL || 'https://api.alphadesk.ir').trim();
 export let directusAdminToken = (process.env.DIRECTUS_ADMIN_TOKEN || '').trim();
+export let latestAccessToken = '';
+
+export function setLatestAccessToken(token?: string) {
+  if (token && typeof token === 'string' && token.trim()) {
+    latestAccessToken = token.trim();
+  }
+}
+
 function resolvePort(): number {
   const portArgIndex = process.argv.indexOf('--port');
   if (portArgIndex !== -1 && process.argv[portArgIndex + 1]) {
@@ -49,6 +57,7 @@ export const initialPersonnel: Personnel[] = [
     phone: '09121112233',
     status: 'active',
     active: true,
+    avatar: '/api/assets/p-1',
   },
   {
     id: 'p-2',
@@ -59,6 +68,7 @@ export const initialPersonnel: Personnel[] = [
     phone: '09123456789',
     status: 'active',
     active: true,
+    avatar: '/api/assets/p-2',
   },
   {
     id: 'p-3',
@@ -69,6 +79,7 @@ export const initialPersonnel: Personnel[] = [
     phone: '09351234567',
     status: 'active',
     active: true,
+    avatar: '/api/assets/p-3',
   },
   {
     id: 'p-4',
@@ -79,6 +90,7 @@ export const initialPersonnel: Personnel[] = [
     phone: '09197654321',
     status: 'active',
     active: true,
+    avatar: '/api/assets/p-4',
   },
 ];
 
@@ -207,11 +219,11 @@ export const initialAdvanceRequests: SalaryAdvanceRequest[] = [];
 
 // Mutable state arrays
 export let personnelData = [...initialPersonnel];
-export let customersData: Customer[] = [];
-export let reportsData: CustomerReport[] = [];
-export let coldLeadsData: ColdLead[] = [];
+export let customersData: Customer[] = [...initialCustomers];
+export let reportsData: CustomerReport[] = [...initialReports];
+export let coldLeadsData: ColdLead[] = [...initialColdLeads];
 export let adminReportsData: AdministrativeReport[] = [];
-export let contactsData: CustomerContact[] = [];
+export let contactsData: CustomerContact[] = [...initialContacts];
 export let leaveRequestsData: LeaveRequest[] = [];
 export let advanceRequestsData: SalaryAdvanceRequest[] = [];
 

@@ -156,7 +156,9 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
   const [profileName, setProfileName] = useState(currentPersonnel?.name || currentUser?.name || '');
   const [profileUsername, setProfileUsername] = useState(currentPersonnel?.username || currentUser?.username || '');
   const [profilePhone, setProfilePhone] = useState(currentPersonnel?.phone || '');
-  const [profileAvatar, setProfileAvatar] = useState(currentPersonnel?.avatar || '');
+  const [profileAvatar, setProfileAvatar] = useState(
+    currentPersonnel?.avatar || (currentPersonnel as any)?.avater || currentUser?.avatar || (currentUser as any)?.avater || ''
+  );
   const [profileBankCard, setProfileBankCard] = useState(currentPersonnel?.bank_card_number || '');
   const [profileIban, setProfileIban] = useState(currentPersonnel?.iban || '');
   const [profileNationalId, setProfileNationalId] = useState(currentPersonnel?.national_id || '');
@@ -165,7 +167,10 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const avatarToUse = currentUser?.avatar || currentPersonnel?.avatar || '';
+    const avatarToUse =
+      currentUser?.avatar ||
+      currentPersonnel?.avatar ||
+      '';
     if (avatarToUse) setProfileAvatar(avatarToUse);
     if (currentPersonnel?.name || currentUser?.name) setProfileName(currentPersonnel?.name || currentUser?.name || '');
     if (currentPersonnel?.username || currentUser?.username) setProfileUsername(currentPersonnel?.username || currentUser?.username || '');
@@ -507,34 +512,33 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
           <div className="flex items-center gap-3">
             <div className="relative">
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-[#1DB954] dark:to-[#14833b] text-white dark:text-black font-black text-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 dark:shadow-[#1DB954]/20 overflow-hidden border-2 border-emerald-500 dark:border-[#1DB954]">
-                {(profileAvatar || currentPersonnel?.avatar || currentUser?.avatar) ? (
-                  <img
-                    key={getAvatarUrl(profileAvatar || currentPersonnel?.avatar || currentUser?.avatar)}
-                    src={getAvatarUrl(profileAvatar || currentPersonnel?.avatar || currentUser?.avatar)}
-                    alt={profileName}
-                    className="w-full h-full object-cover"
-                    onLoad={(e) => {
-                      (e.currentTarget as HTMLElement).style.display = 'block';
-                      const parent = (e.currentTarget as HTMLElement).parentElement;
-                      if (parent) {
-                        const existing = parent.querySelector('.portal-avatar-fallback');
-                        if (existing) existing.remove();
+                <img
+                  key={getAvatarUrl(profileAvatar || currentUser?.avatar || currentPersonnel?.avatar, profileName)}
+                  src={getAvatarUrl(profileAvatar || currentUser?.avatar || currentPersonnel?.avatar, profileName)}
+                  alt={profileName}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (!target.dataset.fallbackTried) {
+                      target.dataset.fallbackTried = 'true';
+                      const av = profileAvatar || currentUser?.avatar || currentPersonnel?.avatar;
+                      let fileKey = typeof av === 'object' && av !== null ? ((av as any).id || (av as any).filename_disk || (av as any).filename_download) : av;
+                      if (fileKey && typeof fileKey === 'string') {
+                        const cleanKey = fileKey.replace(/^https?:\/\/[^\/]+\/assets\//i, '').replace(/^\/api\/assets\//i, '').replace(/^\/assets\//i, '').split('?')[0];
+                        if (cleanKey) {
+                          try {
+                            const saved = localStorage.getItem('crm_auth_session');
+                            const token = saved ? JSON.parse(saved)?.access_token || '' : '';
+                            const tQuery = token ? `?access_token=${encodeURIComponent(token)}` : '';
+                            target.src = `/api/assets/${encodeURIComponent(cleanKey)}${tQuery}`;
+                          } catch {
+                            target.src = `/api/assets/${encodeURIComponent(cleanKey)}`;
+                          }
+                        }
                       }
-                    }}
-                    onError={(e) => {
-                      (e.currentTarget as HTMLElement).style.display = 'none';
-                      const parent = (e.currentTarget as HTMLElement).parentElement;
-                      if (parent && !parent.querySelector('.portal-avatar-fallback')) {
-                        const span = document.createElement('span');
-                        span.className = 'portal-avatar-fallback text-white dark:text-black font-black text-xl';
-                        span.textContent = profileName.charAt(0) || 'ک';
-                        parent.appendChild(span);
-                      }
-                    }}
-                  />
-                ) : (
-                  <span>{profileName.charAt(0) || 'ک'}</span>
-                )}
+                    }
+                  }}
+                />
               </div>
               <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 dark:bg-[#1DB954] rounded-full border-2 border-white dark:border-[#121212]" />
             </div>

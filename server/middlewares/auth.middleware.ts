@@ -5,6 +5,7 @@ import {
   personnelData,
   globalSessionRevocationTimestamp,
   DIRECTUS_ADMIN_ROLE_IDS,
+  latestAccessToken,
 } from '../config.ts';
 import { RequestUserContext } from '../types.ts';
 
@@ -62,59 +63,82 @@ export function safeDecodeURIComponent(str?: string | null): string {
   }
 }
 
-export function formatAvatarUrl(avatar: any): string | undefined {
+export function formatAvatarUrl(avatar: any, reqToken?: string): string | undefined {
   if (!avatar) return undefined;
   let raw = '';
   if (typeof avatar === 'object' && avatar !== null) {
-    raw = avatar.id || avatar.url || avatar.filename_disk || '';
+    raw = avatar.id || avatar.filename_disk || avatar.filename_download || avatar.avatar || avatar.url || '';
   } else if (typeof avatar === 'string') {
     raw = avatar.trim();
   }
   if (!raw) return undefined;
 
+  // Strip wrapping quotes
+  raw = raw.replace(/^["']+|["']+$/g, '').trim();
+  if (!raw) return undefined;
+
   // Base64 data URLs
   if (raw.startsWith('data:')) return raw;
 
-  // Already our authenticated API proxy
-  if (raw.startsWith('/api/assets/')) return raw;
+  // Local uploaded avatar proxy
+  if (raw.startsWith('/api/assets/avatar-') || raw.startsWith('api/assets/avatar-')) return raw.startsWith('/') ? raw : `/${raw}`;
 
-  // Relative /assets/ path -> route to /api/assets/
-  if (raw.startsWith('/assets/')) return `/api${raw}`;
+  let cleanId = raw;
+  if (cleanId.includes('access_token=')) {
+    return cleanId;
+  }
 
-  // If a full URL contains /assets/<uuid> (e.g. from internal directusUrl or direct link)
-  // route through our authenticated proxy so client browsers don't get 403 or network errors
-  const directusAssetsMatch = raw.match(/\/assets\/([a-zA-Z0-9\-_]+)/);
+  const directusAssetsMatch = cleanId.match(/\/assets\/([a-zA-Z0-9\-_.]+)/);
   if (directusAssetsMatch && directusAssetsMatch[1]) {
-    return `/api/assets/${directusAssetsMatch[1]}`;
+    cleanId = directusAssetsMatch[1];
+  } else if (cleanId.startsWith('https://api.alphadesk.ir/assets/')) {
+    cleanId = cleanId.replace('https://api.alphadesk.ir/assets/', '');
+  } else if (cleanId.startsWith('http://api.alphadesk.ir/assets/')) {
+    cleanId = cleanId.replace('http://api.alphadesk.ir/assets/', '');
+  } else if (cleanId.startsWith('/assets/')) {
+    cleanId = cleanId.replace('/assets/', '');
   }
 
   // External URLs (e.g. external CDN, gravatar, ui-avatars)
-  if (raw.startsWith('http://') || raw.startsWith('https://')) {
-    return raw;
+  if (cleanId.startsWith('http://') || cleanId.startsWith('https://')) {
+    return cleanId;
   }
 
   // Other relative paths
-  if (raw.startsWith('/')) return raw;
+  if (cleanId.startsWith('/')) return cleanId;
 
-  // Raw Directus file UUID string (e.g. 68f9b7c8-4720-4c57-...)
-  return `/api/assets/${raw}`;
+  const token = reqToken || latestAccessToken;
+  const tokenQuery = token ? `?access_token=${encodeURIComponent(token)}` : '';
+
+  // Raw Directus file UUID or filename string
+  return `https://api.alphadesk.ir/assets/${cleanId}${tokenQuery}`;
 }
 
 export function extractFileId(avatar: any): string | null {
   if (!avatar) return null;
   if (typeof avatar === 'object' && avatar !== null) {
-    return avatar.id || avatar.fileId || null;
+    return avatar.id || avatar.filename_disk || avatar.filename_download || avatar.fileId || avatar.avatar || null;
   }
   if (typeof avatar !== 'string') return null;
-  const str = avatar.trim();
+  let str = avatar.trim().replace(/^["']+|["']+$/g, '').trim();
   if (!str) return null;
   if (str.startsWith('data:')) return null;
-  const match = str.match(/\/api\/assets\/([a-zA-Z0-9\-_]+)/) || str.match(/\/assets\/([a-zA-Z0-9\-_]+)/);
+  const match = str.match(/\/api\/assets\/([a-zA-Z0-9\-_.]+)/) || str.match(/\/assets\/([a-zA-Z0-9\-_.]+)/);
   if (match && match[1]) return match[1];
   if (!str.startsWith('http://') && !str.startsWith('https://') && !str.startsWith('/')) {
     return str;
   }
   return null;
+}
+
+export function resolveUserAvatar(user?: any, personnel?: any): string {
+  if (!user && !personnel) return '';
+  const candidate =
+    user?.avatar ||
+    personnel?.avatar ||
+    (typeof user === 'string' ? user : '') ||
+    '';
+  return formatAvatarUrl(candidate) || '';
 }
 
 

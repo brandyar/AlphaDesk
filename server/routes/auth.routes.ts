@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import {
   directusUrl,
   directusAdminToken,
+  setLatestAccessToken,
   personnelData,
   DIRECTUS_ADMIN_ROLE_ID,
   DIRECTUS_ADMIN_ROLE_IDS,
@@ -10,7 +11,7 @@ import {
   projectSettingsData,
   setGlobalSessionRevocationTimestamp,
 } from '../config.ts';
-import { directusFetch } from '../directus/client.ts';
+import { directusFetch, isDirectusCircuitOpen } from '../directus/client.ts';
 import {
   formatAvatarUrl,
   getRequestUser,
@@ -42,7 +43,7 @@ router.post('/register', async (req: Request, res: Response) => {
   const lName = (last_name || fullName.split(' ').slice(1).join(' ') || 'جدید').trim();
   const cleanPhone = (phone || '').trim();
 
-  if (directusUrl && directusAdminToken) {
+  if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
     try {
       const existingRes = await directusFetch(
         `/users?filter[email][_eq]=${encodeURIComponent(cleanEmail)}`
@@ -162,7 +163,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
   const cleanIdentifier = rawIdentifier.toLowerCase();
 
-  if (directusUrl && directusAdminToken) {
+  if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
     try {
       let directusUserEmail = cleanIdentifier;
 
@@ -199,9 +200,10 @@ router.post('/login', async (req: Request, res: Response) => {
 
       if (loginRes?.data?.access_token) {
         const accessToken = loginRes.data.access_token;
+        setLatestAccessToken(accessToken);
 
         const meRes = await directusFetch(
-          '/users/me?fields=id,email,first_name,last_name,role.id,role.name,role.admin_access,avatar',
+          '/users/me?fields=id,email,first_name,last_name,role.id,role.name,role.admin_access,avatar.*',
           {
             headers: { Authorization: `Bearer ${accessToken}` },
           }
@@ -361,7 +363,9 @@ router.post('/login', async (req: Request, res: Response) => {
         });
       }
     } catch (err: any) {
-      console.warn('Directus auth login failed, trying local fallback:', err.message);
+      if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.name !== 'AbortError' && !err.message?.includes('aborted')) {
+        console.warn('Directus auth notice:', err.message);
+      }
     }
   }
 
@@ -428,6 +432,32 @@ router.post('/login', async (req: Request, res: Response) => {
       ).catch((e) => console.warn('Login SMS pattern send to admin warning:', e.message));
     }
 
+    let fallbackAvatarUrl: string | undefined = undefined;
+    if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
+      try {
+        let uData: any = null;
+        if (found.user_id && !String(found.user_id).startsWith('p-')) {
+          const uRes = await directusFetch(`/users/${found.user_id}?fields=id,email,avatar`).catch(() => null);
+          if (uRes?.data) uData = uRes.data;
+        }
+        if (!uData && found.email) {
+          const uRes = await directusFetch(
+            `/users?filter[email][_eq]=${encodeURIComponent(found.email.toLowerCase().trim())}&fields=id,email,avatar&limit=1`
+          ).catch(() => null);
+          if (uRes?.data?.[0]) uData = uRes.data[0];
+        }
+        if (uData?.avatar) {
+          fallbackAvatarUrl = formatAvatarUrl(uData.avatar);
+        }
+      } catch {}
+    }
+    if (!fallbackAvatarUrl && found.avatar) {
+      fallbackAvatarUrl = formatAvatarUrl(found.avatar);
+    }
+    if (fallbackAvatarUrl) {
+      found.avatar = fallbackAvatarUrl;
+    }
+
     return res.json({
       success: true,
       access_token: 'local-token-' + found.id,
@@ -437,6 +467,7 @@ router.post('/login', async (req: Request, res: Response) => {
         username: found.username,
         name: found.name,
         role_id: found.role === 'admin' ? DIRECTUS_ADMIN_ROLE_ID : DIRECTUS_STAFF_ROLE_ID,
+        avatar: fallbackAvatarUrl || found.avatar,
         is_admin: found.role === 'admin',
         app_role: found.role,
       },
@@ -462,26 +493,17 @@ router.get('/me', async (req: Request, res: Response) => {
   let pItem: any = null;
   let isDirectusAdmin = false;
 
-  if (directusUrl && directusAdminToken) {
+  // 1. First fetch personnel record if personnelId is provided
+  if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
     try {
-      if (userId) {
-        const uRes = await directusFetch(
-          `/users/${userId}?fields=id,email,avatar,first_name,last_name,role.id,role.name,role.admin_access`
-        );
-        if (uRes?.data?.avatar) {
-          avatarUrl = formatAvatarUrl(uRes.data.avatar);
-        }
-        if (uRes?.data?.role?.admin_access === true) {
-          isDirectusAdmin = true;
-        }
-      }
       if (personnelId) {
-        const pRes = await directusFetch(`/items/personnel/${personnelId}`);
+        const pRes = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
         if (pRes?.data) pItem = pRes.data;
       }
     } catch {}
   }
 
+  // 2. Fallback to local in-memory personnel if not found yet
   if (!pItem) {
     pItem = personnelData.find((p) => {
       if (!p) return false;
@@ -502,10 +524,74 @@ router.get('/me', async (req: Request, res: Response) => {
     });
   }
 
+  // 3. Query directus_users to resolve avatar and user details
+  if (directusUrl && !isDirectusCircuitOpen()) {
+    try {
+      let directusUser: any = null;
+
+      // Try current user endpoint if Authorization token is provided
+      if (req.headers['authorization']) {
+        const meRes = await directusFetch(
+          '/users/me?fields=id,email,avatar.*,first_name,last_name,role.id,role.name,role.admin_access',
+          { headers: { Authorization: req.headers['authorization'] as string } }
+        ).catch(() => null);
+        if (meRes?.data?.id) directusUser = meRes.data;
+      }
+
+      // Try userId if it's a UUID (not starting with 'p-')
+      if (!directusUser && userId && !String(userId).startsWith('p-')) {
+        const uRes = await directusFetch(
+          `/users/${userId}?fields=id,email,avatar.*,first_name,last_name,role.id,role.name,role.admin_access`
+        ).catch(() => null);
+        if (uRes?.data?.id) directusUser = uRes.data;
+      }
+
+      // Try pItem.user_id if not found yet
+      if (!directusUser && pItem?.user_id && !String(pItem.user_id).startsWith('p-')) {
+        const uRes = await directusFetch(
+          `/users/${pItem.user_id}?fields=id,email,avatar.*,first_name,last_name,role.id,role.name,role.admin_access`
+        ).catch(() => null);
+        if (uRes?.data?.id) directusUser = uRes.data;
+      }
+
+      // Try by email or username (userEmail or pItem.email or pItem.username)
+      const targetEmail = (userEmail || pItem?.email || '').toLowerCase().trim();
+      const targetUsername = (pItem?.username || '').toLowerCase().trim();
+      if (!directusUser && (targetEmail || targetUsername)) {
+        let filterQuery = '';
+        if (targetEmail && targetUsername) {
+          filterQuery = `filter[_or][0][email][_ieq]=${encodeURIComponent(targetEmail)}&filter[_or][1][username][_ieq]=${encodeURIComponent(targetUsername)}`;
+        } else if (targetEmail) {
+          filterQuery = `filter[email][_ieq]=${encodeURIComponent(targetEmail)}`;
+        } else if (targetUsername) {
+          filterQuery = `filter[username][_ieq]=${encodeURIComponent(targetUsername)}`;
+        }
+        const uRes = await directusFetch(
+          `/users?${filterQuery}&fields=id,email,avatar.*,first_name,last_name,role.id,role.name,role.admin_access&limit=1`
+        ).catch(() => null);
+        if (uRes?.data?.[0]?.id) directusUser = uRes.data[0];
+      }
+
+      if (directusUser) {
+        if (directusUser.avatar) {
+          avatarUrl = formatAvatarUrl(directusUser.avatar);
+        }
+        if (directusUser.role?.admin_access === true) {
+          isDirectusAdmin = true;
+        }
+      }
+    } catch (e: any) {
+      console.warn('Directus user query error in /me:', e?.message);
+    }
+  }
+
   if (pItem) {
     pItem = enrichPersonnel(pItem);
-    if (!avatarUrl && pItem.avatar) avatarUrl = formatAvatarUrl(pItem.avatar);
-    if (avatarUrl) pItem.avatar = avatarUrl;
+    if (avatarUrl) {
+      pItem.avatar = avatarUrl;
+    } else if (pItem.avatar) {
+      avatarUrl = formatAvatarUrl(pItem.avatar);
+    }
   }
 
   const effectiveIsAdmin = Boolean(
@@ -539,7 +625,7 @@ router.post('/change-password', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'رمز عبور جدید باید حداقل ۶ کاراکتر باشد.' });
   }
 
-  if (directusUrl && directusAdminToken) {
+  if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
     try {
       let targetDirectusUserId: string | null = null;
 

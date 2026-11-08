@@ -25,17 +25,23 @@ const BASE_URL = '/api';
 
 const AUTH_STORAGE_KEY = 'crm_auth_session';
 const TENANT_STORAGE_KEY = 'crm_active_tenant_id';
+const TENANT_NAME_STORAGE_KEY = 'crm_active_tenant_name';
 
 let currentPersonnelContext: Personnel | null = null;
 let currentAuthUser: AuthUser | null = null;
 let currentAuthToken: string = '';
 let currentTenantId: string = 'all';
+let currentTenantName: string = '';
 
 // Load initial stored auth session & tenant if available
 try {
   const savedTenant = localStorage.getItem(TENANT_STORAGE_KEY);
   if (savedTenant) {
     currentTenantId = savedTenant;
+  }
+  const savedTenantName = localStorage.getItem(TENANT_NAME_STORAGE_KEY);
+  if (savedTenantName) {
+    currentTenantName = savedTenantName;
   }
 } catch {}
 
@@ -68,8 +74,15 @@ try {
     enforceAuthRole();
 
     const pTenant = parsed.personnel?.tenant_id || parsed.user?.tenant_id;
+    const pTenantName = parsed.personnel?.tenant_name || parsed.user?.tenant_name;
     if (pTenant && (!parsed.user?.is_admin || currentTenantId === 'all' || currentTenantId === 'default' || currentTenantId === '1')) {
       currentTenantId = String(pTenant);
+      if (pTenantName) {
+        currentTenantName = String(pTenantName);
+        try {
+          localStorage.setItem(TENANT_NAME_STORAGE_KEY, currentTenantName);
+        } catch {}
+      }
       try {
         localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
       } catch {}
@@ -81,8 +94,18 @@ export function getActiveTenantId(): string {
   return currentTenantId || 'all';
 }
 
-export function setActiveTenantId(id: string) {
+export function getActiveTenantName(): string {
+  return currentTenantName || '';
+}
+
+export function setActiveTenantId(id: string, name?: string) {
   currentTenantId = id || 'all';
+  if (name) {
+    currentTenantName = name;
+    try {
+      localStorage.setItem(TENANT_NAME_STORAGE_KEY, currentTenantName);
+    } catch {}
+  }
   try {
     localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
   } catch {}
@@ -93,6 +116,12 @@ export function setApiPersonnelContext(p: Personnel | null) {
   enforceAuthRole();
   if (p?.tenant_id && (!currentAuthUser?.is_admin || currentTenantId === 'all')) {
     currentTenantId = String(p.tenant_id);
+    if (p.tenant_name) {
+      currentTenantName = String(p.tenant_name);
+      try {
+        localStorage.setItem(TENANT_NAME_STORAGE_KEY, currentTenantName);
+      } catch {}
+    }
     try {
       localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
     } catch {}
@@ -122,8 +151,15 @@ export function saveAuthSession(data: AuthResponse) {
   enforceAuthRole();
 
   const pTenant = data.personnel?.tenant_id || data.user?.tenant_id;
+  const pTenantName = data.personnel?.tenant_name || data.user?.tenant_name;
   if (pTenant && (!data.user?.is_admin || currentTenantId === 'all')) {
     currentTenantId = String(pTenant);
+    if (pTenantName) {
+      currentTenantName = String(pTenantName);
+      try {
+        localStorage.setItem(TENANT_NAME_STORAGE_KEY, currentTenantName);
+      } catch {}
+    }
     try {
       localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
     } catch {}

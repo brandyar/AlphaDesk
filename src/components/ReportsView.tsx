@@ -25,6 +25,7 @@ import { CustomerReport, Customer, Personnel, NegotiationStatus, AuthUser } from
 import {
   formatPersianDate,
   formatPersianDateTime,
+  formatFollowupDateTime,
   getStatusTheme,
   toPersianDigits,
   formatToman,
@@ -720,7 +721,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                       <span>موعد پیگیری بعدی:</span>
                       <span className="text-slate-900 dark:text-white font-semibold font-mono">
-                        {formatPersianDate(rep.next_followup_date)}
+                        {formatFollowupDateTime(rep.next_followup_date)}
                       </span>
                       {daysToFollowup !== null && (
                         <span

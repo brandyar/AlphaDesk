@@ -177,7 +177,7 @@ export async function ensureDirectusPersonnel() {
   try {
     // 1. Fetch user avatars first
     const userAvatarMap: Record<string, string> = {};
-    const usersRes = await directusFetch('/users?fields=id,email,avatar&limit=500').catch(() => null);
+    const usersRes = await directusFetch('/users?fields=id,email,avatar.*&limit=500').catch(() => null);
     if (usersRes?.data && Array.isArray(usersRes.data)) {
       for (const u of usersRes.data) {
         if (u.id && u.avatar) {
@@ -194,9 +194,10 @@ export async function ensureDirectusPersonnel() {
     if (res && Array.isArray(res.data)) {
       const attachAvatars = (list: any[]) =>
         list.map((p: any) => {
-          let av = formatAvatarUrl(p.avatar);
-          if (!av && p.user_id && userAvatarMap[p.user_id]) av = userAvatarMap[p.user_id];
-          if (!av && p.email && userAvatarMap[p.email.toLowerCase().trim()]) av = userAvatarMap[p.email.toLowerCase().trim()];
+          let av =
+            (p.user_id && userAvatarMap[p.user_id]) ||
+            (p.email && userAvatarMap[p.email.toLowerCase().trim()]);
+          if (!av) av = formatAvatarUrl(p.avatar);
           return {
             ...p,
             avatar: av || '',

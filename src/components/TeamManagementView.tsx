@@ -1970,8 +1970,20 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                                     }
                                   }}
                                   onError={(e) => {
-                                    (e.currentTarget as HTMLElement).style.display = 'none';
-                                    const parent = (e.currentTarget as HTMLElement).parentElement;
+                                    const target = e.currentTarget;
+                                    if (!target.dataset.fallbackTried && p.avatar) {
+                                      target.dataset.fallbackTried = 'true';
+                                      let fileKey = typeof p.avatar === 'object' && p.avatar !== null ? ((p.avatar as any).id || (p.avatar as any).filename_disk || (p.avatar as any).filename_download) : p.avatar;
+                                      if (fileKey && typeof fileKey === 'string') {
+                                        const cleanKey = fileKey.replace(/^https?:\/\/[^\/]+\/assets\//i, '').replace(/^\/api\/assets\//i, '').replace(/^\/assets\//i, '');
+                                        if (cleanKey) {
+                                          target.src = `/api/assets/${encodeURIComponent(cleanKey)}`;
+                                          return;
+                                        }
+                                      }
+                                    }
+                                    target.style.display = 'none';
+                                    const parent = target.parentElement;
                                     if (parent && !parent.querySelector('.table-avatar-fallback')) {
                                       const span = document.createElement('span');
                                       span.className = 'table-avatar-fallback text-[#1DB954] font-bold text-sm';
@@ -2179,6 +2191,18 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                                 }
                               }}
                               onError={(e) => {
+                                const target = e.currentTarget;
+                                if (!target.dataset.fallbackTried && p.avatar) {
+                                  target.dataset.fallbackTried = 'true';
+                                  let fileKey = typeof p.avatar === 'object' && p.avatar !== null ? ((p.avatar as any).id || (p.avatar as any).filename_disk || (p.avatar as any).filename_download) : p.avatar;
+                                  if (fileKey && typeof fileKey === 'string') {
+                                    const cleanKey = fileKey.replace(/^https?:\/\/[^\/]+\/assets\//i, '').replace(/^\/api\/assets\//i, '').replace(/^\/assets\//i, '');
+                                    if (cleanKey) {
+                                      target.src = `/api/assets/${encodeURIComponent(cleanKey)}`;
+                                      return;
+                                    }
+                                  }
+                                }
                                 (e.currentTarget as HTMLElement).style.display = 'none';
                                 const parent = (e.currentTarget as HTMLElement).parentElement;
                                 if (parent && !parent.querySelector('.card-avatar-fallback')) {

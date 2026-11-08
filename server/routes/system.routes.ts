@@ -5,6 +5,8 @@ import path from 'path';
 import {
   directusUrl,
   directusAdminToken,
+  latestAccessToken,
+  setLatestAccessToken,
   projectSettingsData,
   updateProjectSettingsData,
   personnelData,
@@ -17,7 +19,7 @@ import {
   setContactsData,
   initialPersonnel,
 } from '../config.ts';
-import { directusFetch, directusFetchAllPages, directusSafeBatchInsert, directusSafeBatchPatch } from '../directus/client.ts';
+import { directusFetch, directusFetchAllPages, directusSafeBatchInsert, directusSafeBatchPatch, isDirectusCircuitOpen } from '../directus/client.ts';
 import { getRequestUser, getRequestTenantId, extractFileId, formatAvatarUrl } from '../middlewares/auth.middleware.ts';
 import { invalidateCustomersCache, invalidateReportsCache } from '../directus/cache.ts';
 import { resolveDirectusTenantId, backfillNullTenantsDirectus } from '../directus/sync.ts';
@@ -36,17 +38,21 @@ router.get('/health', (req: Request, res: Response) => {
 });
 
 router.get('/bff-status', (req: Request, res: Response) => {
+  const isOnline = Boolean(directusUrl && directusAdminToken && !isDirectusCircuitOpen());
   res.json({
-    online: Boolean(directusUrl && directusAdminToken),
+    online: isOnline,
+    mode: isOnline ? 'online_database' : 'in_memory_fallback',
     url: directusUrl || '',
-    database: 'Directus',
+    database: isOnline ? 'Directus' : 'In-Memory Store',
   });
 });
 router.get('/api/bff-status', (req: Request, res: Response) => {
+  const isOnline = Boolean(directusUrl && directusAdminToken && !isDirectusCircuitOpen());
   res.json({
-    online: Boolean(directusUrl && directusAdminToken),
+    online: isOnline,
+    mode: isOnline ? 'online_database' : 'in_memory_fallback',
     url: directusUrl || '',
-    database: 'Directus',
+    database: isOnline ? 'Directus' : 'In-Memory Store',
   });
 });
 
@@ -78,7 +84,7 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
     return res.json(cached.data);
   }
 
-  if (directusUrl && directusAdminToken) {
+  if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
     try {
       let tenantFilterStr = '';
       if (tenantId && tenantId !== 'all') {
@@ -316,7 +322,8 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
 
   let targetPersonnel: any = null;
 
-  if (directusUrl && directusAdminToken) {
+  const activeToken = directusAdminToken || latestAccessToken;
+  if (directusUrl && activeToken) {
     try {
       let foundPId: string | null = null;
       if (personnelId) {
@@ -384,8 +391,11 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
         const userPatch: Record<string, any> = {};
         if (name) userPatch.first_name = name;
         if (effectiveAvatar !== undefined) {
-          if (directusFileId) userPatch.avatar = directusFileId;
-          else if (!effectiveAvatar) userPatch.avatar = null;
+          if (directusFileId) {
+            userPatch.avatar = directusFileId;
+          } else if (!effectiveAvatar) {
+            userPatch.avatar = null;
+          }
         }
         if (Object.keys(userPatch).length > 0) {
           await directusFetch(`/users/${actualDirectusUserId}`, {
@@ -455,7 +465,7 @@ export const handleAssetProxy = async (req: Request, res: Response, next?: any) 
     return res.status(404).send('Not static asset');
   }
 
-  const cleanId = id.replace(/\.[a-zA-Z0-9]+$/, '');
+  const cleanId = id.replace(/\.[a-zA-Z0-9]+$/, '').replace(/^["']+|["']+$/g, '').trim();
 
   // 1. Check local in-memory avatar cache first
   const cached = localAvatarCacheMap.get(cleanId) || localAvatarCacheMap.get(id);
@@ -465,31 +475,114 @@ export const handleAssetProxy = async (req: Request, res: Response, next?: any) 
     return res.send(cached.buffer);
   }
 
-  if (directusUrl) {
+  const activeDirectusUrl = directusUrl || process.env.DIRECTUS_URL || 'https://api.alphadesk.ir';
+
+  if (activeDirectusUrl && !isDirectusCircuitOpen()) {
     try {
-      const tokenToUse = directusAdminToken || process.env.DIRECTUS_ADMIN_TOKEN || '';
-      const urlToUse = directusUrl || process.env.DIRECTUS_URL || '';
-      const cleanBaseUrl = urlToUse.replace(/\/$/, '');
-      const headers: Record<string, string> = {};
-      if (tokenToUse) {
-        headers['Authorization'] = `Bearer ${tokenToUse}`;
+      const reqAuth = (req.headers['authorization'] as string) || '';
+      const clientToken = reqAuth.replace(/^Bearer\s+/i, '').trim() || (req.query.access_token as string) || '';
+      const tokenToUse = clientToken || directusAdminToken || latestAccessToken || process.env.DIRECTUS_ADMIN_TOKEN || '';
+      const cleanBaseUrl = activeDirectusUrl.replace(/\/$/, '');
+      if (clientToken) {
+        setLatestAccessToken(clientToken);
       }
 
-      // 1. Directus thumbnail transformation: ?width=250&height=250&quality=80&format=webp
-      // Downloads in ~200ms (<10KB) and avoids upstream socket stalling on raw full-sized images
-      const thumbUrl = `${cleanBaseUrl}/assets/${cleanId}?width=250&height=250&quality=80&format=webp`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const baseHeaders: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      };
 
-      let assetRes = await fetch(thumbUrl, { headers, signal: controller.signal }).catch(() => null);
-      clearTimeout(timeoutId);
+      let assetRes: Response | globalThis.Response | null = null;
 
-      // 2. Fallback to raw asset if thumbnail transformation was not available
+      // Step 1: Try fetching with Authorization Bearer header
+      if (tokenToUse) {
+        const hController = new AbortController();
+        const hTimeoutId = setTimeout(() => hController.abort(), 4000);
+        assetRes = await fetch(`${cleanBaseUrl}/assets/${cleanId}`, {
+          headers: { ...baseHeaders, Authorization: `Bearer ${tokenToUse}` },
+          signal: hController.signal,
+        }).catch(() => null);
+        clearTimeout(hTimeoutId);
+      }
+
+      // Step 2: Try fetching with access_token query param
+      if ((!assetRes || !assetRes.ok) && tokenToUse) {
+        const qController = new AbortController();
+        const qTimeoutId = setTimeout(() => qController.abort(), 4000);
+        const urlWithParam = `${cleanBaseUrl}/assets/${cleanId}?access_token=${encodeURIComponent(tokenToUse)}`;
+        assetRes = await fetch(urlWithParam, {
+          headers: baseHeaders,
+          signal: qController.signal,
+        }).catch(() => null);
+        clearTimeout(qTimeoutId);
+      }
+
+      // Step 3: Try fetching public file directly from /assets/
       if (!assetRes || !assetRes.ok) {
-        const rawController = new AbortController();
-        const rawTimeoutId = setTimeout(() => rawController.abort(), 5000);
-        assetRes = await fetch(`${cleanBaseUrl}/assets/${cleanId}`, { headers, signal: rawController.signal }).catch(() => null);
-        clearTimeout(rawTimeoutId);
+        const pController = new AbortController();
+        const pTimeoutId = setTimeout(() => pController.abort(), 4000);
+        assetRes = await fetch(`${cleanBaseUrl}/assets/${cleanId}`, {
+          headers: baseHeaders,
+          signal: pController.signal,
+        }).catch(() => null);
+        clearTimeout(pTimeoutId);
+      }
+
+      // Step 4: Fallback to /files/:id/download if /assets/ endpoint was disabled or unmapped
+      if (!assetRes || !assetRes.ok) {
+        const fController = new AbortController();
+        const fTimeoutId = setTimeout(() => fController.abort(), 4000);
+        const fileUrl = `${cleanBaseUrl}/files/${cleanId}/download${tokenToUse ? '?access_token=' + encodeURIComponent(tokenToUse) : ''}`;
+        assetRes = await fetch(fileUrl, {
+          headers: tokenToUse ? { ...baseHeaders, Authorization: `Bearer ${tokenToUse}` } : baseHeaders,
+          signal: fController.signal,
+        }).catch(() => null);
+        clearTimeout(fTimeoutId);
+      }
+
+      // Step 5: If cleanId was actually a user_id, email, or personnel ID, resolve directus_users avatar UUID
+      if (!assetRes || !assetRes.ok) {
+        try {
+          let directusUserAvatarFileId: string | null = null;
+          if (!cleanId.startsWith('p-')) {
+            const userRes = await directusFetch(`/users/${cleanId}?fields=id,avatar.*`).catch(() => null);
+            if (userRes?.data?.avatar) {
+              const rawAv = userRes.data.avatar;
+              directusUserAvatarFileId = typeof rawAv === 'object' && rawAv !== null ? (rawAv.id || rawAv.filename_disk || rawAv.fileId) : String(rawAv);
+            }
+          }
+
+          if (!directusUserAvatarFileId) {
+            const pMatch = personnelData.find(
+              (p) => String(p.id) === cleanId || String(p.user_id) === cleanId || p.email?.toLowerCase() === cleanId.toLowerCase()
+            );
+            const targetEm = (pMatch?.email || (cleanId.includes('@') ? cleanId : '')).toLowerCase().trim();
+            const targetUid = pMatch?.user_id || (!cleanId.startsWith('p-') ? cleanId : null);
+
+            if (targetUid) {
+              const uRes = await directusFetch(`/users/${targetUid}?fields=id,avatar.*`).catch(() => null);
+              if (uRes?.data?.avatar) {
+                const rawAv = uRes.data.avatar;
+                directusUserAvatarFileId = typeof rawAv === 'object' && rawAv !== null ? (rawAv.id || rawAv.filename_disk || rawAv.fileId) : String(rawAv);
+              }
+            }
+
+            if (!directusUserAvatarFileId && targetEm) {
+              const uRes = await directusFetch(`/users?filter[email][_ieq]=${encodeURIComponent(targetEm)}&fields=id,avatar.*&limit=1`).catch(() => null);
+              if (uRes?.data?.[0]?.avatar) {
+                const rawAv = uRes.data[0].avatar;
+                directusUserAvatarFileId = typeof rawAv === 'object' && rawAv !== null ? (rawAv.id || rawAv.filename_disk || rawAv.fileId) : String(rawAv);
+              }
+            }
+          }
+
+          if (directusUserAvatarFileId && directusUserAvatarFileId !== cleanId) {
+            const fileUrl = `${cleanBaseUrl}/assets/${directusUserAvatarFileId}${tokenToUse ? '?access_token=' + encodeURIComponent(tokenToUse) : ''}`;
+            assetRes = await fetch(fileUrl, {
+              headers: tokenToUse ? { ...baseHeaders, Authorization: `Bearer ${tokenToUse}` } : baseHeaders,
+            }).catch(() => null);
+          }
+        } catch {}
       }
 
       if (assetRes && assetRes.ok) {
@@ -508,14 +601,23 @@ export const handleAssetProxy = async (req: Request, res: Response, next?: any) 
     }
   }
 
-  // Fallback transparent 1x1 GIF instead of 404 so browser image onError never hides the image
-  const transparentGif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
-  res.setHeader('Content-Type', 'image/gif');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
-  return res.send(transparentGif);
+  // Fallback: Generate a clean SVG avatar image buffer so avatar requests NEVER fail or trigger broken image icons in browser
+  const pMatch = personnelData.find(
+    (p) => String(p.id) === cleanId || String(p.user_id) === cleanId || p.email?.toLowerCase() === cleanId.toLowerCase()
+  );
+  const nameToUse = pMatch?.name || cleanId || 'کاربر';
+  const initialChar = nameToUse.trim().charAt(0).toUpperCase() || 'U';
+  const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect width="128" height="128" rx="32" fill="#1DB954"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#000000" font-family="sans-serif" font-size="56" font-weight="900">${initialChar}</text></svg>`;
+  const buffer = Buffer.from(svgContent, 'utf-8');
+  localAvatarCacheMap.set(cleanId, { buffer, contentType: 'image/svg+xml' });
+  localAvatarCacheMap.set(id, { buffer, contentType: 'image/svg+xml' });
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+  return res.send(buffer);
 };
 
 router.get('/api/assets/:id', handleAssetProxy);
+router.get('/assets/:id', handleAssetProxy);
 
 // POST /api/upload-avatar
 router.post('/api/upload-avatar', async (req: Request, res: Response) => {
@@ -526,7 +628,7 @@ router.post('/api/upload-avatar', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'فایلی ارسال نشده است.' });
   }
 
-  const finalAvatarUrl = dataUrl;
+  let finalAvatarUrl = dataUrl;
 
   try {
     const matches = dataUrl.match(/^data:([A-Za-z0-9-+\/]+);base64,(.+)$/);
@@ -536,23 +638,52 @@ router.post('/api/upload-avatar', async (req: Request, res: Response) => {
       const fileId = 'avatar-' + crypto.randomUUID();
       localAvatarCacheMap.set(fileId, { buffer: fileBuffer, contentType: fileType });
       localAvatarCacheMap.set(dataUrl, { buffer: fileBuffer, contentType: fileType });
+      finalAvatarUrl = `/api/assets/${fileId}`;
 
-      if (directusUrl && directusAdminToken) {
-        let actualDirectusUserId: string | null = null;
-        if (userId && !String(userId).startsWith('p-')) {
-          const uCheck = await directusFetch(`/users/${userId}?fields=id`).catch(() => null);
-          if (uCheck?.data?.id) actualDirectusUserId = uCheck.data.id;
-        }
-        if (!actualDirectusUserId && userEmail) {
-          const byEmail = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(userEmail.toLowerCase().trim())}&fields=id&limit=1`).catch(() => null);
-          if (byEmail?.data?.[0]?.id) actualDirectusUserId = byEmail.data[0].id;
-        }
+      const activeToken = directusAdminToken || latestAccessToken;
+      if (directusUrl && activeToken) {
+        try {
+          const cleanBaseUrl = directusUrl.replace(/\/$/, '');
+          const formData = new FormData();
+          const blob = new Blob([fileBuffer], { type: fileType });
+          const safeFileName = (fileName || 'avatar.webp').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+          formData.append('file', blob, safeFileName);
+          formData.append('title', 'Avatar ' + (userName || userId || 'User'));
 
-        if (actualDirectusUserId) {
-          await directusFetch(`/users/${actualDirectusUserId}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ avatar: fileId }),
-          }).catch(() => {});
+          const uploadRes = await fetch(`${cleanBaseUrl}/files`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${activeToken}` },
+            body: formData,
+          }).catch(() => null);
+
+          if (uploadRes && uploadRes.ok) {
+            const uploadJson: any = await uploadRes.json().catch(() => null);
+            const directusFileId = uploadJson?.data?.id;
+            if (directusFileId) {
+              localAvatarCacheMap.set(directusFileId, { buffer: fileBuffer, contentType: fileType });
+
+              let actualDirectusUserId: string | null = null;
+              if (userId && !String(userId).startsWith('p-')) {
+                const uCheck = await directusFetch(`/users/${userId}?fields=id`).catch(() => null);
+                if (uCheck?.data?.id) actualDirectusUserId = uCheck.data.id;
+              }
+              if (!actualDirectusUserId && userEmail) {
+                const byEmail = await directusFetch(`/users?filter[email][_ieq]=${encodeURIComponent(userEmail.toLowerCase().trim())}&fields=id&limit=1`).catch(() => null);
+                if (byEmail?.data?.[0]?.id) actualDirectusUserId = byEmail.data[0].id;
+              }
+
+              if (actualDirectusUserId) {
+                await directusFetch(`/users/${actualDirectusUserId}`, {
+                  method: 'PATCH',
+                  body: JSON.stringify({ avatar: directusFileId }),
+                }).catch((e: any) => console.warn('Could not patch directus_users avatar:', e?.message));
+              }
+
+              finalAvatarUrl = `/api/assets/${directusFileId}`;
+            }
+          }
+        } catch (uploadErr: any) {
+          console.warn('Directus avatar sync warning:', uploadErr?.message);
         }
       }
     }

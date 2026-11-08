@@ -210,11 +210,9 @@ router.post('/api/advance-requests', async (req: Request, res: Response) => {
         return res.status(201).json(savedItem);
       }
     } catch (err: any) {
-      console.error('[Directus advance_requests POST ERROR]:', err.message);
-      return res.status(500).json({
-        error: 'ADVANCE_REQUEST_SAVE_FAILED',
-        message: `خطا در ذخیره درخواست مساعده در پایگاه داده: ${err.message}`
-      });
+      if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
+        console.warn('[Directus advance_requests POST notice, using local fallback]:', err.message);
+      }
     }
   }
 

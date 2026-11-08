@@ -7,7 +7,7 @@ import {
   setPersonnelData,
   DIRECTUS_STAFF_ROLE_ID,
 } from '../config.ts';
-import { directusFetch } from '../directus/client.ts';
+import { directusFetch, isDirectusCircuitOpen } from '../directus/client.ts';
 import { resolveDirectusTenantId } from '../directus/sync.ts';
 import {
   getRequestTenantId,
@@ -63,9 +63,9 @@ router.get('/', async (req: Request, res: Response) => {
   const tenantId = getRequestTenantId(req);
 
   let userAvatarMap: Record<string, string> = {};
-  if (directusUrl && directusAdminToken) {
+  if (directusUrl && !isDirectusCircuitOpen()) {
     try {
-      const usersRes = await directusFetch('/users?fields=id,email,avatar&limit=500').catch(
+      const usersRes = await directusFetch('/users?fields=id,email,avatar.*&limit=500').catch(
         () => null
       );
       if (usersRes && Array.isArray(usersRes.data)) {
@@ -89,7 +89,7 @@ router.get('/', async (req: Request, res: Response) => {
             let userAvatar = (enriched.user_id && userAvatarMap[enriched.user_id]) || (enriched.email && userAvatarMap[enriched.email.toLowerCase().trim()]);
             if (!userAvatar && enriched.user_id && !String(enriched.user_id).startsWith('p-')) {
               try {
-                const uRes = await directusFetch(`/users/${enriched.user_id}?fields=avatar`).catch(() => null);
+                const uRes = await directusFetch(`/users/${enriched.user_id}?fields=id,avatar.*`).catch(() => null);
                 if (uRes?.data?.avatar) {
                   userAvatar = formatAvatarUrl(uRes.data.avatar);
                 }
@@ -98,9 +98,9 @@ router.get('/', async (req: Request, res: Response) => {
             if (!userAvatar && enriched.email) {
               try {
                 const em = String(enriched.email).toLowerCase().trim();
-                const uRes = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(em)}&fields=avatar&limit=1`).catch(() => null);
+                const uRes = await directusFetch(`/users?filter[email][_ieq]=${encodeURIComponent(em)}&fields=id,avatar.*&limit=1`).catch(() => null);
                 if (uRes?.data?.[0]?.avatar) {
-                  userAvatar = formatAvatarUrl(uRes.data.avatar);
+                  userAvatar = formatAvatarUrl(uRes.data[0].avatar);
                 }
               } catch {}
             }

@@ -1073,11 +1073,9 @@ router.post('/', async (req: Request, res: Response) => {
 
         return res.status(201).json(fullCustomer);
       } catch (err: any) {
-        console.error('Customer create Directus error:', err.message);
-        return res.status(500).json({
-          error: 'CUSTOMER_SAVE_FAILED',
-          message: `خطا در ذخیره پرونده مشتری در پایگاه داده مرکزی: ${err.message}`,
-        });
+        if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
+          console.warn('Customer create Directus notice, falling back to local store:', err.message);
+        }
       }
     }
 
@@ -1180,11 +1178,9 @@ router.patch('/:id', async (req: Request, res: Response) => {
       const updatedCust = computeCustomerExpiration(patchedCust.data || patchPayload);
       return res.json(updatedCust);
     } catch (err: any) {
-      console.error('Customer patch Directus error:', err.message);
-      return res.status(500).json({
-        error: 'CUSTOMER_UPDATE_FAILED',
-        message: `خطا در بروزرسانی پرونده مشتری در پایگاه داده مرکزی: ${err.message}`,
-      });
+      if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
+        console.warn('Customer patch Directus notice, falling back to local store:', err.message);
+      }
     }
   }
 
@@ -1265,11 +1261,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
       invalidateReportsCache();
       return res.status(204).send();
     } catch (err: any) {
-      console.error('Delete customer error:', err.message);
-      return res.status(500).json({
-        error: 'CUSTOMER_DELETE_FAILED',
-        message: `خطا در حذف پرونده مشتری: ${err.message}`,
-      });
+      if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
+        console.warn('Delete customer Directus notice, falling back to local store:', err.message);
+      }
     }
   }
 
@@ -1407,11 +1401,9 @@ router.post('/:id/claim-free', async (req: Request, res: Response) => {
         customer: finalCust,
       });
     } catch (e: any) {
-      console.error('Claim customer Directus error:', e.message);
-      return res.status(500).json({
-        error: 'CLAIM_FAILED',
-        message: `خطا در اختصاص پرونده: ${e.message}`,
-      });
+      if (e.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && e.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
+        console.warn('Claim customer Directus notice, falling back to local store:', e.message);
+      }
     }
   }
 
@@ -1586,11 +1578,9 @@ router.post('/merge', async (req: Request, res: Response) => {
         customer: finalCustomer,
       });
     } catch (err: any) {
-      console.error('Merge customers error:', err.message);
-      return res.status(500).json({
-        error: 'MERGE_FAILED',
-        message: `خطا در ادغام پرونده‌های مشتریان: ${err.message}`,
-      });
+      if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
+        console.warn('Merge customers Directus notice, falling back to local store:', err.message);
+      }
     }
   }
 

@@ -283,9 +283,10 @@ router.get('/', async (req: Request, res: Response) => {
         '*,customer_id.id,customer_id.company_name,customer_id.manager_name,customer_id.status,customer_id.province,customer_id.city,customer_id.next_followup_date,customer_id.assignment_deadline,customer_id.is_expired,customer_id.assigned_marketer_id,customer_id.assigned_marketer_name';
       directusPath += `&fields=${encodeURIComponent(fields ? String(fields) : defaultReportFields)}`;
 
-      console.log('[Directus Reports Query] Path:', directusPath);
       const resData = await directusFetch(directusPath, {}, 1).catch((err) => {
-        console.error('[Directus Reports Query Error]:', err.message);
+        if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
+          console.warn('[Directus Reports Query Warning]:', err.message);
+        }
         return null;
       });
       console.log('[Directus Reports Query] resData meta:', resData?.meta);
@@ -661,7 +662,18 @@ router.post('/', async (req: Request, res: Response) => {
     nextFollowupIso = null;
   } else {
     try {
-      nextFollowupIso = new Date(nextFollowupIso).toISOString();
+      const followupDateObj = new Date(nextFollowupIso);
+      if (!isNaN(followupDateObj.getTime())) {
+        // Validation: Next followup date and time cannot be in the past (allow 1 minute tolerance for network lag)
+        if (followupDateObj.getTime() < Date.now() - 60000) {
+          return res.status(400).json({
+            error: 'تاریخ و ساعت پیگیری بعدی نمی‌تواند در گذشته باشد. لطفاً زمان پیگیری را در آینده تنظیم کنید.',
+          });
+        }
+        nextFollowupIso = followupDateObj.toISOString();
+      } else {
+        nextFollowupIso = null;
+      }
     } catch {
       nextFollowupIso = null;
     }
@@ -747,11 +759,9 @@ router.post('/', async (req: Request, res: Response) => {
 
       return res.status(201).json(created.data || newReport);
     } catch (err: any) {
-      console.error('Customer report create Directus error:', err.message);
-      return res.status(500).json({
-        error: 'REPORT_SAVE_FAILED',
-        message: `خطا در ثبت گزارش در پایگاه داده مرکزی: ${err.message}`,
-      });
+      if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
+        console.warn('Customer report create Directus notice, falling back to local store:', err.message);
+      }
     }
   }
 

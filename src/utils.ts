@@ -1,4 +1,4 @@
-import { NegotiationStatus, LeadStatus } from './types';
+import { NegotiationStatus, LeadStatus, Customer, CustomerPhoneOption } from './types';
 
 export const JALALI_MONTH_NAMES = [
   'فروردین',
@@ -217,6 +217,179 @@ export function jalaliToGregorianIso(jalaliStr?: string | null): string {
   }
 }
 
+/**
+ * Converts Jalali date string (YYYY/MM/DD) and hour/minute into a valid ISO 8601 string in local time.
+ */
+export function jalaliAndTimeToIso(jalaliStr: string, hour = 10, minute = 0): string {
+  if (!jalaliStr) return '';
+  const parts = jalaliStr.split(/[\/\-]/).map((p) => parseInt(p, 10));
+  if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+    return '';
+  }
+  try {
+    const g = jalaliToGregorian(parts[0], parts[1], parts[2]);
+    const clampedHour = Math.min(23, Math.max(0, hour));
+    const clampedMinute = Math.min(59, Math.max(0, minute));
+    const d = new Date(g.gy, g.gm - 1, g.gd, clampedHour, clampedMinute, 0, 0);
+    return d.toISOString();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Parses an ISO string or date into Jalali date string and separate hour/minute.
+ */
+export function parseIsoToJalaliAndTime(isoString?: string | null): {
+  jalaliDate: string;
+  hour: number;
+  minute: number;
+  timeStr: string;
+  displayStr: string;
+} {
+  const today = getTodayJalali();
+  if (!isoString) {
+    const now = new Date();
+    const h = (now.getHours() + 2) % 24;
+    const m = 0;
+    const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    return {
+      jalaliDate: today.str,
+      hour: h,
+      minute: m,
+      timeStr,
+      displayStr: `${toPersianDigits(today.str)} - ساعت ${toPersianDigits(timeStr)}`,
+    };
+  }
+
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) {
+      return {
+        jalaliDate: today.str,
+        hour: 10,
+        minute: 0,
+        timeStr: '10:00',
+        displayStr: toPersianDigits(today.str),
+      };
+    }
+    const j = gregorianToJalali(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    const mm = String(j.jm).padStart(2, '0');
+    const dd = String(j.jd).padStart(2, '0');
+    const jalaliDate = `${j.jy}/${mm}/${dd}`;
+    const hour = d.getHours();
+    const minute = d.getMinutes();
+    const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    const displayStr = `${toPersianDigits(jalaliDate)} - ساعت ${toPersianDigits(timeStr)}`;
+    return { jalaliDate, hour, minute, timeStr, displayStr };
+  } catch {
+    return {
+      jalaliDate: today.str,
+      hour: 10,
+      minute: 0,
+      timeStr: '10:00',
+      displayStr: toPersianDigits(today.str),
+    };
+  }
+}
+
+/**
+ * Returns a human-friendly Persian string for follow-up date and time.
+ */
+export function formatFollowupDateTime(isoString?: string | null): string {
+  if (!isoString) return 'تنظیم نشده';
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return String(isoString);
+    const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+    if (hasTime) {
+      const datePart = new Intl.DateTimeFormat('fa-IR', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }).format(d);
+      const hour = String(d.getHours()).padStart(2, '0');
+      const minute = String(d.getMinutes()).padStart(2, '0');
+      return `${datePart} - ساعت ${toPersianDigits(`${hour}:${minute}`)}`;
+    }
+    return formatPersianDate(isoString);
+  } catch {
+    return String(isoString || '-');
+  }
+}
+
+/**
+ * Collects all unique phone numbers associated with a customer with readable labels.
+ */
+export function getCustomerPhoneOptions(customer?: Partial<Customer> | null): CustomerPhoneOption[] {
+  if (!customer) return [];
+  const options: CustomerPhoneOption[] = [];
+  const seenNumbers = new Set<string>();
+
+  const addOption = (numRaw: any, label: string, type: string) => {
+    if (!numRaw) return;
+    const num = String(numRaw).trim();
+    if (!num) return;
+    const cleanKey = num.replace(/[^\d]/g, '');
+    if (!cleanKey || seenNumbers.has(cleanKey)) return;
+    seenNumbers.add(cleanKey);
+    options.push({ number: num, label, type });
+  };
+
+  // Manager phones
+  if (Array.isArray(customer.manager_phones)) {
+    customer.manager_phones.forEach((p, idx) => {
+      const mgrLabel = customer.manager_name
+        ? `موبایل مدیریت (${customer.manager_name})`
+        : `موبایل مدیریت ${customer.manager_phones && customer.manager_phones.length > 1 ? idx + 1 : ''}`;
+      addOption(p, mgrLabel.trim(), 'manager');
+    });
+  }
+
+  // Negotiator phones
+  if (Array.isArray(customer.negotiator_phones)) {
+    customer.negotiator_phones.forEach((p, idx) => {
+      const negLabel = customer.negotiator_name
+        ? `طرف مذاکره (${customer.negotiator_name})`
+        : `طرف مذاکره ${customer.negotiator_phones && customer.negotiator_phones.length > 1 ? idx + 1 : ''}`;
+      addOption(p, negLabel.trim(), 'negotiator');
+    });
+  }
+
+  // Mobile numbers
+  if (Array.isArray(customer.mobile_numbers)) {
+    customer.mobile_numbers.forEach((p, idx) => {
+      addOption(p, `موبایل ${customer.mobile_numbers && customer.mobile_numbers.length > 1 ? idx + 1 : ''}`.trim(), 'mobile');
+    });
+  }
+
+  // Landline numbers
+  if (Array.isArray(customer.landline_numbers)) {
+    customer.landline_numbers.forEach((p, idx) => {
+      addOption(p, `تلفن ثابت ${customer.landline_numbers && customer.landline_numbers.length > 1 ? idx + 1 : ''}`.trim(), 'landline');
+    });
+  }
+
+  // Telegram phone
+  if (customer.telegram_phone) {
+    addOption(customer.telegram_phone, 'شماره تلگرام', 'telegram');
+  }
+
+  // Contacts sub-items if present
+  if (Array.isArray(customer.contacts)) {
+    customer.contacts.forEach((contact) => {
+      if (['mobile', 'landline', 'whatsapp', 'telegram'].includes(contact.channel_type) && contact.value) {
+        const contactLabel = contact.contact_name
+          ? `${contact.contact_name} (${contact.contact_role || (contact.channel_type === 'landline' ? 'ثابت' : 'موبایل')})`
+          : (contact.contact_role || (contact.channel_type === 'landline' ? 'تلفن ثابت' : 'موبایل'));
+        addOption(contact.value, contactLabel, contact.channel_type);
+      }
+    });
+  }
+
+  return options;
+}
+
 export function formatTimeRemaining(deadlineIso?: string | null): {
   text: string;
   isExpired: boolean;
@@ -304,8 +477,32 @@ export function formatFollowupRelativeBadge(followupIso?: string | null): {
   const targetTime = d.getTime();
 
   if (targetTime >= startToday && targetTime <= endToday) {
+    const isPastToday = targetTime < now.getTime();
+    if (isPastToday) {
+      return {
+        text: 'گذشته (امروز)',
+        badgeClass: 'text-rose-700 bg-rose-50 border border-rose-300 dark:text-[#E22134] dark:bg-[#E22134]/15 dark:border-[#E22134]/40 font-bold',
+        isToday: true,
+        isOverdue: true,
+        isTomorrow: false,
+        daysDiff: 0,
+      };
+    }
+
+    const diffMs = targetTime - now.getTime();
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffMins = Math.floor((diffMs % 3600000) / 60000);
+    let timeLabel = '';
+    if (diffHours > 0) {
+      timeLabel = `${toPersianDigits(diffHours)} ساعت دیگر`;
+    } else if (diffMins > 0) {
+      timeLabel = `${toPersianDigits(diffMins)} دقیقه دیگر`;
+    } else {
+      timeLabel = 'هم‌اکنون';
+    }
+
     return {
-      text: 'امروز',
+      text: `امروز (${timeLabel})`,
       badgeClass: 'text-emerald-700 bg-emerald-50 border border-emerald-300 dark:text-[#1DB954] dark:bg-[#1DB954]/20 dark:border-[#1DB954]/50 font-bold animate-pulse',
       isToday: true,
       isOverdue: false,
@@ -673,44 +870,88 @@ export function matchPersonnelToReport(
   return false;
 }
 
-export function getAvatarUrl(avatar?: any): string | undefined {
-  if (!avatar) return undefined;
+function getStoredToken(): string {
+  try {
+    const saved = localStorage.getItem('crm_auth_session');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return parsed.access_token || '';
+    }
+  } catch {}
+  return '';
+}
+
+export function getAvatarUrl(avatar?: any, fallbackName: string = 'default'): string {
+  if (!avatar) return `/api/assets/${encodeURIComponent(fallbackName)}`;
 
   let raw: string = '';
   if (typeof avatar === 'object' && avatar !== null) {
-    raw = avatar.id || avatar.url || avatar.filename_disk || '';
+    raw = avatar.id || avatar.filename_disk || avatar.filename_download || avatar.url || (typeof avatar.avatar === 'string' ? avatar.avatar : '');
   } else if (typeof avatar === 'string') {
     raw = avatar.trim();
   }
 
-  if (!raw) return undefined;
+  if (!raw) return `/api/assets/${encodeURIComponent(fallbackName)}`;
+
+  // Trim wrapping quotes
+  raw = raw.replace(/^["']+|["']+$/g, '').trim();
+  if (!raw) return `/api/assets/${encodeURIComponent(fallbackName)}`;
 
   // Base64 data URLs
   if (raw.startsWith('data:')) return raw;
 
-  // Already our authenticated API proxy
-  if (raw.startsWith('/api/assets/')) return raw;
-
-  // Relative /assets/ path -> route to /api/assets/
-  if (raw.startsWith('/assets/')) return `/api${raw}`;
-
-  // If a full URL contains /assets/<uuid> (e.g. from internal directusUrl or direct link)
-  // route through our authenticated proxy so client browsers don't get 403 or network errors
-  const directusAssetsMatch = raw.match(/\/assets\/([a-zA-Z0-9\-_]+)/);
-  if (directusAssetsMatch && directusAssetsMatch[1]) {
-    return `/api/assets/${directusAssetsMatch[1]}`;
+  // Local uploaded avatar proxy
+  if (raw.startsWith('/api/assets/avatar-') || raw.startsWith('api/assets/avatar-')) {
+    return raw.startsWith('/') ? raw : `/${raw}`;
   }
 
-  // External URLs (e.g. external CDN, gravatar, ui-avatars)
-  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+  // Already contains access_token
+  if (raw.includes('access_token=')) {
     return raw;
   }
 
-  // Other relative paths
-  if (raw.startsWith('/')) return raw;
+  let cleanId = raw;
+  const match = raw.match(/\/assets\/([a-zA-Z0-9\-_.]+)/);
+  if (match && match[1]) {
+    cleanId = match[1];
+  } else if (cleanId.startsWith('https://api.alphadesk.ir/assets/')) {
+    cleanId = cleanId.replace('https://api.alphadesk.ir/assets/', '');
+  } else if (cleanId.startsWith('http://api.alphadesk.ir/assets/')) {
+    cleanId = cleanId.replace('http://api.alphadesk.ir/assets/', '');
+  } else if (cleanId.startsWith('/assets/')) {
+    cleanId = cleanId.replace('/assets/', '');
+  } else if (cleanId.startsWith('/api/assets/')) {
+    cleanId = cleanId.replace('/api/assets/', '');
+  }
 
-  // Raw Directus file UUID string (e.g. 68f9b7c8-4720-4c57-...)
-  return `/api/assets/${raw}`;
+  // External URLs (e.g. gravatar, ui-avatars)
+  if (cleanId.startsWith('http://') || cleanId.startsWith('https://')) {
+    return cleanId;
+  }
+
+  // Other relative paths starting with slash
+  if (cleanId.startsWith('/') && !cleanId.startsWith('/api/assets/')) {
+    return cleanId;
+  }
+
+  const token = getStoredToken();
+  const tokenQuery = token ? `?access_token=${encodeURIComponent(token)}` : '';
+
+  // Raw Directus file UUID or filename string (e.g. 2a0b76be-f530-4f28-be14-a094c89bd5c5 or file.webp)
+  return `https://api.alphadesk.ir/assets/${cleanId}${tokenQuery}`;
+}
+
+/**
+ * Resolves avatar URL from any user or personnel object.
+ */
+export function resolveUserAvatar(user?: any, personnel?: any): string {
+  if (!user && !personnel) return '';
+  const candidate =
+    user?.avatar ||
+    personnel?.avatar ||
+    (typeof user === 'string' ? user : '') ||
+    '';
+  return getAvatarUrl(candidate) || '';
 }
 
 /**

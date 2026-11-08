@@ -96,6 +96,12 @@ export interface Customer {
   reports?: CustomerReport[];
 }
 
+export interface CustomerPhoneOption {
+  number: string;
+  label: string;
+  type: string;
+}
+
 export interface CustomerReport {
   id: string;
   customer_id: string;
