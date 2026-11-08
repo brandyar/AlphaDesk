@@ -299,12 +299,13 @@ export default function App() {
         }
 
         const effectiveAvatar =
+          targetPersonnel?.profile_image ||
+          targetPersonnel?.avatar ||
           targetUser?.avatar ||
           currentUser?.avatar ||
-          targetPersonnel?.avatar ||
           '';
         if (effectiveAvatar) {
-          targetPersonnel = { ...targetPersonnel, avatar: effectiveAvatar };
+          targetPersonnel = { ...targetPersonnel, profile_image: effectiveAvatar, avatar: effectiveAvatar };
         }
 
         setCurrentPersonnel(targetPersonnel);
@@ -941,11 +942,13 @@ export default function App() {
       setCurrentPersonnel(res.personnel);
       setApiPersonnelContext(res.personnel);
       if (currentUser) {
+        const effectiveAvatar = res.personnel.profile_image || res.personnel.avatar || (res.personnel as any).avater || currentUser.avatar || (currentUser as any)?.avater;
         const updatedUser = {
           ...currentUser,
           name: res.personnel.name || currentUser.name,
-          avatar: res.personnel.avatar || (res.personnel as any).avater || currentUser.avatar || (currentUser as any)?.avater,
-          avater: (res.personnel as any).avater || res.personnel.avatar || (currentUser as any)?.avater || currentUser.avatar,
+          profile_image: effectiveAvatar,
+          avatar: effectiveAvatar,
+          avater: effectiveAvatar,
         };
         setCurrentUser(updatedUser);
         saveAuthSession({

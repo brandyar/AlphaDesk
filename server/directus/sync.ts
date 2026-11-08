@@ -194,12 +194,15 @@ export async function ensureDirectusPersonnel() {
     if (res && Array.isArray(res.data)) {
       const attachAvatars = (list: any[]) =>
         list.map((p: any) => {
+          let profileImg = formatAvatarUrl(p.profile_image);
           let av =
+            profileImg ||
             (p.user_id && userAvatarMap[p.user_id]) ||
-            (p.email && userAvatarMap[p.email.toLowerCase().trim()]);
-          if (!av) av = formatAvatarUrl(p.avatar);
+            (p.email && userAvatarMap[p.email.toLowerCase().trim()]) ||
+            formatAvatarUrl(p.avatar);
           return {
             ...p,
+            profile_image: profileImg || av || '',
             avatar: av || '',
           };
         });

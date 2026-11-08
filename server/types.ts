@@ -178,6 +178,7 @@ export interface Personnel {
   emergency_contact_relation?: string;
   family_contacts?: any;
   permissions?: PersonnelPermissions;
+  profile_image?: string;
   avatar?: string;
   status?: string;
   active?: boolean;

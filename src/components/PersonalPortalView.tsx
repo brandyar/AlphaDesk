@@ -157,7 +157,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
   const [profileUsername, setProfileUsername] = useState(currentPersonnel?.username || currentUser?.username || '');
   const [profilePhone, setProfilePhone] = useState(currentPersonnel?.phone || '');
   const [profileAvatar, setProfileAvatar] = useState(
-    currentPersonnel?.avatar || (currentPersonnel as any)?.avater || currentUser?.avatar || (currentUser as any)?.avater || ''
+    currentPersonnel?.profile_image || currentPersonnel?.avatar || (currentPersonnel as any)?.avater || currentUser?.avatar || (currentUser as any)?.avater || ''
   );
   const [profileBankCard, setProfileBankCard] = useState(currentPersonnel?.bank_card_number || '');
   const [profileIban, setProfileIban] = useState(currentPersonnel?.iban || '');
@@ -168,8 +168,9 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
 
   useEffect(() => {
     const avatarToUse =
-      currentUser?.avatar ||
+      currentPersonnel?.profile_image ||
       currentPersonnel?.avatar ||
+      currentUser?.avatar ||
       '';
     if (avatarToUse) setProfileAvatar(avatarToUse);
     if (currentPersonnel?.name || currentUser?.name) setProfileName(currentPersonnel?.name || currentUser?.name || '');
@@ -205,6 +206,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
             name: profileName,
             username: profileUsername.trim() || undefined,
             phone: profilePhone,
+            profile_image: res.avatarUrl,
             avatar: res.avatarUrl,
             bank_card_number: profileBankCard,
             iban: profileIban,
@@ -299,6 +301,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
         name: profileName,
         username: profileUsername.trim() || undefined,
         phone: profilePhone,
+        profile_image: profileAvatar,
         avatar: profileAvatar,
         bank_card_number: profileBankCard,
         iban: profileIban,
@@ -511,34 +514,19 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-[#1DB954] dark:to-[#14833b] text-white dark:text-black font-black text-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 dark:shadow-[#1DB954]/20 overflow-hidden border-2 border-emerald-500 dark:border-[#1DB954]">
-                <img
-                  key={getAvatarUrl(profileAvatar || currentUser?.avatar || currentPersonnel?.avatar, profileName)}
-                  src={getAvatarUrl(profileAvatar || currentUser?.avatar || currentPersonnel?.avatar, profileName)}
-                  alt={profileName}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    const target = e.currentTarget;
-                    if (!target.dataset.fallbackTried) {
-                      target.dataset.fallbackTried = 'true';
-                      const av = profileAvatar || currentUser?.avatar || currentPersonnel?.avatar;
-                      let fileKey = typeof av === 'object' && av !== null ? ((av as any).id || (av as any).filename_disk || (av as any).filename_download) : av;
-                      if (fileKey && typeof fileKey === 'string') {
-                        const cleanKey = fileKey.replace(/^https?:\/\/[^\/]+\/assets\//i, '').replace(/^\/api\/assets\//i, '').replace(/^\/assets\//i, '').split('?')[0];
-                        if (cleanKey) {
-                          try {
-                            const saved = localStorage.getItem('crm_auth_session');
-                            const token = saved ? JSON.parse(saved)?.access_token || '' : '';
-                            const tQuery = token ? `?access_token=${encodeURIComponent(token)}` : '';
-                            target.src = `/api/assets/${encodeURIComponent(cleanKey)}${tQuery}`;
-                          } catch {
-                            target.src = `/api/assets/${encodeURIComponent(cleanKey)}`;
-                          }
-                        }
-                      }
-                    }
-                  }}
-                />
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-[#1DB954] dark:to-[#14833b] text-white dark:text-black font-black text-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 dark:shadow-[#1DB954]/20 overflow-hidden border-2 border-emerald-500 dark:border-[#1DB954] relative">
+                {getAvatarUrl(profileAvatar || currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, profileName) ? (
+                  <img
+                    key={getAvatarUrl(profileAvatar || currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, profileName)}
+                    src={getAvatarUrl(profileAvatar || currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, profileName)}
+                    alt={profileName}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : null}
+                <span>{(profileName || currentPersonnel?.name || currentUser?.name || 'U').trim().charAt(0).toUpperCase()}</span>
               </div>
               <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 dark:bg-[#1DB954] rounded-full border-2 border-white dark:border-[#121212]" />
             </div>

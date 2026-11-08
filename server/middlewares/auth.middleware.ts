@@ -68,7 +68,7 @@ export function formatAvatarUrl(avatar: any, reqToken?: string): string | undefi
   if (!avatar) return undefined;
   let raw = '';
   if (typeof avatar === 'object' && avatar !== null) {
-    raw = avatar.id || avatar.filename_disk || avatar.filename_download || avatar.avatar || avatar.url || '';
+    raw = avatar.id || avatar.filename_disk || avatar.filename_download || avatar.profile_image || avatar.avatar || avatar.url || '';
   } else if (typeof avatar === 'string') {
     raw = avatar.trim();
   }
@@ -81,14 +81,10 @@ export function formatAvatarUrl(avatar: any, reqToken?: string): string | undefi
   // Base64 data URLs
   if (raw.startsWith('data:')) return raw;
 
-  // Local uploaded avatar proxy
-  if (raw.startsWith('/api/assets/avatar-') || raw.startsWith('api/assets/avatar-')) return raw.startsWith('/') ? raw : `/${raw}`;
+  // Strip access_token query param
+  raw = raw.replace(/([?&])access_token=[^&]+(&|$)/, '$1').replace(/[?&]$/, '');
 
   let cleanId = raw;
-  if (cleanId.includes('access_token=')) {
-    return cleanId;
-  }
-
   const directusAssetsMatch = cleanId.match(/\/assets\/([a-zA-Z0-9\-_.]+)/);
   if (directusAssetsMatch && directusAssetsMatch[1]) {
     cleanId = directusAssetsMatch[1];
@@ -98,27 +94,34 @@ export function formatAvatarUrl(avatar: any, reqToken?: string): string | undefi
     cleanId = cleanId.replace('http://api.alphadesk.ir/assets/', '');
   } else if (cleanId.startsWith('/assets/')) {
     cleanId = cleanId.replace('/assets/', '');
+  } else if (cleanId.startsWith('/api/assets/')) {
+    cleanId = cleanId.replace('/api/assets/', '');
   }
 
-  // External URLs (e.g. external CDN, gravatar, ui-avatars)
-  if (cleanId.startsWith('http://') || cleanId.startsWith('https://')) {
+  cleanId = cleanId.split('?')[0].split('#')[0];
+
+  // External non-Directus URLs
+  if ((cleanId.startsWith('http://') || cleanId.startsWith('https://')) && !cleanId.includes('alphadesk.ir')) {
     return cleanId;
   }
 
   // Other relative paths
-  if (cleanId.startsWith('/')) return cleanId;
+  if (cleanId.startsWith('/') && !cleanId.startsWith('/api/assets/')) {
+    return cleanId;
+  }
 
-  const token = reqToken || latestAccessToken;
-  const tokenQuery = token ? `?access_token=${encodeURIComponent(token)}` : '';
+  // Route through BFF proxy /api/assets/:id
+  if (cleanId) {
+    return `/api/assets/${cleanId}`;
+  }
 
-  // Raw Directus file UUID or filename string
-  return `https://api.alphadesk.ir/assets/${cleanId}${tokenQuery}`;
+  return undefined;
 }
 
 export function extractFileId(avatar: any): string | null {
   if (!avatar) return null;
   if (typeof avatar === 'object' && avatar !== null) {
-    return avatar.id || avatar.filename_disk || avatar.filename_download || avatar.fileId || avatar.avatar || null;
+    return avatar.id || avatar.filename_disk || avatar.filename_download || avatar.fileId || avatar.profile_image || avatar.avatar || null;
   }
   if (typeof avatar !== 'string') return null;
   let str = avatar.trim().replace(/^["']+|["']+$/g, '').trim();
@@ -135,8 +138,10 @@ export function extractFileId(avatar: any): string | null {
 export function resolveUserAvatar(user?: any, personnel?: any): string {
   if (!user && !personnel) return '';
   const candidate =
-    user?.avatar ||
+    personnel?.profile_image ||
+    user?.profile_image ||
     personnel?.avatar ||
+    user?.avatar ||
     (typeof user === 'string' ? user : '') ||
     '';
   return formatAvatarUrl(candidate) || '';

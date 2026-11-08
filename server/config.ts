@@ -57,7 +57,7 @@ export const initialPersonnel: Personnel[] = [
     phone: '09121112233',
     status: 'active',
     active: true,
-    avatar: '/api/assets/p-1',
+    avatar: '',
   },
   {
     id: 'p-2',
@@ -68,7 +68,7 @@ export const initialPersonnel: Personnel[] = [
     phone: '09123456789',
     status: 'active',
     active: true,
-    avatar: '/api/assets/p-2',
+    avatar: '',
   },
   {
     id: 'p-3',
@@ -79,7 +79,7 @@ export const initialPersonnel: Personnel[] = [
     phone: '09351234567',
     status: 'active',
     active: true,
-    avatar: '/api/assets/p-3',
+    avatar: '',
   },
   {
     id: 'p-4',
@@ -90,7 +90,7 @@ export const initialPersonnel: Personnel[] = [
     phone: '09197654321',
     status: 'active',
     active: true,
-    avatar: '/api/assets/p-4',
+    avatar: '',
   },
 ];
 

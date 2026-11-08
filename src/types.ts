@@ -220,6 +220,7 @@ export interface Personnel {
   emergency_contact_relation?: string;
   family_contacts?: FamilyContact[];
   permissions?: PersonnelPermissions;
+  profile_image?: string;
   avatar?: string;
   active: boolean;
   status?: string;
@@ -275,6 +276,7 @@ export interface UserProfileUpdatePayload {
   name?: string;
   username?: string;
   phone?: string;
+  profile_image?: string;
   avatar?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;

@@ -157,27 +157,29 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-8 max-h-[95vh] flex flex-col text-slate-900 dark:text-white">
-        <div className="p-4 sm:p-5 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-[#1DB954]/15 text-emerald-700 dark:text-[#1DB954] flex items-center justify-center border border-emerald-300 dark:border-[#1DB954]/30 shrink-0">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-black/75 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92vh] sm:max-h-[90vh] flex flex-col text-slate-900 dark:text-white transition-all">
+        {/* Header */}
+        <div className="p-3.5 sm:p-5 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-full bg-emerald-100 dark:bg-[#1DB954]/15 text-emerald-700 dark:text-[#1DB954] flex items-center justify-center border border-emerald-300 dark:border-[#1DB954]/30 shrink-0">
               <MessageSquareText className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">ثبت گزارش مذاکره و پیگیری مشتری</h3>
-              <p className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">گزارش پیگیری‌ها و تغییر وضعیت مرحله مشتری</p>
+            <div className="truncate">
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">ثبت گزارش مذاکره و پیگیری مشتری</h3>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-[#A7A7A7] truncate">گزارش پیگیری‌ها و تغییر وضعیت مرحله مشتری</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors cursor-pointer shrink-0"
+            aria-label="بستن"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+        <form onSubmit={handleSubmit} className="p-3.5 sm:p-5 md:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
           {/* Error Message Banner */}
           {formError && (
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-300 dark:bg-rose-950/40 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-400 font-bold flex items-center gap-2 animate-in fade-in">
@@ -197,7 +199,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                 setCustomerId(e.target.value);
                 setFormError(null);
               }}
-              className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
+              className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-lg sm:rounded-md text-xs text-slate-900 dark:text-white focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
             >
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -207,7 +209,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
             </select>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {/* Customer Negotiator Name (Empty by default) */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
@@ -221,16 +223,16 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                   setFormError(null);
                 }}
                 placeholder="نام طرف مذاکره سمت مشتری..."
-                className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
+                className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-lg sm:rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
               />
               {selectedCustomer && (selectedCustomer.manager_name || selectedCustomer.negotiator_name) && (
-                <div className="flex flex-wrap items-center gap-1 mt-1.5 text-[10px]">
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[10px]">
                   <span className="text-slate-400 dark:text-[#777]">پیشنهاد:</span>
                   {selectedCustomer.manager_name && (
                     <button
                       type="button"
                       onClick={() => setCustomerNegotiatorName(selectedCustomer.manager_name)}
-                      className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-emerald-100 dark:bg-[#333] dark:hover:bg-[#1DB954]/20 text-slate-700 hover:text-emerald-700 dark:text-[#ccc] dark:hover:text-[#1DB954] transition-colors cursor-pointer"
+                      className="px-2 py-0.5 rounded bg-slate-100 hover:bg-emerald-100 dark:bg-[#333] dark:hover:bg-[#1DB954]/20 text-slate-700 hover:text-emerald-700 dark:text-[#ccc] dark:hover:text-[#1DB954] transition-colors cursor-pointer"
                     >
                       {selectedCustomer.manager_name} (مدیر)
                     </button>
@@ -239,7 +241,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setCustomerNegotiatorName(selectedCustomer.negotiator_name)}
-                      className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-emerald-100 dark:bg-[#333] dark:hover:bg-[#1DB954]/20 text-slate-700 hover:text-emerald-700 dark:text-[#ccc] dark:hover:text-[#1DB954] transition-colors cursor-pointer"
+                      className="px-2 py-0.5 rounded bg-slate-100 hover:bg-emerald-100 dark:bg-[#333] dark:hover:bg-[#1DB954]/20 text-slate-700 hover:text-emerald-700 dark:text-[#ccc] dark:hover:text-[#1DB954] transition-colors cursor-pointer"
                     >
                       {selectedCustomer.negotiator_name}
                     </button>
@@ -267,7 +269,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                         setNegotiationPhone(e.target.value);
                       }
                     }}
-                    className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                    className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-lg sm:rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
                   >
                     {customerPhoneOptions.map((opt) => (
                       <option key={opt.number} value={opt.number}>
@@ -324,7 +326,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                     setFormError(null);
                   }}
                   placeholder="0912..."
-                  className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954] font-mono"
+                  className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-lg sm:rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954] font-mono"
                 />
               )}
             </div>
@@ -349,7 +351,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {/* Negotiation Status */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
@@ -358,7 +360,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
               <select
                 value={negotiationStatus}
                 onChange={(e) => setNegotiationStatus(e.target.value as NegotiationStatus)}
-                className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
+                className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-lg sm:rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
               >
                 <option value="تماس برقرار نشده">تماس برقرار نشده</option>
                 <option value="پاسخ نمیدهد">پاسخ نمیدهد</option>
@@ -377,18 +379,20 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                 امتیاز مذاکره: <span className="text-emerald-700 dark:text-[#1DB954] font-bold font-mono">{negotiationScore}</span>/10
               </label>
-              <input
-                type="range"
-                min={1}
-                max={10}
-                value={negotiationScore}
-                onChange={(e) => setNegotiationScore(Number(e.target.value))}
-                className="w-full accent-emerald-600 dark:accent-[#1DB954] mt-2"
-              />
+              <div className="flex items-center gap-2 h-10 px-2 bg-slate-50 dark:bg-[#222] rounded-lg border border-slate-200 dark:border-[#2e2e2e]">
+                <input
+                  type="range"
+                  min={1}
+                  max={10}
+                  value={negotiationScore}
+                  onChange={(e) => setNegotiationScore(Number(e.target.value))}
+                  className="w-full accent-emerald-600 dark:accent-[#1DB954] cursor-pointer"
+                />
+              </div>
             </div>
 
             {/* Next Follow-up Date and Time */}
-            <div>
+            <div className="sm:col-span-2 lg:col-span-1">
               <PersianDatePicker
                 label="موعد پیگیری بعدی"
                 value={nextFollowupDate}
@@ -405,13 +409,13 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
 
           {/* Dedicated Contract / Invoice Section when status is 'قرارداد / فاکتور' */}
           {isContractStatus && (
-            <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-[#1DB954]/10 border border-emerald-300 dark:border-[#1DB954]/30 space-y-3.5 animate-in fade-in duration-200">
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-emerald-50 dark:bg-[#1DB954]/10 border border-emerald-300 dark:border-[#1DB954]/30 space-y-3 animate-in fade-in duration-200">
               <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 dark:text-[#1DB954] border-b border-emerald-200 dark:border-[#1DB954]/20 pb-2">
                 <FileCheck2 className="w-4 h-4" />
                 <span>اطلاعات تکمیلی قرارداد / فاکتور صادر شده</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {/* Contract / Invoice Number */}
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1 flex items-center gap-1">
@@ -438,7 +442,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                 </div>
 
                 {/* Final Amount (Toman) */}
-                <div>
+                <div className="sm:col-span-2 lg:col-span-1">
                   <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1 flex items-center justify-between">
                     <span className="flex items-center gap-1">
                       <DollarSign className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
@@ -459,21 +463,21 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                     className="w-full h-9 px-3 bg-white dark:bg-[#181818] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2a2a2a] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono font-bold text-left"
                   />
                 </div>
-              </div>
 
-              {/* Contract / Invoice Items */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1 flex items-center gap-1">
-                  <PackageCheck className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
-                  <span>آیتم‌ها و اقلام قرارداد / فاکتور</span>
-                </label>
-                <input
-                  type="text"
-                  value={contractItems}
-                  onChange={(e) => setContractItems(e.target.value)}
-                  placeholder="شرح اقلام و خدمات (مثلاً: طراحی سایت فروشگاهی + درگاه پرداخت + هاست و پشتیبانی ۱ ساله)..."
-                  className="w-full h-9 px-3 bg-white dark:bg-[#181818] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2a2a2a] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
-                />
+                {/* Contract / Invoice Items */}
+                <div className="col-span-1 sm:col-span-2 lg:col-span-3">
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1 flex items-center gap-1">
+                    <PackageCheck className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
+                    <span>آیتم‌ها و اقلام قرارداد / فاکتور</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={contractItems}
+                    onChange={(e) => setContractItems(e.target.value)}
+                    placeholder="شرح اقلام و خدمات (مثلاً: طراحی سایت فروشگاهی + درگاه پرداخت + هاست و پشتیبانی ۱ ساله)..."
+                    className="w-full h-9 px-3 bg-white dark:bg-[#181818] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2a2a2a] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -492,23 +496,23 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                 setFormError(null);
               }}
               placeholder="شرح دقیق مکالمه، پاسخ مشتری، نیازها و بندهای مورد مذاکره..."
-              className="w-full p-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-md text-xs text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"
+              className="w-full p-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-lg sm:rounded-md text-xs text-slate-900 dark:text-white resize-none focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed"
             />
           </div>
 
-          {/* Actions */}
-          <div className="pt-4 border-t border-slate-200 dark:border-[#282828] flex items-center justify-end gap-3">
+          {/* Actions - Responsive Full Width on Mobile, End-Aligned on Desktop */}
+          <div className="pt-3.5 sm:pt-4 border-t border-slate-200 dark:border-[#282828] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="h-10 px-5 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#535353] dark:hover:border-white text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-[#B3B3B3] dark:hover:text-white transition-colors cursor-pointer"
+              className="w-full sm:w-auto h-10 px-5 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#535353] dark:hover:border-white text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-[#B3B3B3] dark:hover:text-white transition-colors cursor-pointer text-center"
             >
               انصراف
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="h-10 px-6 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 cursor-pointer"
+              className="w-full sm:w-auto h-10 px-6 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 cursor-pointer text-center flex items-center justify-center gap-1.5"
             >
               {saving ? 'در حال ثبت...' : 'ثبت و اعمال گزارش'}
             </button>

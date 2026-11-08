@@ -86,6 +86,7 @@ router.get('/', async (req: Request, res: Response) => {
         const mapped = await Promise.all(
           resp.data.map(async (p: any) => {
             const enriched = enrichPersonnel(p);
+            let profileImg = formatAvatarUrl(p.profile_image || enriched.profile_image);
             let userAvatar = (enriched.user_id && userAvatarMap[enriched.user_id]) || (enriched.email && userAvatarMap[enriched.email.toLowerCase().trim()]);
             if (!userAvatar && enriched.user_id && !String(enriched.user_id).startsWith('p-')) {
               try {
@@ -104,8 +105,8 @@ router.get('/', async (req: Request, res: Response) => {
                 }
               } catch {}
             }
-            let avatar = userAvatar || formatAvatarUrl(enriched.avatar) || (typeof enriched.avatar === 'string' ? enriched.avatar : '');
-            return { ...enriched, avatar };
+            let avatar = profileImg || userAvatar || formatAvatarUrl(enriched.avatar) || (typeof enriched.avatar === 'string' ? enriched.avatar : '');
+            return { ...enriched, profile_image: profileImg || avatar, avatar };
           })
         );
 
@@ -124,9 +125,10 @@ router.get('/', async (req: Request, res: Response) => {
 
   let list = personnelData.map((p) => {
     const enriched = enrichPersonnel(p);
+    let profileImg = formatAvatarUrl(enriched.profile_image || (p as any).profile_image);
     let userAvatar = (enriched.user_id && userAvatarMap[enriched.user_id]) || (enriched.email && userAvatarMap[enriched.email.toLowerCase().trim()]);
-    let avatar = userAvatar || formatAvatarUrl(enriched.avatar) || (typeof enriched.avatar === 'string' ? enriched.avatar : '');
-    return { ...enriched, avatar };
+    let avatar = profileImg || userAvatar || formatAvatarUrl(enriched.avatar) || (typeof enriched.avatar === 'string' ? enriched.avatar : '');
+    return { ...enriched, profile_image: profileImg || avatar, avatar };
   });
 
   if (tenantId && tenantId !== 'all') {
@@ -286,11 +288,14 @@ router.patch('/:id', async (req: Request, res: Response) => {
         directusPatch.tenant_id = resolveDirectusTenantId(patch.tenant_id);
       }
 
-      // If avatar is /api/assets/<fileId>, extract raw UUID for Directus file relation
-      if (typeof patch.avatar === 'string') {
-        const fileMatch = patch.avatar.match(/\/api\/assets\/([a-zA-Z0-9\-_]+)/);
+      // If profile_image / avatar is /api/assets/<fileId>, extract raw UUID for Directus file relation
+      const imgVal = patch.profile_image || patch.avatar;
+      if (typeof imgVal === 'string') {
+        const fileMatch = imgVal.match(/\/api\/assets\/([a-zA-Z0-9\-_]+)/);
         if (fileMatch && fileMatch[1]) {
-          directusPatch.avatar = fileMatch[1];
+          directusPatch.profile_image = fileMatch[1];
+        } else if (!imgVal.startsWith('http://') && !imgVal.startsWith('https://') && !imgVal.startsWith('/')) {
+          directusPatch.profile_image = imgVal;
         }
       }
 

@@ -956,10 +956,10 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             {showAddReport && (
               <form
                 onSubmit={handleReportSubmit}
-                className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-[#181818] border border-slate-300 dark:border-[#2e2e2e] space-y-4 shadow-lg animate-in fade-in"
+                className="p-3.5 sm:p-5 rounded-2xl bg-slate-50 dark:bg-[#181818] border border-slate-300 dark:border-[#2e2e2e] space-y-4 shadow-lg animate-in fade-in transition-all"
               >
-                <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-2.5">
-                  <div className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-[#282828] pb-2.5">
+                  <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                     <span>ثبت گزارش مذاکره جدید برای این پرونده</span>
                   </div>
@@ -976,9 +976,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-3.5">
                   {/* Customer Negotiator Name (Empty by default) */}
-                  <div className="sm:col-span-1">
+                  <div>
                     <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">
                       طرف مذاکره (سمت مشتری)
                     </label>
@@ -993,13 +993,13 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       className="w-full h-9 px-2.5 bg-white dark:bg-[#242424] border border-slate-300 dark:border-[#383838] rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     />
                     {(customer.manager_name || customer.negotiator_name) && (
-                      <div className="flex flex-wrap items-center gap-1 mt-1 text-[10px]">
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[10px]">
                         <span className="text-slate-400 dark:text-[#777]">پیشنهاد:</span>
                         {customer.manager_name && (
                           <button
                             type="button"
                             onClick={() => setCustomerNegotiatorName(customer.manager_name)}
-                            className="px-1.5 py-0.5 rounded bg-slate-200 hover:bg-emerald-100 dark:bg-[#2c2c2c] dark:hover:bg-[#1DB954]/20 text-slate-700 hover:text-emerald-700 dark:text-[#bbb] dark:hover:text-[#1DB954] transition-colors cursor-pointer"
+                            className="px-2 py-0.5 rounded bg-slate-200 hover:bg-emerald-100 dark:bg-[#2c2c2c] dark:hover:bg-[#1DB954]/20 text-slate-700 hover:text-emerald-700 dark:text-[#bbb] dark:hover:text-[#1DB954] transition-colors cursor-pointer"
                           >
                             {customer.manager_name} (مدیر)
                           </button>
@@ -1008,7 +1008,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           <button
                             type="button"
                             onClick={() => setCustomerNegotiatorName(customer.negotiator_name)}
-                            className="px-1.5 py-0.5 rounded bg-slate-200 hover:bg-emerald-100 dark:bg-[#2c2c2c] dark:hover:bg-[#1DB954]/20 text-slate-700 hover:text-emerald-700 dark:text-[#bbb] dark:hover:text-[#1DB954] transition-colors cursor-pointer"
+                            className="px-2 py-0.5 rounded bg-slate-200 hover:bg-emerald-100 dark:bg-[#2c2c2c] dark:hover:bg-[#1DB954]/20 text-slate-700 hover:text-emerald-700 dark:text-[#bbb] dark:hover:text-[#1DB954] transition-colors cursor-pointer"
                           >
                             {customer.negotiator_name}
                           </button>
@@ -1018,12 +1018,12 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </div>
 
                   {/* Customer Negotiation Phone Selection */}
-                  <div className="sm:col-span-1">
+                  <div>
                     <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">
                       شماره تماس مذاکره
                     </label>
                     {customerPhoneOptions.length > 0 ? (
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         <select
                           value={isCustomPhone ? '__custom__' : negotiationPhone}
                           onChange={(e) => {
@@ -1057,7 +1057,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                                 setIsCustomPhone(false);
                                 setReportError(null);
                               }}
-                              className={`text-[10px] px-1.5 py-0.5 rounded border font-mono transition-colors cursor-pointer ${
+                              className={`text-[10px] px-2 py-0.5 rounded border font-mono transition-colors cursor-pointer ${
                                 !isCustomPhone && negotiationPhone === opt.number
                                   ? 'bg-emerald-500 text-white border-emerald-500 font-bold dark:bg-[#1DB954] dark:text-black'
                                   : 'bg-white hover:bg-slate-200 text-slate-700 border-slate-300 dark:bg-[#262626] dark:hover:bg-[#333] dark:text-[#ccc] dark:border-[#383838]'
@@ -1100,7 +1100,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </div>
 
                   {/* Negotiation Status */}
-                  <div className="sm:col-span-1">
+                  <div>
                     <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">وضعیت مذاکره</label>
                     <select
                       value={negotiationStatus}
@@ -1120,31 +1120,33 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   </div>
 
                   {/* Negotiation Score */}
-                  <div className="sm:col-span-1">
+                  <div>
                     <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">
                       امتیاز مذاکره: <span className="text-emerald-700 dark:text-[#1DB954] font-bold font-mono">{negotiationScore}</span>/10
                     </label>
-                    <input
-                      type="range"
-                      min={1}
-                      max={10}
-                      value={negotiationScore}
-                      onChange={(e) => setNegotiationScore(Number(e.target.value))}
-                      className="w-full accent-emerald-600 dark:accent-[#1DB954] mt-2"
-                    />
+                    <div className="flex items-center gap-2 h-9 px-2 bg-white dark:bg-[#242424] rounded-lg border border-slate-300 dark:border-[#383838]">
+                      <input
+                        type="range"
+                        min={1}
+                        max={10}
+                        value={negotiationScore}
+                        onChange={(e) => setNegotiationScore(Number(e.target.value))}
+                        className="w-full accent-emerald-600 dark:accent-[#1DB954] cursor-pointer"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 {/* Admin Staff Selector */}
                 {userIsAdmin && (
-                  <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-[#222] border border-slate-200 dark:border-[#333] flex items-center justify-between gap-3 text-xs">
+                  <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-[#222] border border-slate-200 dark:border-[#333] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
                     <span className="text-slate-600 dark:text-[#A7A7A7] font-medium shrink-0">
                       کارشناس ثبت‌کننده (سازمان - ویژه مدیریت):
                     </span>
                     <select
                       value={staffNegotiatorName}
                       onChange={(e) => setStaffNegotiatorName(e.target.value)}
-                      className="h-8 px-2.5 bg-white dark:bg-[#2a2a2a] border border-slate-300 dark:border-[#444] rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
+                      className="w-full sm:w-auto h-8 px-2.5 bg-white dark:bg-[#2a2a2a] border border-slate-300 dark:border-[#444] rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
                     >
                       {personnelList.map((p) => (
                         <option key={p.id} value={p.name}>
@@ -1163,7 +1165,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       <span>اطلاعات تکمیلی قرارداد / فاکتور</span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                       <div>
                         <label className="block text-[10px] text-slate-600 dark:text-[#A7A7A7] mb-1">شماره قرارداد / فاکتور</label>
                         <input
@@ -1182,7 +1184,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           onChange={(iso) => setContractDate(iso || new Date().toISOString().split('T')[0])}
                         />
                       </div>
-                      <div>
+                      <div className="sm:col-span-2 lg:col-span-1">
                         <label className="block text-[10px] text-slate-600 dark:text-[#A7A7A7] mb-1">
                           مبلغ نهایی: <span className="text-emerald-700 dark:text-[#1DB954] font-mono">{formatToman(contractAmount)}</span>
                         </label>
@@ -1198,24 +1200,23 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                           className="w-full h-8 px-2.5 bg-white dark:bg-[#181818] rounded text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2a2a2a] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono text-left font-bold"
                         />
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-slate-600 dark:text-[#A7A7A7] mb-1">اقلام، خدمات یا بندهای فاکتور</label>
-                      <input
-                        type="text"
-                        value={contractItems}
-                        onChange={(e) => setContractItems(e.target.value)}
-                        placeholder="شرح اقلام (مثلاً: طراحی سایت فروشگاهی + درگاه پرداخت + پشتیبانی ۱ ساله)..."
-                        className="w-full h-8 px-2.5 bg-white dark:bg-[#181818] rounded text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2a2a2a] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
-                      />
+                      <div className="col-span-1 sm:col-span-2 lg:col-span-3">
+                        <label className="block text-[10px] text-slate-600 dark:text-[#A7A7A7] mb-1">اقلام، خدمات یا بندهای فاکتور</label>
+                        <input
+                          type="text"
+                          value={contractItems}
+                          onChange={(e) => setContractItems(e.target.value)}
+                          placeholder="شرح اقلام (مثلاً: طراحی سایت فروشگاهی + درگاه پرداخت + پشتیبانی ۱ ساله)..."
+                          className="w-full h-8 px-2.5 bg-white dark:bg-[#181818] rounded text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#2a2a2a] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
 
                 {/* Report Text & Follow-up Date/Time */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
-                  <div className="md:col-span-2">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4">
+                  <div className="lg:col-span-7">
                     <label className="block text-[11px] font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1">
                       متن گزارش مذاکره <span className="text-red-500">*</span>
                     </label>
@@ -1232,7 +1233,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     />
                   </div>
 
-                  <div className="md:col-span-2 flex flex-col justify-between">
+                  <div className="lg:col-span-5 flex flex-col justify-between gap-3">
                     <div>
                       <PersianDatePicker
                         label="موعد پیگیری بعدی"
@@ -1247,23 +1248,23 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       />
                     </div>
 
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        type="submit"
-                        disabled={submittingReport}
-                        className="flex-1 h-9 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-colors shadow-sm cursor-pointer hover:scale-105"
-                      >
-                        {submittingReport ? 'در حال ثبت...' : 'ذخیره و ثبت گزارش'}
-                      </button>
+                    <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1 sm:pt-0">
                       <button
                         type="button"
                         onClick={() => {
                           setShowAddReport(false);
                           setReportError(null);
                         }}
-                        className="px-4 h-9 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#535353] text-slate-600 hover:text-slate-900 dark:text-[#B3B3B3] dark:hover:text-white text-xs transition-colors cursor-pointer"
+                        className="w-full sm:w-auto px-4 h-10 sm:h-9 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#535353] text-slate-600 hover:text-slate-900 dark:text-[#B3B3B3] dark:hover:text-white text-xs transition-colors cursor-pointer text-center"
                       >
                         انصراف
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={submittingReport}
+                        className="w-full sm:flex-1 h-10 sm:h-9 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all shadow-sm cursor-pointer hover:scale-105 text-center flex items-center justify-center gap-1"
+                      >
+                        {submittingReport ? 'در حال ثبت...' : 'ذخیره و ثبت گزارش'}
                       </button>
                     </div>
                   </div>

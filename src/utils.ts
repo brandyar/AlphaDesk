@@ -881,34 +881,27 @@ function getStoredToken(): string {
   return '';
 }
 
-export function getAvatarUrl(avatar?: any, fallbackName: string = 'default'): string {
-  if (!avatar) return `/api/assets/${encodeURIComponent(fallbackName)}`;
+export function getAvatarUrl(avatar?: any, fallbackName: string = ''): string {
+  if (!avatar) return '';
 
   let raw: string = '';
   if (typeof avatar === 'object' && avatar !== null) {
-    raw = avatar.id || avatar.filename_disk || avatar.filename_download || avatar.url || (typeof avatar.avatar === 'string' ? avatar.avatar : '');
+    raw = avatar.id || avatar.filename_disk || avatar.filename_download || avatar.url || avatar.profile_image || (typeof avatar.avatar === 'string' ? avatar.avatar : '');
   } else if (typeof avatar === 'string') {
     raw = avatar.trim();
   }
 
-  if (!raw) return `/api/assets/${encodeURIComponent(fallbackName)}`;
+  if (!raw) return '';
 
   // Trim wrapping quotes
   raw = raw.replace(/^["']+|["']+$/g, '').trim();
-  if (!raw) return `/api/assets/${encodeURIComponent(fallbackName)}`;
+  if (!raw) return '';
 
   // Base64 data URLs
   if (raw.startsWith('data:')) return raw;
 
-  // Local uploaded avatar proxy
-  if (raw.startsWith('/api/assets/avatar-') || raw.startsWith('api/assets/avatar-')) {
-    return raw.startsWith('/') ? raw : `/${raw}`;
-  }
-
-  // Already contains access_token
-  if (raw.includes('access_token=')) {
-    return raw;
-  }
+  // Remove any access_token query param if present
+  raw = raw.replace(/([?&])access_token=[^&]+(&|$)/, '$1').replace(/[?&]$/, '');
 
   let cleanId = raw;
   const match = raw.match(/\/assets\/([a-zA-Z0-9\-_.]+)/);
@@ -924,21 +917,24 @@ export function getAvatarUrl(avatar?: any, fallbackName: string = 'default'): st
     cleanId = cleanId.replace('/api/assets/', '');
   }
 
-  // External URLs (e.g. gravatar, ui-avatars)
-  if (cleanId.startsWith('http://') || cleanId.startsWith('https://')) {
+  cleanId = cleanId.split('?')[0].split('#')[0];
+
+  // External non-Directus URLs
+  if ((cleanId.startsWith('http://') || cleanId.startsWith('https://')) && !cleanId.includes('alphadesk.ir')) {
     return cleanId;
   }
 
-  // Other relative paths starting with slash
+  // Relative paths starting with slash
   if (cleanId.startsWith('/') && !cleanId.startsWith('/api/assets/')) {
     return cleanId;
   }
 
-  const token = getStoredToken();
-  const tokenQuery = token ? `?access_token=${encodeURIComponent(token)}` : '';
+  // Route through BFF proxy /api/assets/:id
+  if (cleanId) {
+    return `/api/assets/${cleanId}`;
+  }
 
-  // Raw Directus file UUID or filename string (e.g. 2a0b76be-f530-4f28-be14-a094c89bd5c5 or file.webp)
-  return `https://api.alphadesk.ir/assets/${cleanId}${tokenQuery}`;
+  return '';
 }
 
 /**
@@ -947,11 +943,20 @@ export function getAvatarUrl(avatar?: any, fallbackName: string = 'default'): st
 export function resolveUserAvatar(user?: any, personnel?: any): string {
   if (!user && !personnel) return '';
   const candidate =
-    user?.avatar ||
+    personnel?.profile_image ||
+    user?.profile_image ||
+    currentUserAvatarCandidate(user) ||
     personnel?.avatar ||
+    user?.avatar ||
     (typeof user === 'string' ? user : '') ||
     '';
-  return getAvatarUrl(candidate) || '';
+  return getAvatarUrl(candidate, user?.name || personnel?.name || '') || '';
+}
+
+function currentUserAvatarCandidate(user?: any): string {
+  if (!user) return '';
+  if (typeof user === 'string') return user;
+  return user.profile_image || user.avatar || '';
 }
 
 /**

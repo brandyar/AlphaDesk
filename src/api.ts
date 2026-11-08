@@ -67,8 +67,8 @@ try {
   if (saved) {
     const parsed = JSON.parse(saved);
     currentAuthToken = parsed.access_token || '';
-    currentAuthUser = parsed.user || null;
-    currentPersonnelContext = parsed.personnel || null;
+    currentAuthUser = parsed.user ? { ...parsed.user, avatar: '', profile_image: '' } : null;
+    currentPersonnelContext = parsed.personnel ? { ...parsed.personnel, avatar: '', profile_image: '' } : null;
     currentSessionIat = parsed.session_iat || Date.now();
 
     enforceAuthRole();
@@ -165,7 +165,12 @@ export function saveAuthSession(data: AuthResponse) {
     } catch {}
   }
 
-  const sessionToSave = { ...data, user: currentAuthUser, personnel: currentPersonnelContext, session_iat: currentSessionIat };
+  const sessionToSave = {
+    ...data,
+    user: currentAuthUser ? { ...currentAuthUser, avatar: '', profile_image: '' } : null,
+    personnel: currentPersonnelContext ? { ...currentPersonnelContext, avatar: '', profile_image: '' } : null,
+    session_iat: currentSessionIat,
+  };
   try {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessionToSave));
   } catch {}

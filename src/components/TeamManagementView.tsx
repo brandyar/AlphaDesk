@@ -1954,47 +1954,19 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         {/* Colleague Name & Avatar */}
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-[#222] border border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-sm flex-shrink-0">
-                              {p.avatar ? (
+                            <div className="w-10 h-10 rounded-xl bg-[#222] border border-[#1DB954] overflow-hidden flex items-center justify-center flex-shrink-0 text-white font-bold text-sm relative">
+                              {getAvatarUrl(p.profile_image || p.avatar, p.name) ? (
                                 <img
-                                  key={getAvatarUrl(p.avatar)}
-                                  src={getAvatarUrl(p.avatar)}
+                                  key={getAvatarUrl(p.profile_image || p.avatar, p.name)}
+                                  src={getAvatarUrl(p.profile_image || p.avatar, p.name)}
                                   alt={p.name}
                                   className="w-full h-full object-cover"
-                                  onLoad={(e) => {
-                                    (e.currentTarget as HTMLElement).style.display = 'block';
-                                    const parent = (e.currentTarget as HTMLElement).parentElement;
-                                    if (parent) {
-                                      const existing = parent.querySelector('.table-avatar-fallback');
-                                      if (existing) existing.remove();
-                                    }
-                                  }}
                                   onError={(e) => {
-                                    const target = e.currentTarget;
-                                    if (!target.dataset.fallbackTried && p.avatar) {
-                                      target.dataset.fallbackTried = 'true';
-                                      let fileKey = typeof p.avatar === 'object' && p.avatar !== null ? ((p.avatar as any).id || (p.avatar as any).filename_disk || (p.avatar as any).filename_download) : p.avatar;
-                                      if (fileKey && typeof fileKey === 'string') {
-                                        const cleanKey = fileKey.replace(/^https?:\/\/[^\/]+\/assets\//i, '').replace(/^\/api\/assets\//i, '').replace(/^\/assets\//i, '');
-                                        if (cleanKey) {
-                                          target.src = `/api/assets/${encodeURIComponent(cleanKey)}`;
-                                          return;
-                                        }
-                                      }
-                                    }
-                                    target.style.display = 'none';
-                                    const parent = target.parentElement;
-                                    if (parent && !parent.querySelector('.table-avatar-fallback')) {
-                                      const span = document.createElement('span');
-                                      span.className = 'table-avatar-fallback text-[#1DB954] font-bold text-sm';
-                                      span.textContent = p.name ? p.name.charAt(0) : '؟';
-                                      parent.appendChild(span);
-                                    }
+                                    e.currentTarget.style.display = 'none';
                                   }}
                                 />
-                              ) : (
-                                <span>{p.name.charAt(0)}</span>
-                              )}
+                              ) : null}
+                              <span>{(p.name || 'U').trim().charAt(0).toUpperCase()}</span>
                             </div>
                             <div className="truncate">
                               <div className="font-bold text-sm text-white flex items-center gap-1.5">
@@ -2175,47 +2147,19 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-12 h-12 rounded-2xl bg-[#222] border-2 border-[#1DB954] overflow-hidden flex items-center justify-center text-[#1DB954] font-bold text-base flex-shrink-0 shadow-md">
-                          {p.avatar ? (
+                        <div className="w-12 h-12 rounded-2xl bg-[#222] border-2 border-[#1DB954] overflow-hidden flex items-center justify-center flex-shrink-0 shadow-md text-white font-bold text-base relative">
+                          {getAvatarUrl(p.profile_image || p.avatar, p.name) ? (
                             <img
-                              key={getAvatarUrl(p.avatar)}
-                              src={getAvatarUrl(p.avatar)}
+                              key={getAvatarUrl(p.profile_image || p.avatar, p.name)}
+                              src={getAvatarUrl(p.profile_image || p.avatar, p.name)}
                               alt={p.name}
                               className="w-full h-full object-cover"
-                              onLoad={(e) => {
-                                (e.currentTarget as HTMLElement).style.display = 'block';
-                                const parent = (e.currentTarget as HTMLElement).parentElement;
-                                if (parent) {
-                                  const existing = parent.querySelector('.card-avatar-fallback');
-                                  if (existing) existing.remove();
-                                }
-                              }}
                               onError={(e) => {
-                                const target = e.currentTarget;
-                                if (!target.dataset.fallbackTried && p.avatar) {
-                                  target.dataset.fallbackTried = 'true';
-                                  let fileKey = typeof p.avatar === 'object' && p.avatar !== null ? ((p.avatar as any).id || (p.avatar as any).filename_disk || (p.avatar as any).filename_download) : p.avatar;
-                                  if (fileKey && typeof fileKey === 'string') {
-                                    const cleanKey = fileKey.replace(/^https?:\/\/[^\/]+\/assets\//i, '').replace(/^\/api\/assets\//i, '').replace(/^\/assets\//i, '');
-                                    if (cleanKey) {
-                                      target.src = `/api/assets/${encodeURIComponent(cleanKey)}`;
-                                      return;
-                                    }
-                                  }
-                                }
-                                (e.currentTarget as HTMLElement).style.display = 'none';
-                                const parent = (e.currentTarget as HTMLElement).parentElement;
-                                if (parent && !parent.querySelector('.card-avatar-fallback')) {
-                                  const span = document.createElement('span');
-                                  span.className = 'card-avatar-fallback text-[#1DB954] font-bold text-base';
-                                  span.textContent = p.name ? p.name.charAt(0) : '؟';
-                                  parent.appendChild(span);
-                                }
+                                e.currentTarget.style.display = 'none';
                               }}
                             />
-                          ) : (
-                            <span>{p.name.charAt(0)}</span>
-                          )}
+                          ) : null}
+                          <span>{(p.name || 'U').trim().charAt(0).toUpperCase()}</span>
                         </div>
                         <div className="truncate">
                           <div className="font-bold text-sm text-white truncate flex items-center gap-1.5">

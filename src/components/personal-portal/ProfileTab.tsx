@@ -95,34 +95,19 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         >
           {/* Avatar Preview */}
           <div className="relative flex-shrink-0">
-            <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-[#222] border-2 border-emerald-500 dark:border-[#1DB954] overflow-hidden flex items-center justify-center text-slate-900 dark:text-white font-black text-xl shadow-lg shadow-black/10 dark:shadow-black/40">
-              <img
-                key={getAvatarUrl(profileAvatar || currentUser?.avatar || currentPersonnel?.avatar, profileName)}
-                src={getAvatarUrl(profileAvatar || currentUser?.avatar || currentPersonnel?.avatar, profileName)}
-                alt="avatar preview"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  const target = e.currentTarget;
-                  if (!target.dataset.fallbackTried) {
-                    target.dataset.fallbackTried = 'true';
-                    const av = profileAvatar || currentUser?.avatar || currentPersonnel?.avatar;
-                    let fileKey = typeof av === 'object' && av !== null ? ((av as any).id || (av as any).filename_disk || (av as any).filename_download) : av;
-                    if (fileKey && typeof fileKey === 'string') {
-                      const cleanKey = fileKey.replace(/^https?:\/\/[^\/]+\/assets\//i, '').replace(/^\/api\/assets\//i, '').replace(/^\/assets\//i, '').split('?')[0];
-                      if (cleanKey) {
-                        try {
-                          const saved = localStorage.getItem('crm_auth_session');
-                          const token = saved ? JSON.parse(saved)?.access_token || '' : '';
-                          const tQuery = token ? `?access_token=${encodeURIComponent(token)}` : '';
-                          target.src = `/api/assets/${encodeURIComponent(cleanKey)}${tQuery}`;
-                        } catch {
-                          target.src = `/api/assets/${encodeURIComponent(cleanKey)}`;
-                        }
-                      }
-                    }
-                  }
-                }}
-              />
+            <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-[#222] border-2 border-emerald-500 dark:border-[#1DB954] overflow-hidden flex items-center justify-center text-slate-900 dark:text-[#1DB954] font-black text-xl shadow-lg shadow-black/10 dark:shadow-black/40 relative">
+              {getAvatarUrl(profileAvatar || currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, profileName) ? (
+                <img
+                  key={getAvatarUrl(profileAvatar || currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, profileName)}
+                  src={getAvatarUrl(profileAvatar || currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, profileName)}
+                  alt="avatar preview"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              ) : null}
+              <span>{(profileName || currentPersonnel?.name || currentUser?.name || 'U').trim().charAt(0).toUpperCase()}</span>
             </div>
             {isUploadingAvatar && (
               <div className="absolute inset-0 bg-slate-900/70 dark:bg-black/70 rounded-2xl flex items-center justify-center">

@@ -205,39 +205,24 @@ export const Header: React.FC<HeaderProps> = ({
               title="حساب کاربری و سازمان"
             >
               <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-sm overflow-hidden ${
+                className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 shadow-sm overflow-hidden relative ${
                   isAdmin
                     ? 'bg-[#1DB954] text-black'
                     : 'bg-emerald-100 text-emerald-800 dark:bg-[#282828] dark:text-[#1DB954] border border-emerald-200 dark:border-[#3e3e3e]'
                 }`}
               >
-                <img
-                  key={getAvatarUrl(currentUser?.avatar || currentPersonnel?.avatar, displayName)}
-                  src={getAvatarUrl(currentUser?.avatar || currentPersonnel?.avatar, displayName)}
-                  alt={displayName}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    const target = e.currentTarget;
-                    if (!target.dataset.fallbackTried) {
-                      target.dataset.fallbackTried = 'true';
-                      const av = currentUser?.avatar || currentPersonnel?.avatar;
-                      let fileKey = typeof av === 'object' && av !== null ? ((av as any).id || (av as any).filename_disk || (av as any).filename_download) : av;
-                      if (fileKey && typeof fileKey === 'string') {
-                        const cleanKey = fileKey.replace(/^https?:\/\/[^\/]+\/assets\//i, '').replace(/^\/api\/assets\//i, '').replace(/^\/assets\//i, '').split('?')[0];
-                        if (cleanKey) {
-                          try {
-                            const saved = localStorage.getItem('crm_auth_session');
-                            const token = saved ? JSON.parse(saved)?.access_token || '' : '';
-                            const tQuery = token ? `?access_token=${encodeURIComponent(token)}` : '';
-                            target.src = `/api/assets/${encodeURIComponent(cleanKey)}${tQuery}`;
-                          } catch {
-                            target.src = `/api/assets/${encodeURIComponent(cleanKey)}`;
-                          }
-                        }
-                      }
-                    }
-                  }}
-                />
+                {getAvatarUrl(currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, displayName) ? (
+                  <img
+                    key={getAvatarUrl(currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, displayName)}
+                    src={getAvatarUrl(currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, displayName)}
+                    alt={displayName}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                ) : null}
+                <span>{initial}</span>
               </div>
 
               <div className="hidden md:flex flex-col text-right leading-tight pr-0.5">

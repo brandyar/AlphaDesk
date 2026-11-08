@@ -587,10 +587,18 @@ router.get('/me', async (req: Request, res: Response) => {
 
   if (pItem) {
     pItem = enrichPersonnel(pItem);
-    if (avatarUrl) {
+    const pImg = formatAvatarUrl(pItem.profile_image);
+    if (pImg) {
+      avatarUrl = pImg;
+      pItem.profile_image = pImg;
+      pItem.avatar = pImg;
+    } else if (avatarUrl) {
+      pItem.profile_image = avatarUrl;
       pItem.avatar = avatarUrl;
     } else if (pItem.avatar) {
       avatarUrl = formatAvatarUrl(pItem.avatar);
+      pItem.profile_image = avatarUrl;
+      pItem.avatar = avatarUrl;
     }
   }
 

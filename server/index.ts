@@ -48,6 +48,16 @@ app.use(rateLimiter);
 // Block inactive personnel from performing any operations
 app.use(checkInactivePersonnel);
 
+// Static serve avatars and persistent uploads with zero delay
+const publicAvatarsDir = path.resolve(process.cwd(), 'public/assets/avatars');
+const publicUploadsDir = path.resolve(process.cwd(), 'public/uploads');
+if (fs.existsSync(publicAvatarsDir)) {
+  app.use('/assets/avatars', express.static(publicAvatarsDir, { maxAge: '7d' }));
+}
+if (fs.existsSync(publicUploadsDir)) {
+  app.use('/uploads', express.static(publicUploadsDir, { maxAge: '7d' }));
+}
+
 // Mount all modular API routers
 app.use('/api/auth', authRoutes);
 app.use('/api', authRoutes);

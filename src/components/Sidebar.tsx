@@ -795,34 +795,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className="p-3 border-t border-slate-200 dark:border-[#282828] bg-slate-50 dark:bg-[#0c0c0c] flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-[#151515] transition-colors"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="relative w-8 h-8 rounded-full overflow-hidden bg-slate-200 dark:bg-zinc-800 shrink-0">
-              <img
-                key={getAvatarUrl(currentUser?.avatar || currentPersonnel?.avatar, currentPersonnel?.name || currentUser?.name || 'U')}
-                src={getAvatarUrl(currentUser?.avatar || currentPersonnel?.avatar, currentPersonnel?.name || currentUser?.name || 'U')}
-                alt="avatar"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  const target = e.currentTarget;
-                  if (!target.dataset.fallbackTried) {
-                    target.dataset.fallbackTried = 'true';
-                    const av = currentUser?.avatar || currentPersonnel?.avatar;
-                    let fileKey = typeof av === 'object' && av !== null ? ((av as any).id || (av as any).filename_disk || (av as any).filename_download) : av;
-                    if (fileKey && typeof fileKey === 'string') {
-                      const cleanKey = fileKey.replace(/^https?:\/\/[^\/]+\/assets\//i, '').replace(/^\/api\/assets\//i, '').replace(/^\/assets\//i, '').split('?')[0];
-                      if (cleanKey) {
-                        try {
-                          const saved = localStorage.getItem('crm_auth_session');
-                          const token = saved ? JSON.parse(saved)?.access_token || '' : '';
-                          const tQuery = token ? `?access_token=${encodeURIComponent(token)}` : '';
-                          target.src = `/api/assets/${encodeURIComponent(cleanKey)}${tQuery}`;
-                        } catch {
-                          target.src = `/api/assets/${encodeURIComponent(cleanKey)}`;
-                        }
-                      }
-                    }
-                  }
-                }}
-              />
+            <div className="relative w-8 h-8 rounded-full overflow-hidden bg-slate-200 dark:bg-zinc-800 shrink-0 flex items-center justify-center font-bold text-xs text-slate-700 dark:text-[#1DB954] border border-slate-300 dark:border-[#333]">
+              {getAvatarUrl(currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, currentPersonnel?.name || currentUser?.name || 'U') ? (
+                <img
+                  key={getAvatarUrl(currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, currentPersonnel?.name || currentUser?.name || 'U')}
+                  src={getAvatarUrl(currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, currentPersonnel?.name || currentUser?.name || 'U')}
+                  alt="avatar"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              ) : null}
+              <span>{(currentPersonnel?.name || currentUser?.name || 'U').trim().charAt(0).toUpperCase()}</span>
             </div>
             <div className="truncate">
               <div className="text-xs font-bold text-slate-900 dark:text-white truncate flex items-center gap-1">
