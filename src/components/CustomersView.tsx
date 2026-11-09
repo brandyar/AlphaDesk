@@ -27,7 +27,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
-import { formatTimeRemaining, formatPersianDate, formatDisplayDate, formatDisplayDateOnly, formatFollowupRelativeBadge, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS, toPersianDigits } from '../utils';
+import { formatTimeRemaining, formatPersianDate, formatDisplayDate, formatDisplayDateOnly, formatFollowupDateTime, formatFollowupRelativeBadge, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS, toPersianDigits } from '../utils';
 import { fetchCustomersPaginated } from '../api';
 import { PaginationControl } from './PaginationControl';
 
@@ -71,7 +71,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [pageSize, setPageSize] = useState<number>(25);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOption, setSortOption] = useState<string>('next_followup_asc');
-  const [followupFilter, setFollowupFilter] = useState<string>('همه');
+  const [followupFilter, setFollowupFilter] = useState<string>('active');
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState<boolean>(false);
 
   const [items, setItems] = useState<Customer[]>(customers);
@@ -375,13 +375,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 onChange={(e) => setFollowupFilter(e.target.value)}
                 className="h-9 px-3 rounded-xl bg-white dark:bg-[#242424] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#383838] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer w-full sm:w-auto"
               >
-                <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه موعدها</option>
-                <option value="active" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">دارای پیگیری آینده</option>
+                <option value="active" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">امروز به بعد (فعال / آینده)</option>
                 <option value="today" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">پیگیری امروز</option>
                 <option value="due_3_days" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">سررسید ۳ روز آینده</option>
                 <option value="due_7_days" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">سررسید ۷ روز آینده</option>
                 <option value="overdue" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">عقب‌افتاده / منقضی</option>
                 <option value="no_followup" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">بدون موعد پیگیری</option>
+                <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه موعدها (شامل گذشته)</option>
               </select>
             </div>
 
@@ -406,17 +406,17 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           </div>
 
           {/* Reset Filters shortcut if filters are active */}
-          {(statusFilter !== 'همه' || selectedMarketerId !== 'همه' || followupFilter !== 'همه') && (
+          {(statusFilter !== 'همه' || selectedMarketerId !== 'همه' || followupFilter !== 'active') && (
             <button
               type="button"
               onClick={() => {
                 onSelectStatusFilter('همه');
                 onSelectMarketerId('همه');
-                setFollowupFilter('همه');
+                setFollowupFilter('active');
               }}
               className="text-xs text-rose-600 dark:text-rose-400 hover:underline font-semibold cursor-pointer py-1"
             >
-              پاک کردن همه فیلترها
+              بازنشانی فیلترها (امروز به بعد)
             </button>
           )}
         </div>
@@ -518,12 +518,12 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           {c.assigned_marketer_name || 'تخصیص نیافته'}
                         </td>
 
-                        {/* Next Follow-up Date (Day, Month, Year only + Relative Badge) */}
+                        {/* Next Follow-up Date (Day, Month, Year and exact Time + Relative Badge) */}
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           {c.next_followup_date ? (
                             <div className="flex items-center gap-1.5 text-xs text-slate-800 dark:text-white font-medium">
                               <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />
-                              <span className="font-mono">{formatDisplayDateOnly(c.next_followup_date)}</span>
+                              <span className="font-mono">{formatFollowupDateTime(c.next_followup_date)}</span>
                               <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-sans font-medium ${fBadge.badgeClass}`}>
                                 {fBadge.text}
                               </span>
@@ -662,7 +662,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       <span>موعد پیگیری:</span>
                     </span>
                     <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-white font-mono">
-                      <span>{c.next_followup_date ? formatDisplayDateOnly(c.next_followup_date) : 'ثبت نشده'}</span>
+                      <span>{c.next_followup_date ? formatFollowupDateTime(c.next_followup_date) : 'ثبت نشده'}</span>
                       {c.next_followup_date && (
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-sans font-medium ${formatFollowupRelativeBadge(c.next_followup_date).badgeClass}`}>
                           {formatFollowupRelativeBadge(c.next_followup_date).text}

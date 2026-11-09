@@ -295,6 +295,8 @@ export async function enrichCustomersWithLatestReportFollowup(items: any[]): Pro
 export function sortCustomersList(items: any[], sortKey?: string): any[] {
   if (!items || items.length <= 1) return items || [];
   const list = [...items];
+  const nowMs = Date.now();
+  const startOfTodayMs = new Date().setHours(0, 0, 0, 0);
 
   if (sortKey === 'next_followup_asc' || sortKey === 'next_followup_date') {
     return list.sort((a, b) => {
@@ -305,7 +307,21 @@ export function sortCustomersList(items: any[], sortKey?: string): any[] {
       if (!aValid && !bValid) return 0;
       if (!aValid) return 1;
       if (!bValid) return -1;
-      return aTime - bTime;
+
+      // Group 1: Upcoming from start of today onwards (today and future)
+      const aIsUpcoming = aTime >= startOfTodayMs;
+      const bIsUpcoming = bTime >= startOfTodayMs;
+
+      if (aIsUpcoming && !bIsUpcoming) return -1;
+      if (!aIsUpcoming && bIsUpcoming) return 1;
+
+      // If both are upcoming (today/future): sort ascending by exact datetime (closest first)
+      if (aIsUpcoming && bIsUpcoming) {
+        return aTime - bTime;
+      }
+
+      // If both are overdue (in the past before today): sort closest to now first (most recent past date first)
+      return bTime - aTime;
     });
   }
 
