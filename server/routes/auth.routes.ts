@@ -22,6 +22,36 @@ import { localAvatarCacheMap, handleAssetProxy } from './system.routes.ts';
 
 const router = Router();
 
+function detectDeviceType(userAgent?: string, clientReported?: string): 'موبایل' | 'دسکتاپ' {
+  if (clientReported) {
+    const s = String(clientReported).trim();
+    if (s.includes('موبایل') || s.toLowerCase() === 'mobile') return 'موبایل';
+    if (s.includes('دسکتاپ') || s.toLowerCase() === 'desktop') return 'دسکتاپ';
+  }
+  if (!userAgent) return 'دسکتاپ';
+  const ua = userAgent.toLowerCase();
+  const isMobile = /mobile|android|iphone|ipad|ipod|blackberry|iemobile|opera mini|windows phone/i.test(ua);
+  return isMobile ? 'موبایل' : 'دسکتاپ';
+}
+
+function resolveUserTimeAndDate(clientTime?: string, clientDate?: string): { time: string; date: string } {
+  const userNow = new Date();
+  const defaultTehranTime = userNow.toLocaleTimeString('fa-IR', {
+    timeZone: 'Asia/Tehran',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const defaultTehranDate = userNow.toLocaleDateString('fa-IR', {
+    timeZone: 'Asia/Tehran',
+  });
+
+  return {
+    time: (clientTime || '').trim() || defaultTehranTime,
+    date: (clientDate || '').trim() || defaultTehranDate,
+  };
+}
+
 router.get('/assets/:id', handleAssetProxy);
 router.get('/api/assets/:id', handleAssetProxy);
 
@@ -308,13 +338,20 @@ router.post('/login', async (req: Request, res: Response) => {
         }
 
         if (projectSettingsData.login_pattern) {
-          const pInfo = await getPersonnelFullName(pItem?.id || meUser.id, pItem?.name);
-          const fullName = pInfo.fullName || pItem?.name || `${meUser.first_name || ''} ${meUser.last_name || ''}`.trim() || meUser.email;
-          const uPhone = pInfo.phone || pItem?.phone || '';
+          const fullName = pItem?.name || `${meUser.first_name || ''} ${meUser.last_name || ''}`.trim() || meUser.email;
+          const uPhone = pItem?.phone || '';
           const parts = fullName.split(' ');
           const fName = parts[0] || 'همکار';
           const lName = parts.length > 1 ? parts.slice(1).join(' ') : 'گرامی';
-          const now = new Date();
+
+          const detectedDevice = detectDeviceType(
+            req.headers['user-agent'] as string,
+            req.body.device || req.body.client_device
+          );
+          const { time: finalTime, date: finalDate } = resolveUserTimeAndDate(
+            req.body.client_time || req.body.time,
+            req.body.client_date || req.body.date
+          );
 
           const loginVars = {
             name: fullName,
@@ -325,24 +362,31 @@ router.post('/login', async (req: Request, res: Response) => {
             first_name: fName,
             mobile: uPhone || 'نامشخص',
             phone: uPhone || 'نامشخص',
-            date: now.toLocaleDateString('fa-IR'),
-            time: now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+            date: finalDate,
+            time: finalTime,
+            client_date: finalDate,
+            client_time: finalTime,
             ip: (req.headers['x-forwarded-for'] as string) || req.ip || '127.0.0.1',
-            device: req.headers['user-agent'] ? 'مرورگر وب' : 'سامانه وب',
+            device: detectedDevice,
+            client_device: detectedDevice,
+            device_type: detectedDevice,
             username: meUser.email,
           };
 
-          if (uPhone) {
-            sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars).catch(
-              (e) => console.warn('Login SMS pattern send to user warning:', e.message)
-            );
-          }
+          // Dispatch SMS asynchronously in the background so the login HTTP response is instantaneous
+          queueMicrotask(() => {
+            if (uPhone) {
+              sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars).catch(
+                (e) => console.warn('Login SMS pattern send to user warning:', e.message)
+              );
+            }
 
-          sendTenantAdminsSmsPattern(
-            pItem?.tenant_id || 'default',
-            projectSettingsData.login_pattern,
-            loginVars
-          ).catch((e) => console.warn('Login SMS pattern send to admin warning:', e.message));
+            sendTenantAdminsSmsPattern(
+              pItem?.tenant_id || 'default',
+              projectSettingsData.login_pattern,
+              loginVars
+            ).catch((e) => console.warn('Login SMS pattern send to admin warning:', e.message));
+          });
         }
 
         return res.json({
@@ -395,13 +439,20 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     if (projectSettingsData.login_pattern) {
-      const pInfo = await getPersonnelFullName(found.id, found.name);
-      const fullName = pInfo.fullName || found.name || found.email;
-      const uPhone = pInfo.phone || found.phone || '';
+      const fullName = found.name || found.email;
+      const uPhone = found.phone || '';
       const parts = fullName.split(' ');
       const fName = parts[0] || 'همکار';
       const lName = parts.length > 1 ? parts.slice(1).join(' ') : 'گرامی';
-      const now = new Date();
+
+      const detectedDevice = detectDeviceType(
+        req.headers['user-agent'] as string,
+        req.body.device || req.body.client_device
+      );
+      const { time: finalTime, date: finalDate } = resolveUserTimeAndDate(
+        req.body.client_time || req.body.time,
+        req.body.client_date || req.body.date
+      );
 
       const loginVars = {
         name: fullName,
@@ -412,24 +463,30 @@ router.post('/login', async (req: Request, res: Response) => {
         first_name: fName,
         mobile: uPhone || 'نامشخص',
         phone: uPhone || 'نامشخص',
-        date: now.toLocaleDateString('fa-IR'),
-        time: now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+        date: finalDate,
+        time: finalTime,
+        client_date: finalDate,
+        client_time: finalTime,
         ip: (req.headers['x-forwarded-for'] as string) || req.ip || '127.0.0.1',
-        device: 'سامانه وب آلفادسک',
+        device: detectedDevice,
+        client_device: detectedDevice,
+        device_type: detectedDevice,
         username: found.username || found.email,
       };
 
-      if (uPhone) {
-        sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars).catch(
-          (e) => console.warn('Login SMS pattern send to user warning:', e.message)
-        );
-      }
+      queueMicrotask(() => {
+        if (uPhone) {
+          sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars).catch(
+            (e) => console.warn('Login SMS pattern send to user warning:', e.message)
+          );
+        }
 
-      sendTenantAdminsSmsPattern(
-        found.tenant_id || 'default',
-        projectSettingsData.login_pattern,
-        loginVars
-      ).catch((e) => console.warn('Login SMS pattern send to admin warning:', e.message));
+        sendTenantAdminsSmsPattern(
+          found.tenant_id || 'default',
+          projectSettingsData.login_pattern,
+          loginVars
+        ).catch((e) => console.warn('Login SMS pattern send to admin warning:', e.message));
+      });
     }
 
     let fallbackAvatarUrl: string | undefined = undefined;

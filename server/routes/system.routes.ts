@@ -24,6 +24,7 @@ import { getRequestUser, getRequestTenantId, extractFileId, formatAvatarUrl } fr
 import { invalidateCustomersCache, invalidateReportsCache } from '../directus/cache.ts';
 import { resolveDirectusTenantId, backfillNullTenantsDirectus } from '../directus/sync.ts';
 import { normalizeContactValue, normalizePersianString } from '../services/phoneNormalizer.ts';
+import { sendIppanelSmsPattern } from '../services/sms.service.ts';
 import { Personnel } from '../types.ts';
 
 const router = Router();
@@ -276,6 +277,21 @@ router.patch('/api/project-settings', async (req: Request, res: Response) => {
   }
 
   res.json({ success: true, settings: projectSettingsData });
+});
+
+// POST /api/project-settings/test-sms
+router.post('/api/project-settings/test-sms', async (req: Request, res: Response) => {
+  const { phone, pattern_code, variables, api_key, sender } = req.body;
+  if (!phone || !pattern_code) {
+    return res.status(400).json({ success: false, error: 'شماره تلفن و کد پترن الزامی هستند.' });
+  }
+
+  const result = await sendIppanelSmsPattern(phone, pattern_code, variables || {}, api_key, sender);
+  if (result.success) {
+    return res.json({ success: true, messageId: result.messageId });
+  } else {
+    return res.status(400).json({ success: false, error: result.error });
+  }
 });
 
 // POST /api/auth/update-profile

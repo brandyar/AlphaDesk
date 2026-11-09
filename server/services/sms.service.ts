@@ -178,8 +178,14 @@ export function resolvePatternVariables(
   }
 
   const now = new Date();
-  const jalaliDate = now.toLocaleDateString('fa-IR');
-  const jalaliTime = now.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+  const defaultTehranDate = now.toLocaleDateString('fa-IR', { timeZone: 'Asia/Tehran' });
+  const jalaliDate = defaultTehranDate;
+  const defaultTehranTime = now.toLocaleTimeString('fa-IR', {
+    timeZone: 'Asia/Tehran',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 
   for (const ph of foundPlaceholders) {
     if (cleanVars[ph] !== undefined && cleanVars[ph] !== '') continue;
@@ -220,13 +226,22 @@ export function resolvePatternVariables(
       const parts = fullName.split(' ');
       cleanVars[ph] = parts[0] || 'همکار';
     } else if (lower === 'date' || lower === 'request_date' || lower === 'approval_date') {
-      cleanVars[ph] = cleanVars.date || cleanVars.request_date || cleanVars.approval_date || jalaliDate;
+      cleanVars[ph] = cleanVars.client_date || cleanVars.date || cleanVars.request_date || cleanVars.approval_date || defaultTehranDate;
     } else if (lower === 'time') {
-      cleanVars[ph] = cleanVars.time || jalaliTime;
+      cleanVars[ph] = cleanVars.client_time || cleanVars.time || defaultTehranTime;
     } else if (lower === 'ip') {
       cleanVars[ph] = cleanVars.ip || '127.0.0.1';
-    } else if (lower === 'device') {
-      cleanVars[ph] = cleanVars.device || 'سامانه وب آلفادسک';
+    } else if (lower === 'device' || lower === 'device_type' || lower === 'client_device') {
+      const rawDev = cleanVars.client_device || cleanVars.device || cleanVars.device_type;
+      if (rawDev && (rawDev.includes('موبایل') || rawDev.toLowerCase() === 'mobile')) {
+        cleanVars[ph] = 'موبایل';
+      } else if (rawDev && (rawDev.includes('دسکتاپ') || rawDev.toLowerCase() === 'desktop')) {
+        cleanVars[ph] = 'دسکتاپ';
+      } else if (cleanVars.is_mobile === 'true') {
+        cleanVars[ph] = 'موبایل';
+      } else {
+        cleanVars[ph] = 'دسکتاپ';
+      }
     } else if (lower === 'leave_type') {
       cleanVars[ph] = cleanVars.leave_type || 'مرخصی';
     } else if (lower === 'leave_date' || lower === 'from_date') {
@@ -273,6 +288,10 @@ export function resolvePatternVariables(
 
   return cleanVars;
 }
+
+// In-memory cache for the fastest working IPPanel endpoint to achieve instant (~200ms) dispatch
+let cachedWorkingAttemptLabel: string | null = null;
+let lastAdminPhonesCache: { tenantId: string; phones: string[]; timestamp: number } | null = null;
 
 export async function sendIppanelSmsPattern(
   recipientPhone: string | null | undefined,
@@ -372,39 +391,12 @@ export async function sendIppanelSmsPattern(
     cleanVars
   );
 
-  const attempts: Array<{
+  const baseAttempts: Array<{
     url: string;
     headers: Record<string, string>;
     body: string;
     label: string;
   }> = [
-    {
-      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: cleanApiKey,
-      },
-      body: JSON.stringify(restPayload98),
-      label: 'rest.ippanel.com (apikey, 989...)',
-    },
-    {
-      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: cleanApiKey,
-      },
-      body: JSON.stringify(restPayload09),
-      label: 'rest.ippanel.com (apikey, 09...)',
-    },
-    {
-      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: cleanApiKey,
-      },
-      body: JSON.stringify(restPayloadAltSender),
-      label: 'rest.ippanel.com (alt sender)',
-    },
     {
       url: 'https://api2.ippanel.com/api/v1/sms/pattern/normal/send',
       headers: {
@@ -415,6 +407,15 @@ export async function sendIppanelSmsPattern(
       label: 'api2.ippanel.com (apikey)',
     },
     {
+      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: cleanApiKey,
+      },
+      body: JSON.stringify(restPayload98),
+      label: 'rest.ippanel.com (apikey, 989...)',
+    },
+    {
       url: 'https://api2.ippanel.com/api/v1/sms/pattern/normal/send',
       headers: {
         'Content-Type': 'application/json',
@@ -422,6 +423,15 @@ export async function sendIppanelSmsPattern(
       },
       body: JSON.stringify(api2Payload),
       label: 'api2.ippanel.com (AccessKey)',
+    },
+    {
+      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: cleanApiKey,
+      },
+      body: JSON.stringify(restPayload09),
+      label: 'rest.ippanel.com (apikey, 09...)',
     },
     {
       url: 'https://edge.ippanel.com/v1/api/send',
@@ -442,15 +452,6 @@ export async function sendIppanelSmsPattern(
       label: 'edge.ippanel.com (apikey)',
     },
     {
-      url: 'https://ippanel.com/api/v1/sms/pattern/normal/send',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: cleanApiKey,
-      },
-      body: JSON.stringify(api2Payload),
-      label: 'ippanel.com (apikey)',
-    },
-    {
       url: 'https://rest.ippanel.com/v1/messages/patterns/send',
       headers: {
         'Content-Type': 'application/json',
@@ -459,20 +460,53 @@ export async function sendIppanelSmsPattern(
       body: JSON.stringify(restPayload98),
       label: 'rest.ippanel.com (AccessKey)',
     },
+    {
+      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: cleanApiKey,
+      },
+      body: JSON.stringify(restPayloadAltSender),
+      label: 'rest.ippanel.com (alt sender)',
+    },
+    {
+      url: 'https://ippanel.com/api/v1/sms/pattern/normal/send',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: cleanApiKey,
+      },
+      body: JSON.stringify(api2Payload),
+      label: 'ippanel.com (apikey)',
+    },
   ];
+
+  // If a specific endpoint succeeded previously, put it at index 0 for immediate zero-delay dispatch!
+  const attempts = [...baseAttempts];
+  if (cachedWorkingAttemptLabel) {
+    const cachedIdx = attempts.findIndex((a) => a.label === cachedWorkingAttemptLabel);
+    if (cachedIdx > 0) {
+      const [favored] = attempts.splice(cachedIdx, 1);
+      attempts.unshift(favored);
+    }
+  }
 
   let lastError = '';
 
   for (const attempt of attempts) {
+    const controller = new AbortController();
+    const timeoutTimer = setTimeout(() => controller.abort(), 3200);
+
     try {
       const res = await fetch(attempt.url, {
         method: 'POST',
         headers: attempt.headers,
         body: attempt.body,
+        signal: controller.signal,
       });
 
       if (res.ok) {
         const json: any = await res.json().catch(() => ({}));
+        cachedWorkingAttemptLabel = attempt.label; // Lock in the fast working endpoint!
         console.log(`[IPPanel SMS] Successfully sent via ${attempt.label}:`, json);
         return {
           success: true,
@@ -512,6 +546,8 @@ export async function sendIppanelSmsPattern(
     } catch (fetchErr: any) {
       lastError = `[${attempt.label}] Network error: ${fetchErr.message}`;
       console.warn(`[IPPanel SMS] Network error connecting to ${attempt.label}:`, fetchErr.message);
+    } finally {
+      clearTimeout(timeoutTimer);
     }
   }
 
@@ -528,30 +564,7 @@ export async function sendTenantAdminsSmsPattern(
 
   const collectedPhones = new Set<string>();
 
-  if (directusUrl && directusAdminToken) {
-    try {
-      let res = await directusFetch(
-        `/items/tenant_settings?filter[tenant_id][_eq]=${encodeURIComponent(tIdStr)}`
-      ).catch(() => null);
-      if (!res?.data || (Array.isArray(res.data) && res.data.length === 0)) {
-        res = await directusFetch('/items/tenant_settings').catch(() => null);
-      }
-      if (res?.data) {
-        const items = Array.isArray(res.data) ? res.data : [res.data];
-        for (const item of items) {
-          const raw = item?.sms_phones;
-          if (Array.isArray(raw)) {
-            raw.forEach((p: any) => p && collectedPhones.add(String(p).trim()));
-          } else if (typeof raw === 'string') {
-            raw.split(',').forEach((p: string) => p.trim() && collectedPhones.add(p.trim()));
-          }
-        }
-      }
-    } catch (err: any) {
-      console.warn('[IPPanel SMS] Directus tenant_settings lookup warning:', err.message);
-    }
-  }
-
+  // 1. Immediately read from synchronized in-memory tenantSettingsMap (0ms delay)
   for (const [, local] of tenantSettingsMap.entries()) {
     if (local?.sms_phones) {
       const pArr = Array.isArray(local.sms_phones)
@@ -561,17 +574,70 @@ export async function sendTenantAdminsSmsPattern(
     }
   }
 
+  // 2. Query Directus tenant_settings only if no phones found locally, with 60s cache
+  const now = Date.now();
+  if (collectedPhones.size === 0 && directusUrl && directusAdminToken) {
+    if (
+      lastAdminPhonesCache &&
+      lastAdminPhonesCache.tenantId === tIdStr &&
+      now - lastAdminPhonesCache.timestamp < 60000
+    ) {
+      lastAdminPhonesCache.phones.forEach((p) => collectedPhones.add(p));
+    } else {
+      try {
+        let res = await directusFetch(
+          `/items/tenant_settings?filter[tenant_id][_eq]=${encodeURIComponent(tIdStr)}`
+        ).catch(() => null);
+        if (!res?.data || (Array.isArray(res.data) && res.data.length === 0)) {
+          res = await directusFetch('/items/tenant_settings').catch(() => null);
+        }
+        if (res?.data) {
+          const items = Array.isArray(res.data) ? res.data : [res.data];
+          const fetchedPhones: string[] = [];
+          for (const item of items) {
+            const raw = item?.sms_phones;
+            if (Array.isArray(raw)) {
+              raw.forEach((p: any) => {
+                if (p) {
+                  const cp = String(p).trim();
+                  collectedPhones.add(cp);
+                  fetchedPhones.push(cp);
+                }
+              });
+            } else if (typeof raw === 'string') {
+              raw.split(',').forEach((p: string) => {
+                const cp = p.trim();
+                if (cp) {
+                  collectedPhones.add(cp);
+                  fetchedPhones.push(cp);
+                }
+              });
+            }
+          }
+          lastAdminPhonesCache = { tenantId: tIdStr, phones: fetchedPhones, timestamp: now };
+        }
+      } catch (err: any) {
+        console.warn('[IPPanel SMS] Directus tenant_settings lookup warning:', err.message);
+      }
+    }
+  }
+
   if (collectedPhones.size === 0) {
     console.warn('[IPPanel SMS] No admin phone numbers found in tenant_settings to send notification.');
     return;
   }
 
   console.log(
-    `[IPPanel SMS] Notifying ${collectedPhones.size} tenant admins with pattern '${patternCode}'...`
+    `[IPPanel SMS] Notifying ${collectedPhones.size} tenant admins concurrently with pattern '${patternCode}'...`
   );
-  for (const phone of collectedPhones) {
-    sendIppanelSmsPattern(phone, patternCode, variables).catch((e) =>
-      console.warn(`[IPPanel SMS] Failed to notify tenant admin ${phone}:`, e.message)
-    );
-  }
+
+  // Send to all admin phones CONCURRENTLY via Promise.allSettled without blocking
+  const phoneList = Array.from(collectedPhones);
+  Promise.allSettled(
+    phoneList.map((phone) =>
+      sendIppanelSmsPattern(phone, patternCode, variables).catch((e) =>
+        console.warn(`[IPPanel SMS] Failed to notify tenant admin ${phone}:`, e.message)
+      )
+    )
+  );
 }

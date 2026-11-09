@@ -266,9 +266,12 @@ export const SmsSettingsTab: React.FC<SmsSettingsTabProps> = ({
                     type="text"
                     value={projectSettings.login_pattern_text || ''}
                     onChange={(e) => setProjectSettings({ ...projectSettings, login_pattern_text: e.target.value })}
-                    placeholder="متغیرها: {name}، {date}، {time}، {username}"
+                    placeholder="متغیرها: {name}، {date}، {time} (ساعت دستگاه)، {device} (موبایل/دسکتاپ)، {username}"
                     className="w-full h-9 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
                   />
+                  <p className="text-[10px] text-slate-500 dark:text-[#888] mt-1">
+                    متغیر <code className="text-emerald-500">{"{device}"}</code> بر اساس دستگاه کاربر (موبایل یا دسکتاپ) و متغیر <code className="text-emerald-500">{"{time}"}</code> ساعت دقیق دستگاه کاربر را درج می‌کند.
+                  </p>
                 </div>
               </div>
             </div>

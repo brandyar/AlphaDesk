@@ -252,11 +252,54 @@ async function handleResponse<T>(res: globalThis.Response, defaultErrorMsg: stri
 
 // ----------------- Auth API ----------------- //
 
+export function getClientDeviceAndLocalTime(): {
+  device: 'موبایل' | 'دسکتاپ';
+  client_device: 'موبایل' | 'دسکتاپ';
+  client_time: string;
+  client_date: string;
+} {
+  let isMobile = false;
+  if (typeof window !== 'undefined') {
+    const ua = navigator?.userAgent || '';
+    const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i;
+    const isTouch = 'ontouchstart' in window || (navigator?.maxTouchPoints || 0) > 0;
+    const isSmallScreen = window.matchMedia ? window.matchMedia('(max-width: 768px)').matches : false;
+    isMobile = mobileRegex.test(ua) || (isTouch && isSmallScreen);
+  }
+
+  const userNow = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const client_time = `${pad(userNow.getHours())}:${pad(userNow.getMinutes())}`;
+  let client_date = '';
+  try {
+    client_date = userNow.toLocaleDateString('fa-IR');
+  } catch {
+    client_date = `${userNow.getFullYear()}/${pad(userNow.getMonth() + 1)}/${pad(userNow.getDate())}`;
+  }
+
+  const devType: 'موبایل' | 'دسکتاپ' = isMobile ? 'موبایل' : 'دسکتاپ';
+
+  return {
+    device: devType,
+    client_device: devType,
+    client_time,
+    client_date,
+  };
+}
+
 export async function loginUser(identifier: string, password: string): Promise<AuthResponse> {
+  const deviceInfo = getClientDeviceAndLocalTime();
   const res = await fetch(`${BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ identifier, email: identifier, username: identifier, phone: identifier, password }),
+    body: JSON.stringify({
+      identifier,
+      email: identifier,
+      username: identifier,
+      phone: identifier,
+      password,
+      ...deviceInfo,
+    }),
   });
   const data = await handleResponse<AuthResponse>(res, 'خطا در ورود به سامانه');
   if (data && data.success) {
@@ -266,10 +309,14 @@ export async function loginUser(identifier: string, password: string): Promise<A
 }
 
 export async function registerUser(payload: RegisterPayload): Promise<AuthResponse> {
+  const deviceInfo = getClientDeviceAndLocalTime();
   const res = await fetch(`${BASE_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      ...deviceInfo,
+    }),
   });
   const data = await handleResponse<AuthResponse>(res, 'خطا در ثبت نام کاربر');
   if (data && data.success) {
