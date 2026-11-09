@@ -31,30 +31,34 @@ export const PaginationControl: React.FC<PaginationControlProps> = ({
 }) => {
   if (totalCount === 0) return null;
 
-  const safeTotalPages = Math.max(1, totalPages || Math.ceil(totalCount / pageSize));
-  const safeCurrentPage = Math.min(Math.max(1, currentPage), safeTotalPages);
+  const validPageSize = Math.max(1, Number(pageSize) || 25);
+  const rawPages = totalPages > 0 ? totalPages : Math.ceil(totalCount / validPageSize);
+  const safeTotalPages = Math.min(Math.max(1, isFinite(rawPages) ? rawPages : 1), 10000);
+  const safeCurrentPage = Math.min(Math.max(1, Number(currentPage) || 1), safeTotalPages);
 
-  // Generate visible page numbers (e.g., [1, 2, 3, '...', 1400])
+  // Generate visible page numbers safely and in O(1) time
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];
-    const delta = 1; // Number of pages before and after current page
-
-    for (let i = 1; i <= safeTotalPages; i++) {
-      if (
-        i === 1 ||
-        i === safeTotalPages ||
-        (i >= safeCurrentPage - delta && i <= safeCurrentPage + delta)
-      ) {
-        pages.push(i);
-      } else if (
-        (i === safeCurrentPage - delta - 1 && safeCurrentPage - delta > 2) ||
-        (i === safeCurrentPage + delta + 1 && safeCurrentPage + delta < safeTotalPages - 1)
-      ) {
-        if (!pages.includes('...')) {
-          pages.push('...');
-        }
-      }
+    if (safeTotalPages <= 7) {
+      for (let i = 1; i <= safeTotalPages; i++) pages.push(i);
+      return pages;
     }
+
+    pages.push(1);
+    if (safeCurrentPage > 3) {
+      pages.push('...');
+    }
+
+    const start = Math.max(2, safeCurrentPage - 1);
+    const end = Math.min(safeTotalPages - 1, safeCurrentPage + 1);
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+
+    if (safeCurrentPage < safeTotalPages - 2) {
+      pages.push('...');
+    }
+    pages.push(safeTotalPages);
     return pages;
   };
 

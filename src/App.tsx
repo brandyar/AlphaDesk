@@ -265,7 +265,7 @@ export default function App() {
         fetchDashboardSummary().catch(() => null),
         fetchLeaveRequests().catch(() => []),
         fetchAdvanceRequests().catch(() => []),
-        fetchCustomers({ all: true }).catch(() => []),
+        fetchCustomers({ limit: 50 }).catch(() => []),
         fetchCustomerReports({ page: 1, limit: 10 }).catch(() => []),
       ]);
 
@@ -327,7 +327,7 @@ export default function App() {
         if (!isCurrentAllowed && allowedTenants.length > 0) {
           const fallback = String(allowedTenants[0].id);
           setActiveTenantId(fallback);
-          setActiveTenantIdState(fallback);
+          setActiveTenantIdState((prev) => (prev === fallback ? prev : fallback));
         }
       }
     } catch (e) {
@@ -350,7 +350,7 @@ export default function App() {
   }, [loading]);
 
   useEffect(() => {
-    // Verify & refresh user session and roles dynamically from server on mount
+    // Verify & refresh user session once on mount, then load data with verified context
     const stored = getStoredAuthSession();
     if (stored.token || stored.user) {
       getMe()
@@ -368,12 +368,16 @@ export default function App() {
               personnel: data.personnel || stored.personnel,
             });
             loadAllData(data.personnel, data.user);
+          } else {
+            loadAllData(stored.personnel, stored.user);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          loadAllData(stored.personnel, stored.user);
+        });
+    } else {
+      loadAllData(null, null);
     }
-
-    loadAllData();
 
     // Lightweight status refresh every 45 seconds (does NOT spam large datasets)
     const interval = setInterval(() => {
@@ -1184,16 +1188,6 @@ export default function App() {
 
         {/* Dynamic Main View */}
         <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 lg:p-8 pb-24 lg:pb-8 relative bg-slate-50 dark:bg-[#121212]">
-          {/* Subtle graceful view transition overlay during heavy tab mounting */}
-          {isTabPending && (
-            <div className="absolute inset-0 bg-white/60 dark:bg-[#121212]/50 backdrop-blur-[2px] z-30 flex flex-col items-center justify-center pointer-events-none transition-all">
-              <div className="bg-white/95 dark:bg-[#181818]/95 px-5 py-3 rounded-2xl border border-slate-200 dark:border-[#282828] shadow-2xl flex items-center gap-3 text-xs text-slate-900 dark:text-white">
-                <div className="w-4 h-4 rounded-full border-2 border-emerald-500 dark:border-[#1DB954] border-t-transparent animate-spin" />
-                <span className="font-bold">در حال بارگذاری صفحه...</span>
-              </div>
-            </div>
-          )}
-
           {loading ? (
             activeTab === 'dashboard' ? (
               <DashboardSkeleton />
@@ -1205,7 +1199,7 @@ export default function App() {
             )
           ) : (
             <div className="w-full">
-              <ErrorBoundary key={`${activeTab}_${activeTenantId}_${currentUser?.id || 'guest'}`} fallbackTitle="خطا در بارگذاری این صفحه" onReset={loadAllData}>
+              <ErrorBoundary key={activeTab} fallbackTitle="خطا در بارگذاری این صفحه" onReset={loadAllData}>
                 {activeTab === 'dashboard' && (
                   <DashboardView
                     customers={userScopedCustomers}

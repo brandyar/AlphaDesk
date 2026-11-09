@@ -437,6 +437,9 @@ router.get('/', async (req: Request, res: Response) => {
       });
     }
 
+    if (isUnlimited && list.length > reqLimit) {
+      list = list.slice(0, reqLimit);
+    }
     list = await enrichCustomersWithLatestReportFollowup(list);
     list = sortCustomersList(list, sortKey);
     return res.json(list);

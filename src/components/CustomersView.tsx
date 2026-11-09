@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Users,
   Search,
@@ -70,77 +70,40 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(25);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   const [sortOption, setSortOption] = useState<string>('next_followup_asc');
   const [followupFilter, setFollowupFilter] = useState<string>('active');
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState<boolean>(false);
 
-  const [items, setItems] = useState<Customer[]>(customers);
-  const [totalCount, setTotalCount] = useState<number>(customers.length);
+  // Initialize with empty array so we never render thousands of unpaginated items on mount
+  const [items, setItems] = useState<Customer[]>([]);
+  const [totalCount, setTotalCount] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
-  const [isLoadingPage, setIsLoadingPage] = useState<boolean>(false);
+  const [isLoadingPage, setIsLoadingPage] = useState<boolean>(true);
+  const fetchVersionRef = useRef(0);
 
-  // Listen to customer save/update/delete events to immediately refresh server pagination
+  // 300ms debounce for search query to avoid lag on typing
   useEffect(() => {
-    const handleSaved = () => {
-      fetchCustomersPaginated({
-        page: currentPage,
-        limit: pageSize,
-        search: searchQuery.trim(),
-        status: statusFilter !== 'همه' ? statusFilter : undefined,
-        marketer_id: selectedMarketerId !== 'همه' ? selectedMarketerId : undefined,
-        expired_only: showExpiredOnly,
-        followup_filter: followupFilter !== 'همه' ? followupFilter : undefined,
-        sort: sortOption,
-      })
-        .then((res) => {
-          setItems(res.data);
-          setTotalCount(res.meta.filter_count);
-          setTotalPages(res.meta.total_pages);
-        })
-        .catch(() => {});
-    };
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-    const handleDeleted = () => {
-      fetchCustomersPaginated({
-        page: currentPage,
-        limit: pageSize,
-        search: searchQuery.trim(),
-        status: statusFilter !== 'همه' ? statusFilter : undefined,
-        marketer_id: selectedMarketerId !== 'همه' ? selectedMarketerId : undefined,
-        expired_only: showExpiredOnly,
-        followup_filter: followupFilter !== 'همه' ? followupFilter : undefined,
-        sort: sortOption,
-      })
-        .then((res) => {
-          setItems(res.data);
-          setTotalCount(res.meta.filter_count);
-          setTotalPages(res.meta.total_pages);
-        })
-        .catch(() => {});
-    };
+  // Guaranteed bounded slice so mobile / low-memory devices never render excessive cards
+  const displayItems = useMemo(() => {
+    if (!Array.isArray(items)) return [];
+    return items.slice(0, pageSize);
+  }, [items, pageSize]);
 
-    window.addEventListener('crm_customer_saved', handleSaved);
-    window.addEventListener('crm_customer_deleted', handleDeleted);
-    return () => {
-      window.removeEventListener('crm_customer_saved', handleSaved);
-      window.removeEventListener('crm_customer_deleted', handleDeleted);
-    };
-  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, followupFilter, searchQuery, activeTenantId, sortOption]);
-
-  // Reset page to 1 when filters, search, sort or tenant change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [statusFilter, selectedMarketerId, showExpiredOnly, followupFilter, searchQuery, activeTenantId, sortOption]);
-
-  // Fetch server-side paginated items on filter, tenant, sort or page change
-  useEffect(() => {
-    let isMounted = true;
+  const loadData = () => {
+    const currentVersion = ++fetchVersionRef.current;
     setIsLoadingPage(true);
 
     fetchCustomersPaginated({
       page: currentPage,
       limit: pageSize,
-      search: searchQuery.trim(),
+      search: debouncedSearch.trim(),
       status: statusFilter !== 'همه' ? statusFilter : undefined,
       marketer_id: selectedMarketerId !== 'همه' ? selectedMarketerId : undefined,
       expired_only: showExpiredOnly,
@@ -148,21 +111,45 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       sort: sortOption,
     })
       .then((res) => {
-        if (isMounted) {
-          setItems(res.data);
-          setTotalCount(res.meta.filter_count);
-          setTotalPages(res.meta.total_pages);
-        }
+        if (currentVersion !== fetchVersionRef.current) return;
+        setItems(res.data || []);
+        setTotalCount(res.meta?.filter_count ?? (res.data ? res.data.length : 0));
+        setTotalPages(res.meta?.total_pages ?? Math.max(1, Math.ceil((res.meta?.filter_count || 0) / pageSize)));
       })
-      .catch((err) => console.warn('Failed to load paginated customers:', err))
+      .catch((err) => {
+        if (currentVersion !== fetchVersionRef.current) return;
+        console.warn('Failed to load paginated customers:', err);
+      })
       .finally(() => {
-        if (isMounted) setIsLoadingPage(false);
+        if (currentVersion === fetchVersionRef.current) {
+          setIsLoadingPage(false);
+        }
       });
+  };
 
-    return () => {
-      isMounted = false;
+  // Listen to customer save/update/delete events to immediately refresh server pagination
+  useEffect(() => {
+    const handleRefresh = () => {
+      loadData();
     };
-  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, followupFilter, searchQuery, activeTenantId, sortOption]);
+
+    window.addEventListener('crm_customer_saved', handleRefresh);
+    window.addEventListener('crm_customer_deleted', handleRefresh);
+    return () => {
+      window.removeEventListener('crm_customer_saved', handleRefresh);
+      window.removeEventListener('crm_customer_deleted', handleRefresh);
+    };
+  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, followupFilter, debouncedSearch, activeTenantId, sortOption]);
+
+  // Reset page to 1 when filters, search, sort or tenant change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, selectedMarketerId, showExpiredOnly, followupFilter, debouncedSearch, activeTenantId, sortOption]);
+
+  // Fetch server-side paginated items on filter, tenant, sort or page change
+  useEffect(() => {
+    loadData();
+  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, followupFilter, debouncedSearch, activeTenantId, sortOption]);
 
   const userIsAdmin = Boolean(
     isAdmin ||
@@ -423,12 +410,31 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       </div>
 
       {/* Customers Content: Table List or Card Grid */}
-      {isLoadingPage && items.length === 0 ? (
-        <div className="p-16 text-center bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] space-y-3 shadow-xs">
-          <Loader2 className="w-8 h-8 text-emerald-600 dark:text-[#1DB954] animate-spin mx-auto" />
-          <p className="text-xs text-slate-500 dark:text-[#A7A7A7]">در حال بارگذاری پرونده‌های مشتریان...</p>
+      {isLoadingPage && displayItems.length === 0 ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+            {[...Array(6)].map((_, i) => (
+              <div
+                key={i}
+                className="bg-white dark:bg-[#181818] p-5 rounded-2xl border border-slate-200 dark:border-[#282828] animate-pulse space-y-4 shadow-xs"
+              >
+                <div className="flex justify-between items-start">
+                  <div className="space-y-2 w-2/3">
+                    <div className="h-4 bg-slate-200 dark:bg-[#282828] rounded w-3/4" />
+                    <div className="h-3 bg-slate-100 dark:bg-[#222] rounded w-1/2" />
+                  </div>
+                  <div className="h-5 bg-slate-200 dark:bg-[#282828] rounded-full w-16" />
+                </div>
+                <div className="h-10 bg-slate-50 dark:bg-[#141414] rounded-lg" />
+                <div className="pt-3 border-t border-slate-100 dark:border-[#282828] space-y-2">
+                  <div className="h-3 bg-slate-100 dark:bg-[#222] rounded w-1/2" />
+                  <div className="h-3 bg-slate-100 dark:bg-[#222] rounded w-2/3" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      ) : items.length === 0 ? (
+      ) : displayItems.length === 0 ? (
         <div className="p-12 text-center bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] space-y-4 shadow-xs">
           <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-[#282828] flex items-center justify-center text-slate-400 dark:text-[#535353] mx-auto">
             <Users className="w-7 h-7" />
@@ -447,7 +453,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           </button>
         </div>
       ) : (
-        <div className={isLoadingPage ? 'opacity-50 pointer-events-none transition-opacity' : ''}>
+        <div className={isLoadingPage ? 'opacity-60 pointer-events-none transition-opacity duration-150' : ''}>
           {/* DESKTOP TABLE LIST VIEW (Visible on md screens and above when viewMode is table) */}
           <div className={`${viewMode === 'table' ? 'hidden md:block' : 'hidden'} bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl overflow-hidden shadow-xs dark:shadow-xl`}>
             <div className="overflow-x-auto">
@@ -464,7 +470,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#222222] text-xs text-slate-700 dark:text-[#CCCCCC]">
-                  {items.map((c) => {
+                  {displayItems.map((c) => {
+                    if (!c) return null;
                     const timer = formatTimeRemaining(c.assignment_deadline);
                     const statusTheme = getStatusTheme(c.status);
                     const fBadge = formatFollowupRelativeBadge(c.next_followup_date);
@@ -606,7 +613,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
           {/* CARD GRID VIEW (Visible on mobile, or when viewMode === 'grid' on desktop) */}
           <div className={`${viewMode === 'table' ? 'block md:hidden' : 'block'} grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5`}>
-          {items.map((c) => {
+          {displayItems.map((c) => {
+            if (!c) return null;
             const timer = formatTimeRemaining(c.assignment_deadline);
             const statusTheme = getStatusTheme(c.status);
 
@@ -765,7 +773,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         totalPages={totalPages}
         totalCount={totalCount}
         pageSize={pageSize}
-        displayedCount={items.length}
+        displayedCount={displayItems.length}
         isLoading={isLoadingPage}
         onPageChange={(p) => setCurrentPage(p)}
         label="پرونده مشتری"

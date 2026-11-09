@@ -293,6 +293,27 @@ export function parseIsoToJalaliAndTime(isoString?: string | null): {
   }
 }
 
+// Module-level cached formatters to avoid repeated synchronous ICU table initialization in loops / mobile devices
+const cachedPersianFollowupDateFormatter = new Intl.DateTimeFormat('fa-IR', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+});
+
+const cachedPersianDateFormatter = new Intl.DateTimeFormat('fa-IR', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+
+const cachedPersianDateTimeFormatter = new Intl.DateTimeFormat('fa-IR', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
 /**
  * Returns a human-friendly Persian string for follow-up date and time.
  */
@@ -303,11 +324,7 @@ export function formatFollowupDateTime(isoString?: string | null): string {
     if (isNaN(d.getTime())) return String(isoString);
     const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
     if (hasTime) {
-      const datePart = new Intl.DateTimeFormat('fa-IR', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      }).format(d);
+      const datePart = cachedPersianFollowupDateFormatter.format(d);
       const hour = String(d.getHours()).padStart(2, '0');
       const minute = String(d.getMinutes()).padStart(2, '0');
       return `${datePart} - ساعت ${toPersianDigits(`${hour}:${minute}`)}`;
@@ -552,11 +569,7 @@ export function formatPersianDate(isoString?: string | null): string {
   try {
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return isoString;
-    return new Intl.DateTimeFormat('fa-IR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(d);
+    return cachedPersianDateFormatter.format(d);
   } catch (e) {
     return isoString;
   }
@@ -567,13 +580,7 @@ export function formatPersianDateTime(isoString: string): string {
   try {
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return isoString;
-    return new Intl.DateTimeFormat('fa-IR', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(d);
+    return cachedPersianDateTimeFormatter.format(d);
   } catch (e) {
     return isoString;
   }
