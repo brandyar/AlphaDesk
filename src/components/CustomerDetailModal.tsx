@@ -29,6 +29,9 @@ import {
   ArrowRight,
   Calendar,
   AlertCircle,
+  Minus,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { Customer, CustomerReport, Personnel, NegotiationStatus, ChannelType, CustomerContact, AuthUser, CustomerPhoneOption } from '../types';
 import {
@@ -59,6 +62,9 @@ interface CustomerDetailModalProps {
   currentPersonnel: Personnel | null;
   currentUser?: AuthUser | null;
   isAdmin?: boolean;
+  isMinimized?: boolean;
+  onToggleMinimize?: () => void;
+  isPopup?: boolean;
 }
 
 export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
@@ -75,6 +81,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   currentPersonnel,
   currentUser,
   isAdmin,
+  isMinimized = false,
+  onToggleMinimize,
+  isPopup = true,
 }) => {
   if (!isOpen || !customer) return null;
 
@@ -277,23 +286,23 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     }
   };
 
-  return (
+  const content = (
     <div className="w-full max-w-6xl mx-auto space-y-6 text-slate-900 dark:text-white font-sans">
       {/* Customer Header Card */}
-      <div className="p-4 sm:p-6 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 sm:gap-4">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-[#282828] border border-slate-300 dark:border-[#3e3e3e] flex items-center justify-center text-emerald-600 dark:text-[#1DB954] font-black text-xl flex-shrink-0">
+      <div className="p-4 sm:p-5 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 sm:gap-4 sticky top-0 z-20 backdrop-blur-md">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-100 dark:bg-[#282828] border border-slate-300 dark:border-[#3e3e3e] flex items-center justify-center text-emerald-600 dark:text-[#1DB954] font-black text-xl flex-shrink-0">
               {(customer.manager_name?.trim() || customer.negotiator_name?.trim() || customer.company_name).charAt(0)}
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                 {/* Main Heading: Business Owner's Name */}
-                <h2 className="text-xl font-extrabold text-slate-900 dark:text-white truncate">
+                <h2 className="text-base sm:text-xl font-extrabold text-slate-900 dark:text-white truncate">
                   {customer.manager_name?.trim() || customer.negotiator_name?.trim() || 'صاحب کسب و کار (نامشخص)'}
                 </h2>
                 {/* Status indicator */}
                 <div
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${statusTheme.bg} ${statusTheme.color}`}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusTheme.bg} ${statusTheme.color}`}
                 >
                   <span className={`w-2 h-2 rounded-full ${statusTheme.dot}`} />
                   <span>{formatStatusLabel(customer.status)}</span>
@@ -321,7 +330,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {userIsAdmin && onOpenMerge && (
               <button
                 type="button"
@@ -353,13 +362,27 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             >
               <Trash2 className="w-4 h-4" />
             </button>
+
+            {/* Minimize Button */}
+            {onToggleMinimize && (
+              <button
+                type="button"
+                onClick={onToggleMinimize}
+                className="p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] dark:text-[#B3B3B3] dark:hover:text-white transition-colors cursor-pointer"
+                title="کمینه‌سازی (Minimize) پرونده"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Close Button */}
             <button
               type="button"
               onClick={onClose}
-              className="h-8 px-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-[#282828] dark:hover:bg-[#333333] dark:text-[#B3B3B3] dark:hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-              title="خروج و بازگشت"
+              className="h-8 px-2.5 sm:px-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-[#282828] dark:hover:bg-[#333333] dark:text-[#B3B3B3] dark:hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+              title="بستن پرونده"
             >
-              <span>بازگشت</span>
+              <span className="hidden sm:inline">بستن</span>
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -1375,6 +1398,21 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
             </div>
           </div>
         </div>
+    </div>
+  );
+
+  if (!isPopup) {
+    return content;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 animate-in fade-in duration-200">
+      <div
+        className="w-full max-w-6xl max-h-[92vh] overflow-y-auto bg-white dark:bg-[#151515] rounded-3xl shadow-2xl border border-slate-200 dark:border-[#282828] p-3 sm:p-6 transition-all"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {content}
+      </div>
     </div>
   );
 };

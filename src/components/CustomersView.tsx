@@ -22,6 +22,9 @@ import {
   List,
   Loader2,
   Calendar,
+  SlidersHorizontal,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
 import { formatTimeRemaining, formatPersianDate, formatDisplayDate, formatDisplayDateOnly, formatFollowupRelativeBadge, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS, toPersianDigits } from '../utils';
@@ -69,6 +72,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOption, setSortOption] = useState<string>('next_followup_asc');
   const [followupFilter, setFollowupFilter] = useState<string>('همه');
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState<boolean>(false);
 
   const [items, setItems] = useState<Customer[]>(customers);
   const [totalCount, setTotalCount] = useState<number>(customers.length);
@@ -224,152 +228,197 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         </div>
       </div>
 
-      {/* Clean Single-Row Filter Toolbar: Dropdowns instead of tags */}
-      <div className="p-3 sm:p-4 bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] flex flex-wrap items-center justify-between gap-3 shadow-xs">
-        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
-          {/* Marketer Dropdown - ONLY for Admin */}
-          {userIsAdmin && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
-                <Filter className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
-                <span>بازاریاب:</span>
-              </span>
-              <select
-                value={selectedMarketerId}
-                onChange={(e) => onSelectMarketerId(e.target.value)}
-                className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
-              >
-                <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه بازاریاب‌ها</option>
-                {personnelList.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Status Dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 dark:text-[#A7A7A7]">وضعیت پرونده:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => onSelectStatusFilter(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
-            >
-              <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه وضعیت‌ها</option>
-              {NEGOTIATION_STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Follow-up Filter Dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
-              <span>موعد پیگیری:</span>
-            </span>
-            <select
-              value={followupFilter}
-              onChange={(e) => setFollowupFilter(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
-            >
-              <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه موعدها</option>
-              <option value="active" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">دارای پیگیری آینده</option>
-              <option value="today" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">پیگیری امروز</option>
-              <option value="due_3_days" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">سررسید ۳ روز آینده</option>
-              <option value="due_7_days" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">سررسید ۷ روز آینده</option>
-              <option value="overdue" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">عقب‌افتاده / منقضی</option>
-              <option value="no_followup" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">بدون موعد پیگیری</option>
-            </select>
-          </div>
-
-          {/* Sort Dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
-              <ArrowUpDown className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
-              <span>مرتب‌سازی:</span>
-            </span>
-            <select
-              value={sortOption}
-              onChange={(e) => setSortOption(e.target.value)}
-              className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer font-medium"
-            >
-              <option value="next_followup_asc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">نزدیک‌ترین موعد پیگیری</option>
-              <option value="next_followup_desc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">دورترین موعد پیگیری</option>
-              <option value="date_created_desc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">جدیدترین ثبت</option>
-              <option value="company_name_asc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">نام برند (الف - ی)</option>
-              <option value="deadline_asc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">مهلت مالکیت</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Search input, View Mode & Pagination Size */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative">
+      {/* Clean Responsive Filter Toolbar */}
+      <div className="bg-white dark:bg-[#181818] rounded-2xl border border-slate-200 dark:border-[#282828] shadow-xs overflow-hidden">
+        {/* Main Bar: Search, Mobile Filter Toggle, View Mode, Count */}
+        <div className="p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
+          {/* Search Input - Full width on small screens, fixed on md+ */}
+          <div className="relative flex-1 min-w-[200px] sm:min-w-[260px] max-w-full sm:max-w-md">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="جستجو در نام، برند، شماره تلفن، شهر..."
-              className="h-9 w-52 sm:w-64 pl-8 pr-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#777] border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954]"
+              className="h-10 w-full pl-9 pr-3 rounded-xl bg-slate-50 dark:bg-[#242424] text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#777] border border-slate-200 dark:border-[#383838] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] transition-colors"
             />
-            <Search className="w-3.5 h-3.5 text-slate-400 dark:text-[#777] absolute left-2.5 top-3 pointer-events-none" />
+            <Search className="w-4 h-4 text-slate-400 dark:text-[#777] absolute left-3 top-3 pointer-events-none" />
           </div>
 
-          {/* View Mode Toggle: List vs Card Grid */}
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#121212] p-1 rounded-xl border border-slate-200 dark:border-[#2c2c2c]">
+          {/* Quick Actions Strip */}
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            {/* Mobile Filter Toggle Button (Shown on mobile, hidden on lg screens where filters are always visible) */}
             <button
               type="button"
-              onClick={() => setViewMode('table')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                viewMode === 'table'
-                  ? 'bg-emerald-500 dark:bg-[#1DB954] text-white dark:text-black font-bold shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white'
+              onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
+              className={`lg:hidden h-10 px-3.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
+                isMobileFiltersOpen || statusFilter !== 'همه' || selectedMarketerId !== 'همه' || followupFilter !== 'همه'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-[#1DB954]/15 dark:text-[#1DB954] dark:border-[#1DB954]/40'
+                  : 'bg-slate-50 dark:bg-[#242424] text-slate-700 dark:text-[#ccc] border-slate-200 dark:border-[#383838] hover:bg-slate-100'
               }`}
-              title="نمایش لیستی (جدولی - دسکتاپ)"
             >
-              <List className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span className="hidden sm:inline">لیست</span>
+              <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
+              <span>فیلترها</span>
+              {(statusFilter !== 'همه' || selectedMarketerId !== 'همه' || followupFilter !== 'همه') && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-[#1DB954]" />
+              )}
+              {isMobileFiltersOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('grid')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                viewMode === 'grid'
-                  ? 'bg-emerald-500 dark:bg-[#1DB954] text-white dark:text-black font-bold shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white'
-              }`}
-              title="نمایش کارتی (موبایل)"
-            >
-              <LayoutGrid className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span className="hidden sm:inline">کارت</span>
-            </button>
+
+            {/* View Mode Toggle: List vs Card Grid */}
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#121212] p-1 rounded-xl border border-slate-200 dark:border-[#2c2c2c]">
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'table'
+                    ? 'bg-emerald-500 dark:bg-[#1DB954] text-white dark:text-black font-bold shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white'
+                }`}
+                title="نمایش لیستی (جدولی - دسکتاپ)"
+              >
+                <List className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span className="hidden sm:inline">لیست</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'grid'
+                    ? 'bg-emerald-500 dark:bg-[#1DB954] text-white dark:text-black font-bold shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white'
+                }`}
+                title="نمایش کارتی (موبایل)"
+              >
+                <LayoutGrid className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span className="hidden sm:inline">کارت</span>
+              </button>
+            </div>
+
+            {/* Page Size Dropdown */}
+            <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 dark:text-[#888]">
+              <span>تعداد:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="h-10 px-2 rounded-xl bg-slate-50 dark:bg-[#242424] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#383838] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
+              >
+                <option value="15" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۱۵</option>
+                <option value="30" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۳۰</option>
+                <option value="60" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۶۰</option>
+                <option value="100" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۱۰۰</option>
+              </select>
+            </div>
+
+            <div className="text-xs text-slate-500 dark:text-[#888888] font-mono whitespace-nowrap">
+              کل: <span className="text-emerald-600 dark:text-[#1DB954] font-bold">{toPersianDigits(totalCount)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Filter Dropdowns Tray: Always visible on desktop (lg:flex), Collapsible toggle on mobile */}
+        <div
+          className={`${
+            isMobileFiltersOpen ? 'flex' : 'hidden lg:flex'
+          } p-3 sm:p-4 bg-slate-50/70 dark:bg-[#151515] border-t border-slate-200 dark:border-[#262626] flex-wrap items-center justify-between gap-3 animate-in fade-in transition-all`}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
+            {/* Marketer Dropdown - ONLY for Admin */}
+            {userIsAdmin && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+                <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
+                  <Filter className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
+                  <span>بازاریاب:</span>
+                </span>
+                <select
+                  value={selectedMarketerId}
+                  onChange={(e) => onSelectMarketerId(e.target.value)}
+                  className="h-9 px-3 rounded-xl bg-white dark:bg-[#242424] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#383838] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer w-full sm:w-auto"
+                >
+                  <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه بازاریاب‌ها</option>
+                  {personnelList.map((p) => (
+                    <option key={p.id} value={p.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Status Dropdown */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+              <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">وضعیت پرونده:</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => onSelectStatusFilter(e.target.value)}
+                className="h-9 px-3 rounded-xl bg-white dark:bg-[#242424] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#383838] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer w-full sm:w-auto"
+              >
+                <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه وضعیت‌ها</option>
+                {NEGOTIATION_STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Follow-up Filter Dropdown */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+              <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
+                <span>موعد پیگیری:</span>
+              </span>
+              <select
+                value={followupFilter}
+                onChange={(e) => setFollowupFilter(e.target.value)}
+                className="h-9 px-3 rounded-xl bg-white dark:bg-[#242424] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#383838] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer w-full sm:w-auto"
+              >
+                <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه موعدها</option>
+                <option value="active" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">دارای پیگیری آینده</option>
+                <option value="today" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">پیگیری امروز</option>
+                <option value="due_3_days" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">سررسید ۳ روز آینده</option>
+                <option value="due_7_days" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">سررسید ۷ روز آینده</option>
+                <option value="overdue" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">عقب‌افتاده / منقضی</option>
+                <option value="no_followup" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">بدون موعد پیگیری</option>
+              </select>
+            </div>
+
+            {/* Sort Dropdown */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+              <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
+                <ArrowUpDown className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
+                <span>مرتب‌سازی:</span>
+              </span>
+              <select
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value)}
+                className="h-9 px-3 rounded-xl bg-white dark:bg-[#242424] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#383838] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer font-medium w-full sm:w-auto"
+              >
+                <option value="next_followup_asc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">نزدیک‌ترین موعد پیگیری</option>
+                <option value="next_followup_desc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">دورترین موعد پیگیری</option>
+                <option value="date_created_desc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">جدیدترین ثبت</option>
+                <option value="company_name_asc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">نام برند (الف - ی)</option>
+                <option value="deadline_asc" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">مهلت مالکیت</option>
+              </select>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-[#888]">
-            <span>تعداد:</span>
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setCurrentPage(1);
+          {/* Reset Filters shortcut if filters are active */}
+          {(statusFilter !== 'همه' || selectedMarketerId !== 'همه' || followupFilter !== 'همه') && (
+            <button
+              type="button"
+              onClick={() => {
+                onSelectStatusFilter('همه');
+                onSelectMarketerId('همه');
+                setFollowupFilter('همه');
               }}
-              className="h-9 px-2 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
+              className="text-xs text-rose-600 dark:text-rose-400 hover:underline font-semibold cursor-pointer py-1"
             >
-              <option value="15" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۱۵</option>
-              <option value="30" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۳۰</option>
-              <option value="60" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۶۰</option>
-              <option value="100" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">۱۰۰</option>
-            </select>
-          </div>
-
-          <div className="text-xs text-slate-500 dark:text-[#888888] font-mono">
-            کل: <span className="text-emerald-600 dark:text-[#1DB954] font-bold">{toPersianDigits(totalCount)}</span> پرونده
-          </div>
+              پاک کردن همه فیلترها
+            </button>
+          )}
         </div>
       </div>
 
@@ -536,7 +585,11 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                         <td className="py-3.5 px-4 text-left whitespace-nowrap">
                           <button
                             type="button"
-                            onClick={() => onSelectCustomer(c)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onSelectCustomer(c);
+                            }}
                             className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-emerald-500 hover:text-white dark:bg-[#242424] dark:hover:bg-[#1DB954] text-slate-700 dark:text-[#A7A7A7] dark:hover:text-black font-bold text-xs transition-colors flex items-center gap-1 ml-auto border border-slate-200 dark:border-transparent cursor-pointer shadow-xs"
                           >
                             <span>مشاهده</span>

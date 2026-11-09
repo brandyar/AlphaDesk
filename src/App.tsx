@@ -15,6 +15,7 @@ import {
   Building2,
   Plus,
   Edit2,
+  Maximize2,
 } from 'lucide-react';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -109,7 +110,7 @@ import {
   DashboardSummary,
   getMe,
 } from './api';
-import { matchPersonnelToCustomer, matchPersonnelToReport, getUserAllowedTenants } from './utils';
+import { matchPersonnelToCustomer, matchPersonnelToReport, getUserAllowedTenants, getStatusTheme, formatStatusLabel, toPersianDigits } from './utils';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
@@ -164,7 +165,9 @@ export default function App() {
   const [showExpiredOnly, setShowExpiredOnly] = useState(false);
 
   // Modals State
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [activeCustomerModalId, setActiveCustomerModalId] = useState<string | null>(null);
+  const [minimizedCustomerIds, setMinimizedCustomerIds] = useState<string[]>([]);
+  const [customerModalCache, setCustomerModalCache] = useState<Record<string, Customer>>({});
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isAddReportModalOpen, setIsAddReportModalOpen] = useState(false);
@@ -544,9 +547,7 @@ export default function App() {
         const updated = await updateCustomer(editingCustomer.id, customerData);
         savedCustomer = updated;
         setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-        if (selectedCustomer?.id === updated.id) {
-          setSelectedCustomer(updated);
-        }
+        setCustomerModalCache((prev) => (prev[updated.id] ? { ...prev, [updated.id]: updated } : prev));
         showToast('پرونده و شماره‌های مشتری با موفقیت ذخیره شدند.', 'success');
       } else {
         const created = await createCustomer(customerData);
@@ -625,36 +626,36 @@ export default function App() {
             };
           })
         );
-        if (selectedCustomer?.id === custId) {
-          setSelectedCustomer((prev) => {
-            if (!prev) return null;
-            const existingContacts = prev.contacts || [];
-            const newContacts = [created, ...existingContacts.filter((ct) => ct.id !== created.id)];
-            const mobiles =
-              created.channel_type === 'mobile' && !prev.mobile_numbers?.includes(created.value)
-                ? [...(prev.mobile_numbers || []), created.value]
-                : prev.mobile_numbers;
-            const landlines =
-              created.channel_type === 'landline' && !prev.landline_numbers?.includes(created.value)
-                ? [...(prev.landline_numbers || []), created.value]
-                : prev.landline_numbers;
-            return {
-              ...prev,
+        setCustomerModalCache((prev) => {
+          const cached = prev[custId];
+          if (!cached) return prev;
+          const existingContacts = cached.contacts || [];
+          const newContacts = [created, ...existingContacts.filter((ct) => ct.id !== created.id)];
+          const mobiles =
+            created.channel_type === 'mobile' && !cached.mobile_numbers?.includes(created.value)
+              ? [...(cached.mobile_numbers || []), created.value]
+              : cached.mobile_numbers;
+          const landlines =
+            created.channel_type === 'landline' && !cached.landline_numbers?.includes(created.value)
+              ? [...(cached.landline_numbers || []), created.value]
+              : cached.landline_numbers;
+          return {
+            ...prev,
+            [custId]: {
+              ...cached,
               contacts: newContacts,
               mobile_numbers: mobiles,
               landline_numbers: landlines,
-            };
-          });
-        }
+            },
+          };
+        });
         window.dispatchEvent(new CustomEvent('crm_contact_saved', { detail: created }));
 
         // Background sync to ensure full consistency
         fetchCustomerById(custId).then((freshCust) => {
           if (freshCust) {
             setCustomers((prev) => prev.map((c) => (c.id === freshCust.id ? freshCust : c)));
-            if (selectedCustomer?.id === freshCust.id) {
-              setSelectedCustomer(freshCust);
-            }
+            setCustomerModalCache((prev) => (prev[freshCust.id] ? { ...prev, [freshCust.id]: freshCust } : prev));
             window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: freshCust }));
           }
         }).catch(() => {});
@@ -671,7 +672,8 @@ export default function App() {
       await deleteCustomer(id);
       setCustomers((prev) => prev.filter((c) => c.id !== id));
       setReports((prev) => prev.filter((r) => r.customer_id !== id));
-      setSelectedCustomer(null);
+      setActiveCustomerModalId((curr) => (curr === id ? null : curr));
+      setMinimizedCustomerIds((curr) => curr.filter((cId) => cId !== id));
       window.dispatchEvent(new CustomEvent('crm_customer_deleted', { detail: { id } }));
       fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
       fetchBffStatus().then(setBffStatus).catch(() => {});
@@ -690,7 +692,7 @@ export default function App() {
     try {
       const updated = await reassignCustomer(customerId, marketerId, marketerName, days);
       setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-      setSelectedCustomer(updated);
+      setCustomerModalCache((prev) => (prev[updated.id] ? { ...prev, [updated.id]: updated } : prev));
       window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: updated }));
       fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
       fetchBffStatus().then(setBffStatus).catch(() => {});
@@ -746,9 +748,8 @@ export default function App() {
       await loadAllData();
       setIsMergeModalOpen(false);
       setMergeInitialCustomerIds([]);
-      if (selectedCustomer) {
-        setSelectedCustomer(null);
-      }
+      setActiveCustomerModalId((curr) => (curr && mergedCustomerIds.includes(curr) ? null : curr));
+      setMinimizedCustomerIds((curr) => curr.filter((id) => !mergedCustomerIds.includes(id)));
     } catch (err: any) {
       showToast('خطا در ادغام پرونده‌های مشتریان: ' + (err.message || 'خطای نامشخص'), 'error');
       throw err;
@@ -778,18 +779,19 @@ export default function App() {
               : c
           )
         );
-        if (selectedCustomer?.id === custId) {
-          setSelectedCustomer((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  status: statusToSet,
-                  next_followup_date: nextDate,
-                  reports: [created, ...(prev.reports?.filter((r) => r.id !== created.id) || [])],
-                }
-              : null
-          );
-        }
+        setCustomerModalCache((prev) => {
+          const cached = prev[custId];
+          if (!cached) return prev;
+          return {
+            ...prev,
+            [custId]: {
+              ...cached,
+              status: statusToSet,
+              next_followup_date: nextDate,
+              reports: [created, ...(cached.reports?.filter((r) => r.id !== created.id) || [])],
+            },
+          };
+        });
       }
 
       window.dispatchEvent(new CustomEvent('crm_report_saved', { detail: created }));
@@ -799,9 +801,7 @@ export default function App() {
         fetchCustomerById(custId).then((updatedCustomer) => {
           if (updatedCustomer) {
             setCustomers((prev) => prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)));
-            if (selectedCustomer?.id === updatedCustomer.id) {
-              setSelectedCustomer(updatedCustomer);
-            }
+            setCustomerModalCache((prev) => (prev[updatedCustomer.id] ? { ...prev, [updatedCustomer.id]: updatedCustomer } : prev));
             window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: updatedCustomer }));
           }
         }).catch(() => {});
@@ -1006,23 +1006,58 @@ export default function App() {
 
   const openCustomerDetail = (customer: Customer) => {
     if (!customer || !customer.id) return;
-    const detailUrl = `${window.location.origin}${window.location.pathname}?customer_id=${customer.id}`;
-    window.open(detailUrl, '_blank');
+    const cid = String(customer.id);
+    setCustomerModalCache((prev) => ({ ...prev, [cid]: customer }));
+    // If it was minimized, remove from minimized list so it expands
+    setMinimizedCustomerIds((prev) => prev.filter((id) => id !== cid));
+    setActiveCustomerModalId(cid);
+
+    // Fetch the freshest customer details in background to sync reports & contacts smoothly without blocking
+    fetchCustomerById(customer.id)
+      .then((fresh) => {
+        if (fresh) {
+          setCustomerModalCache((prev) => ({ ...prev, [cid]: fresh }));
+          setCustomers((prev) => prev.map((c) => (c.id === fresh.id ? fresh : c)));
+        }
+      })
+      .catch(() => {});
   };
 
-  // URL query parameter listener for opening customer in a new tab
+  const handleMinimizeCustomer = (customerId: string) => {
+    setMinimizedCustomerIds((prev) => (prev.includes(customerId) ? prev : [...prev, customerId]));
+    setActiveCustomerModalId((curr) => (curr === customerId ? null : curr));
+  };
+
+  const handleRestoreCustomer = (customerId: string) => {
+    setMinimizedCustomerIds((prev) => prev.filter((id) => id !== customerId));
+    setActiveCustomerModalId(customerId);
+  };
+
+  const handleCloseCustomerModal = (customerId: string) => {
+    setActiveCustomerModalId((curr) => (curr === customerId ? null : curr));
+    setMinimizedCustomerIds((prev) => prev.filter((id) => id !== customerId));
+  };
+
+  // URL query parameter listener for opening customer when link contains customer_id
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const targetCustId = urlParams.get('customer_id') || urlParams.get('id');
     if (targetCustId) {
-      setActiveTab('customer_detail' as NavTab);
       fetchCustomerById(targetCustId)
         .then((full) => {
-          setSelectedCustomer(full);
+          if (full) {
+            setCustomerModalCache((prev) => ({ ...prev, [String(full.id)]: full }));
+            setActiveCustomerModalId(String(full.id));
+            setMinimizedCustomerIds((prev) => prev.filter((id) => id !== String(full.id)));
+          }
         })
         .catch(() => {
           const match = customers.find((c) => String(c.id) === String(targetCustId));
-          if (match) setSelectedCustomer(match);
+          if (match) {
+            setCustomerModalCache((prev) => ({ ...prev, [String(match.id)]: match }));
+            setActiveCustomerModalId(String(match.id));
+            setMinimizedCustomerIds((prev) => prev.filter((id) => id !== String(match.id)));
+          }
         });
     }
   }, [customers]);
@@ -1360,37 +1395,45 @@ export default function App() {
                 )}
 
                 {activeTab === ('customer_detail' as NavTab) && (
-                  selectedCustomer ? (
-                    <CustomerDetailModal
-                      customer={selectedCustomer}
-                      isOpen={true}
-                      onClose={() => handleNavigateToTab('customers')}
-                      onAddReport={handleAddCustomerReport}
-                      onReassign={handleReassignCustomer}
-                      onAddContact={handleAddCustomerContact}
-                      onEdit={(cust) => {
-                        setEditingCustomer(cust);
-                        setIsCustomerModalOpen(true);
-                      }}
-                      onDelete={(custId) => {
-                        handleDeleteCustomer(custId);
-                        handleNavigateToTab('customers');
-                      }}
-                      onOpenMerge={(customerId) => {
-                        setMergeInitialCustomerIds([customerId]);
-                        setIsMergeModalOpen(true);
-                      }}
-                      personnelList={personnelList}
-                      currentPersonnel={currentPersonnel}
-                      currentUser={currentUser}
-                      isAdmin={isCurrentUserAdmin}
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-64 space-y-3">
-                      <div className="w-8 h-8 rounded-full border-2 border-emerald-500 dark:border-[#1DB954] border-t-transparent animate-spin" />
-                      <div className="text-xs text-slate-500 dark:text-[#A7A7A7]">در حال دریافت اطلاعات کامل پرونده مشتری...</div>
-                    </div>
-                  )
+                  (() => {
+                    const activeCust = (activeCustomerModalId && customerModalCache[activeCustomerModalId]) ||
+                      customers.find((c) => c.id === activeCustomerModalId) ||
+                      customers[0] ||
+                      null;
+
+                    return activeCust ? (
+                      <CustomerDetailModal
+                        customer={activeCust}
+                        isOpen={true}
+                        isPopup={false}
+                        onClose={() => handleNavigateToTab('customers')}
+                        onAddReport={handleAddCustomerReport}
+                        onReassign={handleReassignCustomer}
+                        onAddContact={handleAddCustomerContact}
+                        onEdit={(cust) => {
+                          setEditingCustomer(cust);
+                          setIsCustomerModalOpen(true);
+                        }}
+                        onDelete={(custId) => {
+                          handleDeleteCustomer(custId);
+                          handleNavigateToTab('customers');
+                        }}
+                        onOpenMerge={(customerId) => {
+                          setMergeInitialCustomerIds([customerId]);
+                          setIsMergeModalOpen(true);
+                        }}
+                        personnelList={personnelList}
+                        currentPersonnel={currentPersonnel}
+                        currentUser={currentUser}
+                        isAdmin={isCurrentUserAdmin}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-64 space-y-3">
+                        <div className="w-8 h-8 rounded-full border-2 border-emerald-500 dark:border-[#1DB954] border-t-transparent animate-spin" />
+                        <div className="text-xs text-slate-500 dark:text-[#A7A7A7]">در حال دریافت اطلاعات کامل پرونده مشتری...</div>
+                      </div>
+                    );
+                  })()
                 )}
               </ErrorBoundary>
             </div>
@@ -1512,6 +1555,99 @@ export default function App() {
         prefilledName={prefilledLeadName}
         prefilledNotes={prefilledLeadNotes}
       />
+
+      {/* Active Customer Detail Modal (Full Popup) */}
+      {(() => {
+        if (!activeCustomerModalId) return null;
+        const activeCust = customerModalCache[activeCustomerModalId] ||
+          customers.find((c) => String(c.id) === String(activeCustomerModalId));
+        if (!activeCust) return null;
+
+        return (
+          <CustomerDetailModal
+            customer={activeCust}
+            isOpen={true}
+            isMinimized={false}
+            isPopup={true}
+            onToggleMinimize={() => handleMinimizeCustomer(String(activeCust.id))}
+            onClose={() => handleCloseCustomerModal(String(activeCust.id))}
+            onAddReport={handleAddCustomerReport}
+            onReassign={handleReassignCustomer}
+            onAddContact={handleAddCustomerContact}
+            onEdit={(cust) => {
+              setEditingCustomer(cust);
+              setIsCustomerModalOpen(true);
+            }}
+            onDelete={(custId) => {
+              handleDeleteCustomer(custId);
+              handleCloseCustomerModal(custId);
+            }}
+            onOpenMerge={(customerId) => {
+              setMergeInitialCustomerIds([customerId]);
+              setIsMergeModalOpen(true);
+            }}
+            personnelList={personnelList}
+            currentPersonnel={currentPersonnel}
+            currentUser={currentUser}
+            isAdmin={isCurrentUserAdmin}
+          />
+        );
+      })()}
+
+      {/* Responsive Multi-Customer Minimized Dock Bar (Bottom Dock Tray - Placed above mobile bottom nav bar on mobile) */}
+      {minimizedCustomerIds.length > 0 && (
+        <div className="fixed bottom-20 lg:bottom-4 left-3 sm:left-4 z-40 flex items-center gap-2 max-w-[calc(100vw-24px)] overflow-x-auto py-1 px-1 scrollbar-none animate-in slide-in-from-bottom-3 pointer-events-auto">
+          {minimizedCustomerIds.map((cid) => {
+            const cust = customerModalCache[cid] || customers.find((c) => String(c.id) === String(cid));
+            if (!cust) return null;
+            const statusTheme = getStatusTheme(cust.status);
+
+            return (
+              <div
+                key={cid}
+                className="flex items-center gap-2 sm:gap-2.5 bg-white/95 dark:bg-[#181818]/95 backdrop-blur-md border border-slate-300 dark:border-[#333] shadow-xl rounded-2xl p-2 sm:px-3 sm:py-2.5 transition-all hover:border-emerald-500 dark:hover:border-[#1DB954] hover:shadow-2xl flex-shrink-0 group"
+              >
+                <div
+                  onClick={() => handleRestoreCustomer(cid)}
+                  className="flex items-center gap-2 sm:gap-2.5 cursor-pointer select-none"
+                  title="بازگشت و باز کردن پرونده"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-[#1DB954]/15 border border-emerald-300 dark:border-[#1DB954]/30 flex items-center justify-center text-emerald-600 dark:text-[#1DB954] font-black text-xs flex-shrink-0 group-hover:scale-105 transition-transform">
+                    {(cust.manager_name?.trim() || cust.negotiator_name?.trim() || cust.company_name).charAt(0)}
+                  </div>
+                  <div className="text-right max-w-[110px] sm:max-w-[150px]">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-emerald-600 dark:group-hover:text-[#1DB954] transition-colors">
+                      {cust.manager_name?.trim() || cust.negotiator_name?.trim() || cust.company_name}
+                    </div>
+                    <div className="text-[10px] text-slate-500 dark:text-[#888] truncate">
+                      {cust.company_name}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 border-r border-slate-200 dark:border-[#2c2c2c] pr-1.5 mr-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleRestoreCustomer(cid)}
+                    className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-[#282828] text-emerald-600 dark:text-[#1DB954] transition-colors cursor-pointer"
+                    title="بزرگ‌نمایی و باز کردن پرونده"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCloseCustomerModal(cid)}
+                    className="p-1 rounded-lg hover:bg-red-100 dark:hover:bg-red-950/60 text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+                    title="بستن این پرونده"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
 
 
