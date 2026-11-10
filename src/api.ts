@@ -19,7 +19,11 @@ import {
   CreateColleaguePayload,
   ProjectSettings,
   Tenant,
+  PersonnelSalaryConfig,
+  PayrollSlip,
+  PayrollCalculateResponse,
 } from './types';
+
 
 const BASE_URL = '/api';
 
@@ -45,6 +49,29 @@ try {
   }
 } catch {}
 
+export function isSessionFromPreviousDay(sessionIat: number, timeZone = 'Asia/Tehran'): boolean {
+  if (!sessionIat || sessionIat <= 0 || isNaN(sessionIat)) return false;
+  const now = new Date();
+  const sessionDate = new Date(sessionIat);
+  if (isNaN(sessionDate.getTime())) return false;
+
+  try {
+    const dtf = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const todayStr = dtf.format(now);
+    const sessionDayStr = dtf.format(sessionDate);
+    return sessionDayStr !== todayStr;
+  } catch {
+    const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const sessionLocal = `${sessionDate.getFullYear()}-${String(sessionDate.getMonth() + 1).padStart(2, '0')}-${String(sessionDate.getDate()).padStart(2, '0')}`;
+    return sessionLocal !== todayLocal;
+  }
+}
+
 let currentSessionIat: number = Date.now();
 
 function enforceAuthRole() {
@@ -66,26 +93,38 @@ try {
   const saved = localStorage.getItem(AUTH_STORAGE_KEY);
   if (saved) {
     const parsed = JSON.parse(saved);
-    currentAuthToken = parsed.access_token || '';
-    currentAuthUser = parsed.user ? { ...parsed.user, avatar: '', profile_image: '' } : null;
-    currentPersonnelContext = parsed.personnel ? { ...parsed.personnel, avatar: '', profile_image: '' } : null;
-    currentSessionIat = parsed.session_iat || Date.now();
+    const savedIat = parsed.session_iat || 0;
+    if (savedIat > 0 && isSessionFromPreviousDay(savedIat)) {
+      // Session has expired with the end of the day!
+      try {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      } catch {}
+      currentAuthToken = '';
+      currentAuthUser = null;
+      currentPersonnelContext = null;
+      currentSessionIat = 0;
+    } else {
+      currentAuthToken = parsed.access_token || '';
+      currentAuthUser = parsed.user ? { ...parsed.user, avatar: '', profile_image: '' } : null;
+      currentPersonnelContext = parsed.personnel ? { ...parsed.personnel, avatar: '', profile_image: '' } : null;
+      currentSessionIat = savedIat || Date.now();
 
-    enforceAuthRole();
+      enforceAuthRole();
 
-    const pTenant = parsed.personnel?.tenant_id || parsed.user?.tenant_id;
-    const pTenantName = parsed.personnel?.tenant_name || parsed.user?.tenant_name;
-    if (pTenant && (!parsed.user?.is_admin || currentTenantId === 'all' || currentTenantId === 'default' || currentTenantId === '1')) {
-      currentTenantId = String(pTenant);
-      if (pTenantName) {
-        currentTenantName = String(pTenantName);
+      const pTenant = parsed.personnel?.tenant_id || parsed.user?.tenant_id;
+      const pTenantName = parsed.personnel?.tenant_name || parsed.user?.tenant_name;
+      if (pTenant && (!parsed.user?.is_admin || currentTenantId === 'all' || currentTenantId === 'default' || currentTenantId === '1')) {
+        currentTenantId = String(pTenant);
+        if (pTenantName) {
+          currentTenantName = String(pTenantName);
+          try {
+            localStorage.setItem(TENANT_NAME_STORAGE_KEY, currentTenantName);
+          } catch {}
+        }
         try {
-          localStorage.setItem(TENANT_NAME_STORAGE_KEY, currentTenantName);
+          localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
         } catch {}
       }
-      try {
-        localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
-      } catch {}
     }
   }
 } catch {}
@@ -133,6 +172,9 @@ export function getApiPersonnelContext(): Personnel | null {
 }
 
 export function getStoredAuthSession(): { user: AuthUser | null; personnel: Personnel | null; token: string; sessionIat: number } {
+  if (currentSessionIat > 0 && isSessionFromPreviousDay(currentSessionIat)) {
+    clearAuthSession();
+  }
   enforceAuthRole();
   return {
     user: currentAuthUser,
@@ -235,6 +277,7 @@ async function handleResponse<T>(res: globalThis.Response, defaultErrorMsg: stri
 
     if (
       res.status === 401 ||
+      errCode === 'SESSION_EXPIRED' ||
       errCode === 'ALL_SESSIONS_REVOKED' ||
       errCode === 'ACCOUNT_INACTIVE' ||
       (res.status === 403 && (errorMsg.includes('غیرفعال') || errCode === 'ACCOUNT_INACTIVE'))
@@ -1373,6 +1416,92 @@ export async function repairNegotiators(payload: {
   });
   return handleResponse(res, 'خطا در اصلاح نام مذاکره‌کنندگان و تاریخ‌های پیگیری');
 }
+
+// ---------------------------------------------------------------------------
+// Payroll & Commission APIs
+// ---------------------------------------------------------------------------
+export async function fetchSalaryConfigs(): Promise<PersonnelSalaryConfig[]> {
+  const res = await fetch(`${BASE_URL}/payroll/configs`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse<PersonnelSalaryConfig[]>(res, 'خطا در دریافت احکام حقوقی پرسنل');
+}
+
+export async function fetchSalaryConfig(personnelId: string): Promise<PersonnelSalaryConfig> {
+  const res = await fetch(`${BASE_URL}/payroll/configs/${personnelId}`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse<PersonnelSalaryConfig>(res, 'خطا در دریافت حکم حقوقی پرسنل');
+}
+
+export async function saveSalaryConfig(config: PersonnelSalaryConfig): Promise<PersonnelSalaryConfig> {
+  const res = await fetch(`${BASE_URL}/payroll/configs`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(config),
+  });
+  return handleResponse<PersonnelSalaryConfig>(res, 'خطا در ذخیره حکم حقوقی پرسنل');
+}
+
+export async function calculatePayrollSimulation(payload: {
+  from_date?: string | null;
+  to_date?: string | null;
+  personnel_id?: string;
+}): Promise<PayrollCalculateResponse> {
+  const res = await fetch(`${BASE_URL}/payroll/calculate`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<PayrollCalculateResponse>(res, 'خطا در محاسبه آنلاین حقوق و پورسانت');
+}
+
+export async function fetchPayrollSlips(params?: {
+  personnel_id?: string;
+  status?: string;
+}): Promise<PayrollSlip[]> {
+  const query = new URLSearchParams();
+  if (params?.personnel_id && params.personnel_id !== 'all') query.append('personnel_id', params.personnel_id);
+  if (params?.status && params.status !== 'all') query.append('status', params.status);
+  const qStr = query.toString() ? `?${query.toString()}` : '';
+
+  const res = await fetch(`${BASE_URL}/payroll/slips${qStr}`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse<PayrollSlip[]>(res, 'خطا در دریافت آرشیو فیش‌های حقوقی');
+}
+
+export async function createPayrollSlip(
+  payload: Partial<PayrollSlip> | Partial<PayrollSlip>[]
+): Promise<PayrollSlip | PayrollSlip[]> {
+  const res = await fetch(`${BASE_URL}/payroll/slips`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<PayrollSlip | PayrollSlip[]>(res, 'خطا در صدور و ثبت فیش حقوقی');
+}
+
+export async function updatePayrollSlip(
+  id: number | string,
+  patch: Partial<PayrollSlip>
+): Promise<PayrollSlip> {
+  const res = await fetch(`${BASE_URL}/payroll/slips/${id}`, {
+    method: 'PATCH',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(patch),
+  });
+  return handleResponse<PayrollSlip>(res, 'خطا در بروزرسانی وضعیت فیش حقوقی');
+}
+
+export async function deletePayrollSlip(id: number | string): Promise<{ success: boolean }> {
+  const res = await fetch(`${BASE_URL}/payroll/slips/${id}`, {
+    method: 'DELETE',
+    headers: getBffHeaders(),
+  });
+  return handleResponse<{ success: boolean }>(res, 'خطا در حذف فیش حقوقی');
+}
+
 
 
 

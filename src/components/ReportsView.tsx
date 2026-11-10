@@ -114,10 +114,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Reset page to 1 when filters, sorting or search change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [adminFilter, staffFilter, selectedStatus, selectedNegotiator, debouncedSearch, activeTenantId, sortBy]);
+
 
   // High-performance O(1) Customer Lookup Map
   const customersMap = useMemo(() => {
@@ -182,7 +179,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   // Server-Side Paginated Fetch with Versioned Cancellation Token
   const fetchVersionRef = useRef(0);
-  useEffect(() => {
+  const filterKey = `${adminFilter}_${staffFilter}_${selectedStatus}_${selectedNegotiator}_${debouncedSearch}_${sortBy}_${pageSize}_${activeTenantId}_${userIsAdmin}`;
+  const prevFilterKeyRef = useRef(filterKey);
+
+  const loadReports = (targetPage = currentPage) => {
     if (!userIsAdmin && staffFilter === 'unfollowed_referrals') {
       setIsLoading(false);
       return;
@@ -198,7 +198,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         : sortBy;
 
     fetchCustomerReportsPaginated(undefined, {
-      page: currentPage,
+      page: targetPage,
       limit: pageSize,
       search: debouncedSearch.trim() || undefined,
       status: selectedStatus !== 'همه' ? selectedStatus : undefined,
@@ -220,18 +220,19 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         console.error('Error fetching paginated customer reports:', err);
         setIsLoading(false);
       });
-  }, [
-    currentPage,
-    pageSize,
-    adminFilter,
-    staffFilter,
-    selectedStatus,
-    selectedNegotiator,
-    debouncedSearch,
-    sortBy,
-    activeTenantId,
-    userIsAdmin,
-  ]);
+  };
+
+  useEffect(() => {
+    if (prevFilterKeyRef.current !== filterKey) {
+      prevFilterKeyRef.current = filterKey;
+      if (currentPage !== 1) {
+        setCurrentPage(1);
+        loadReports(1);
+        return;
+      }
+    }
+    loadReports(currentPage);
+  }, [currentPage, filterKey]);
 
   // Listen to report save/delete events to immediately show newly added or deleted reports
   useEffect(() => {
@@ -563,7 +564,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </div>
           </div>
         )
-      ) : isLoading ? (
+      ) : isLoading && displayedReports.length === 0 ? (
         <div className="space-y-4">
           {[...Array(6)].map((_, i) => (
             <div
@@ -592,7 +593,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <p className="text-xs text-slate-500 dark:text-[#A7A7A7]">هیچ گزارشی مطابق با فیلترها و مرتب‌سازی انتخابی یافت نشد.</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className={`space-y-4 ${isLoading ? 'opacity-60 pointer-events-none transition-opacity duration-150' : ''}`}>
           {displayedReports.map((rep) => {
             const customer =
               typeof rep.customer_id === 'object' && rep.customer_id !== null

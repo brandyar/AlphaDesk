@@ -28,7 +28,9 @@ import { ColdLeadsView } from './components/ColdLeadsView';
 import { AdminReportsView } from './components/AdminReportsView';
 import { PersonalPortalView, PortalTab } from './components/PersonalPortalView';
 import { TeamManagementView } from './components/TeamManagementView';
+import { PayrollView } from './components/PayrollView';
 import { CustomerModal } from './components/CustomerModal';
+
 import { CustomerDetailModal } from './components/CustomerDetailModal';
 import { AddReportModal } from './components/AddReportModal';
 import { AddColdLeadModal } from './components/AddColdLeadModal';
@@ -109,6 +111,8 @@ import {
   fetchDashboardSummary,
   DashboardSummary,
   getMe,
+  isSessionFromPreviousDay,
+  clearAuthSession,
 } from './api';
 import { matchPersonnelToCustomer, matchPersonnelToReport, getUserAllowedTenants, getStatusTheme, formatStatusLabel, toPersianDigits } from './utils';
 
@@ -181,7 +185,7 @@ export default function App() {
   const [prefilledLeadName, setPrefilledLeadName] = useState('');
   const [prefilledLeadNotes, setPrefilledLeadNotes] = useState('');
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => !initialSession.user);
 
   // Load and refresh tenants
   const loadTenants = async () => {
@@ -239,104 +243,119 @@ export default function App() {
     const target = tenants.find((t) => String(t.id) === String(tenantId));
     const name = tenantId === 'all' ? 'همه سازمان‌ها (تجمیعی)' : target?.name || 'سازمان منتخب';
     showToast(`سازمان فعال: ${name}`, 'info');
-    setDashboardSummary((prev) => prev);
     loadAllData(currentPersonnel, currentUser);
   };
 
   // Versioned fetch token to cancel stale concurrent requests cleanly
   const fetchVersionRef = useRef(0);
+  const activeLoadPromiseRef = useRef<Promise<void> | null>(null);
+  const hasCompletedInitialLoadRef = useRef(false);
 
   // Initial & Reactive Data Load with intelligent user-scoped querying and caching
-  const loadAllData = async (activeP?: Personnel | null, activeUser?: AuthUser | null) => {
+  const loadAllData = async (activeP?: Personnel | null, activeUser?: AuthUser | null): Promise<void> => {
+    // Reuse in-flight promise to avoid duplicate concurrent loading cascades
+    if (activeLoadPromiseRef.current) {
+      return activeLoadPromiseRef.current;
+    }
+
     const currentVersion = ++fetchVersionRef.current;
-    if (!customers || customers.length === 0) {
+    if (!hasCompletedInitialLoadRef.current && (!customers || customers.length === 0) && !currentUser) {
       setLoading(true);
     }
 
-    try {
-      const targetUser = activeUser !== undefined ? activeUser : currentUser;
-      const targetPContext = activeP !== undefined ? activeP : currentPersonnel;
+    const loadPromise = (async () => {
+      try {
+        const targetUser = activeUser !== undefined ? activeUser : currentUser;
+        const targetPContext = activeP !== undefined ? activeP : currentPersonnel;
 
-      // 1. Fetch Core Metadata (personnel, tenants, status, summary, leave & advance requests, customers, reports)
-      const [pData, tData, bStatus, dSummary, lData, aData, cData, rData] = await Promise.all([
-        fetchPersonnel().catch(() => []),
-        fetchTenants().catch(() => []),
-        fetchBffStatus().catch(() => null),
-        fetchDashboardSummary().catch(() => null),
-        fetchLeaveRequests().catch(() => []),
-        fetchAdvanceRequests().catch(() => []),
-        fetchCustomers({ limit: 50 }).catch(() => []),
-        fetchCustomerReports({ page: 1, limit: 10 }).catch(() => []),
-      ]);
+        // 1. Fetch Core Metadata (personnel, tenants, status, summary, leave & advance requests, customers, reports)
+        const [pData, tData, bStatus, dSummary, lData, aData, cData, rData] = await Promise.all([
+          fetchPersonnel().catch(() => []),
+          fetchTenants().catch(() => []),
+          fetchBffStatus().catch(() => null),
+          fetchDashboardSummary().catch(() => null),
+          fetchLeaveRequests().catch(() => []),
+          fetchAdvanceRequests().catch(() => []),
+          fetchCustomers({ limit: 50 }).catch(() => []),
+          fetchCustomerReports({ page: 1, limit: 10 }).catch(() => []),
+        ]);
 
-      // If a newer fetch was started, discard stale results
-      if (currentVersion !== fetchVersionRef.current) return;
+        // If a newer fetch was started, discard stale results
+        if (currentVersion !== fetchVersionRef.current) return;
 
-      if (Array.isArray(pData) && pData.length > 0) setPersonnelList(pData);
-      if (Array.isArray(tData) && tData.length > 0) setTenants(tData);
-      if (bStatus) setBffStatus(bStatus);
-      if (dSummary) setDashboardSummary(dSummary);
-      if (Array.isArray(lData) && (lData.length > 0 || leaveRequests.length === 0)) setLeaveRequests(lData);
-      if (Array.isArray(aData) && (aData.length > 0 || advanceRequests.length === 0)) setAdvanceRequests(aData);
-      if (Array.isArray(cData) && (cData.length > 0 || customers.length === 0)) setCustomers(cData);
-      if (Array.isArray(rData) && (rData.length > 0 || reports.length === 0)) setReports(rData);
+        if (Array.isArray(pData) && pData.length > 0) setPersonnelList(pData);
+        if (Array.isArray(tData) && tData.length > 0) setTenants(tData);
+        if (bStatus) setBffStatus(bStatus);
+        if (dSummary) setDashboardSummary(dSummary);
+        if (Array.isArray(lData) && (lData.length > 0 || leaveRequests.length === 0)) setLeaveRequests(lData);
+        if (Array.isArray(aData) && (aData.length > 0 || advanceRequests.length === 0)) setAdvanceRequests(aData);
+        if (Array.isArray(cData) && (cData.length > 0 || customers.length === 0)) setCustomers(cData);
+        if (Array.isArray(rData) && (rData.length > 0 || reports.length === 0)) setReports(rData);
 
-      // Accurately match logged-in user to their specific personnel record
-      let targetPersonnel = activeP !== undefined ? activeP : null;
-      if (!targetPersonnel && targetUser) {
-        targetPersonnel = pData.find(
-          (p) =>
-            (targetUser.email && p.email?.toLowerCase() === targetUser.email?.toLowerCase()) ||
-            (targetUser.id && (p.id === targetUser.id || p.user_id === targetUser.id))
-        ) || null;
-      }
-      if (!targetPersonnel && currentPersonnel) {
-        targetPersonnel = pData.find((p) => p.id === currentPersonnel.id) || currentPersonnel;
-      }
-
-      if (targetPersonnel) {
-        if (targetPersonnel.status === 'inactive' || targetPersonnel.active === false) {
-          showToast('حساب کاربری شما توسط مدیریت غیرفعال شده است.', 'error');
-          handleLogout();
-          return;
+        // Accurately match logged-in user to their specific personnel record
+        let targetPersonnel = activeP !== undefined ? activeP : null;
+        if (!targetPersonnel && targetUser) {
+          targetPersonnel = pData.find(
+            (p) =>
+              (targetUser.email && p.email?.toLowerCase() === targetUser.email?.toLowerCase()) ||
+              (targetUser.id && (p.id === targetUser.id || p.user_id === targetUser.id))
+          ) || null;
+        }
+        if (!targetPersonnel && currentPersonnel) {
+          targetPersonnel = pData.find((p) => p.id === currentPersonnel.id) || currentPersonnel;
         }
 
-        const effectiveAvatar =
-          targetPersonnel?.profile_image ||
-          targetPersonnel?.avatar ||
-          targetUser?.avatar ||
-          currentUser?.avatar ||
-          '';
-        if (effectiveAvatar) {
-          targetPersonnel = { ...targetPersonnel, profile_image: effectiveAvatar, avatar: effectiveAvatar };
+        if (targetPersonnel) {
+          if (targetPersonnel.status === 'inactive' || targetPersonnel.active === false) {
+            showToast('حساب کاربری شما توسط مدیریت غیرفعال شده است.', 'error');
+            handleLogout();
+            return;
+          }
+
+          const effectiveAvatar =
+            targetPersonnel?.profile_image ||
+            targetPersonnel?.avatar ||
+            targetUser?.avatar ||
+            currentUser?.avatar ||
+            '';
+          if (effectiveAvatar) {
+            targetPersonnel = { ...targetPersonnel, profile_image: effectiveAvatar, avatar: effectiveAvatar };
+          }
+
+          if (!currentPersonnel || currentPersonnel.id !== targetPersonnel.id || currentPersonnel.role !== targetPersonnel.role) {
+            setCurrentPersonnel(targetPersonnel);
+            setApiPersonnelContext(targetPersonnel);
+          }
+
+          if (effectiveAvatar && (!currentUser?.avatar || currentUser.avatar !== effectiveAvatar)) {
+            setCurrentUser((prev) => (prev ? { ...prev, avatar: effectiveAvatar } : prev));
+          }
+
+          const allowedTenants = getUserAllowedTenants(targetPersonnel, targetUser, tData);
+          const currentActive = getActiveTenantId();
+          const isCurrentAllowed = allowedTenants.some(
+            (t) => String(t.id) === String(currentActive) || (currentActive === 'all' && targetUser?.is_admin)
+          );
+
+          if (!isCurrentAllowed && allowedTenants.length > 0) {
+            const fallback = String(allowedTenants[0].id);
+            setActiveTenantId(fallback);
+            setActiveTenantIdState((prev) => (prev === fallback ? prev : fallback));
+          }
         }
-
-        setCurrentPersonnel(targetPersonnel);
-        setApiPersonnelContext(targetPersonnel);
-
-        if (effectiveAvatar && (!currentUser?.avatar || currentUser.avatar !== effectiveAvatar)) {
-          setCurrentUser((prev) => (prev ? { ...prev, avatar: effectiveAvatar } : prev));
-        }
-
-        const allowedTenants = getUserAllowedTenants(targetPersonnel, targetUser, tData);
-        const currentActive = getActiveTenantId();
-        const isCurrentAllowed = allowedTenants.some(
-          (t) => String(t.id) === String(currentActive) || (currentActive === 'all' && targetUser?.is_admin)
-        );
-
-        if (!isCurrentAllowed && allowedTenants.length > 0) {
-          const fallback = String(allowedTenants[0].id);
-          setActiveTenantId(fallback);
-          setActiveTenantIdState((prev) => (prev === fallback ? prev : fallback));
+      } catch (e) {
+        console.error('Error loading data:', e);
+      } finally {
+        hasCompletedInitialLoadRef.current = true;
+        activeLoadPromiseRef.current = null;
+        if (currentVersion === fetchVersionRef.current) {
+          setLoading(false);
         }
       }
-    } catch (e) {
-      console.error('Error loading data:', e);
-    } finally {
-      if (currentVersion === fetchVersionRef.current) {
-        setLoading(false);
-      }
-    }
+    })();
+
+    activeLoadPromiseRef.current = loadPromise;
+    return loadPromise;
   };
 
   // Safety fallback: Never leave the UI stuck on loading/skeleton state for more than 2.5s
@@ -350,15 +369,36 @@ export default function App() {
   }, [loading]);
 
   useEffect(() => {
-    // Verify & refresh user session once on mount, then load data with verified context
+    // Check end of day session expiry immediately
+    const checkDayExpiry = () => {
+      const stored = getStoredAuthSession();
+      if (stored.sessionIat && isSessionFromPreviousDay(stored.sessionIat)) {
+        clearAuthSession();
+        handleLogout();
+        setIsAuthModalOpen(true);
+        showToast('نشست کاری شما با پایان روز کاری منقضی شد. لطفاً دوباره وارد شوید.', 'error');
+        return true;
+      }
+      return false;
+    };
+
+    if (checkDayExpiry()) {
+      setLoading(false);
+      return;
+    }
+
     const stored = getStoredAuthSession();
     if (stored.token || stored.user) {
+      // Immediately load with stored context so the view renders right away
+      loadAllData(stored.personnel, stored.user);
+
+      // Verify token in background without causing UI jumping
       getMe()
         .then((data) => {
           if (data && data.user) {
-            setCurrentUser(data.user);
+            setCurrentUser((prev) => ({ ...prev, ...data.user }));
             if (data.personnel) {
-              setCurrentPersonnel(data.personnel);
+              setCurrentPersonnel((prev) => ({ ...prev, ...data.personnel }));
               setApiPersonnelContext(data.personnel);
             }
             saveAuthSession({
@@ -367,35 +407,34 @@ export default function App() {
               user: data.user,
               personnel: data.personnel || stored.personnel,
             });
-            loadAllData(data.personnel, data.user);
-          } else {
-            loadAllData(stored.personnel, stored.user);
           }
         })
-        .catch(() => {
-          loadAllData(stored.personnel, stored.user);
-        });
+        .catch(() => {});
     } else {
       loadAllData(null, null);
     }
 
-    // Lightweight status refresh every 45 seconds (does NOT spam large datasets)
+    // Periodic check for end of day expiration (every 30 seconds) & status refresh
     const interval = setInterval(() => {
+      checkDayExpiry();
       if (document.visibilityState === 'visible') {
         fetchBffStatus().then(setBffStatus).catch(() => {});
       }
-    }, 45000);
+    }, 30000);
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        checkDayExpiry();
         fetchBffStatus().then(setBffStatus).catch(() => {});
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', checkDayExpiry);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', checkDayExpiry);
     };
   }, []);
 
@@ -1388,7 +1427,17 @@ export default function App() {
                   />
                 )}
 
+                {activeTab === 'payroll' && (
+                  <PayrollView
+                    personnelList={personnelList}
+                    currentPersonnel={currentPersonnel}
+                    isAdmin={isCurrentUserAdmin}
+                    showToast={showToast}
+                  />
+                )}
+
                 {activeTab === ('customer_detail' as NavTab) && (
+
                   (() => {
                     const activeCust = (activeCustomerModalId && customerModalCache[activeCustomerModalId]) ||
                       customers.find((c) => c.id === activeCustomerModalId) ||

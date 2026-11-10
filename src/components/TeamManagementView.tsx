@@ -57,7 +57,9 @@ import {
   Save,
   AlertTriangle,
   Loader2,
+  WalletCards,
 } from 'lucide-react';
+
 import { DataMigrationView } from './DataMigrationView';
 import { SmsSettingsTab } from './team/SmsSettingsTab';
 import { LeaveApprovalsTab } from './team/LeaveApprovalsTab';
@@ -225,8 +227,10 @@ export const SYSTEM_MENUS = [
   { id: 'admin_reports', label: 'گزارش عملکرد پرسنل', icon: ClipboardCheck, desc: 'فرم ثبت کار روزانه و ساعت کاری' },
   { id: 'team', label: 'مدیریت همکاران و تیم', icon: Users2, desc: 'ثبت همکار، تمدید و سوئیچ مالکیت' },
   { id: 'tenants', label: 'سازمان‌ها و شعب (چندسازمانی)', icon: Building2, desc: 'مشاهده لیست سازمان‌ها و تعریف شرکت یا شعبه جدید' },
+  { id: 'payroll', label: 'حقوق و دستمزد', icon: WalletCards, desc: 'تنظیم احکام، پورسانت و صدور فیش ماهانه' },
   { id: 'personal_portal', label: 'پنل شخصی و پرسنلی', icon: User, desc: 'پروفایل، مرخصی و مساعده' },
 ];
+
 
 export const SYSTEM_ACTIONS = [
   { key: 'can_view_all_customers', label: 'مشاهده مشتریان همه همکاران (نه فقط مال خودش)' },

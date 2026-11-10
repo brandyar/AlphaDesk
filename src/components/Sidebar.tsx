@@ -25,6 +25,7 @@ import {
   Layers,
   Plus,
   Database,
+  WalletCards,
 } from 'lucide-react';
 import { Personnel, AuthUser, TeamSubTab, Tenant } from '../types';
 import { getAvatarUrl, getUserAllowedTenants } from '../utils';
@@ -40,7 +41,9 @@ export type NavTab =
   | 'team'
   | 'tenants'
   | 'personal_portal'
+  | 'payroll'
   | 'customer_detail';
+
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -190,6 +193,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: ClipboardCheck,
       count: counts.adminReports,
     },
+    {
+      id: 'payroll',
+      label: 'حقوق و پورسانت',
+      icon: WalletCards,
+    },
   ];
 
   const totalPortalPending = (counts.pendingLeaves || 0) + (counts.pendingAdvances || 0);
@@ -206,8 +214,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (menuId === 'team' || menuId === 'tenants') {
       return Boolean(isAdmin || currentPersonnel?.role === 'admin' || currentPersonnel?.role === 'sales_manager');
     }
+    if (menuId === 'payroll') {
+      return Boolean(isAdmin || currentPersonnel?.role === 'admin');
+    }
     return true;
   };
+
 
   const visibleNavItems = navItems.filter((item) => isMenuAllowed(item.id));
   const canAccessTeam = isMenuAllowed('team');

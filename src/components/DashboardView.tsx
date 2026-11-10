@@ -61,13 +61,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [summary, setSummary] = React.useState<DashboardSummary | null>(dashboardSummary || null);
 
   React.useEffect(() => {
-    setSummary(dashboardSummary || null);
-    if (!dashboardSummary) {
+    if (dashboardSummary) {
+      setSummary(dashboardSummary);
+    } else if (!summary) {
       fetchDashboardSummary()
         .then((s) => setSummary(s))
         .catch((err) => console.warn('Failed to load dashboard summary:', err));
     }
   }, [dashboardSummary, activeTenantId]);
+
+  const activeSummary = dashboardSummary || summary;
 
   const expiredCustomers = customers.filter((c) => c.is_expired);
   const contractsWon = customers.filter((c) => c.status === 'قرارداد');
@@ -76,28 +79,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   );
 
   // Accurate Summary Totals
-  const totalCustomersCount = summary?.total_customers ?? customers.length;
-  const contractsWonCount = summary?.contracts_won_count ?? contractsWon.length;
-  const inNegotiationCount = summary?.in_negotiation_count ?? inNegotiation.length;
-  const expiredCustomersCount = summary?.expired_customers_count ?? expiredCustomers.length;
+  const totalCustomersCount = activeSummary?.total_customers ?? (customers.length > 0 ? customers.length : 0);
+  const contractsWonCount = activeSummary?.contracts_won_count ?? contractsWon.length;
+  const inNegotiationCount = activeSummary?.in_negotiation_count ?? inNegotiation.length;
+  const expiredCustomersCount = activeSummary?.expired_customers_count ?? expiredCustomers.length;
 
   // Financial contract totals
-  const totalContractRevenue = summary?.total_contract_revenue ?? reports.reduce(
+  const totalContractRevenue = activeSummary?.total_contract_revenue ?? reports.reduce(
     (acc, r) => acc + (Number(r.contract_amount) || 0),
     0
   );
 
   // Average negotiation score
   const scoredReports = reports.filter((r) => r.negotiation_score && r.negotiation_score > 0);
-  const avgScore = summary?.avg_negotiation_score
-    ? toPersianDigits(summary.avg_negotiation_score)
+  const avgScore = activeSummary?.avg_negotiation_score
+    ? toPersianDigits(activeSummary.avg_negotiation_score)
     : (scoredReports.length > 0
         ? (scoredReports.reduce((acc, r) => acc + (r.negotiation_score || 0), 0) / scoredReports.length).toFixed(1)
         : '۰');
 
   // Urgent upcoming followups (< 3 days or scheduled)
-  const upcomingFollowups = (summary?.upcoming_followups && summary.upcoming_followups.length > 0)
-    ? summary.upcoming_followups
+  const upcomingFollowups = (activeSummary?.upcoming_followups && activeSummary.upcoming_followups.length > 0)
+    ? activeSummary.upcoming_followups
     : customers
         .filter((c): c is Customer & { next_followup_date: string } => Boolean(c.next_followup_date))
         .sort(
@@ -107,8 +110,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         .slice(0, 5);
 
   // Customers in danger of expiring (< 3 days deadline)
-  const urgentExpiringCustomers = (summary?.urgent_expiring_customers && summary.urgent_expiring_customers.length > 0)
-    ? summary.urgent_expiring_customers
+  const urgentExpiringCustomers = (activeSummary?.urgent_expiring_customers && activeSummary.urgent_expiring_customers.length > 0)
+    ? activeSummary.urgent_expiring_customers
     : customers
         .filter((c) => {
           if (!c.assignment_deadline || c.is_expired || c.status === 'قرارداد') return false;
@@ -133,7 +136,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   ];
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-6">
       {/* ------------------------------------------------------------- */}
       {/* 1. TOP 4 QUICK ACCESS ACTION BLOCKS                           */}
       {/* ------------------------------------------------------------- */}

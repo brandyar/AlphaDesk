@@ -148,6 +148,29 @@ export function resolveUserAvatar(user?: any, personnel?: any): string {
 }
 
 
+export function isSessionFromPreviousDay(sessionIat: number, timeZone = 'Asia/Tehran'): boolean {
+  if (!sessionIat || sessionIat <= 0 || isNaN(sessionIat)) return false;
+  const now = new Date();
+  const sessionDate = new Date(sessionIat);
+  if (isNaN(sessionDate.getTime())) return false;
+
+  try {
+    const dtf = new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const todayStr = dtf.format(now);
+    const sessionDayStr = dtf.format(sessionDate);
+    return sessionDayStr !== todayStr;
+  } catch {
+    const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const sessionLocal = `${sessionDate.getFullYear()}-${String(sessionDate.getMonth() + 1).padStart(2, '0')}-${String(sessionDate.getDate()).padStart(2, '0')}`;
+    return sessionLocal !== todayLocal;
+  }
+}
+
 export function getRequestUser(req: Request): RequestUserContext {
   const reqAuth = (req.headers['authorization'] as string) || '';
   if (reqAuth) {
@@ -172,9 +195,11 @@ export function getRequestUser(req: Request): RequestUserContext {
 
   const rawSessionIat = req.headers['x-session-iat'] as string;
   const sessionIat = rawSessionIat ? parseInt(rawSessionIat, 10) : 0;
+  const isDayExpired = Boolean(sessionIat > 0 && isSessionFromPreviousDay(sessionIat));
   const isSessionRevoked = Boolean(
-    globalSessionRevocationTimestamp > 0 &&
-      (!sessionIat || sessionIat < globalSessionRevocationTimestamp)
+    isDayExpired ||
+    (globalSessionRevocationTimestamp > 0 &&
+      (!sessionIat || sessionIat < globalSessionRevocationTimestamp))
   );
 
   const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
@@ -263,6 +288,7 @@ export function getRequestUser(req: Request): RequestUserContext {
     tenantId,
     isAuthenticated: hasUserContext,
     isSessionRevoked,
+    isDayExpired,
     isInactive,
   };
 }
@@ -288,6 +314,13 @@ export function checkInactivePersonnel(req: Request, res: any, next: any) {
   }
 
   const user = getRequestUser(req);
+  if (user.isDayExpired) {
+    return res.status(401).json({
+      error: 'SESSION_EXPIRED',
+      message: 'نشست کاری شما با پایان روز کاری منقضی شده است. لطفاً مجدداً وارد شوید.',
+    });
+  }
+
   if (user.isInactive) {
     return res.status(403).json({
       error: 'ACCOUNT_INACTIVE',

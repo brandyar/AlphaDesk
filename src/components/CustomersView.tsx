@@ -75,11 +75,19 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [followupFilter, setFollowupFilter] = useState<string>('active');
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState<boolean>(false);
 
-  // Initialize with empty array so we never render thousands of unpaginated items on mount
-  const [items, setItems] = useState<Customer[]>([]);
-  const [totalCount, setTotalCount] = useState<number>(0);
-  const [totalPages, setTotalPages] = useState<number>(1);
-  const [isLoadingPage, setIsLoadingPage] = useState<boolean>(true);
+  // Initialize with passed customers if available so we render smoothly without initial skeleton flash
+  const [items, setItems] = useState<Customer[]>(() =>
+    Array.isArray(customers) && customers.length > 0 ? customers.slice(0, 25) : []
+  );
+  const [totalCount, setTotalCount] = useState<number>(() =>
+    Array.isArray(customers) ? customers.length : 0
+  );
+  const [totalPages, setTotalPages] = useState<number>(() =>
+    Math.max(1, Math.ceil((customers?.length || 0) / 25))
+  );
+  const [isLoadingPage, setIsLoadingPage] = useState<boolean>(() =>
+    !customers || customers.length === 0
+  );
   const fetchVersionRef = useRef(0);
 
   // 300ms debounce for search query to avoid lag on typing
@@ -96,12 +104,12 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     return items.slice(0, pageSize);
   }, [items, pageSize]);
 
-  const loadData = () => {
+  const loadData = (targetPage = currentPage) => {
     const currentVersion = ++fetchVersionRef.current;
     setIsLoadingPage(true);
 
     fetchCustomersPaginated({
-      page: currentPage,
+      page: targetPage,
       limit: pageSize,
       search: debouncedSearch.trim(),
       status: statusFilter !== 'همه' ? statusFilter : undefined,
@@ -127,10 +135,30 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       });
   };
 
-  // Listen to customer save/update/delete events to immediately refresh server pagination
+  const loadDataRef = useRef(loadData);
+  loadDataRef.current = loadData;
+
+  const filterKey = `${statusFilter}_${selectedMarketerId}_${showExpiredOnly}_${followupFilter}_${debouncedSearch}_${activeTenantId}_${sortOption}_${pageSize}`;
+  const prevFilterKeyRef = useRef(filterKey);
+
+  // Single consolidated effect for filters and pagination:
+  // When filters change, reset to page 1 and fetch page 1 in one single step without double-fetching!
+  useEffect(() => {
+    if (prevFilterKeyRef.current !== filterKey) {
+      prevFilterKeyRef.current = filterKey;
+      if (currentPage !== 1) {
+        setCurrentPage(1);
+        loadData(1);
+        return;
+      }
+    }
+    loadData(currentPage);
+  }, [currentPage, filterKey]);
+
+  // Listen to customer save/update/delete events stably without re-attaching listeners
   useEffect(() => {
     const handleRefresh = () => {
-      loadData();
+      loadDataRef.current();
     };
 
     window.addEventListener('crm_customer_saved', handleRefresh);
@@ -139,17 +167,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       window.removeEventListener('crm_customer_saved', handleRefresh);
       window.removeEventListener('crm_customer_deleted', handleRefresh);
     };
-  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, followupFilter, debouncedSearch, activeTenantId, sortOption]);
-
-  // Reset page to 1 when filters, search, sort or tenant change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [statusFilter, selectedMarketerId, showExpiredOnly, followupFilter, debouncedSearch, activeTenantId, sortOption]);
-
-  // Fetch server-side paginated items on filter, tenant, sort or page change
-  useEffect(() => {
-    loadData();
-  }, [currentPage, pageSize, statusFilter, selectedMarketerId, showExpiredOnly, followupFilter, debouncedSearch, activeTenantId, sortOption]);
+  }, []);
 
   const userIsAdmin = Boolean(
     isAdmin ||

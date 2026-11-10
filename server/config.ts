@@ -11,7 +11,10 @@ import {
   ProjectSettingsState,
   Tenant,
   TenantSettingsState,
+  PersonnelSalaryConfig,
+  PayrollSlip,
 } from './types.ts';
+
 
 dotenv.config();
 
@@ -217,6 +220,12 @@ export const initialLeaveRequests: LeaveRequest[] = [];
 
 export const initialAdvanceRequests: SalaryAdvanceRequest[] = [];
 
+// Do not fabricate fake salary configs - must be defined by admin
+export const initialSalaryConfigs: PersonnelSalaryConfig[] = [];
+
+export const initialPayrollSlips: PayrollSlip[] = [];
+
+
 // Mutable state arrays
 export let personnelData = [...initialPersonnel];
 export let customersData: Customer[] = [...initialCustomers];
@@ -226,6 +235,8 @@ export let adminReportsData: AdministrativeReport[] = [];
 export let contactsData: CustomerContact[] = [...initialContacts];
 export let leaveRequestsData: LeaveRequest[] = [];
 export let advanceRequestsData: SalaryAdvanceRequest[] = [];
+export let salaryConfigsData: PersonnelSalaryConfig[] = [...initialSalaryConfigs];
+export let payrollSlipsData: PayrollSlip[] = [...initialPayrollSlips];
 
 export function setPersonnelData(data: Personnel[]) {
   personnelData = data;
@@ -258,6 +269,15 @@ export function setLeaveRequestsData(data: LeaveRequest[]) {
 export function setAdvanceRequestsData(data: SalaryAdvanceRequest[]) {
   advanceRequestsData = data;
 }
+
+export function setSalaryConfigsData(data: PersonnelSalaryConfig[]) {
+  salaryConfigsData = data;
+}
+
+export function setPayrollSlipsData(data: PayrollSlip[]) {
+  payrollSlipsData = data;
+}
+
 
 export let tenantsData: Tenant[] = [
   {

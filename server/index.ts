@@ -25,6 +25,8 @@ import adminReportRoutes from './routes/adminReports.routes.ts';
 import analyticsRoutes from './routes/analytics.routes.ts';
 import contactRoutes from './routes/contacts.routes.ts';
 import systemRoutes from './routes/system.routes.ts';
+import payrollRoutes from './routes/payroll.routes.ts';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,6 +80,10 @@ app.use(leaveRequestRoutes);
 app.use(advanceRequestRoutes);
 app.use(adminReportRoutes);
 app.use(systemRoutes);
+app.use(payrollRoutes);
+app.use('/api/payroll', payrollRoutes);
+app.use('/payroll', payrollRoutes);
+
 
 export async function startServer() {
   if (directusUrl && directusAdminToken) {

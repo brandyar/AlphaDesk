@@ -536,8 +536,14 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 router.get('/me', async (req: Request, res: Response) => {
-  const { userId, personnelId, userRole, isAdmin, userName, userEmail, isSessionRevoked } =
+  const { userId, personnelId, userRole, isAdmin, userName, userEmail, isSessionRevoked, isDayExpired } =
     getRequestUser(req);
+  if (isDayExpired) {
+    return res.status(401).json({
+      error: 'SESSION_EXPIRED',
+      message: 'نشست کاری شما با پایان روز کاری منقضی شده است. لطفاً مجدداً وارد شوید.',
+    });
+  }
   if (isSessionRevoked || (!userId && !personnelId && !userEmail)) {
     return res.status(401).json({
       error: 'ALL_SESSIONS_REVOKED',

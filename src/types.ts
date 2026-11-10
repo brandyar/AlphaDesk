@@ -444,4 +444,95 @@ export interface TenantSettings {
   date_updated?: string;
 }
 
+export interface CommissionTier {
+  from_amount: number;
+  to_amount: number | null;
+  rate_percent: number;
+}
+
+export type SalaryType = 'fixed' | 'commission' | 'fixed_plus_commission';
+export type CommissionModel = 'flat' | 'tiered';
+export type TieredCalculationMode = 'marginal' | 'retroactive';
+
+export interface PersonnelSalaryConfig {
+  id?: number | string;
+  personnel_id: string;
+  salary_type: SalaryType;
+  base_salary: number;
+  commission_model?: CommissionModel;
+  flat_rate_percent?: number;
+  tiered_calculation_mode?: TieredCalculationMode;
+  commission_tiers?: CommissionTier[];
+  min_sales_target?: number;
+  is_active: boolean;
+  effective_from?: string | null;
+  tenant_id?: string;
+  date_created?: string;
+  date_updated?: string;
+}
+
+export interface PayrollSlip {
+  id: number | string;
+  personnel_id: string;
+  personnel_name?: string;
+  from_date?: string | null;
+  to_date?: string | null;
+  base_salary_amount: number;
+  total_contracts_amount: number;
+  contracts_count: number;
+  commission_amount: number;
+  advances_deducted: number;
+  bonuses_amount: number;
+  deductions_amount: number;
+  net_payable: number;
+  calculation_breakdown?: any;
+  status: 'draft' | 'approved' | 'paid';
+  payment_date?: string | null;
+  payment_ref?: string | null;
+  created_by?: string | null;
+  tenant_id?: string;
+  date_created?: string;
+}
+
+export interface PayrollContractItem {
+  id: string;
+  contract_number?: string | null;
+  contract_date?: string | null;
+  contract_amount?: number | null;
+  contract_items?: string | null;
+  customer_id?: string;
+}
+
+export interface PayrollCalculateItem {
+  personnel_id: string;
+  personnel_name: string;
+  personnel_role: string;
+  avatar?: string;
+  has_config: boolean;
+  salary_config: PersonnelSalaryConfig | null;
+  contracts_count: number;
+  total_contracts_amount: number;
+  contracts_list: PayrollContractItem[];
+  base_salary_amount: number;
+  commission_amount: number;
+  commission_breakdown?: any;
+  advances_deducted: number;
+  advances_list: any[];
+  bonuses_amount: number;
+  deductions_amount: number;
+  net_payable: number;
+}
+
+
+export interface PayrollCalculateResponse {
+  from_date: string | null;
+  to_date: string | null;
+  total_payable: number;
+  total_sales: number;
+  total_contracts: number;
+  total_advances: number;
+  items: PayrollCalculateItem[];
+}
+
+
 

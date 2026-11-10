@@ -254,5 +254,53 @@ export interface RequestUserContext {
   tenantId: string;
   isAuthenticated: boolean;
   isSessionRevoked: boolean;
+  isDayExpired?: boolean;
   isInactive?: boolean;
 }
+
+export interface CommissionTier {
+  from_amount: number;
+  to_amount: number | null;
+  rate_percent: number;
+}
+
+export interface PersonnelSalaryConfig {
+  id?: number | string;
+  personnel_id: string;
+  salary_type: 'fixed' | 'commission' | 'fixed_plus_commission';
+  base_salary: number;
+  commission_model?: 'flat' | 'tiered';
+  flat_rate_percent?: number;
+  tiered_calculation_mode?: 'marginal' | 'retroactive';
+  commission_tiers?: CommissionTier[];
+  min_sales_target?: number;
+  is_active: boolean;
+  effective_from?: string | null;
+  tenant_id?: string;
+  date_created?: string;
+  date_updated?: string;
+}
+
+export interface PayrollSlip {
+  id: number | string;
+  personnel_id: string;
+  personnel_name?: string;
+  from_date?: string | null;
+  to_date?: string | null;
+  base_salary_amount: number;
+  total_contracts_amount: number;
+  contracts_count: number;
+  commission_amount: number;
+  advances_deducted: number;
+  bonuses_amount: number;
+  deductions_amount: number;
+  net_payable: number;
+  calculation_breakdown?: any;
+  status: 'draft' | 'approved' | 'paid';
+  payment_date?: string | null;
+  payment_ref?: string | null;
+  created_by?: string | null;
+  tenant_id?: string;
+  date_created?: string;
+}
+
