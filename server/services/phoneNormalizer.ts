@@ -5,11 +5,13 @@ import {
   addDays,
   customersData,
   contactsData,
+  reportsData,
 } from '../config.ts';
 import { directusFetch } from '../directus/client.ts';
 import {
   computeCustomerExpiration,
   updateExpirationFlags,
+  ensureCustomersCache,
 } from '../directus/cache.ts';
 import { resolveDirectusTenantId } from '../directus/sync.ts';
 import { CustomerContact } from '../types.ts';
@@ -297,6 +299,104 @@ export function extractCustomerContacts(payload: any, customerId: string): Custo
   return list;
 }
 
+function customerMatchesContactValue(cust: any, normalized: string, channelType?: string): boolean {
+  if (!cust || !normalized) return false;
+  const checkVal = (val: any, type?: string) => {
+    if (!val) return false;
+    const norm = normalizeContactValue(String(val), type || channelType);
+    return norm !== '' && norm === normalized;
+  };
+
+  const mobiles = Array.isArray(cust.mobile_numbers) ? cust.mobile_numbers : [];
+  const landlines = Array.isArray(cust.landline_numbers) ? cust.landline_numbers : [];
+  const mgrPhones = Array.isArray(cust.manager_phones) ? cust.manager_phones : [];
+  const negPhones = Array.isArray(cust.negotiator_phones) ? cust.negotiator_phones : [];
+
+  if (mobiles.some((v: any) => checkVal(v, 'mobile'))) return true;
+  if (landlines.some((v: any) => checkVal(v, 'landline'))) return true;
+  if (mgrPhones.some((v: any) => checkVal(v, 'mobile'))) return true;
+  if (negPhones.some((v: any) => checkVal(v, 'mobile'))) return true;
+  if (cust.telegram_phone && checkVal(cust.telegram_phone, 'mobile')) return true;
+
+  if (channelType === 'telegram' || !channelType) {
+    const tids = Array.isArray(cust.telegram_ids) ? cust.telegram_ids : [];
+    if (tids.some((v: any) => checkVal(v, 'telegram'))) return true;
+  }
+  if (channelType === 'instagram' || !channelType) {
+    const iids = Array.isArray(cust.instagram_ids) ? cust.instagram_ids : [];
+    if (iids.some((v: any) => checkVal(v, 'instagram'))) return true;
+  }
+  if (channelType === 'email' || !channelType) {
+    const emails = Array.isArray(cust.emails) ? cust.emails : [];
+    if (emails.some((v: any) => checkVal(v, 'email'))) return true;
+  }
+  if (channelType === 'website' || !channelType) {
+    const webs = Array.isArray(cust.websites) ? cust.websites : [];
+    if (webs.some((v: any) => checkVal(v, 'website'))) return true;
+  }
+  if (Array.isArray(cust.contacts)) {
+    if (cust.contacts.some((ct: any) => checkVal(ct?.normalized_value || ct?.value, ct?.channel_type))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function buildDuplicateResult(expCust: any, matchedContact: any, reportsCount = 0) {
+  const statusStr = String(expCust.status || '').trim();
+  const isContract =
+    statusStr === 'قرارداد' || statusStr === 'قرارداد / فاکتور' || statusStr === 'قرارداد/فاکتور';
+  const isBlacklisted = statusStr === 'لیست سیاه';
+  const isUnassigned =
+    !expCust.assigned_marketer_id || expCust.assigned_marketer_name === 'تخصیص نیافته';
+  const isDeadlinePassed = Boolean(
+    expCust.is_expired ||
+      (expCust.assignment_deadline && Date.now() > new Date(expCust.assignment_deadline).getTime())
+  );
+  const isFreePool = !isContract && !isBlacklisted && (isDeadlinePassed || isUnassigned);
+
+  const conflictType: 'active_marketer' | 'expired' | 'contract' = isContract
+    ? 'contract'
+    : isFreePool
+    ? 'expired'
+    : 'active_marketer';
+
+  let message = '';
+  if (conflictType === 'active_marketer') {
+    if (isBlacklisted) {
+      message = `این شماره متعلق به پرونده «${expCust.company_name}» در لیست سیاه است.`;
+    } else {
+      message = `این شماره/اکانت قبلاً برای مشتری «${expCust.company_name}» در اختیار بازاریاب «${expCust.assigned_marketer_name}» ثبت شده و مهلت واگذاری آن هنوز معتبر است.`;
+    }
+  } else if (conflictType === 'contract') {
+    message = `این شماره متعلق به مشتری قطعی «${expCust.company_name}» با قرارداد رسمی است (بازاریاب: ${expCust.assigned_marketer_name}).`;
+  } else {
+    message = `این شماره از قبل در بخش مشتریان آزاد برای پرونده «${expCust.company_name}» وجود دارد. با تأیید انتقال مالکیت، پرونده به شما منتقل شده و گزارش‌های قبلی آن نمایش داده می‌شود.`;
+  }
+
+  return {
+    isDuplicate: true,
+    conflictType,
+    isFreePool,
+    matchedContact,
+    matchedCustomer: {
+      id: expCust.id,
+      company_name: expCust.company_name,
+      manager_name: expCust.manager_name || '',
+      business_type: expCust.business_type || '',
+      province: expCust.province || '',
+      city: expCust.city || '',
+      assigned_marketer_name: expCust.assigned_marketer_name || 'تخصیص نیافته',
+      assigned_marketer_id: expCust.assigned_marketer_id || '',
+      assignment_deadline: expCust.assignment_deadline || '',
+      is_expired: isDeadlinePassed || isUnassigned,
+      status: expCust.status,
+      reports_count: reportsCount,
+    },
+    message,
+  };
+}
+
 export async function asyncCheckContactDuplicate(
   value: string,
   channelType?: string,
@@ -337,42 +437,36 @@ export async function asyncCheckContactDuplicate(
             }
             if (cust) {
               const expCust = computeCustomerExpiration(cust);
-              const isContract = expCust.status === 'قرارداد';
-              const isExpired = !!expCust.is_expired;
-              const conflictType: 'active_marketer' | 'expired' | 'contract' = isContract
-                ? 'contract'
-                : isExpired
-                ? 'expired'
-                : 'active_marketer';
-
-              let msg = '';
-              if (conflictType === 'active_marketer') {
-                msg = `این شماره/اکانت قبلاً برای مشتری «${expCust.company_name}» در اختیار بازاریاب «${expCust.assigned_marketer_name}» ثبت شده و مهلت واگذاری آن هنوز معتبر است.`;
-              } else if (conflictType === 'contract') {
-                msg = `این شماره متعلق به مشتری قطعی «${expCust.company_name}» با قرارداد رسمی است (بازاریاب: ${expCust.assigned_marketer_name}).`;
-              } else {
-                msg = `این شماره قبلاً برای مشتری «${expCust.company_name}» ثبت شده بود، اما مهلت بازاریاب (${expCust.assigned_marketer_name}) منقضی شده است و امکان واگذاری مجدد دارد.`;
-              }
-
-              return {
-                isDuplicate: true,
-                conflictType,
-                matchedContact: item,
-                matchedCustomer: {
-                  id: expCust.id,
-                  company_name: expCust.company_name,
-                  assigned_marketer_name: expCust.assigned_marketer_name,
-                  assigned_marketer_id: expCust.assigned_marketer_id,
-                  assignment_deadline: expCust.assignment_deadline,
-                  is_expired: isExpired,
-                  status: expCust.status,
-                },
-                message: msg,
-              };
+              const repCountRes = await directusFetch(
+                `/items/customer_reports?aggregate[count]=*&filter[customer_id][_eq]=${encodeURIComponent(custId)}`
+              ).catch(() => null);
+              const reportsCount = Number(repCountRes?.data?.[0]?.count || 0);
+              return buildDuplicateResult(expCust, item, reportsCount);
             }
           }
         }
       }
+
+      // Fallback check against cached customers phone arrays (handles imported/legacy records without customer_contacts row)
+      const cachedCustomers = await ensureCustomersCache().catch(() => []);
+      for (const rawCust of cachedCustomers) {
+        if (
+          currentCustomerId &&
+          rawCust?.id &&
+          String(rawCust.id).toLowerCase() === String(currentCustomerId).toLowerCase()
+        ) {
+          continue;
+        }
+        if (customerMatchesContactValue(rawCust, normalized, channelType)) {
+          const expCust = computeCustomerExpiration(rawCust);
+          const repCountRes = await directusFetch(
+            `/items/customer_reports?aggregate[count]=*&filter[customer_id][_eq]=${encodeURIComponent(expCust.id)}`
+          ).catch(() => null);
+          const reportsCount = Number(repCountRes?.data?.[0]?.count || 0);
+          return buildDuplicateResult(expCust, null, reportsCount);
+        }
+      }
+
       return null;
     } catch (e: any) {
       console.warn('Database duplicate check error:', e.message);
@@ -388,40 +482,23 @@ export async function asyncCheckContactDuplicate(
     return cNorm === normalized;
   });
 
-  if (!matchedContact) return null;
-  const matchedCustomer = customersData.find((cust) => cust.id === matchedContact.customer_id);
-  if (!matchedCustomer) return null;
+  let matchedCustomer = matchedContact
+    ? customersData.find((cust) => cust.id === matchedContact.customer_id)
+    : undefined;
 
-  const isExpired = !!matchedCustomer.is_expired;
-  const isContract = matchedCustomer.status === 'قرارداد';
-  const conflictType: 'active_marketer' | 'expired' | 'contract' = isContract
-    ? 'contract'
-    : isExpired
-    ? 'expired'
-    : 'active_marketer';
-
-  let message = '';
-  if (conflictType === 'active_marketer') {
-    message = `این شماره/اکانت قبلاً برای مشتری «${matchedCustomer.company_name}» در اختیار بازاریاب «${matchedCustomer.assigned_marketer_name}» ثبت شده است و مهلت واگذاری آن هنوز معتبر است.`;
-  } else if (conflictType === 'contract') {
-    message = `این شماره متعلق به مشتری قطعی «${matchedCustomer.company_name}» با قرارداد رسمی است (بازاریاب: ${matchedCustomer.assigned_marketer_name}).`;
-  } else {
-    message = `این شماره قبلاً برای مشتری «${matchedCustomer.company_name}» ثبت شده بود، اما مهلت بازاریاب (${matchedCustomer.assigned_marketer_name}) منقضی شده است و امکان واگذاری مجدد دارد.`;
+  if (!matchedCustomer) {
+    matchedCustomer = customersData.find((cust) => {
+      if (currentCustomerId && cust.id === currentCustomerId) return false;
+      return customerMatchesContactValue(cust, normalized, channelType);
+    });
   }
 
-  return {
-    isDuplicate: true,
-    conflictType,
-    matchedContact,
-    matchedCustomer: {
-      id: matchedCustomer.id,
-      company_name: matchedCustomer.company_name,
-      assigned_marketer_name: matchedCustomer.assigned_marketer_name,
-      assigned_marketer_id: matchedCustomer.assigned_marketer_id,
-      assignment_deadline: matchedCustomer.assignment_deadline,
-      is_expired: isExpired,
-      status: matchedCustomer.status,
-    },
-    message,
-  };
+  if (!matchedCustomer) return null;
+
+  const expCust = computeCustomerExpiration(matchedCustomer);
+  const reportsCount = reportsData.filter(
+    (r) => String(r.customer_id) === String(matchedCustomer!.id)
+  ).length;
+
+  return buildDuplicateResult(expCust, matchedContact || null, reportsCount);
 }

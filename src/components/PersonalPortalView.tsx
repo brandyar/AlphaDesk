@@ -181,7 +181,17 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
     if (currentPersonnel?.national_id) setProfileNationalId(currentPersonnel.national_id);
   }, [currentPersonnel, currentUser]);
 
+  const canEditIdentity = Boolean(
+    currentPersonnel
+      ? currentPersonnel.role === 'admin'
+      : Boolean(isAdmin && currentUser?.is_admin && currentUser?.app_role === 'admin')
+  );
+
   const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canEditIdentity) {
+      showToast('تنها مدیر سیستم مجاز به تغییر تصویر پروفایل می‌باشد.', 'error');
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -291,23 +301,35 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
   // Handle Profile Update
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profileName.trim()) {
+    if (canEditIdentity && !profileName.trim()) {
       showToast('لطفاً نام و نام خانوادگی را وارد کنید.', 'error');
       return;
     }
     setIsSavingProfile(true);
     try {
-      await onUpdateProfile({
-        name: profileName,
-        username: profileUsername.trim() || undefined,
-        phone: profilePhone,
-        profile_image: profileAvatar,
-        avatar: profileAvatar,
-        bank_card_number: profileBankCard,
-        iban: profileIban,
-        national_id: profileNationalId,
-      });
-      showToast('مشخصات پروفایل با موفقیت ذخیره شد.', 'success');
+      const payload: UserProfileUpdatePayload = canEditIdentity
+        ? {
+            name: profileName,
+            username: profileUsername.trim() || undefined,
+            phone: profilePhone,
+            profile_image: profileAvatar,
+            avatar: profileAvatar,
+            bank_card_number: profileBankCard,
+            iban: profileIban,
+            national_id: profileNationalId,
+          }
+        : {
+            bank_card_number: profileBankCard,
+            iban: profileIban,
+          };
+
+      await onUpdateProfile(payload);
+      showToast(
+        canEditIdentity
+          ? 'مشخصات پروفایل با موفقیت ذخیره شد.'
+          : 'شماره کارت بانکی و شماره شبا با موفقیت ذخیره شد.',
+        'success'
+      );
     } catch (err: any) {
       showToast(err.message || 'خطا در ذخیره پروفایل', 'error');
     } finally {
@@ -624,6 +646,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <ProfileTab
+              isAdmin={canEditIdentity}
               profileName={profileName}
               setProfileName={setProfileName}
               profileUsername={profileUsername}
@@ -739,19 +762,30 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
       {reviewModalItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/80 backdrop-blur-sm">
           <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-[#282828] pb-3">
               <div className="flex items-center gap-2">
                 <Shield className="w-5 h-5 text-emerald-600 dark:text-[#1DB954]" />
                 <h3 className="font-bold text-sm text-slate-900 dark:text-white">
                   تعیین وضعیت درخواست {reviewModalItem.type === 'leave' ? 'مرخصی' : 'مساعده'}
                 </h3>
               </div>
-              <button
-                onClick={() => setReviewModalItem(null)}
-                className="text-slate-400 dark:text-[#888] hover:text-slate-700 dark:hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmReview}
+                  disabled={isProcessingReview}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black text-xs font-bold shadow-sm disabled:opacity-50 cursor-pointer"
+                >
+                  {isProcessingReview ? 'در حال ثبت...' : 'ثبت تصمیم نهایی'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewModalItem(null)}
+                  className="text-slate-400 dark:text-[#888] hover:text-slate-700 dark:hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3 bg-slate-50 dark:bg-[#121212] p-3.5 rounded-xl border border-slate-200 dark:border-[#222] text-xs">

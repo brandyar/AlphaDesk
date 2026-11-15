@@ -89,7 +89,17 @@ import {
   getAvatarUrl,
   matchPersonnelToCustomer,
 } from '../utils';
-import { fetchLeaveRequests, bulkSetOwnershipDeadline, fetchCustomersPaginated, DashboardSummary } from '../api';
+import {
+  fetchLeaveRequests,
+  bulkSetOwnershipDeadline,
+  fetchCustomersPaginated,
+  DashboardSummary,
+  fetchProjectSettings as apiFetchProjectSettings,
+  updateProjectSettings as apiUpdateProjectSettings,
+  fetchTenantSettings as apiFetchTenantSettings,
+  updateTenantSettings as apiUpdateTenantSettings,
+  sendTestSms as apiSendTestSms,
+} from '../api';
 
 export const FAMILY_RELATION_OPTIONS = [
   'پدر',
@@ -133,7 +143,6 @@ export const PERSONNEL_ROLE_CONFIG: Record<
       'free_customers',
       'reports',
       'analytics',
-      'cold_leads',
       'admin_reports',
       'team',
       'tenants',
@@ -152,7 +161,6 @@ export const PERSONNEL_ROLE_CONFIG: Record<
       'free_customers',
       'reports',
       'analytics',
-      'cold_leads',
       'admin_reports',
       'team',
       'personal_portal',
@@ -161,7 +169,7 @@ export const PERSONNEL_ROLE_CONFIG: Record<
   },
   marketer: {
     label: 'کارشناس فروش و مذاکره',
-    description: 'پیگیری پرونده‌ها، ثبت مذاکرات، فاکتورها، بانک شماره‌ها و گزارش کار روزانه',
+    description: 'پیگیری پرونده‌ها، ثبت مذاکرات، فاکتورها و گزارش کار روزانه',
     badgeClass: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
     icon: PhoneCall,
     defaultMenus: [
@@ -169,7 +177,6 @@ export const PERSONNEL_ROLE_CONFIG: Record<
       'customers',
       'free_customers',
       'reports',
-      'cold_leads',
       'admin_reports',
       'personal_portal',
     ],
@@ -193,10 +200,10 @@ export const PERSONNEL_ROLE_CONFIG: Record<
   },
   operator: {
     label: 'اپراتور پشتیبانی و ورود اطلاعات',
-    description: 'پاسخگویی اولیه و ثبت شماره‌های ورودی در بانک لید سرد',
+    description: 'پاسخگویی اولیه، ثبت سریع مشتری و ثبت گزارش عملکرد',
     badgeClass: 'bg-teal-500/15 text-teal-400 border-teal-500/30',
     icon: Headphones,
-    defaultMenus: ['dashboard', 'cold_leads', 'admin_reports', 'personal_portal'],
+    defaultMenus: ['dashboard', 'customers', 'admin_reports', 'personal_portal'],
     defaultReportScope: 'own_only',
   },
   finance: {
@@ -223,7 +230,6 @@ export const SYSTEM_MENUS = [
   { id: 'free_customers', label: 'مشتریان آزاد', icon: Unlock, desc: 'حوضچه مشتریان منقضی‌شده و بدون مالک با امکان اختصاص' },
   { id: 'reports', label: 'گزارش‌های مذاکره', icon: MessageSquareText, desc: 'تاریخچه تماس‌ها و فاکتورها' },
   { id: 'analytics', label: 'گزارشات نموداری', icon: BarChart3, desc: 'نمودارهای روزانه و قیف فروش' },
-  { id: 'cold_leads', label: 'بانک شماره‌های اولیه', icon: PhoneCall, desc: 'لیدهای سرد و تماس‌های اولیه' },
   { id: 'admin_reports', label: 'گزارش عملکرد پرسنل', icon: ClipboardCheck, desc: 'فرم ثبت کار روزانه و ساعت کاری' },
   { id: 'team', label: 'مدیریت همکاران و تیم', icon: Users2, desc: 'ثبت همکار، تمدید و سوئیچ مالکیت' },
   { id: 'tenants', label: 'سازمان‌ها و شعب (چندسازمانی)', icon: Building2, desc: 'مشاهده لیست سازمان‌ها و تعریف شرکت یا شعبه جدید' },
@@ -239,7 +245,6 @@ export const SYSTEM_ACTIONS = [
   { key: 'can_export_data', label: 'کپی اطلاعات و خروجی داده‌ها' },
   { key: 'can_extend_ownership', label: 'تمدید مهلت مالکیت پرونده‌ها (Deadline)' },
   { key: 'can_switch_ownership', label: 'سوئیچ و واگذاری پرونده به بازاریاب دیگر' },
-  { key: 'can_manage_leads', label: 'تخصیص شماره‌های لید سرد به دیگران' },
   { key: 'can_approve_leaves', label: 'تایید یا رد درخواست‌های مرخصی همکاران' },
   { key: 'can_approve_advances', label: 'بررسی و تایید درخواست‌های مساعده مالی' },
   { key: 'can_manage_tenants', label: 'مدیریت سازمان‌ها، شعب و ایجاد سازمان جدید' },
@@ -363,7 +368,6 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
     can_export_data: false,
     can_extend_ownership: false,
     can_switch_ownership: false,
-    can_manage_leads: false,
     can_approve_leaves: false,
     can_approve_advances: false,
     can_manage_tenants: false,
@@ -385,7 +389,6 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           can_export_data: true,
           can_extend_ownership: true,
           can_switch_ownership: true,
-          can_manage_leads: true,
           can_approve_leaves: true,
           can_approve_advances: true,
           can_manage_tenants: true,
@@ -398,7 +401,6 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           can_export_data: true,
           can_extend_ownership: true,
           can_switch_ownership: true,
-          can_manage_leads: true,
           can_approve_leaves: true,
           can_approve_advances: false,
           can_manage_tenants: false,
@@ -411,7 +413,6 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           can_export_data: false,
           can_extend_ownership: false,
           can_switch_ownership: false,
-          can_manage_leads: false,
           can_approve_leaves: false,
           can_approve_advances: false,
           can_manage_tenants: false,
@@ -641,7 +642,6 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       can_export_data: getActionPerm('can_export_data', isRoleAdminOrManager),
       can_extend_ownership: getActionPerm('can_extend_ownership', isRoleAdminOrManager),
       can_switch_ownership: getActionPerm('can_switch_ownership', isRoleAdminOrManager),
-      can_manage_leads: getActionPerm('can_manage_leads', isRoleAdminOrManager),
       can_approve_leaves: getActionPerm('can_approve_leaves', isRoleAdmin),
       can_approve_advances: getActionPerm('can_approve_advances', isRoleAdmin),
       can_manage_tenants: getActionPerm('can_manage_tenants', isRoleAdmin),
@@ -1060,8 +1060,27 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   const [showApiKey, setShowApiKey] = useState(false);
 
   // Tenant Settings (sms_phones) State & Handlers
+  const [selectedSmsTenantId, setSelectedSmsTenantId] = useState<string>(() => {
+    if (activeTenantId && activeTenantId !== 'all') return String(activeTenantId);
+    return tenants[0]?.id ? String(tenants[0].id) : 'default';
+  });
   const [tenantSmsPhones, setTenantSmsPhones] = useState('');
+  const [isLoadingTenantSettings, setIsLoadingTenantSettings] = useState(false);
   const [isSavingTenantSettings, setIsSavingTenantSettings] = useState(false);
+
+  // Sync selectedSmsTenantId when activeTenantId or tenants list updates
+  useEffect(() => {
+    if (activeTenantId && activeTenantId !== 'all') {
+      setSelectedSmsTenantId(String(activeTenantId));
+    } else if (tenants.length > 0) {
+      setSelectedSmsTenantId((prev) => {
+        if (prev && prev !== 'all' && tenants.some((t) => String(t.id) === String(prev))) {
+          return prev;
+        }
+        return String(tenants[0].id);
+      });
+    }
+  }, [activeTenantId, tenants]);
 
   // Test SMS modal
   const [testSmsModalOpen, setTestSmsModalOpen] = useState(false);
@@ -1076,19 +1095,21 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
 
   useEffect(() => {
     if (activeSubTab === 'sms_settings') {
-      fetchProjectSettings();
-      fetchTenantSettings();
+      loadProjectSettings();
     }
-  }, [activeSubTab, activeTenantId]);
+  }, [activeSubTab]);
 
-  const fetchProjectSettings = async () => {
+  useEffect(() => {
+    if (activeSubTab === 'sms_settings' && selectedSmsTenantId && selectedSmsTenantId !== 'all') {
+      loadTenantSettings(selectedSmsTenantId);
+    }
+  }, [activeSubTab, selectedSmsTenantId]);
+
+  const loadProjectSettings = async () => {
     setIsLoadingProjectSettings(true);
     try {
-      const res = await fetch('/api/project-settings');
-      if (res.ok) {
-        const data = await res.json();
-        setProjectSettings(data || {});
-      }
+      const data = await apiFetchProjectSettings();
+      setProjectSettings(data || {});
     } catch {
       showToast('خطا در دریافت تنظیمات سامانه', 'error');
     } finally {
@@ -1096,16 +1117,18 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
     }
   };
 
-  const fetchTenantSettings = async () => {
+  const loadTenantSettings = async (targetTenantId: string) => {
+    setIsLoadingTenantSettings(true);
     try {
-      const res = await fetch(`/api/tenant-settings?tenant_id=${encodeURIComponent(activeTenantId || 'default')}`);
-      if (res.ok) {
-        const data = await res.json();
-        const raw = data.sms_phones;
-        const str = Array.isArray(raw) ? raw.join(', ') : (typeof raw === 'string' ? raw : '');
-        setTenantSmsPhones(str);
-      }
-    } catch {}
+      const data = await apiFetchTenantSettings(targetTenantId);
+      const raw = data?.sms_phones;
+      const str = Array.isArray(raw) ? raw.join(', ') : (typeof raw === 'string' ? raw : '');
+      setTenantSmsPhones(str);
+    } catch (err: any) {
+      showToast(err?.message || 'خطا در دریافت شماره‌های مدیریت سازمان', 'error');
+    } finally {
+      setIsLoadingTenantSettings(false);
+    }
   };
 
   const handleSaveProjectSettings = async () => {
@@ -1123,46 +1146,30 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
         ippanel_line_number: projectSettings.ippanel_sender || projectSettings.ippanel_line_number || '+983000505',
       };
 
-      const res = await fetch('/api/project-settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setProjectSettings(updated);
-        showToast('تنظیمات درگاه پیامک IPPanel با موفقیت ذخیره شد.', 'success');
-      } else {
-        const err = await res.json();
-        showToast(err.message || 'خطا در ذخیره تنظیمات', 'error');
-      }
+      const updated = await apiUpdateProjectSettings(payload);
+      setProjectSettings(updated || payload);
+      showToast('تنظیمات درگاه پیامک با موفقیت ذخیره شد.', 'success');
     } catch (e: any) {
-      showToast('خطا در ذخیره تنظیمات: ' + e.message, 'error');
+      showToast(e.message || 'خطا در ذخیره تنظیمات', 'error');
     } finally {
       setIsSavingProjectSettings(false);
     }
   };
 
   const handleSaveTenantSettings = async () => {
+    const targetTenantId = selectedSmsTenantId && selectedSmsTenantId !== 'all'
+      ? selectedSmsTenantId
+      : (tenants[0]?.id ? String(tenants[0].id) : 'default');
+
     setIsSavingTenantSettings(true);
     try {
-      const phonesArr = tenantSmsPhones.split(',').map(s => s.trim()).filter(Boolean);
-      const res = await fetch('/api/tenant-settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenant_id: activeTenantId || 'default',
-          sms_phones: phonesArr,
-        }),
-      });
-      if (res.ok) {
-        showToast('شماره‌های پیامک اطلاع‌رسانی مدیریت سازمان با موفقیت ذخیره شد.', 'success');
-      } else {
-        const err = await res.json();
-        showToast(err.message || 'خطا در ذخیره شماره‌ها', 'error');
-      }
+      const phonesArr = tenantSmsPhones.split(/[,،\n;]+/).map(s => s.trim()).filter(Boolean);
+      const res = await apiUpdateTenantSettings(targetTenantId, phonesArr);
+      const savedPhones = Array.isArray(res?.sms_phones) ? res.sms_phones : phonesArr;
+      setTenantSmsPhones(savedPhones.join(', '));
+      showToast('شماره‌های پیامک اطلاع‌رسانی مدیریت سازمان با موفقیت ذخیره شد.', 'success');
     } catch (e: any) {
-      showToast('خطا در ذخیره شماره‌ها: ' + e.message, 'error');
+      showToast(e.message || 'خطا در ذخیره شماره‌ها', 'error');
     } finally {
       setIsSavingTenantSettings(false);
     }
@@ -1180,25 +1187,20 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       if (testSmsVarKey.trim()) vars[testSmsVarKey.trim()] = testSmsVarVal;
       if (testSmsVarKey2.trim()) vars[testSmsVarKey2.trim()] = testSmsVarVal2;
 
-      const res = await fetch('/api/project-settings/test-sms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: testSmsPhone,
-          pattern_code: testSmsPattern,
-          variables: vars,
-          api_key: projectSettings.ippanel_api,
-          sender: projectSettings.ippanel_sender || projectSettings.ippanel_line_number,
-        }),
+      const data = await apiSendTestSms({
+        phone: testSmsPhone,
+        pattern_code: testSmsPattern,
+        variables: vars,
+        api_key: projectSettings.ippanel_api,
+        sender: projectSettings.ippanel_sender || projectSettings.ippanel_line_number,
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showToast('پیامک تست با موفقیت از طریق درگاه IPPanel ارسال گردید.', 'success');
+      if (data.success) {
+        showToast('پیامک تست با موفقیت ارسال گردید.', 'success');
         setTestSmsModalOpen(false);
       } else {
-        const errMsg = data.error || data.message || 'خطا در ارسال پیامک تست';
+        const errMsg = data.error || 'خطا در ارسال پیامک تست';
         setTestSmsError(errMsg);
-        showToast(data.message || errMsg, 'error');
+        showToast(errMsg, 'error');
       }
     } catch (e: any) {
       setTestSmsError(e.message);
@@ -1354,16 +1356,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               }`}
             >
               <MessageSquareText className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>تنظیمات پیامک (IPPanel)</span>
-              <span
-                className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
-                  activeSubTab === 'sms_settings'
-                    ? 'bg-black text-[#1DB954]'
-                    : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
-                }`}
-              >
-                پترن‌ها
-              </span>
+              <span>تنظیمات پیامک</span>
             </button>
           )}
         </div>
@@ -1374,7 +1367,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {/* ------------------------------------------------------------- */}
       {activeSubTab === 'new_colleague' && (
         <div className="max-w-4xl bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-7 space-y-7 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-[#282828] pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#282828] pb-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954]">
                 <UserPlus className="w-5 h-5" />
@@ -1386,13 +1379,28 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 </p>
               </div>
             </div>
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#222] border border-[#333] text-[11px] text-[#A7A7A7]">
-              <Sparkles className="w-3.5 h-3.5 text-[#1DB954]" />
-              <span>پیکربندی هوشمند دسترسی‌ها</span>
-            </span>
+            <div className="flex items-center gap-2.5">
+              <span className="hidden md:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#222] border border-[#333] text-[11px] text-[#A7A7A7]">
+                <Sparkles className="w-3.5 h-3.5 text-[#1DB954]" />
+                <span>پیکربندی هوشمند دسترسی‌ها</span>
+              </span>
+              <button
+                type="submit"
+                form="register-colleague-form"
+                disabled={isSubmittingPersonnel}
+                className="px-4 py-2 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold text-xs shadow-lg shadow-[#1DB954]/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSubmittingPersonnel ? (
+                  <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                )}
+                <span>ثبت و ذخیره مشخصات همکار</span>
+              </button>
+            </div>
           </div>
 
-          <form onSubmit={handleRegisterColleague} className="space-y-6">
+          <form id="register-colleague-form" onSubmit={handleRegisterColleague} className="space-y-6">
             {/* Section A: Identity & Credentials */}
             <div className="space-y-3">
               <div className="text-xs font-bold text-white flex items-center gap-2">
@@ -2873,6 +2881,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           setProjectSettings={setProjectSettings}
           tenantSmsPhones={tenantSmsPhones}
           setTenantSmsPhones={setTenantSmsPhones}
+          isLoadingTenantSettings={isLoadingTenantSettings}
           isSavingProjectSettings={isSavingProjectSettings}
           isSavingTenantSettings={isSavingTenantSettings}
           handleSaveProjectSettings={handleSaveProjectSettings}
@@ -2880,6 +2889,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           isCentralOrgAdmin={isCentralOrgAdmin}
           tenants={tenants}
           activeTenantId={activeTenantId}
+          selectedSmsTenantId={selectedSmsTenantId}
+          setSelectedSmsTenantId={setSelectedSmsTenantId}
           showApiKey={showApiKey}
           setShowApiKey={setShowApiKey}
           testSmsModalOpen={testSmsModalOpen}
@@ -2923,12 +2934,27 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setEditingColleague(null)}
-                className="w-8 h-8 rounded-full bg-[#242424] hover:bg-[#303030] flex items-center justify-center text-[#888] hover:text-white transition-colors flex-shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={handleSaveColleagueEdit}
+                  disabled={isUpdatingColleague}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black text-xs font-extrabold shadow-md shadow-[#1DB954]/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isUpdatingColleague ? (
+                    <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  )}
+                  <span>ذخیره تغییرات</span>
+                </button>
+                <button
+                  onClick={() => setEditingColleague(null)}
+                  className="w-8 h-8 rounded-full bg-[#242424] hover:bg-[#303030] flex items-center justify-center text-[#888] hover:text-white transition-colors flex-shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body */}

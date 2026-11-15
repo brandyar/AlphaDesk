@@ -1200,10 +1200,20 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       {payingSlip && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
           <div className="w-full max-w-md bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#303030] rounded-2xl p-6 space-y-4 text-right shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-[#1DB954]" />
-              <span>ثبت پرداخت و تسویه حساب</span>
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-[#282828] pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-[#1DB954]" />
+                <span>ثبت پرداخت و تسویه حساب</span>
+              </h3>
+              <button
+                type="button"
+                onClick={handleConfirmPaid}
+                disabled={isMarkingPaid}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black font-bold text-xs cursor-pointer disabled:opacity-50"
+              >
+                {isMarkingPaid ? 'در حال ثبت...' : 'تایید پرداخت فیش'}
+              </button>
+            </div>
 
             <p className="text-xs text-slate-600 dark:text-[#A7A7A7] leading-relaxed">
               مبلغ <strong className="font-mono text-emerald-600 dark:text-[#1DB954]">{formatToman(payingSlip.net_payable)} تومان</strong> برای{' '}

@@ -33,7 +33,8 @@ import {
   Maximize2,
   Minimize2,
 } from 'lucide-react';
-import { Customer, CustomerReport, Personnel, NegotiationStatus, ChannelType, CustomerContact, AuthUser, CustomerPhoneOption } from '../types';
+import { Customer, CustomerReport, Personnel, NegotiationStatus, ChannelType, CustomerContact, AuthUser, CustomerPhoneOption, DuplicateCheckResult } from '../types';
+import { checkDuplicateContact } from '../api';
 import {
   formatTimeRemaining,
   formatPersianDate,
@@ -47,6 +48,7 @@ import {
   formatFollowupDateTime,
 } from '../utils';
 import { PersianDatePicker } from './PersianDatePicker';
+import { FreePoolDuplicateAlert } from './FreePoolDuplicateAlert';
 
 interface CustomerDetailModalProps {
   customer: Customer | null;
@@ -58,6 +60,8 @@ interface CustomerDetailModalProps {
   onDelete: (customerId: string) => void;
   onOpenMerge?: (customerId: string) => void;
   onAddContact?: (contact: Partial<CustomerContact>) => Promise<void>;
+  onClaimFreeCustomer?: (customerId: string, targetMarketerId?: string, targetMarketerName?: string) => Promise<void>;
+  justClaimedFromDuplicate?: boolean;
   personnelList: Personnel[];
   currentPersonnel: Personnel | null;
   currentUser?: AuthUser | null;
@@ -77,6 +81,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   onDelete,
   onOpenMerge,
   onAddContact,
+  onClaimFreeCustomer,
+  justClaimedFromDuplicate = false,
   personnelList,
   currentPersonnel,
   currentUser,
@@ -155,6 +161,78 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const [addingContact, setAddingContact] = useState(false);
   const [addContactError, setAddContactError] = useState<string | null>(null);
   const [addContactSuccess, setAddContactSuccess] = useState<string | null>(null);
+  const [newContactDuplicate, setNewContactDuplicate] = useState<DuplicateCheckResult | null>(null);
+  const [checkingNewContact, setCheckingNewContact] = useState(false);
+  const [transferringCustomerId, setTransferringCustomerId] = useState<string | null>(null);
+  const quickContactDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reportsSectionRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (justClaimedFromDuplicate && isOpen && !isMinimized) {
+      const t = setTimeout(() => {
+        reportsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+      return () => clearTimeout(t);
+    }
+  }, [justClaimedFromDuplicate, isOpen, isMinimized, customer?.id]);
+
+  React.useEffect(() => {
+    if (!showAddContact) {
+      setNewContactDuplicate(null);
+      setCheckingNewContact(false);
+      return;
+    }
+    if (quickContactDebounceRef.current) {
+      clearTimeout(quickContactDebounceRef.current);
+    }
+    const trimmed = newContactValue.trim();
+    if (trimmed.length < 4) {
+      setNewContactDuplicate(null);
+      setCheckingNewContact(false);
+      return;
+    }
+    setCheckingNewContact(true);
+    quickContactDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await checkDuplicateContact(trimmed, newContactType, customer?.id);
+        setNewContactDuplicate(res.isDuplicate ? res : null);
+      } catch {
+        setNewContactDuplicate(null);
+      } finally {
+        setCheckingNewContact(false);
+      }
+    }, 400);
+    return () => {
+      if (quickContactDebounceRef.current) {
+        clearTimeout(quickContactDebounceRef.current);
+      }
+    };
+  }, [showAddContact, newContactValue, newContactType, customer?.id]);
+
+  const isFreePoolDup = (dup?: DuplicateCheckResult | null) =>
+    Boolean(dup && (dup.isFreePool || dup.conflictType === 'expired'));
+
+  const handleConfirmQuickContactTransfer = async (targetCustomerId: string) => {
+    if (!onClaimFreeCustomer || transferringCustomerId) return;
+    setAddContactError(null);
+    setTransferringCustomerId(targetCustomerId);
+    try {
+      await onClaimFreeCustomer(
+        targetCustomerId,
+        currentPersonnel?.id || currentUser?.id,
+        currentPersonnel?.name || currentUser?.name
+      );
+      setShowAddContact(false);
+      setNewContactValue('');
+      setNewContactName('');
+      setNewContactRole('');
+      setNewContactDuplicate(null);
+    } catch (err: any) {
+      setAddContactError(err?.message || 'خطا در انتقال مالکیت پرونده');
+    } finally {
+      setTransferringCustomerId(null);
+    }
+  };
 
   // Reassignment state
   const [showReassignBox, setShowReassignBox] = useState(false);
@@ -258,6 +336,14 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
     setAddContactSuccess(null);
     if (!newContactValue.trim()) {
       setAddContactError('لطفاً مقدار یا شماره تماس را وارد کنید.');
+      return;
+    }
+    if (isFreePoolDup(newContactDuplicate)) {
+      setAddContactError('این شماره در مشتریان آزاد وجود دارد. برای مشاهده گزارش‌های قبلی، انتقال مالکیت را در باکس زیر تأیید کنید.');
+      return;
+    }
+    if (newContactDuplicate?.conflictType === 'active_marketer') {
+      setAddContactError(newContactDuplicate.message || 'این شماره در اختیار بازاریاب دیگری است.');
       return;
     }
     setAddingContact(true);
@@ -475,9 +561,19 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           {/* Reassign Box Drawer */}
           {showReassignBox && (
             <div className="p-4 rounded-xl bg-slate-100 dark:bg-[#202020] border border-slate-300 dark:border-[#333333] space-y-3">
-              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <RefreshCw className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
-                <span>تخصیص مشتری به بازاریاب دیگر با مهلت زمانی جدید</span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
+                  <span>تخصیص مشتری به بازاریاب دیگر با مهلت زمانی جدید</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={reassigning}
+                  onClick={handleReassignSubmit}
+                  className="px-3.5 py-1.5 rounded-lg bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {reassigning ? 'در حال ثبت...' : 'تأیید تخصیص و ریست مهلت'}
+                </button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
@@ -550,19 +646,36 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
             {/* Quick Add Contact Form Drawer */}
             {showAddContact && (
-              <form onSubmit={handleQuickAddContact} className="p-3.5 rounded-xl bg-slate-100 dark:bg-[#1e1e1e] border border-slate-300 dark:border-[#333] space-y-3 animate-in fade-in">
-                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center justify-between">
+              <form id="detail-quick-add-contact-form" onSubmit={handleQuickAddContact} className="p-3.5 rounded-xl bg-slate-100 dark:bg-[#1e1e1e] border border-slate-300 dark:border-[#333] space-y-3 animate-in fade-in">
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex flex-wrap items-center justify-between gap-2">
                   <span className="flex items-center gap-1.5 text-emerald-600 dark:text-[#1DB954]">
                     <Plus className="w-4 h-4 stroke-[3]" />
                     <span>افزودن سریع شماره تماس یا اکانت ارتباطی</span>
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddContact(false)}
-                    className="text-slate-400 hover:text-slate-700 dark:text-[#888] dark:hover:text-white p-1"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="submit"
+                      form="detail-quick-add-contact-form"
+                      disabled={addingContact}
+                      className="px-3 py-1 rounded-lg bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs flex items-center gap-1 transition-all shadow-sm disabled:opacity-50 cursor-pointer"
+                    >
+                      {addingContact ? (
+                        <span>در حال ثبت...</span>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          <span>ثبت شماره</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddContact(false)}
+                      className="text-slate-400 hover:text-slate-700 dark:text-[#888] dark:hover:text-white p-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 {addContactError && (
@@ -597,13 +710,19 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     </select>
                   </div>
                   <div className="sm:col-span-4">
-                    <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1">شماره یا شناسه</label>
+                    <label className="block text-[11px] text-slate-600 dark:text-[#A7A7A7] mb-1 flex items-center justify-between">
+                      <span>شماره یا شناسه</span>
+                      {checkingNewContact && <span className="text-[10px] text-emerald-600 dark:text-[#1DB954]">در حال بررسی...</span>}
+                    </label>
                     <input
                       type="text"
                       dir="ltr"
                       required
                       value={newContactValue}
-                      onChange={(e) => setNewContactValue(e.target.value)}
+                      onChange={(e) => {
+                        setNewContactValue(e.target.value);
+                        setAddContactError(null);
+                      }}
                       placeholder={newContactType === 'mobile' ? '09121234567' : newContactType === 'landline' ? '02188776655' : 'مقدار'}
                       className="w-full h-9 px-2.5 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-right"
                     />
@@ -621,8 +740,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   <div className="sm:col-span-2 flex items-end">
                     <button
                       type="submit"
-                      disabled={addingContact}
-                      className="w-full h-9 rounded bg-[#1DB954] hover:bg-[#1ED760] disabled:bg-slate-300 dark:disabled:bg-[#333] text-black font-bold text-xs transition-colors flex items-center justify-center gap-1 shadow-md"
+                      disabled={addingContact || isFreePoolDup(newContactDuplicate) || newContactDuplicate?.conflictType === 'active_marketer'}
+                      className="w-full h-9 rounded bg-[#1DB954] hover:bg-[#1ED760] disabled:bg-slate-300 dark:disabled:bg-[#333] disabled:text-slate-500 text-black font-bold text-xs transition-colors flex items-center justify-center gap-1 shadow-md"
                     >
                       {addingContact ? (
                         <span>در حال ثبت...</span>
@@ -635,6 +754,25 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {newContactDuplicate && (
+                  isFreePoolDup(newContactDuplicate) && onClaimFreeCustomer ? (
+                    <FreePoolDuplicateAlert
+                      duplicate={newContactDuplicate}
+                      onConfirmTransfer={handleConfirmQuickContactTransfer}
+                      isTransferring={transferringCustomerId === newContactDuplicate.matchedCustomer?.id}
+                      targetMarketerName={currentPersonnel?.name || currentUser?.name}
+                    />
+                  ) : (
+                    <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-500/40 text-xs text-red-700 dark:text-red-200 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold">هشدار شماره تکراری: </span>
+                        <span>{newContactDuplicate.message}</span>
+                      </div>
+                    </div>
+                  )
+                )}
               </form>
             )}
 
@@ -959,7 +1097,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
           </div>
 
           {/* Follow-up Reports History Section */}
-          <div className="space-y-4">
+          <div ref={reportsSectionRef} className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-white">
                 <MessageSquare className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
@@ -975,20 +1113,52 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               </button>
             </div>
 
+            {justClaimedFromDuplicate && (
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-[#1DB954]/15 border border-emerald-300 dark:border-[#1DB954]/40 text-xs text-emerald-900 dark:text-emerald-100 flex items-center gap-2 animate-in fade-in">
+                <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-[#1DB954] shrink-0" />
+                <span className="font-bold">
+                  انتقال مالکیت با موفقیت تأیید شد — گزارش‌های قبلی این پرونده در زیر نمایش داده می‌شود.
+                </span>
+              </div>
+            )}
+
             {/* Inline Add Report Form */}
             {showAddReport && (
               <form
+                id="detail-add-report-form"
                 onSubmit={handleReportSubmit}
                 className="p-3.5 sm:p-5 rounded-2xl bg-slate-50 dark:bg-[#181818] border border-slate-300 dark:border-[#2e2e2e] space-y-4 shadow-lg animate-in fade-in transition-all"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-[#282828] pb-2.5">
-                  <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
-                    <span>ثبت گزارش مذاکره جدید برای این پرونده</span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-200 dark:border-[#282828] pb-3">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
+                      <span>ثبت گزارش مذاکره جدید برای این پرونده</span>
+                    </div>
+                    <span className="text-[11px] text-slate-500 dark:text-[#888]">
+                      ثبت‌کننده: <strong className="text-slate-800 dark:text-white">{staffNegotiatorName}</strong>
+                    </span>
                   </div>
-                  <span className="text-[11px] text-slate-500 dark:text-[#888]">
-                    ثبت‌کننده: <strong className="text-slate-800 dark:text-white">{staffNegotiatorName}</strong>
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddReport(false);
+                        setReportError(null);
+                      }}
+                      className="px-3.5 h-8 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#535353] text-slate-600 hover:text-slate-900 dark:text-[#B3B3B3] dark:hover:text-white text-xs transition-colors cursor-pointer"
+                    >
+                      انصراف
+                    </button>
+                    <button
+                      type="submit"
+                      form="detail-add-report-form"
+                      disabled={submittingReport}
+                      className="px-4 h-8 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all shadow-sm cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      {submittingReport ? 'در حال ثبت...' : 'ذخیره و ثبت گزارش'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Form Error Banner */}

@@ -936,7 +936,7 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
       {claimingCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-5 shadow-2xl relative">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-[#282828] pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-[#1DB954]">
                   <Unlock className="w-5 h-5" />
@@ -946,12 +946,32 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
                   <p className="text-[11px] text-slate-500 dark:text-[#888]">تخصیص مشتری به شما با مهلت پیگیری جدید</p>
                 </div>
               </div>
-              <button
-                onClick={() => setClaimingCustomer(null)}
-                className="text-slate-400 hover:text-slate-700 dark:text-[#888] dark:hover:text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmClaim}
+                  disabled={isProcessingClaim}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black font-bold text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isProcessingClaim ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>در حال اختصاص...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>تایید و برداشت پرونده</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setClaimingCustomer(null)}
+                  className="text-slate-400 hover:text-slate-700 dark:text-[#888] dark:hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Customer Details Box */}
@@ -1037,14 +1057,23 @@ export const FreeCustomersView: React.FC<FreeCustomersViewProps> = ({
       {isEditingLimit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-[#282828] pb-3">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Settings className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                 <span>تنظیم سقف سهمیه برداشت آزاد</span>
               </h3>
-              <button onClick={() => setIsEditingLimit(false)} className="text-slate-400 hover:text-slate-700 dark:text-[#888] dark:hover:text-white">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveClaimLimit}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black text-xs font-bold cursor-pointer"
+                >
+                  ذخیره تغییرات
+                </button>
+                <button onClick={() => setIsEditingLimit(false)} className="text-slate-400 hover:text-slate-700 dark:text-[#888] dark:hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div>

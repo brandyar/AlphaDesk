@@ -9,7 +9,7 @@ import {
   updateProjectSettingsData,
 } from './config.ts';
 import { directusFetch, probeDirectusConnection, isDirectusCircuitOpen } from './directus/client.ts';
-import { ensureDirectusTenants, ensureDirectusPersonnel, syncAllCustomersFollowupFromReports } from './directus/sync.ts';
+import { ensureDirectusTenants, ensureDirectusPersonnel, syncAllCustomersFollowupFromReports, syncDirectusTenantSettings } from './directus/sync.ts';
 import { rateLimiter } from './middlewares/rateLimit.middleware.ts';
 import { checkInactivePersonnel } from './middlewares/auth.middleware.ts';
 
@@ -86,32 +86,7 @@ app.use('/payroll', payrollRoutes);
 
 
 export async function startServer() {
-  if (directusUrl && directusAdminToken) {
-    // Fast probe connection with 2s timeout
-    const isDirectusOnline = await probeDirectusConnection(2000);
-    if (isDirectusOnline) {
-      console.log('Directus database reachable. Initializing data sync...');
-      ensureDirectusTenants()
-        .then(() => ensureDirectusPersonnel())
-        .then(async () => {
-          try {
-            const resp = await directusFetch('/items/project_settings').catch(() => null);
-            if (resp?.data) {
-              const item = Array.isArray(resp.data) ? resp.data[0] : resp.data;
-              if (item) {
-                updateProjectSettingsData(item);
-              }
-            }
-          } catch {}
-        })
-        .then(() => syncAllCustomersFollowupFromReports())
-        .catch((err) => console.warn('Database initialization warning:', err?.message || err));
-    } else {
-      console.log('⚡ Directus server is unreachable or offline. Running immediately in In-Memory Fallback Mode (zero lag).');
-    }
-  }
-
-  // Robust dist folder discovery across root server.js, tsx, or custom working directories
+  // 1. Mount frontend handler (Vite in dev, static dist in production)
   const candidateDistDirs = [
     path.resolve(process.cwd(), 'dist'),
     path.resolve(__dirname, 'dist'),
@@ -152,20 +127,42 @@ export async function startServer() {
       });
     }
   } else {
-    // In development (AI Studio), mount Vite middleware for live development
-    try {
-      const { createServer: createViteServer } = await import('vite');
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: 'spa',
+    // In development (AI Studio), mount Vite middleware non-blockingly so dev server binds port 3000 immediately
+    let viteInstance: any = null;
+    const viteInitPromise = import('vite')
+      .then(({ createServer: createViteServer }) =>
+        createViteServer({
+          server: { middlewareMode: true },
+          appType: 'spa',
+        })
+      )
+      .then((vite) => {
+        viteInstance = vite;
+        console.log('Vite development middleware mounted successfully.');
+        return vite;
+      })
+      .catch((viteErr: any) => {
+        console.warn('Vite development middleware could not be loaded:', viteErr?.message || viteErr);
+        return null;
       });
-      app.use(vite.middlewares);
-      console.log('Vite development middleware mounted successfully.');
-    } catch (viteErr: any) {
-      console.warn('Vite development middleware could not be loaded:', viteErr?.message || viteErr);
-    }
+
+    app.use(async (req, res, next) => {
+      if (viteInstance) {
+        return viteInstance.middlewares(req, res, next);
+      }
+      try {
+        const vite = await viteInitPromise;
+        if (vite) {
+          return vite.middlewares(req, res, next);
+        }
+      } catch (err) {
+        console.error('Error delegating request to Vite middleware:', err);
+      }
+      next();
+    });
   }
 
+  // 2. Bind HTTP server to port 3000 immediately for instant container/AI Studio readiness
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server listening on port ${PORT} (0.0.0.0)`);
     console.log(
@@ -182,6 +179,35 @@ export async function startServer() {
       console.error('Server socket error encountered:', err);
     }
   });
+
+  // 3. Directus synchronization in the background without blocking the HTTP listen socket
+  if (directusUrl && directusAdminToken) {
+    probeDirectusConnection(2000)
+      .then((isDirectusOnline) => {
+        if (isDirectusOnline) {
+          console.log('Directus database reachable. Initializing data sync in background...');
+          ensureDirectusTenants()
+            .then(() => syncDirectusTenantSettings())
+            .then(() => ensureDirectusPersonnel())
+            .then(async () => {
+              try {
+                const resp = await directusFetch('/items/project_settings').catch(() => null);
+                if (resp?.data) {
+                  const item = Array.isArray(resp.data) ? resp.data[0] : resp.data;
+                  if (item) {
+                    updateProjectSettingsData(item);
+                  }
+                }
+              } catch {}
+            })
+            .then(() => syncAllCustomersFollowupFromReports())
+            .catch((err) => console.warn('Database initialization warning:', err?.message || err));
+        } else {
+          console.log('⚡ Directus server is unreachable or offline. Running immediately in In-Memory Fallback Mode (zero lag).');
+        }
+      })
+      .catch((err) => console.warn('Directus probe error:', err?.message || err));
+  }
 
   // Graceful termination for Docker / Coolify stop signals
   const handleShutdown = (signal: string) => {

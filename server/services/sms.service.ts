@@ -7,6 +7,11 @@ import {
   tenantSettingsMap,
 } from '../config.ts';
 import { directusFetch } from '../directus/client.ts';
+import {
+  resolveDirectusTenantId,
+  parseSmsPhones,
+  extractDirectusTenantIdString,
+} from '../directus/sync.ts';
 
 /**
  * Resolves the full name of a user directly from the `personnel` collection (`name` field).
@@ -291,7 +296,18 @@ export function resolvePatternVariables(
 
 // In-memory cache for the fastest working IPPanel endpoint to achieve instant (~200ms) dispatch
 let cachedWorkingAttemptLabel: string | null = null;
-let lastAdminPhonesCache: { tenantId: string; phones: string[]; timestamp: number } | null = null;
+const tenantAdminPhonesCache = new Map<string, { phones: string[]; timestamp: number }>();
+
+export function invalidateTenantAdminPhonesCache(tenantId?: string | number | null) {
+  if (tenantId !== undefined && tenantId !== null) {
+    const raw = String(tenantId).trim();
+    const resolved = resolveDirectusTenantId(raw);
+    tenantAdminPhonesCache.delete(raw);
+    if (resolved) tenantAdminPhonesCache.delete(String(resolved));
+  } else {
+    tenantAdminPhonesCache.clear();
+  }
+}
 
 export async function sendIppanelSmsPattern(
   recipientPhone: string | null | undefined,
@@ -560,75 +576,74 @@ export async function sendTenantAdminsSmsPattern(
   variables: Record<string, string | number> = {}
 ) {
   if (!patternCode) return;
-  const tIdStr = tenantId !== undefined && tenantId !== null ? String(tenantId).trim() : 'default';
+  const rawTenantStr = tenantId !== undefined && tenantId !== null ? String(tenantId).trim() : 'default';
+  const resolvedNum = resolveDirectusTenantId(rawTenantStr);
+  const effectiveKey = resolvedNum ? String(resolvedNum) : rawTenantStr || 'default';
 
   const collectedPhones = new Set<string>();
+  const now = Date.now();
+  const cached = tenantAdminPhonesCache.get(effectiveKey);
 
-  // 1. Immediately read from synchronized in-memory tenantSettingsMap (0ms delay)
-  for (const [, local] of tenantSettingsMap.entries()) {
-    if (local?.sms_phones) {
-      const pArr = Array.isArray(local.sms_phones)
-        ? local.sms_phones
-        : String(local.sms_phones).split(',');
-      pArr.forEach((p) => p.trim() && collectedPhones.add(p.trim()));
+  if (cached && now - cached.timestamp < 60000) {
+    cached.phones.forEach((p) => collectedPhones.add(p));
+  } else if (directusUrl && directusAdminToken) {
+    try {
+      const filterTarget = resolvedNum ? String(resolvedNum) : rawTenantStr;
+      let res = await directusFetch(
+        `/items/tenant_settings?filter[tenant_id][_eq]=${encodeURIComponent(filterTarget)}&limit=10`
+      ).catch(() => null);
+
+      if (!res?.data || (Array.isArray(res.data) && res.data.length === 0)) {
+        // Fallback: fetch all tenant_settings and match by extracted tenant_id
+        const allRes = await directusFetch('/items/tenant_settings?limit=200').catch(() => null);
+        if (allRes?.data && Array.isArray(allRes.data)) {
+          const matched = allRes.data.filter((item: any) => {
+            const itemTId = extractDirectusTenantIdString(item?.tenant_id);
+            return itemTId === effectiveKey || itemTId === rawTenantStr;
+          });
+          res = { data: matched };
+        }
+      }
+
+      if (res?.data) {
+        const items = Array.isArray(res.data) ? res.data : [res.data];
+        const fetchedPhones: string[] = [];
+        for (const item of items) {
+          const phones = parseSmsPhones(item?.sms_phones);
+          phones.forEach((cp) => {
+            collectedPhones.add(cp);
+            fetchedPhones.push(cp);
+          });
+          if (items[0]?.id) {
+            tenantSettingsMap.set(effectiveKey, {
+              id: String(items[0].id),
+              tenant_id: effectiveKey,
+              sms_phones: fetchedPhones,
+            });
+          }
+        }
+        tenantAdminPhonesCache.set(effectiveKey, { phones: fetchedPhones, timestamp: now });
+      }
+    } catch (err: any) {
+      console.warn('[IPPanel SMS] Directus tenant_settings lookup warning:', err.message);
     }
   }
 
-  // 2. Query Directus tenant_settings only if no phones found locally, with 60s cache
-  const now = Date.now();
-  if (collectedPhones.size === 0 && directusUrl && directusAdminToken) {
-    if (
-      lastAdminPhonesCache &&
-      lastAdminPhonesCache.tenantId === tIdStr &&
-      now - lastAdminPhonesCache.timestamp < 60000
-    ) {
-      lastAdminPhonesCache.phones.forEach((p) => collectedPhones.add(p));
-    } else {
-      try {
-        let res = await directusFetch(
-          `/items/tenant_settings?filter[tenant_id][_eq]=${encodeURIComponent(tIdStr)}`
-        ).catch(() => null);
-        if (!res?.data || (Array.isArray(res.data) && res.data.length === 0)) {
-          res = await directusFetch('/items/tenant_settings').catch(() => null);
-        }
-        if (res?.data) {
-          const items = Array.isArray(res.data) ? res.data : [res.data];
-          const fetchedPhones: string[] = [];
-          for (const item of items) {
-            const raw = item?.sms_phones;
-            if (Array.isArray(raw)) {
-              raw.forEach((p: any) => {
-                if (p) {
-                  const cp = String(p).trim();
-                  collectedPhones.add(cp);
-                  fetchedPhones.push(cp);
-                }
-              });
-            } else if (typeof raw === 'string') {
-              raw.split(',').forEach((p: string) => {
-                const cp = p.trim();
-                if (cp) {
-                  collectedPhones.add(cp);
-                  fetchedPhones.push(cp);
-                }
-              });
-            }
-          }
-          lastAdminPhonesCache = { tenantId: tIdStr, phones: fetchedPhones, timestamp: now };
-        }
-      } catch (err: any) {
-        console.warn('[IPPanel SMS] Directus tenant_settings lookup warning:', err.message);
-      }
+  // Fallback to in-memory tenantSettingsMap for this specific tenant only
+  if (collectedPhones.size === 0) {
+    const localEntry = tenantSettingsMap.get(effectiveKey) || tenantSettingsMap.get(rawTenantStr);
+    if (localEntry?.sms_phones) {
+      parseSmsPhones(localEntry.sms_phones).forEach((p) => collectedPhones.add(p));
     }
   }
 
   if (collectedPhones.size === 0) {
-    console.warn('[IPPanel SMS] No admin phone numbers found in tenant_settings to send notification.');
+    console.warn(`[IPPanel SMS] No admin phone numbers found in tenant_settings for tenant ${effectiveKey} to send notification.`);
     return;
   }
 
   console.log(
-    `[IPPanel SMS] Notifying ${collectedPhones.size} tenant admins concurrently with pattern '${patternCode}'...`
+    `[IPPanel SMS] Notifying ${collectedPhones.size} tenant (${effectiveKey}) admins concurrently with pattern '${patternCode}'...`
   );
 
   // Send to all admin phones CONCURRENTLY via Promise.allSettled without blocking

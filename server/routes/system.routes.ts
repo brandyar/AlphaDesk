@@ -18,13 +18,19 @@ import {
   contactsData,
   setContactsData,
   initialPersonnel,
+  tenantSettingsMap,
 } from '../config.ts';
 import { directusFetch, directusFetchAllPages, directusSafeBatchInsert, directusSafeBatchPatch, isDirectusCircuitOpen } from '../directus/client.ts';
 import { getRequestUser, getRequestTenantId, extractFileId, formatAvatarUrl } from '../middlewares/auth.middleware.ts';
 import { invalidateCustomersCache, invalidateReportsCache } from '../directus/cache.ts';
-import { resolveDirectusTenantId, backfillNullTenantsDirectus } from '../directus/sync.ts';
+import {
+  resolveDirectusTenantId,
+  backfillNullTenantsDirectus,
+  parseSmsPhones,
+  extractDirectusTenantIdString,
+} from '../directus/sync.ts';
 import { normalizeContactValue, normalizePersianString } from '../services/phoneNormalizer.ts';
-import { sendIppanelSmsPattern } from '../services/sms.service.ts';
+import { sendIppanelSmsPattern, invalidateTenantAdminPhonesCache } from '../services/sms.service.ts';
 import { Personnel } from '../types.ts';
 
 const router = Router();
@@ -207,6 +213,29 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
     }
   }
 
+  const startOfTodayMs = new Date().setHours(0, 0, 0, 0);
+  const sortedUpcomingFollowups = customersData
+    .filter((c) => Boolean(c.next_followup_date) && !isNaN(new Date(c.next_followup_date!).getTime()))
+    .sort((a, b) => {
+      const aTime = new Date(a.next_followup_date!).getTime();
+      const bTime = new Date(b.next_followup_date!).getTime();
+      const aUp = aTime >= startOfTodayMs;
+      const bUp = bTime >= startOfTodayMs;
+      if (aUp && !bUp) return -1;
+      if (!aUp && bUp) return 1;
+      if (aUp && bUp) return aTime - bTime;
+      return bTime - aTime;
+    })
+    .slice(0, 5);
+
+  const urgentExpiring = customersData
+    .filter((c) => {
+      if (!c.assignment_deadline || c.is_expired || c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
+      const days = Math.ceil((new Date(c.assignment_deadline).getTime() - Date.now()) / 86400000);
+      return days >= 0 && days <= 3;
+    })
+    .slice(0, 5);
+
   res.json({
     total_customers: customersData.length,
     contracts_won_count: customersData.filter(c => c.status === 'قرارداد').length,
@@ -220,8 +249,8 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
     pending_advance_count: 0,
     total_contract_revenue: 0,
     avg_negotiation_score: 8.5,
-    upcoming_followups: customersData.slice(0, 5),
-    urgent_expiring_customers: customersData.slice(0, 5),
+    upcoming_followups: sortedUpcomingFollowups,
+    urgent_expiring_customers: urgentExpiring,
   });
 };
 
@@ -294,6 +323,174 @@ router.post('/api/project-settings/test-sms', async (req: Request, res: Response
   }
 });
 
+// GET /api/tenant-settings (fetch manager notification SMS phones from Directus tenant_settings)
+const handleGetTenantSettings = async (req: Request, res: Response) => {
+  const rawTenantId =
+    (typeof req.query.tenant_id === 'string' && req.query.tenant_id.trim()) ||
+    getRequestTenantId(req) ||
+    'default';
+
+  const resolvedNum = rawTenantId !== 'all' ? resolveDirectusTenantId(rawTenantId) : null;
+  const targetKey = resolvedNum ? String(resolvedNum) : rawTenantId;
+
+  const allItems: Array<{ id: string | number; tenant_id: string; sms_phones: string[] }> = [];
+
+  if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
+    try {
+      const resp = await directusFetch('/items/tenant_settings?limit=200&sort=id');
+      if (resp && Array.isArray(resp.data)) {
+        tenantSettingsMap.clear();
+        for (const item of resp.data) {
+          const tId = extractDirectusTenantIdString(item?.tenant_id);
+          if (!tId) continue;
+          const phones = parseSmsPhones(item?.sms_phones);
+          const entry = {
+            id: item.id !== undefined ? String(item.id) : `ts-${tId}`,
+            tenant_id: tId,
+            sms_phones: phones,
+          };
+          tenantSettingsMap.set(tId, entry);
+          allItems.push({
+            id: item.id,
+            tenant_id: tId,
+            sms_phones: phones,
+          });
+        }
+
+        const matched = allItems.find(
+          (it) =>
+            it.tenant_id === targetKey ||
+            it.tenant_id === rawTenantId ||
+            (resolvedNum !== null && it.tenant_id === String(resolvedNum))
+        );
+
+        return res.json({
+          id: matched?.id ?? null,
+          tenant_id: targetKey,
+          sms_phones: matched ? matched.sms_phones : [],
+          items: allItems,
+        });
+      }
+    } catch (err: any) {
+      console.warn('Directus tenant_settings fetch error:', err.message);
+    }
+  }
+
+  for (const [, v] of tenantSettingsMap.entries()) {
+    allItems.push({
+      id: v.id ?? `ts-${v.tenant_id}`,
+      tenant_id: String(v.tenant_id),
+      sms_phones: parseSmsPhones(v.sms_phones),
+    });
+  }
+
+  const localMatched =
+    tenantSettingsMap.get(targetKey) ||
+    tenantSettingsMap.get(rawTenantId) ||
+    (resolvedNum !== null ? tenantSettingsMap.get(String(resolvedNum)) : undefined);
+
+  return res.json({
+    id: localMatched?.id ?? null,
+    tenant_id: targetKey,
+    sms_phones: localMatched ? parseSmsPhones(localMatched.sms_phones) : [],
+    items: allItems,
+  });
+};
+
+router.get('/api/tenant-settings', handleGetTenantSettings);
+router.get('/tenant-settings', handleGetTenantSettings);
+
+// PATCH / POST /api/tenant-settings
+const handleSaveTenantSettings = async (req: Request, res: Response) => {
+  const { isAuthenticated, isAdmin, userRole } = getRequestUser(req);
+  if (!isAuthenticated || (!isAdmin && userRole !== 'admin')) {
+    return res.status(403).json({
+      error: 'FORBIDDEN',
+      message: 'تنها مدیر سیستم مجاز به ویرایش شماره‌های پیامک اطلاع‌رسانی سازمان است.',
+    });
+  }
+
+  const rawTenantId =
+    (req.body?.tenant_id !== undefined && req.body?.tenant_id !== null
+      ? String(req.body.tenant_id).trim()
+      : '') ||
+    (typeof req.query.tenant_id === 'string' ? req.query.tenant_id.trim() : '') ||
+    getRequestTenantId(req);
+
+  if (!rawTenantId || rawTenantId === 'all') {
+    return res.status(400).json({
+      error: 'INVALID_TENANT',
+      message: 'لطفاً یک سازمان مشخص را برای ذخیره شماره‌های مدیریت انتخاب کنید.',
+    });
+  }
+
+  const resolvedNum = resolveDirectusTenantId(rawTenantId);
+  const effectiveTenantId = resolvedNum ? String(resolvedNum) : rawTenantId;
+  const phonesArr = parseSmsPhones(req.body?.sms_phones);
+  const phonesStr = phonesArr.join(', ');
+
+  let savedId: string | number = `ts-${effectiveTenantId}`;
+
+  if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
+    try {
+      const targetFilterId = resolvedNum || rawTenantId;
+      const existingRes = await directusFetch(
+        `/items/tenant_settings?filter[tenant_id][_eq]=${encodeURIComponent(String(targetFilterId))}&limit=1`
+      ).catch(() => null);
+
+      const existingItem =
+        existingRes?.data && Array.isArray(existingRes.data) && existingRes.data.length > 0
+          ? existingRes.data[0]
+          : null;
+
+      if (existingItem?.id) {
+        const patched = await directusFetch(`/items/tenant_settings/${existingItem.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ sms_phones: phonesStr }),
+        });
+        savedId = patched?.data?.id ?? existingItem.id;
+      } else {
+        const created = await directusFetch('/items/tenant_settings', {
+          method: 'POST',
+          body: JSON.stringify({
+            tenant_id: resolvedNum || rawTenantId,
+            sms_phones: phonesStr,
+          }),
+        });
+        if (created?.data?.id) {
+          savedId = created.data.id;
+        }
+      }
+    } catch (err: any) {
+      console.warn('Directus tenant_settings save error:', err.message);
+      return res.status(500).json({
+        error: 'DIRECTUS_ERROR',
+        message: 'خطا در ذخیره شماره‌های مدیریت در پایگاه داده: ' + err.message,
+      });
+    }
+  }
+
+  tenantSettingsMap.set(effectiveTenantId, {
+    id: String(savedId),
+    tenant_id: effectiveTenantId,
+    sms_phones: phonesArr,
+  });
+  invalidateTenantAdminPhonesCache(effectiveTenantId);
+  invalidateTenantAdminPhonesCache(rawTenantId);
+
+  return res.json({
+    success: true,
+    id: savedId,
+    tenant_id: effectiveTenantId,
+    sms_phones: phonesArr,
+  });
+};
+
+router.patch('/api/tenant-settings', handleSaveTenantSettings);
+router.post('/api/tenant-settings', handleSaveTenantSettings);
+router.patch('/tenant-settings', handleSaveTenantSettings);
+router.post('/tenant-settings', handleSaveTenantSettings);
+
 // POST /api/auth/update-profile
 router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
   const {
@@ -310,7 +507,14 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
     emergency_contact_relation,
     family_contacts,
   } = req.body;
-  const { userId, personnelId, userEmail, userName } = getRequestUser(req);
+  const reqUser = getRequestUser(req);
+  if (!reqUser.isAuthenticated) {
+    return res.status(401).json({
+      error: 'UNAUTHORIZED',
+      message: 'نشست کاربری معتبر نیست. لطفاً مجدداً وارد شوید.',
+    });
+  }
+  const { userId, personnelId, userEmail, userName, isAdmin } = reqUser;
 
   const existingPersonnel = personnelData.find(
     p =>
@@ -320,26 +524,51 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
   );
   const currentAvatar = existingPersonnel?.profile_image || existingPersonnel?.avatar || '';
 
-  const incomingImage = profile_image !== undefined ? profile_image : avatar;
-  const effectiveAvatar = (incomingImage !== undefined && incomingImage !== null && String(incomingImage).trim() !== '')
-    ? incomingImage
-    : (incomingImage === null ? '' : currentAvatar);
+  if (!isAdmin) {
+    const hasUnauthorizedIdentityChange =
+      (name !== undefined && String(name).trim() !== String(existingPersonnel?.name || '').trim()) ||
+      (username !== undefined && String(username).trim() !== String(existingPersonnel?.username || '').trim()) ||
+      (phone !== undefined && String(phone).trim() !== String(existingPersonnel?.phone || '').trim()) ||
+      (national_id !== undefined && String(national_id).trim() !== String(existingPersonnel?.national_id || '').trim()) ||
+      (profile_image !== undefined && String(profile_image || '').trim() !== String(currentAvatar || '').trim()) ||
+      (avatar !== undefined && String(avatar || '').trim() !== String(currentAvatar || '').trim()) ||
+      emergency_contact_name !== undefined ||
+      emergency_contact_phone !== undefined ||
+      emergency_contact_relation !== undefined ||
+      family_contacts !== undefined;
+
+    if (hasUnauthorizedIdentityChange) {
+      return res.status(403).json({
+        error: 'FORBIDDEN',
+        message: 'تنها مدیر سیستم مجاز به تغییر اطلاعات هویتی و پرسنلی می‌باشد. شما فقط می‌توانید شماره کارت بانکی و شماره شبا را ویرایش کنید.',
+      });
+    }
+  }
+
+  const incomingImage = isAdmin ? (profile_image !== undefined ? profile_image : avatar) : undefined;
+  const effectiveAvatar = isAdmin
+    ? ((incomingImage !== undefined && incomingImage !== null && String(incomingImage).trim() !== '')
+      ? incomingImage
+      : (incomingImage === null ? '' : currentAvatar))
+    : undefined;
 
   const personnelPatch: Record<string, any> = {};
-  if (name) personnelPatch.name = String(name).trim();
-  if (username !== undefined) personnelPatch.username = String(username).trim();
-  if (phone !== undefined) personnelPatch.phone = String(phone).trim();
-  if (effectiveAvatar !== undefined) {
-    personnelPatch.profile_image = effectiveAvatar;
-    personnelPatch.avatar = effectiveAvatar;
+  if (isAdmin) {
+    if (name) personnelPatch.name = String(name).trim();
+    if (username !== undefined) personnelPatch.username = String(username).trim();
+    if (phone !== undefined) personnelPatch.phone = String(phone).trim();
+    if (effectiveAvatar !== undefined) {
+      personnelPatch.profile_image = effectiveAvatar;
+      personnelPatch.avatar = effectiveAvatar;
+    }
+    if (national_id !== undefined) personnelPatch.national_id = String(national_id).trim();
+    if (emergency_contact_name !== undefined) personnelPatch.emergency_contact_name = String(emergency_contact_name).trim();
+    if (emergency_contact_phone !== undefined) personnelPatch.emergency_contact_phone = String(emergency_contact_phone).trim();
+    if (emergency_contact_relation !== undefined) personnelPatch.emergency_contact_relation = String(emergency_contact_relation).trim();
+    if (family_contacts !== undefined) personnelPatch.family_contacts = family_contacts;
   }
   if (bank_card_number !== undefined) personnelPatch.bank_card_number = String(bank_card_number).trim();
   if (iban !== undefined) personnelPatch.iban = String(iban).trim();
-  if (national_id !== undefined) personnelPatch.national_id = String(national_id).trim();
-  if (emergency_contact_name !== undefined) personnelPatch.emergency_contact_name = String(emergency_contact_name).trim();
-  if (emergency_contact_phone !== undefined) personnelPatch.emergency_contact_phone = String(emergency_contact_phone).trim();
-  if (emergency_contact_relation !== undefined) personnelPatch.emergency_contact_relation = String(emergency_contact_relation).trim();
-  if (family_contacts !== undefined) personnelPatch.family_contacts = family_contacts;
 
   let targetPersonnel: any = null;
 
@@ -364,23 +593,24 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
         }
       }
 
-      const directusFileId = extractFileId(effectiveAvatar);
+      const directusFileId = isAdmin ? extractFileId(effectiveAvatar) : null;
       const directusPersonnelPatch: Record<string, any> = { ...personnelPatch };
-      // Set profile_image on Directus personnel collection
-      if (directusFileId) {
-        directusPersonnelPatch.profile_image = directusFileId;
-      } else if (effectiveAvatar !== undefined) {
-        directusPersonnelPatch.profile_image = effectiveAvatar || null;
+      if (isAdmin) {
+        if (directusFileId) {
+          directusPersonnelPatch.profile_image = directusFileId;
+        } else if (effectiveAvatar !== undefined) {
+          directusPersonnelPatch.profile_image = effectiveAvatar || null;
+        }
+        delete directusPersonnelPatch.avatar;
       }
-      delete directusPersonnelPatch.avatar;
 
       if (foundPId) {
         const updatedRes = await directusFetch(`/items/personnel/${foundPId}`, {
           method: 'PATCH',
           body: JSON.stringify(directusPersonnelPatch)
         }).catch(() => null);
-        targetPersonnel = updatedRes?.data || { id: foundPId, ...personnelPatch };
-      } else {
+        targetPersonnel = updatedRes?.data || { ...(existingPersonnel || {}), id: foundPId, ...personnelPatch };
+      } else if (isAdmin) {
         const newPId = personnelId || crypto.randomUUID();
         const createdRes = await directusFetch('/items/personnel', {
           method: 'POST',
@@ -398,36 +628,38 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
         targetPersonnel = createdRes?.data || { id: newPId, ...personnelPatch };
       }
 
-      // Determine the actual directus_users ID to patch avatar and first_name
-      let actualDirectusUserId: string | null = null;
-      if (userId && !String(userId).startsWith('p-')) {
-        const uCheck = await directusFetch(`/users/${userId}?fields=id`).catch(() => null);
-        if (uCheck?.data?.id) actualDirectusUserId = uCheck.data.id;
-      }
-      if (!actualDirectusUserId && targetPersonnel?.user_id) {
-        actualDirectusUserId = targetPersonnel.user_id;
-      }
-      if (!actualDirectusUserId && (userEmail || targetPersonnel?.email)) {
-        const em = (userEmail || targetPersonnel?.email || '').toLowerCase().trim();
-        const byEmail = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(em)}&fields=id&limit=1`).catch(() => null);
-        if (byEmail?.data?.[0]?.id) actualDirectusUserId = byEmail.data[0].id;
-      }
-
-      if (actualDirectusUserId) {
-        const userPatch: Record<string, any> = {};
-        if (name) userPatch.first_name = name;
-        if (effectiveAvatar !== undefined) {
-          if (directusFileId) {
-            userPatch.avatar = directusFileId;
-          } else if (!effectiveAvatar) {
-            userPatch.avatar = null;
-          }
+      // Determine the actual directus_users ID to patch avatar and first_name (admins only)
+      if (isAdmin) {
+        let actualDirectusUserId: string | null = null;
+        if (userId && !String(userId).startsWith('p-')) {
+          const uCheck = await directusFetch(`/users/${userId}?fields=id`).catch(() => null);
+          if (uCheck?.data?.id) actualDirectusUserId = uCheck.data.id;
         }
-        if (Object.keys(userPatch).length > 0) {
-          await directusFetch(`/users/${actualDirectusUserId}`, {
-            method: 'PATCH',
-            body: JSON.stringify(userPatch)
-          }).catch((e) => console.warn('Could not update directus user profile:', e.message));
+        if (!actualDirectusUserId && targetPersonnel?.user_id) {
+          actualDirectusUserId = targetPersonnel.user_id;
+        }
+        if (!actualDirectusUserId && (userEmail || targetPersonnel?.email)) {
+          const em = (userEmail || targetPersonnel?.email || '').toLowerCase().trim();
+          const byEmail = await directusFetch(`/users?filter[email][_eq]=${encodeURIComponent(em)}&fields=id&limit=1`).catch(() => null);
+          if (byEmail?.data?.[0]?.id) actualDirectusUserId = byEmail.data[0].id;
+        }
+
+        if (actualDirectusUserId) {
+          const userPatch: Record<string, any> = {};
+          if (name) userPatch.first_name = name;
+          if (effectiveAvatar !== undefined) {
+            if (directusFileId) {
+              userPatch.avatar = directusFileId;
+            } else if (!effectiveAvatar) {
+              userPatch.avatar = null;
+            }
+          }
+          if (Object.keys(userPatch).length > 0) {
+            await directusFetch(`/users/${actualDirectusUserId}`, {
+              method: 'PATCH',
+              body: JSON.stringify(userPatch)
+            }).catch((e) => console.warn('Could not update directus user profile:', e.message));
+          }
         }
       }
     } catch (err: any) {
@@ -435,7 +667,9 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
     }
   }
 
-  const finalAvatarUrl = formatAvatarUrl(effectiveAvatar) || (typeof effectiveAvatar === 'string' ? effectiveAvatar : currentAvatar);
+  const finalAvatarUrl = isAdmin
+    ? (formatAvatarUrl(effectiveAvatar) || (typeof effectiveAvatar === 'string' ? effectiveAvatar : currentAvatar))
+    : currentAvatar;
   if (targetPersonnel) {
     targetPersonnel.profile_image = finalAvatarUrl || targetPersonnel.profile_image || currentAvatar;
     targetPersonnel.avatar = finalAvatarUrl || targetPersonnel.avatar || currentAvatar;
@@ -462,9 +696,9 @@ router.post('/api/auth/update-profile', async (req: Request, res: Response) => {
   } else {
     const newLocal: Personnel = {
       id: targetId || 'p-1',
-      name: name || userName || 'کاربر سیستم',
+      name: (isAdmin ? name : undefined) || userName || 'کاربر سیستم',
       email: userEmail || '',
-      phone: phone || '',
+      phone: (isAdmin ? phone : undefined) || '',
       role: 'marketer',
       status: 'active',
       active: true,
@@ -625,7 +859,14 @@ router.get('/assets/:id', handleAssetProxy);
 // POST /api/upload-avatar
 router.post('/api/upload-avatar', async (req: Request, res: Response) => {
   const { dataUrl, fileName, mimeType } = req.body;
-  const { userId, personnelId, userEmail, userName } = getRequestUser(req);
+  const reqUser = getRequestUser(req);
+  if (!reqUser.isAdmin) {
+    return res.status(403).json({
+      error: 'FORBIDDEN',
+      message: 'تنها مدیر سیستم مجاز به تغییر تصویر پروفایل می‌باشد.',
+    });
+  }
+  const { userId, personnelId, userEmail, userName } = reqUser;
 
   if (!dataUrl) {
     return res.status(400).json({ error: 'فایلی ارسال نشده است.' });

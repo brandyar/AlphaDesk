@@ -167,29 +167,39 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   // Unfollowed referrals (customers assigned to user with 0 reports)
   const unfollowedReferralCustomers = useMemo(() => {
     const customersWithReports = new Set<string>();
+    for (const r of reports) {
+      if (r?.customer_id) {
+        const id = typeof r.customer_id === 'object' && r.customer_id !== null ? String((r.customer_id as any).id) : String(r.customer_id);
+        if (id) customersWithReports.add(id);
+      }
+    }
     for (const r of reportList) {
       if (r?.customer_id) {
-        const id = typeof r.customer_id === 'object' && r.customer_id !== null ? (r.customer_id as any).id : String(r.customer_id);
+        const id = typeof r.customer_id === 'object' && r.customer_id !== null ? String((r.customer_id as any).id) : String(r.customer_id);
         if (id) customersWithReports.add(id);
       }
     }
     const myCustomers = customers.filter(isMyCustomer);
-    return myCustomers.filter((c) => !customersWithReports.has(String(c.id)));
-  }, [customers, reportList, currentPersonnel, currentUser, userIsAdmin]);
+    return myCustomers.filter(
+      (c) => !(Array.isArray(c.reports) && c.reports.length > 0) && !customersWithReports.has(String(c.id))
+    );
+  }, [customers, reports, reportList, currentPersonnel, currentUser, userIsAdmin]);
 
   // Server-Side Paginated Fetch with Versioned Cancellation Token
   const fetchVersionRef = useRef(0);
   const filterKey = `${adminFilter}_${staffFilter}_${selectedStatus}_${selectedNegotiator}_${debouncedSearch}_${sortBy}_${pageSize}_${activeTenantId}_${userIsAdmin}`;
   const prevFilterKeyRef = useRef(filterKey);
 
-  const loadReports = (targetPage = currentPage) => {
+  const loadReports = (targetPage = currentPage, options?: { silent?: boolean }) => {
     if (!userIsAdmin && staffFilter === 'unfollowed_referrals') {
       setIsLoading(false);
       return;
     }
 
     const currentVersion = ++fetchVersionRef.current;
-    setIsLoading(true);
+    if (!options?.silent) {
+      setIsLoading(true);
+    }
 
     const effectiveSortBy: SortOption =
       (userIsAdmin ? adminFilter === 'active_followups' : staffFilter === 'active_followups') &&
@@ -222,6 +232,37 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       });
   };
 
+  const loadReportsRef = useRef(loadReports);
+  loadReportsRef.current = loadReports;
+
+  const customersMapRef = useRef(customersMap);
+  customersMapRef.current = customersMap;
+
+  const filterStateRef = useRef({
+    userIsAdmin,
+    adminFilter,
+    staffFilter,
+    selectedStatus,
+    selectedNegotiator,
+    debouncedSearch,
+    sortBy,
+    currentPage,
+    pageSize,
+    totalPages,
+  });
+  filterStateRef.current = {
+    userIsAdmin,
+    adminFilter,
+    staffFilter,
+    selectedStatus,
+    selectedNegotiator,
+    debouncedSearch,
+    sortBy,
+    currentPage,
+    pageSize,
+    totalPages,
+  };
+
   useEffect(() => {
     if (prevFilterKeyRef.current !== filterKey) {
       prevFilterKeyRef.current = filterKey;
@@ -234,19 +275,218 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     loadReports(currentPage);
   }, [currentPage, filterKey]);
 
-  // Listen to report save/delete events to immediately show newly added or deleted reports
+  // Listen to report save/delete events to immediately move/update reports into their new follow-up date/list
   useEffect(() => {
+    const getReportCustId = (r: CustomerReport): string => {
+      if (!r?.customer_id) return '';
+      return typeof r.customer_id === 'object' && r.customer_id !== null
+        ? String((r.customer_id as any).id || '')
+        : String(r.customer_id);
+    };
+
+    const normStatus = (s?: string | null) =>
+      s === 'قرارداد / فاکتور' || s === 'قرارداد/فاکتور' ? 'قرارداد' : s || '';
+
     const handleSaved = (e: any) => {
-      const saved: CustomerReport = e.detail;
+      const saved: CustomerReport = e?.detail;
       if (!saved || !saved.id) return;
+
+      const state = filterStateRef.current;
+      const activeCatFilter = state.userIsAdmin ? state.adminFilter : state.staffFilter;
+      const isCustomerQueueTab = [
+        'active_followups',
+        'overdue_followups',
+        'no_followup',
+        'due_less_3_days',
+        'due_less_7_days',
+        'due_less_10_days',
+        'latest_reports',
+      ].includes(activeCatFilter);
+
+      const savedCustId = getReportCustId(saved);
+      const effectiveSortBy: string =
+        activeCatFilter === 'active_followups' && state.sortBy === 'newest'
+          ? 'followup_soonest'
+          : activeCatFilter === 'overdue_followups' && state.sortBy === 'newest'
+          ? 'followup_overdue'
+          : state.sortBy;
+
+      let countDelta = 0;
+
       setReportList((prev) => {
-        const exists = prev.some((r) => r.id === saved.id);
-        if (exists) {
-          return prev.map((r) => (r.id === saved.id ? saved : r));
+        // Preserve populated customer object if prev had it and saved.customer_id is just an ID string
+        const existingForCustomer = savedCustId
+          ? prev.find((r) => getReportCustId(r) === savedCustId)
+          : undefined;
+        const existingCustObj =
+          existingForCustomer && typeof existingForCustomer.customer_id === 'object' && existingForCustomer.customer_id !== null
+            ? (existingForCustomer.customer_id as any as Customer)
+            : savedCustId
+            ? customersMapRef.current.get(savedCustId)
+            : undefined;
+
+        const updatedCustObj: Customer | undefined = existingCustObj
+          ? {
+              ...existingCustObj,
+              next_followup_date: saved.next_followup_date ?? null,
+              status: (normStatus(saved.negotiation_status) as NegotiationStatus) || existingCustObj.status,
+            }
+          : undefined;
+
+        const enrichedSaved: CustomerReport =
+          typeof saved.customer_id !== 'object' && updatedCustObj
+            ? { ...saved, customer_id: updatedCustObj as any }
+            : saved;
+
+        const hadSavedId = prev.some((r) => String(r.id) === String(saved.id));
+        const hadSameCustomer = isCustomerQueueTab && savedCustId
+          ? prev.some((r) => getReportCustId(r) === savedCustId)
+          : false;
+
+        // Remove duplicate ID, and in customer follow-up queue tabs remove superseded older reports of the same customer
+        const baseList = prev.filter((r) => {
+          if (String(r.id) === String(saved.id)) return false;
+          if (isCustomerQueueTab && savedCustId && getReportCustId(r) === savedCustId) return false;
+          return true;
+        });
+
+        // Check if the newly saved report matches active filters/tab
+        const matchesStatus =
+          state.selectedStatus === 'همه' ||
+          normStatus(enrichedSaved.negotiation_status) === normStatus(state.selectedStatus);
+        const matchesNegotiator =
+          !state.userIsAdmin ||
+          state.selectedNegotiator === 'همه' ||
+          enrichedSaved.negotiator_name === state.selectedNegotiator;
+
+        let matchesSearch = true;
+        if (state.debouncedSearch.trim()) {
+          const q = state.debouncedSearch.trim().toLowerCase();
+          matchesSearch = Boolean(
+            enrichedSaved.report_text?.toLowerCase().includes(q) ||
+              enrichedSaved.negotiator_name?.toLowerCase().includes(q) ||
+              enrichedSaved.negotiation_phone?.includes(q) ||
+              updatedCustObj?.company_name?.toLowerCase().includes(q) ||
+              updatedCustObj?.manager_name?.toLowerCase().includes(q)
+          );
         }
-        return [saved, ...prev];
+
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const startTodayMs = startOfToday.getTime();
+        const nowMs = Date.now();
+        const fDateStr = enrichedSaved.next_followup_date;
+        const fTime = fDateStr ? new Date(fDateStr).getTime() : NaN;
+        const fValid = Boolean(fDateStr) && !isNaN(fTime);
+
+        let matchesCategory = true;
+        if (activeCatFilter === 'active_followups') {
+          matchesCategory = fValid && fTime >= startTodayMs;
+        } else if (activeCatFilter === 'overdue_followups') {
+          matchesCategory = fValid && fTime < startTodayMs;
+        } else if (activeCatFilter === 'no_followup') {
+          matchesCategory = !fValid;
+        } else if (
+          activeCatFilter === 'due_less_3_days' ||
+          activeCatFilter === 'due_less_7_days' ||
+          activeCatFilter === 'due_less_10_days'
+        ) {
+          const maxDays =
+            activeCatFilter === 'due_less_3_days' ? 3 : activeCatFilter === 'due_less_7_days' ? 7 : 10;
+          const maxMs = nowMs + maxDays * 86400000;
+          const dTime = updatedCustObj?.assignment_deadline
+            ? new Date(updatedCustObj.assignment_deadline).getTime()
+            : NaN;
+          const matchesFollowupRange = fValid && fTime >= nowMs && fTime <= maxMs;
+          const matchesDeadlineRange = !isNaN(dTime) && dTime >= nowMs && dTime <= maxMs;
+          matchesCategory = matchesFollowupRange || matchesDeadlineRange;
+        } else if (activeCatFilter === 'near_expiry_customers') {
+          const dDays = updatedCustObj?.assignment_deadline
+            ? Math.ceil((new Date(updatedCustObj.assignment_deadline).getTime() - nowMs) / 86400000)
+            : null;
+          matchesCategory =
+            normStatus(enrichedSaved.negotiation_status) === 'پیگیری قبل از انقضا' ||
+            updatedCustObj?.status === 'پیگیری قبل از انقضا' ||
+            (dDays !== null && dDays >= 0 && dDays <= 3);
+        } else if (activeCatFilter === 'expired_customers' || activeCatFilter === 'expired') {
+          matchesCategory = isExpired(updatedCustObj);
+        } else if (activeCatFilter === 'unfollowed_referrals') {
+          matchesCategory = false;
+        }
+
+        if (!matchesStatus || !matchesNegotiator || !matchesSearch || !matchesCategory) {
+          if (hadSavedId || hadSameCustomer) countDelta = -1;
+          return baseList;
+        }
+
+        if (!hadSavedId && !hadSameCustomer) {
+          countDelta = 1;
+        }
+
+        if (state.currentPage > 1 && effectiveSortBy === 'newest' && !hadSameCustomer) {
+          return baseList;
+        }
+
+        const nextList = [enrichedSaved, ...baseList].sort((a, b) => {
+          if (effectiveSortBy === 'followup_soonest') {
+            const cA = typeof a.customer_id === 'object' && a.customer_id !== null ? (a.customer_id as any) : customersMapRef.current.get(String(a.customer_id));
+            const cB = typeof b.customer_id === 'object' && b.customer_id !== null ? (b.customer_id as any) : customersMapRef.current.get(String(b.customer_id));
+            const dA = a.next_followup_date || cA?.next_followup_date;
+            const dB = b.next_followup_date || cB?.next_followup_date;
+            const tA = dA ? new Date(dA).getTime() : Infinity;
+            const tB = dB ? new Date(dB).getTime() : Infinity;
+            if (tA !== tB) return tA - tB;
+            return new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime();
+          }
+          if (effectiveSortBy === 'followup_overdue') {
+            const cA = typeof a.customer_id === 'object' && a.customer_id !== null ? (a.customer_id as any) : customersMapRef.current.get(String(a.customer_id));
+            const cB = typeof b.customer_id === 'object' && b.customer_id !== null ? (b.customer_id as any) : customersMapRef.current.get(String(b.customer_id));
+            const dA = a.next_followup_date || cA?.next_followup_date;
+            const dB = b.next_followup_date || cB?.next_followup_date;
+            const tA = dA ? new Date(dA).getTime() : -Infinity;
+            const tB = dB ? new Date(dB).getTime() : -Infinity;
+            if (tA !== tB) return tB - tA;
+            return new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime();
+          }
+          if (effectiveSortBy === 'oldest') {
+            return new Date(a.date_created || 0).getTime() - new Date(b.date_created || 0).getTime();
+          }
+          if (effectiveSortBy === 'highest_score') {
+            const sA = Number(a.negotiation_score) || 0;
+            const sB = Number(b.negotiation_score) || 0;
+            if (sB !== sA) return sB - sA;
+            return new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime();
+          }
+          return new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime();
+        });
+
+        // If multi-page and sorted ascending by follow-up and saved moved beyond the end of current page, drop it off this page
+        if (
+          effectiveSortBy === 'followup_soonest' &&
+          state.currentPage < state.totalPages &&
+          nextList.length >= state.pageSize &&
+          nextList.length >= 2 &&
+          String(nextList[nextList.length - 1].id) === String(enrichedSaved.id)
+        ) {
+          const prevF = nextList[nextList.length - 2].next_followup_date
+            ? new Date(nextList[nextList.length - 2].next_followup_date!).getTime()
+            : Infinity;
+          const curF = enrichedSaved.next_followup_date
+            ? new Date(enrichedSaved.next_followup_date).getTime()
+            : Infinity;
+          if (curF > prevF) {
+            return nextList.slice(0, -1);
+          }
+        }
+
+        return nextList.slice(0, state.pageSize);
       });
-      setTotalCount((prev) => prev + 1);
+
+      if (countDelta !== 0) {
+        setTotalCount((prev) => Math.max(0, prev + countDelta));
+      }
+
+      loadReportsRef.current(state.currentPage, { silent: true });
     };
 
     const handleReportDeleted = (e: any) => {
@@ -254,6 +494,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       if (!deletedId) return;
       setReportList((prev) => prev.filter((r) => r.id !== deletedId));
       setTotalCount((prev) => Math.max(0, prev - 1));
+      loadReportsRef.current(filterStateRef.current.currentPage, { silent: true });
     };
 
     const handleCustomerDeleted = (e: any) => {
@@ -264,6 +505,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         return String(rCustId) !== String(deletedCustId);
       }));
       setTotalCount((prev) => Math.max(0, prev - 1));
+      loadReportsRef.current(filterStateRef.current.currentPage, { silent: true });
     };
 
     window.addEventListener('crm_report_saved', handleSaved);

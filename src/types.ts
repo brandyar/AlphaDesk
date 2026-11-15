@@ -45,15 +45,21 @@ export interface CustomerContact {
 export interface DuplicateCheckResult {
   isDuplicate: boolean;
   conflictType?: 'active_marketer' | 'expired' | 'contract';
+  isFreePool?: boolean;
   matchedContact?: CustomerContact;
   matchedCustomer?: {
     id: string;
     company_name: string;
+    manager_name?: string;
+    business_type?: string;
+    province?: string;
+    city?: string;
     assigned_marketer_name: string;
     assigned_marketer_id: string;
     assignment_deadline: string;
     is_expired: boolean;
     status: string;
+    reports_count?: number;
   };
   message?: string;
 }
@@ -178,7 +184,7 @@ export interface PersonnelContactNumber {
 }
 
 export interface PersonnelPermissions {
-  allowed_menus: string[]; // 'dashboard', 'customers', 'free_customers', 'reports', 'analytics', 'cold_leads', 'admin_reports', 'team', 'tenants', 'personal_portal'
+  allowed_menus: string[]; // 'dashboard', 'customers', 'free_customers', 'reports', 'analytics', 'admin_reports', 'team', 'tenants', 'personal_portal'
   allowed_tenant_ids?: string[];
   can_view_all_customers?: boolean;
   can_edit_customer?: boolean;

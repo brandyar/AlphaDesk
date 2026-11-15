@@ -9,6 +9,7 @@ import {
   setPersonnelData,
   customersData,
   reportsData,
+  tenantSettingsMap,
 } from '../config.ts';
 import { directusFetch, directusFetchAllPages, fetchAllDirectusItems, directusSafeBatchPatch } from './client.ts';
 import { invalidateCustomersCache } from './cache.ts';
@@ -572,4 +573,80 @@ export async function syncAllCustomersFollowupFromReports(): Promise<{
     isSyncingFollowups = false;
   }
 }
+
+export function normalizeSmsPhoneDigits(input: string): string {
+  return String(input || '')
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+    .trim();
+}
+
+export function parseSmsPhones(raw: any): string[] {
+  if (!raw) return [];
+  let items: string[] = [];
+  if (Array.isArray(raw)) {
+    items = raw.map((item) => String(item ?? '').trim());
+  } else if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          items = parsed.map((item) => String(item ?? '').trim());
+        } else {
+          items = trimmed.split(/[,،\n;]+/);
+        }
+      } catch {
+        items = trimmed.split(/[,،\n;]+/);
+      }
+    } else {
+      items = trimmed.split(/[,،\n;]+/);
+    }
+  } else {
+    items = [String(raw).trim()];
+  }
+
+  return Array.from(
+    new Set(
+      items
+        .map((s) => normalizeSmsPhoneDigits(s))
+        .filter((s) => s.length > 0)
+    )
+  );
+}
+
+export function extractDirectusTenantIdString(rawTenantId: any): string {
+  if (typeof rawTenantId === 'object' && rawTenantId !== null) {
+    return rawTenantId.id !== undefined && rawTenantId.id !== null ? String(rawTenantId.id).trim() : '';
+  }
+  if (rawTenantId !== undefined && rawTenantId !== null) {
+    return String(rawTenantId).trim();
+  }
+  return '';
+}
+
+export async function syncDirectusTenantSettings(): Promise<void> {
+  if (!directusUrl || !directusAdminToken) return;
+  try {
+    const res = await directusFetch('/items/tenant_settings?limit=200&sort=id');
+    if (res && Array.isArray(res.data)) {
+      tenantSettingsMap.clear();
+      for (const item of res.data) {
+        const tId = extractDirectusTenantIdString(item?.tenant_id);
+        if (!tId) continue;
+        const phones = parseSmsPhones(item.sms_phones);
+        tenantSettingsMap.set(tId, {
+          id: item.id !== undefined ? String(item.id) : `ts-${tId}`,
+          tenant_id: tId,
+          sms_phones: phones,
+        });
+      }
+      console.log(`Directus tenant_settings synchronized (${res.data.length} records).`);
+    }
+  } catch (err: any) {
+    console.warn('Could not sync tenant_settings from Directus:', err.message);
+  }
+}
+
 

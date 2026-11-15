@@ -179,22 +179,32 @@ export const TenantsManagementModal: React.FC<TenantsManagementModalProps> = ({
           {/* Add / Edit Form */}
           {isAdding ? (
             <div className="bg-[#141414] border border-[#2c2c2c] rounded-xl p-5 space-y-4">
-              <div className="flex items-center justify-between border-b border-[#242424] pb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#242424] pb-3">
                 <h4 className="text-sm font-bold text-white flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-[#1DB954]" />
                   <span>{editingTenant ? 'ویرایش مشخصات سازمان' : 'تعریف سازمان / شرکت جدید'}</span>
                 </h4>
-                <button
-                  type="button"
-                  onClick={() => setIsAdding(false)}
-                  className="text-xs text-[#888] hover:text-white flex items-center gap-1"
-                >
-                  <ArrowRight className="w-3.5 h-3.5" />
-                  <span>بازگشت به لیست</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="submit"
+                    form="tenant-modal-form"
+                    disabled={isSubmitting}
+                    className="px-3.5 py-1.5 rounded-lg bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-xs shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSubmitting ? 'در حال ثبت...' : editingTenant ? 'ذخیره تغییرات' : 'ایجاد سازمان'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsAdding(false)}
+                    className="text-xs text-[#888] hover:text-white flex items-center gap-1"
+                  >
+                    <ArrowRight className="w-3.5 h-3.5" />
+                    <span>بازگشت به لیست</span>
+                  </button>
+                </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form id="tenant-modal-form" onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">

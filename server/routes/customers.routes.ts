@@ -39,6 +39,7 @@ import {
   matchesTenant,
 } from '../middlewares/auth.middleware.ts';
 import { CustomerContact, Customer } from '../types.ts';
+import { invalidateDashboardSummaryCache } from './system.routes.ts';
 
 const router = Router();
 
@@ -62,7 +63,7 @@ export async function computePersonnelFreeQuota(
           `/items/customers?aggregate[count]=*&filter[status][_in]=${contractStatusIn}${pFilter}`
         ).catch(() => null),
         directusFetch(
-          `/items/customers?aggregate[count]=*&filter[is_expired][_eq]=false&filter[status][_nin]=${contractStatusIn},%D9%84%DB%8C%D8%B3%D8%AA%20%D8%B3%DB%8C%D8%A7%D9%87${pFilter}`
+          `/items/customers?aggregate[count]=*&filter[claimed_from_pool][_eq]=true&filter[is_expired][_eq]=false&filter[status][_nin]=${contractStatusIn},%D9%84%DB%8C%D8%B3%D8%AA%20%D8%B3%DB%8C%D8%A7%D9%87${pFilter}`
         ).catch(() => null),
       ]);
 
@@ -98,7 +99,7 @@ export async function computePersonnelFreeQuota(
 
   const successfulCount = userCustomers.filter((c) => c.status === 'قرارداد').length;
   const activeUnclosedCount = userCustomers.filter(
-    (c) => !c.is_expired && c.status !== 'قرارداد' && c.status !== 'لیست سیاه'
+    (c) => Boolean(c.claimed_from_pool) && !c.is_expired && c.status !== 'قرارداد' && c.status !== 'لیست سیاه'
   ).length;
 
   const remainingQuota = Math.max(0, claimLimit - activeUnclosedCount);
@@ -262,7 +263,7 @@ export async function enrichCustomersWithLatestReportFollowup(items: any[]): Pro
         const cIdStr = String(c.id);
         if (latestMap.has(cIdStr)) {
           const val = latestMap.get(cIdStr);
-          if (val !== undefined && val !== null) {
+          if (val !== undefined) {
             c.next_followup_date = val;
           }
         }
@@ -1018,9 +1019,9 @@ router.post('/', async (req: Request, res: Response) => {
     for (const ct of extractedContacts) {
       if (ct.value) {
         const dup = await asyncCheckContactDuplicate(ct.value, ct.channel_type);
-        if (dup && dup.conflictType === 'active_marketer') {
+        if (dup && (dup.conflictType === 'active_marketer' || dup.isFreePool)) {
           return res.status(409).json({
-            error: 'DUPLICATE_CONTACT',
+            error: dup.isFreePool ? 'FREE_POOL_DUPLICATE' : 'DUPLICATE_CONTACT',
             message: dup.message,
             conflict: dup,
           });
@@ -1076,6 +1077,7 @@ router.post('/', async (req: Request, res: Response) => {
         }
 
         invalidateCustomersCache();
+        invalidateDashboardSummaryCache();
 
         const fullCustomer = computeCustomerExpiration({
           ...(createdCust.data || cleanPayload),
@@ -1114,6 +1116,7 @@ router.post('/', async (req: Request, res: Response) => {
       timestamp: Date.now(),
     });
 
+    invalidateDashboardSummaryCache();
     res.status(201).json(newCustomer);
   } finally {
     activeCustomerCreationLocks.delete(phoneLockKey);
@@ -1193,6 +1196,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
       }
 
       invalidateCustomersCache();
+      invalidateDashboardSummaryCache();
 
       const updatedCust = computeCustomerExpiration(patchedCust.data || patchPayload);
       return res.json(updatedCust);
@@ -1215,6 +1219,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
   customersData[index] = updatedCustomer;
   invalidateCustomersCache();
+  invalidateDashboardSummaryCache();
 
   res.json(updatedCustomer);
 });
@@ -1278,6 +1283,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
       invalidateCustomersCache();
       invalidateReportsCache();
+      invalidateDashboardSummaryCache();
       return res.status(204).send();
     } catch (err: any) {
       if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
@@ -1291,13 +1297,19 @@ router.delete('/:id', async (req: Request, res: Response) => {
   reportsData.splice(0, reportsData.length, ...reportsData.filter((r) => String(r.customer_id) !== String(id)));
   invalidateCustomersCache();
   invalidateReportsCache();
+  invalidateDashboardSummaryCache();
   res.status(204).send();
 });
 
 router.post('/:id/claim-free', async (req: Request, res: Response) => {
-  const { userId, personnelId, userName } = getRequestUser(req);
-  const targetPersonnelId = req.body.personnel_id || personnelId || userId;
-  const targetPersonnelName = req.body.personnel_name || userName;
+  const { userId, personnelId, userName, isAdmin, isPersonnelAdmin } = getRequestUser(req);
+  const canAssignOthers = Boolean(isAdmin || isPersonnelAdmin);
+  const targetPersonnelId = canAssignOthers
+    ? req.body.personnel_id || personnelId || userId
+    : personnelId || userId;
+  const targetPersonnelName = canAssignOthers
+    ? req.body.personnel_name || userName
+    : userName;
   const days = req.body.duration_days ? parseInt(req.body.duration_days, 10) : 10;
   const limit = req.body.claim_limit ? parseInt(req.body.claim_limit, 10) : 20;
 
@@ -1385,6 +1397,19 @@ router.post('/:id/claim-free', async (req: Request, res: Response) => {
     claimed_from_pool_at: nowTime.toISOString(),
   };
 
+  const auditReport = {
+    id: crypto.randomUUID(),
+    customer_id: req.params.id,
+    negotiator_name: patchData.assigned_marketer_name,
+    negotiation_phone: targetCustomer.manager_phones?.[0] || targetCustomer.mobile_numbers?.[0] || '-',
+    report_text: `[انتقال سیستمی]: پرونده از حوضچه مشتریان آزاد توسط «${patchData.assigned_marketer_name}» با مهلت پیگیری ${days} روزه اختصاص داده شد.`,
+    negotiation_score: 8,
+    next_followup_date: addDays(nowTime, 2),
+    negotiation_status: targetCustomer.status || 'پیگیری قبل از انقضا',
+    created_by: patchData.assigned_marketer_id,
+    date_created: nowTime.toISOString(),
+  };
+
   if (directusUrl && directusAdminToken) {
     try {
       const patchedRes = await directusFetch(`/items/customers/${req.params.id}`, {
@@ -1392,28 +1417,37 @@ router.post('/:id/claim-free', async (req: Request, res: Response) => {
         body: JSON.stringify(patchData),
       });
 
-      const auditReport = {
-        id: crypto.randomUUID(),
-        customer_id: req.params.id,
-        negotiator_name: patchData.assigned_marketer_name,
-        negotiation_phone: targetCustomer.manager_phones?.[0] || targetCustomer.mobile_numbers?.[0] || '-',
-        report_text: `[انتقال سیستمی]: پرونده از حوضچه مشتریان آزاد توسط «${patchData.assigned_marketer_name}» با مهلت پیگیری ${days} روزه اختصاص داده شد.`,
-        negotiation_score: 8,
-        next_followup_date: addDays(nowTime, 2),
-        negotiation_status: targetCustomer.status || 'پیگیری قبل از انقضا',
-        created_by: patchData.assigned_marketer_id,
-        date_created: nowTime.toISOString(),
-      };
-
       await directusFetch('/items/customer_reports', {
         method: 'POST',
         body: JSON.stringify(auditReport),
       }).catch(() => {});
 
+      const [reportsRes, contactsRes] = await Promise.all([
+        directusFetch(
+          `/items/customer_reports?filter[customer_id][_eq]=${encodeURIComponent(req.params.id)}&sort=-date_created`
+        ).catch(() => null),
+        directusFetch(
+          `/items/customer_contacts?filter[customer_id][_eq]=${encodeURIComponent(req.params.id)}`
+        ).catch(() => null),
+      ]);
+
+      const customerReports =
+        reportsRes?.data && Array.isArray(reportsRes.data)
+          ? reportsRes.data.sort(
+              (a: any, b: any) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
+            )
+          : [auditReport];
+      const customerContacts =
+        contactsRes?.data && Array.isArray(contactsRes.data) ? contactsRes.data : targetCustomer.contacts || [];
+
       invalidateCustomersCache();
       invalidateReportsCache();
 
-      const finalCust = computeCustomerExpiration(patchedRes.data || { ...targetCustomer, ...patchData });
+      const finalCust = computeCustomerExpiration({
+        ...(patchedRes.data || { ...targetCustomer, ...patchData }),
+        reports: customerReports,
+        contacts: customerContacts,
+      });
       return res.json({
         success: true,
         message: `پرونده «${finalCust.company_name}» با مهلت ${days} روز به شما اختصاص داده شد.`,
@@ -1426,19 +1460,33 @@ router.post('/:id/claim-free', async (req: Request, res: Response) => {
     }
   }
 
+  reportsData.unshift(auditReport as any);
+  const foundReports = reportsData
+    .filter((r) => String(r.customer_id) === String(req.params.id))
+    .sort((a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime());
+  const foundContacts = contactsData.filter((ct) => String(ct.customer_id) === String(req.params.id));
+
   const idx = customersData.findIndex((c) => c.id === req.params.id);
   if (idx !== -1) {
     customersData[idx] = computeCustomerExpiration({
       ...customersData[idx],
       ...patchData,
+      reports: foundReports,
+      contacts: foundContacts,
     });
   }
 
   invalidateCustomersCache();
+  invalidateReportsCache();
   res.json({
     success: true,
-    message: 'پرونده با موفقیت به شما اختصاص داده شد.',
-    customer: customersData[idx],
+    message: `پرونده «${customersData[idx]?.company_name || targetCustomer.company_name}» با مهلت ${days} روز به شما اختصاص داده شد.`,
+    customer: customersData[idx] || computeCustomerExpiration({
+      ...targetCustomer,
+      ...patchData,
+      reports: foundReports,
+      contacts: foundContacts,
+    }),
   });
 });
 

@@ -23,21 +23,20 @@ import {
   Wallet,
   Sparkles,
 } from 'lucide-react';
-import { Customer, CustomerReport, ColdLead, AdministrativeReport, Personnel, BffStatus } from '../types';
+import { Customer, CustomerReport, AdministrativeReport, Personnel, BffStatus } from '../types';
 import { formatTimeRemaining, formatPersianDate, formatFollowupDateTime, formatToman, getStatusTheme, toPersianDigits } from '../utils';
 import { DashboardSummary, fetchDashboardSummary } from '../api';
 
 interface DashboardViewProps {
   customers: Customer[];
   reports: CustomerReport[];
-  coldLeads: ColdLead[];
   adminReports: AdministrativeReport[];
   personnelList: Personnel[];
   bffStatus: BffStatus | null;
   dashboardSummary?: DashboardSummary | null;
   onSelectCustomer: (customer: Customer) => void;
   onOpenNewCustomer: () => void;
-  onOpenNewLead: () => void;
+  onOpenQuickAddCustomer: () => void;
   onOpenAddReport?: () => void;
   onNavigateToTab: (tab: any, subTab?: any) => void;
   activeTenantId?: string;
@@ -46,14 +45,13 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   customers,
   reports,
-  coldLeads,
   adminReports,
   personnelList,
   bffStatus,
   dashboardSummary,
   onSelectCustomer,
   onOpenNewCustomer,
-  onOpenNewLead,
+  onOpenQuickAddCustomer,
   onOpenAddReport,
   onNavigateToTab,
   activeTenantId,
@@ -98,16 +96,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         ? (scoredReports.reduce((acc, r) => acc + (r.negotiation_score || 0), 0) / scoredReports.length).toFixed(1)
         : '۰');
 
-  // Urgent upcoming followups (< 3 days or scheduled)
-  const upcomingFollowups = (activeSummary?.upcoming_followups && activeSummary.upcoming_followups.length > 0)
-    ? activeSummary.upcoming_followups
-    : customers
-        .filter((c): c is Customer & { next_followup_date: string } => Boolean(c.next_followup_date))
-        .sort(
-          (a, b) =>
-            new Date(a.next_followup_date).getTime() - new Date(b.next_followup_date).getTime()
-        )
-        .slice(0, 5);
+  // Urgent upcoming followups (< 3 days or scheduled) - prefer live customers state for instant updates
+  const startOfTodayMs = new Date().setHours(0, 0, 0, 0);
+  const liveUpcomingFollowups = customers
+    .filter((c): c is Customer & { next_followup_date: string } => {
+      if (!c.next_followup_date) return false;
+      return !isNaN(new Date(c.next_followup_date).getTime());
+    })
+    .sort((a, b) => {
+      const aTime = new Date(a.next_followup_date).getTime();
+      const bTime = new Date(b.next_followup_date).getTime();
+      const aUp = aTime >= startOfTodayMs;
+      const bUp = bTime >= startOfTodayMs;
+      if (aUp && !bUp) return -1;
+      if (!aUp && bUp) return 1;
+      if (aUp && bUp) return aTime - bTime;
+      return bTime - aTime;
+    })
+    .slice(0, 5);
+
+  const upcomingFollowups =
+    customers.length > 0
+      ? liveUpcomingFollowups
+      : activeSummary?.upcoming_followups || [];
 
   // Customers in danger of expiring (< 3 days deadline)
   const urgentExpiringCustomers = (activeSummary?.urgent_expiring_customers && activeSummary.urgent_expiring_customers.length > 0)
@@ -166,10 +177,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </button>
 
-          {/* Action 2: Quick Add Lead */}
+          {/* Action 2: Quick Add Customer by Phone */}
           <button
-            onClick={onOpenNewLead}
-            className="group text-right p-4.5 rounded-2xl bg-white dark:bg-gradient-to-br dark:from-[#181818] dark:to-[#141414] hover:bg-slate-50 dark:hover:from-[#222222] dark:hover:to-[#1a1a1a] border border-slate-200 dark:border-[#282828] hover:border-blue-500/50 shadow-sm dark:shadow-lg hover:shadow-blue-500/10 transition-all hover:scale-[1.02] flex items-center justify-between"
+            onClick={onOpenQuickAddCustomer}
+            className="group text-right p-4.5 rounded-2xl bg-white dark:bg-gradient-to-br dark:from-[#181818] dark:to-[#141414] hover:bg-slate-50 dark:hover:from-[#222222] dark:hover:to-[#1a1a1a] border border-slate-200 dark:border-[#282828] hover:border-blue-500/50 shadow-sm dark:shadow-lg hover:shadow-blue-500/10 transition-all hover:scale-[1.02] flex items-center justify-between cursor-pointer"
           >
             <div className="space-y-1">
               <div className="font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex items-center gap-1.5">
@@ -177,7 +188,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-blue-600 dark:text-blue-400" />
               </div>
               <p className="text-[11px] text-slate-500 dark:text-[#888] group-hover:text-slate-700 dark:group-hover:text-[#B3B3B3] transition-colors">
-                ثبت در بانک شماره‌های اولیه
+                ثبت مستقیم مشتری با شماره و موعد پیگیری
               </p>
             </div>
             <div className="w-11 h-11 rounded-xl bg-blue-50 dark:bg-blue-500/15 border border-blue-200 dark:border-blue-500/30 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:bg-blue-600 dark:group-hover:bg-blue-500 group-hover:text-white dark:group-hover:text-black transition-all flex-shrink-0">
@@ -568,8 +579,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="text-slate-900 dark:text-white font-bold">{toPersianDigits(personnelList.length)} نفر</span>
               </div>
               <div className="flex justify-between">
-                <span>بانک لیدهای سرد:</span>
-                <span className="text-slate-900 dark:text-white font-bold">{toPersianDigits(coldLeads.length)} شماره</span>
+                <span>کل پرونده‌های مشتریان:</span>
+                <span className="text-slate-900 dark:text-white font-bold">{toPersianDigits(totalCustomersCount)} پرونده</span>
               </div>
               <div className="flex justify-between">
                 <span>کل گزارشات ثبت‌شده:</span>

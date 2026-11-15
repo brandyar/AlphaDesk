@@ -27,13 +27,27 @@ export const ReviewRequestModal: React.FC<ReviewRequestModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/80 backdrop-blur-xs animate-in fade-in">
       <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#282828] pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-[#282828] pb-3">
           <h3 className="font-bold text-sm text-slate-900 dark:text-white">
             {reviewAction === 'approved' ? 'تایید مرخصی' : 'رد درخواست مرخصی'}
           </h3>
-          <button onClick={onClose} className="text-slate-400 dark:text-[#888] hover:text-slate-700 dark:hover:text-white">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={isProcessing}
+              className={`px-3.5 py-1.5 rounded-xl font-bold text-xs cursor-pointer disabled:opacity-50 ${
+                reviewAction === 'approved'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400 text-white dark:text-black'
+                  : 'bg-rose-600 hover:bg-rose-700 dark:bg-rose-500 dark:hover:bg-rose-400 text-white'
+              }`}
+            >
+              {isProcessing ? 'در حال ثبت...' : reviewAction === 'approved' ? 'تایید نهایی' : 'ثبت رد درخواست'}
+            </button>
+            <button onClick={onClose} className="text-slate-400 dark:text-[#888] hover:text-slate-700 dark:hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <div className="space-y-3 text-xs">

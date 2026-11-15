@@ -24,6 +24,7 @@ import {
 import { Customer, CustomerContact, Personnel, NegotiationStatus, ChannelType, DuplicateCheckResult, AuthUser } from '../types';
 import { checkDuplicateContact } from '../api';
 import { PersianDatePicker } from './PersianDatePicker';
+import { FreePoolDuplicateAlert } from './FreePoolDuplicateAlert';
 import { IRAN_PROVINCES } from '../data/iranProvincesCities';
 import { toPersianDigits } from '../utils';
 
@@ -31,14 +32,12 @@ interface CustomerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (customerData: Partial<Customer> & { assignment_duration_days?: number }) => Promise<void>;
+  onClaimFreeCustomer?: (customerId: string, targetMarketerId?: string, targetMarketerName?: string) => Promise<void>;
   editingCustomer?: Customer | null;
   personnelList: Personnel[];
   currentPersonnel?: Personnel | null;
   currentUser?: AuthUser | null;
   isAdmin?: boolean;
-  prefilledPhone?: string;
-  prefilledName?: string;
-  prefilledNotes?: string;
 }
 
 interface ContactRow {
@@ -68,14 +67,12 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  onClaimFreeCustomer,
   editingCustomer,
   personnelList,
   currentPersonnel,
   currentUser,
   isAdmin,
-  prefilledPhone,
-  prefilledName,
-  prefilledNotes,
 }) => {
   if (!isOpen) return null;
 
@@ -90,7 +87,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   );
 
   // Form State
-  const [companyName, setCompanyName] = useState(editingCustomer?.company_name || prefilledName || '');
+  const [companyName, setCompanyName] = useState(editingCustomer?.company_name || '');
   const [businessType, setBusinessType] = useState(editingCustomer?.business_type || '');
   const [province, setProvince] = useState(editingCustomer?.province || 'تهران');
   const [city, setCity] = useState(editingCustomer?.city || 'تهران');
@@ -207,19 +204,6 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
 
     if (initialRows.length > 0) return initialRows;
 
-    if (prefilledPhone) {
-      return [
-        {
-          channel_type: 'mobile',
-          value: prefilledPhone,
-          contact_name: prefilledName || '',
-          contact_role: 'شماره اولیه',
-          is_primary: true,
-          notes: 'ثبت شده از بانک لید اولیه',
-        },
-      ];
-    }
-
     return [
       {
         channel_type: 'mobile',
@@ -243,7 +227,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
     editingCustomer?.interview_status || 'مصاحبه اولیه انجام شده'
   );
   const [interviewReport, setInterviewReport] = useState(
-    editingCustomer?.interview_report || prefilledNotes || ''
+    editingCustomer?.interview_report || ''
   );
   const [interviewScore, setInterviewScore] = useState<number>(
     editingCustomer?.interview_score || 7
@@ -270,9 +254,35 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   );
 
   const [saving, setSaving] = useState(false);
+  const [transferringCustomerId, setTransferringCustomerId] = useState<string | null>(null);
   const isSubmittingRef = useRef(false);
   const [activeTab, setActiveTab] = useState<'info' | 'contacts' | 'interview'>('info');
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const isFreePoolDup = (dup?: DuplicateCheckResult | null) =>
+    Boolean(dup && (dup.isFreePool || dup.conflictType === 'expired'));
+
+  const handleConfirmOwnershipTransfer = async (customerId: string) => {
+    if (!onClaimFreeCustomer || transferringCustomerId) return;
+    setSubmitError(null);
+    setTransferringCustomerId(customerId);
+    try {
+      let targetId = currentPersonnel?.id || currentUser?.id;
+      let targetName = currentPersonnel?.name || currentUser?.name;
+      if (userIsAdmin && assignedMarketerId && assignedMarketerId !== 'none') {
+        const selected = personnelList.find((p) => p.id === assignedMarketerId);
+        if (selected) {
+          targetId = selected.id;
+          targetName = selected.name;
+        }
+      }
+      await onClaimFreeCustomer(customerId, targetId, targetName);
+    } catch (err: any) {
+      setSubmitError(err?.message || 'خطا در انتقال مالکیت پرونده');
+    } finally {
+      setTransferringCustomerId(null);
+    }
+  };
 
   // Debounced duplicate checker per row
   const debounceTimers = useRef<{ [key: number]: NodeJS.Timeout }>({});
@@ -439,6 +449,18 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
       return;
     }
 
+    const freePoolConflicts = contacts.filter((c) => isFreePoolDup(c.duplicateWarning));
+    if (freePoolConflicts.length > 0) {
+      const first = freePoolConflicts[0];
+      setSubmitError(
+        `شماره «${first.value}» از قبل در مشتریان آزاد وجود دارد. لطفاً با کلیک بر روی دکمه تأیید انتقال مالکیت در همین بخش شماره‌ها، پرونده را به نام خود منتقل کرده و گزارش‌های قبلی را مشاهده کنید.`
+      );
+      setActiveTab('contacts');
+      isSubmittingRef.current = false;
+      setSaving(false);
+      return;
+    }
+
     try {
       let finalMarketerId = assignedMarketerId && assignedMarketerId !== 'none' ? assignedMarketerId : null;
       const selectedMarketer = personnelList.find((p) => p.id === assignedMarketerId);
@@ -507,8 +529,11 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   };
 
   const hasAnyDuplicateWarning = contacts.some(
-    (c) => c.duplicateWarning && c.duplicateWarning.conflictType === 'active_marketer'
+    (c) =>
+      c.duplicateWarning &&
+      (c.duplicateWarning.conflictType === 'active_marketer' || isFreePoolDup(c.duplicateWarning))
   );
+  const hasFreePoolDuplicate = contacts.some((c) => isFreePoolDup(c.duplicateWarning));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
@@ -528,12 +553,23 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="submit"
+              form="customer-modal-form"
+              disabled={saving || isSubmittingRef.current}
+              className="px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full bg-[#1DB954] hover:bg-[#1ED760] disabled:bg-slate-300 dark:disabled:bg-[#333] disabled:text-slate-400 dark:disabled:text-[#666] disabled:cursor-not-allowed text-black text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>{saving || isSubmittingRef.current ? 'در حال ثبت...' : editingCustomer ? 'ذخیره تغییرات' : 'ثبت پرونده'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Tab switcher inside modal */}
@@ -578,7 +614,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1">
+        <form id="customer-modal-form" onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6 overflow-y-auto flex-1">
           {/* Prominent Error Banner */}
           {submitError && (
             <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/70 border border-red-200 dark:border-red-500/80 text-red-700 dark:text-red-200 text-xs flex items-start gap-2.5 shadow-lg animate-in fade-in">
@@ -989,31 +1025,46 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
 
                       {/* Duplicate Warning Banner */}
                       {contact.duplicateWarning && (
-                        <div
-                          className={`mt-2.5 p-2 rounded-lg text-xs flex items-start gap-2 ${
-                            contact.duplicateWarning.conflictType === 'active_marketer'
-                              ? 'bg-red-100 dark:bg-red-500/15 border border-red-300 dark:border-red-500/30 text-red-800 dark:text-red-300'
-                              : contact.duplicateWarning.conflictType === 'contract'
-                              ? 'bg-purple-100 dark:bg-purple-500/15 border border-purple-300 dark:border-purple-500/30 text-purple-800 dark:text-purple-300'
-                              : 'bg-amber-100 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/30 text-amber-800 dark:text-amber-300'
-                          }`}
-                        >
-                          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-current" />
-                          <div>
-                            <span className="font-bold">
-                              {contact.duplicateWarning.conflictType === 'active_marketer'
-                                ? 'هشدار تداخل و انحصار بازاریاب:'
-                                : 'اطلاعیه شماره پیشین:'}
-                            </span>{' '}
-                            <span>{contact.duplicateWarning.message}</span>
-                            {contact.duplicateWarning.matchedCustomer && (
-                              <div className="mt-1 text-[11px] opacity-90 font-medium">
-                                پرونده: «{contact.duplicateWarning.matchedCustomer.company_name}» | بازاریاب متصل:{' '}
-                                {contact.duplicateWarning.matchedCustomer.assigned_marketer_name}
-                              </div>
-                            )}
+                        isFreePoolDup(contact.duplicateWarning) && onClaimFreeCustomer ? (
+                          <FreePoolDuplicateAlert
+                            duplicate={contact.duplicateWarning}
+                            onConfirmTransfer={handleConfirmOwnershipTransfer}
+                            isTransferring={
+                              transferringCustomerId === contact.duplicateWarning.matchedCustomer?.id
+                            }
+                            targetMarketerName={
+                              userIsAdmin && assignedMarketerId && assignedMarketerId !== 'none'
+                                ? personnelList.find((p) => p.id === assignedMarketerId)?.name
+                                : currentPersonnel?.name || currentUser?.name
+                            }
+                          />
+                        ) : (
+                          <div
+                            className={`mt-2.5 p-2 rounded-lg text-xs flex items-start gap-2 ${
+                              contact.duplicateWarning.conflictType === 'active_marketer'
+                                ? 'bg-red-100 dark:bg-red-500/15 border border-red-300 dark:border-red-500/30 text-red-800 dark:text-red-300'
+                                : contact.duplicateWarning.conflictType === 'contract'
+                                ? 'bg-purple-100 dark:bg-purple-500/15 border border-purple-300 dark:border-purple-500/30 text-purple-800 dark:text-purple-300'
+                                : 'bg-amber-100 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/30 text-amber-800 dark:text-amber-300'
+                            }`}
+                          >
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-current" />
+                            <div>
+                              <span className="font-bold">
+                                {contact.duplicateWarning.conflictType === 'active_marketer'
+                                  ? 'هشدار تداخل و انحصار بازاریاب:'
+                                  : 'اطلاعیه شماره پیشین:'}
+                              </span>{' '}
+                              <span>{contact.duplicateWarning.message}</span>
+                              {contact.duplicateWarning.matchedCustomer && (
+                                <div className="mt-1 text-[11px] opacity-90 font-medium">
+                                  پرونده: «{contact.duplicateWarning.matchedCustomer.company_name}» | بازاریاب متصل:{' '}
+                                  {contact.duplicateWarning.matchedCustomer.assigned_marketer_name}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        )
                       )}
                     </div>
                   );
@@ -1106,9 +1157,13 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
           <div className="pt-4 border-t border-slate-200 dark:border-[#282828] flex items-center justify-between">
             <div className="text-xs text-slate-500 dark:text-[#A7A7A7]">
               {hasAnyDuplicateWarning && (
-                <span className="text-red-500 dark:text-red-400 font-bold flex items-center gap-1">
+                <span className={`${hasFreePoolDuplicate ? 'text-amber-600 dark:text-amber-400' : 'text-red-500 dark:text-red-400'} font-bold flex items-center gap-1`}>
                   <AlertCircle className="w-4 h-4" />
-                  <span>یک یا چند شماره دارای تداخل بازاریاب دیگر هستند!</span>
+                  <span>
+                    {hasFreePoolDuplicate
+                      ? 'شماره در مشتریان آزاد وجود دارد — در برگه شماره‌ها انتقال مالکیت را تأیید کنید.'
+                      : 'یک یا چند شماره دارای تداخل بازاریاب دیگر هستند!'}
+                  </span>
                 </span>
               )}
             </div>

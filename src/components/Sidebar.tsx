@@ -4,7 +4,6 @@ import {
   Users,
   Unlock,
   MessageSquareText,
-  PhoneCall,
   ClipboardCheck,
   CalendarDays,
   Building2,
@@ -36,7 +35,6 @@ export type NavTab =
   | 'free_customers'
   | 'reports'
   | 'analytics'
-  | 'cold_leads'
   | 'admin_reports'
   | 'team'
   | 'tenants'
@@ -54,7 +52,6 @@ interface SidebarProps {
     customers: number;
     expiredCustomers: number;
     freeCustomers?: number;
-    coldLeads: number;
     reports: number;
     adminReports: number;
     pendingLeaves?: number;
@@ -180,12 +177,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'analytics',
       label: 'گزارشات نموداری',
       icon: BarChart3,
-    },
-    {
-      id: 'cold_leads',
-      label: 'بانک شماره‌های اولیه',
-      icon: PhoneCall,
-      count: counts.coldLeads,
     },
     {
       id: 'admin_reports',
@@ -602,11 +593,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     >
                       <div className="flex items-center gap-2.5">
                         <MessageSquareText className={`w-3.5 h-3.5 ${isTeamActive && teamSubTab === 'sms_settings' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-emerald-600 dark:text-emerald-400'}`} />
-                        <span>تنظیمات پیامک (IPPanel)</span>
+                        <span>تنظیمات پیامک</span>
                       </div>
-                      <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 font-bold border border-emerald-200 dark:border-emerald-500/20">
-                        پترن‌ها
-                      </span>
                     </button>
                   )}
                 </div>

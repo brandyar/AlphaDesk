@@ -4,7 +4,6 @@ import {
   Users,
   Unlock,
   MessageSquareText,
-  PhoneCall,
   ClipboardCheck,
   BarChart3,
   User,
@@ -24,7 +23,6 @@ import { CustomersView } from './components/CustomersView';
 import { FreeCustomersView } from './components/FreeCustomersView';
 import { ReportsView } from './components/ReportsView';
 import { AnalyticsView } from './components/AnalyticsView';
-import { ColdLeadsView } from './components/ColdLeadsView';
 import { AdminReportsView } from './components/AdminReportsView';
 import { PersonalPortalView, PortalTab } from './components/PersonalPortalView';
 import { TeamManagementView } from './components/TeamManagementView';
@@ -33,7 +31,7 @@ import { CustomerModal } from './components/CustomerModal';
 
 import { CustomerDetailModal } from './components/CustomerDetailModal';
 import { AddReportModal } from './components/AddReportModal';
-import { AddColdLeadModal } from './components/AddColdLeadModal';
+import { QuickAddCustomerModal, QuickAddCustomerPayload } from './components/QuickAddCustomerModal';
 import { MergeCustomersModal } from './components/MergeCustomersModal';
 import { AuthModal } from './components/AuthModal';
 import { TenantsManagementModal } from './components/TenantsManagementModal';
@@ -44,11 +42,9 @@ import {
   Customer,
   CustomerContact,
   CustomerReport,
-  ColdLead,
   AdministrativeReport,
   Personnel,
   BffStatus,
-  LeadStatus,
   AuthUser,
   AuthResponse,
   LeaveRequest,
@@ -73,12 +69,6 @@ import {
   createCustomerContact,
   fetchCustomerReports,
   createCustomerReport,
-  fetchColdLeads,
-  createColdLead,
-  updateColdLead,
-  bulkAssignColdLeads,
-  deleteColdLead,
-  convertColdLead,
   fetchAdminReports,
   createAdminReport,
   updateAdminReport,
@@ -140,7 +130,6 @@ export default function App() {
   // Core Data State
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [reports, setReports] = useState<CustomerReport[]>([]);
-  const [coldLeads, setColdLeads] = useState<ColdLead[]>([]);
   const [adminReports, setAdminReports] = useState<AdministrativeReport[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [advanceRequests, setAdvanceRequests] = useState<SalaryAdvanceRequest[]>([]);
@@ -170,20 +159,16 @@ export default function App() {
 
   // Modals State
   const [activeCustomerModalId, setActiveCustomerModalId] = useState<string | null>(null);
+  const [justClaimedCustomerId, setJustClaimedCustomerId] = useState<string | null>(null);
   const [minimizedCustomerIds, setMinimizedCustomerIds] = useState<string[]>([]);
   const [customerModalCache, setCustomerModalCache] = useState<Record<string, Customer>>({});
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isAddReportModalOpen, setIsAddReportModalOpen] = useState(false);
-  const [isAddLeadModalOpen, setIsAddLeadModalOpen] = useState(false);
+  const [isQuickAddModalOpen, setIsQuickAddModalOpen] = useState(false);
   const [reportPreselectedCustomerId, setReportPreselectedCustomerId] = useState<string | undefined>(undefined);
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
   const [mergeInitialCustomerIds, setMergeInitialCustomerIds] = useState<string[]>([]);
-
-  // Pre-fill state when converting a lead
-  const [prefilledLeadPhone, setPrefilledLeadPhone] = useState('');
-  const [prefilledLeadName, setPrefilledLeadName] = useState('');
-  const [prefilledLeadNotes, setPrefilledLeadNotes] = useState('');
 
   const [loading, setLoading] = useState<boolean>(() => !initialSession.user);
 
@@ -451,7 +436,6 @@ export default function App() {
     // 1. Immediately reset data state & switch view to dashboard
     setCustomers([]);
     setReports([]);
-    setColdLeads([]);
     setAdminReports([]);
     setDashboardSummary(null);
     setActiveTab('dashboard');
@@ -483,7 +467,6 @@ export default function App() {
       setApiPersonnelContext(null);
       setCustomers([]);
       setReports([]);
-      setColdLeads([]);
       setAdminReports([]);
       setDashboardSummary(null);
       setIsAuthModalOpen(true);
@@ -500,7 +483,6 @@ export default function App() {
     setApiPersonnelContext(null);
     setCustomers([]);
     setReports([]);
-    setColdLeads([]);
     setAdminReports([]);
     setDashboardSummary(null);
     showToast('از حساب کاربری خود خارج شدید.', 'info');
@@ -599,36 +581,10 @@ export default function App() {
           const filtered = prev.filter((c) => c.id !== created.id);
           return [created, ...filtered];
         });
-
-        // If created from a lead, mark lead as converted
-        if (prefilledLeadPhone) {
-          const lead = coldLeads.find((l) => l.phone_number === prefilledLeadPhone);
-          if (lead) {
-            await updateColdLead(lead.id, {
-              status: 'تبدیل شده به مشتری',
-              converted_customer_id: created.id,
-            }).catch(() => {});
-            setColdLeads((prev) =>
-              prev.map((l) =>
-                l.id === lead.id
-                  ? { ...l, status: 'تبدیل شده به مشتری', converted_customer_id: created.id }
-                  : l
-              )
-            );
-            window.dispatchEvent(
-              new CustomEvent('crm_lead_saved', {
-                detail: { ...lead, status: 'تبدیل شده به مشتری', converted_customer_id: created.id },
-              })
-            );
-          }
-        }
         showToast('پرونده مشتری جدید با موفقیت در سامانه ثبت شد.', 'success');
       }
       setIsCustomerModalOpen(false);
       setEditingCustomer(null);
-      setPrefilledLeadPhone('');
-      setPrefilledLeadName('');
-      setPrefilledLeadNotes('');
 
       // Synchronize latest state
       window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: savedCustomer }));
@@ -769,6 +725,62 @@ export default function App() {
     }
   };
 
+  const handleClaimAndOpenReports = async (
+    customerId: string,
+    targetMarketerId?: string,
+    targetMarketerName?: string
+  ): Promise<void> => {
+    try {
+      const res = await claimFreeCustomer(customerId, {
+        personnel_id: targetMarketerId || currentPersonnel?.id || currentUser?.id,
+        personnel_name: targetMarketerName || currentPersonnel?.name || currentUser?.name,
+        duration_days: 10,
+      });
+
+      if (!res || !res.customer) {
+        throw new Error('خطا در دریافت اطلاعات پرونده پس از انتقال مالکیت');
+      }
+
+      let fullCustomer: Customer = res.customer;
+      if (!Array.isArray(fullCustomer.reports)) {
+        const fetched = await fetchCustomerById(customerId).catch(() => null);
+        if (fetched) {
+          fullCustomer = fetched;
+        }
+      }
+
+      const cid = String(fullCustomer.id);
+      setCustomers((prev) => [fullCustomer, ...prev.filter((c) => String(c.id) !== cid)]);
+      setCustomerModalCache((prev) => ({ ...prev, [cid]: fullCustomer }));
+
+      const custReports = Array.isArray(fullCustomer.reports) ? fullCustomer.reports : [];
+      if (custReports.length > 0) {
+        setReports((prev) => {
+          const newIds = new Set(custReports.map((r) => r.id));
+          return [...custReports, ...prev.filter((r) => !newIds.has(r.id))];
+        });
+      }
+
+      setIsQuickAddModalOpen(false);
+      setIsCustomerModalOpen(false);
+      setEditingCustomer(null);
+      setMinimizedCustomerIds((prev) => prev.filter((id) => id !== cid));
+      setJustClaimedCustomerId(cid);
+      setActiveCustomerModalId(cid);
+
+      window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: fullCustomer }));
+      window.dispatchEvent(new CustomEvent('crm_customer_claimed', { detail: { id: cid } }));
+      fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
+      fetchBffStatus().then(setBffStatus).catch(() => {});
+
+      showToast('مالکیت پرونده به شما منتقل شد و گزارش‌های قبلی نمایش داده شد.', 'success');
+    } catch (err: any) {
+      const msg = err?.message || 'خطا در انتقال مالکیت پرونده آزاد';
+      showToast(msg, 'error');
+      throw err;
+    }
+  };
+
   const handleMergeCustomers = async (
     primaryCustomerId: string,
     mergedCustomerIds: string[],
@@ -803,21 +815,48 @@ export default function App() {
   const handleAddCustomerReport = async (reportData: Partial<CustomerReport>) => {
     try {
       const created = await createCustomerReport(reportData);
-      setReports((prev) => [created, ...prev.filter((r) => r.id !== created.id)]);
+      const rawCreatedCustId =
+        typeof created.customer_id === 'object' && created.customer_id !== null
+          ? (created.customer_id as any).id
+          : created.customer_id;
+      const custId = String(reportData.customer_id || rawCreatedCustId || '');
+      const nextDate =
+        created.next_followup_date !== undefined
+          ? created.next_followup_date
+          : reportData.next_followup_date || null;
+      const rawStatus: string =
+        created.negotiation_status || reportData.negotiation_status || 'پیگیری قبل از انقضا';
+      const statusToSet = (
+        rawStatus === 'قرارداد / فاکتور' || rawStatus === 'قرارداد/فاکتور'
+          ? 'قرارداد'
+          : rawStatus
+      ) as Customer['status'];
+
+      const normalizedCreated: CustomerReport = {
+        ...created,
+        next_followup_date: nextDate,
+        negotiation_status: statusToSet,
+        date_created: created.date_created || new Date().toISOString(),
+      };
+
+      setReports((prev) => [
+        normalizedCreated,
+        ...prev.filter((r) => String(r.id) !== String(normalizedCreated.id)),
+      ]);
 
       // Optimistically update customer status and next followup date immediately in local state
-      const custId = reportData.customer_id;
       if (custId) {
-        const statusToSet = reportData.negotiation_status || 'پیگیری قبل از انقضا';
-        const nextDate = reportData.next_followup_date || null;
         setCustomers((prev) =>
           prev.map((c) =>
-            c.id === custId
+            String(c.id) === custId
               ? {
                   ...c,
                   status: statusToSet,
                   next_followup_date: nextDate,
-                  reports: [created, ...(c.reports?.filter((r) => r.id !== created.id) || [])],
+                  reports: [
+                    normalizedCreated,
+                    ...(c.reports?.filter((r) => String(r.id) !== String(normalizedCreated.id)) || []),
+                  ],
                 }
               : c
           )
@@ -831,23 +870,34 @@ export default function App() {
               ...cached,
               status: statusToSet,
               next_followup_date: nextDate,
-              reports: [created, ...(cached.reports?.filter((r) => r.id !== created.id) || [])],
+              reports: [
+                normalizedCreated,
+                ...(cached.reports?.filter((r) => String(r.id) !== String(normalizedCreated.id)) || []),
+              ],
             },
           };
         });
       }
 
-      window.dispatchEvent(new CustomEvent('crm_report_saved', { detail: created }));
+      window.dispatchEvent(new CustomEvent('crm_report_saved', { detail: normalizedCreated }));
 
       // Refresh customer in background for full consistency
       if (custId) {
-        fetchCustomerById(custId).then((updatedCustomer) => {
-          if (updatedCustomer) {
-            setCustomers((prev) => prev.map((c) => (c.id === updatedCustomer.id ? updatedCustomer : c)));
-            setCustomerModalCache((prev) => (prev[updatedCustomer.id] ? { ...prev, [updatedCustomer.id]: updatedCustomer } : prev));
-            window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: updatedCustomer }));
-          }
-        }).catch(() => {});
+        fetchCustomerById(custId)
+          .then((updatedCustomer) => {
+            if (updatedCustomer) {
+              setCustomers((prev) =>
+                prev.map((c) => (String(c.id) === String(updatedCustomer.id) ? updatedCustomer : c))
+              );
+              setCustomerModalCache((prev) =>
+                prev[updatedCustomer.id]
+                  ? { ...prev, [updatedCustomer.id]: updatedCustomer }
+                  : prev
+              );
+              window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: updatedCustomer }));
+            }
+          })
+          .catch(() => {});
       }
 
       fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
@@ -858,65 +908,59 @@ export default function App() {
     }
   };
 
-  // Handlers for Cold Leads
-  const handleAddColdLead = async (leadData: Partial<ColdLead>) => {
+  // Handler for Quick Add Customer (Direct Customer + Initial Report + Follow-up)
+  const handleQuickAddCustomer = async ({
+    customerPayload,
+    initialReportPayload,
+  }: QuickAddCustomerPayload) => {
+    if (isSavingCustomerRef.current) return;
+    isSavingCustomerRef.current = true;
     try {
-      const created = await createColdLead(leadData);
-      setColdLeads((prev) => [created, ...prev.filter((l) => l.id !== created.id)]);
-      window.dispatchEvent(new CustomEvent('crm_lead_saved', { detail: created }));
+      const createdCustomer = await createCustomer(customerPayload);
+
+      let createdReport: CustomerReport | null = null;
+      try {
+        createdReport = await createCustomerReport({
+          ...initialReportPayload,
+          customer_id: createdCustomer.id,
+        });
+      } catch (reportErr) {
+        console.warn('Initial quick-add report creation failed:', reportErr);
+      }
+
+      const enrichedCustomer: Customer = createdReport
+        ? {
+            ...createdCustomer,
+            next_followup_date:
+              createdReport.next_followup_date ?? createdCustomer.next_followup_date,
+            status: createdReport.negotiation_status || createdCustomer.status,
+            reports: [createdReport, ...(createdCustomer.reports || [])],
+          }
+        : createdCustomer;
+
+      setCustomers((prev) => [
+        enrichedCustomer,
+        ...prev.filter((c) => c.id !== enrichedCustomer.id),
+      ]);
+
+      if (createdReport) {
+        setReports((prev) => [
+          createdReport!,
+          ...prev.filter((r) => r.id !== createdReport!.id),
+        ]);
+        window.dispatchEvent(new CustomEvent('crm_report_saved', { detail: createdReport }));
+      }
+
+      window.dispatchEvent(new CustomEvent('crm_customer_saved', { detail: enrichedCustomer }));
+      fetchDashboardSummary().then(setDashboardSummary).catch(() => {});
       fetchBffStatus().then(setBffStatus).catch(() => {});
-      showToast('شماره جدید به بانک لید اولیه افزوده شد.', 'success');
+      showToast('مشتری با موفقیت از طریق افزودن سریع ثبت و گزارش اولیه درج شد.', 'success');
     } catch (err: any) {
-      showToast('خطا در ثبت شماره: ' + (err.message || 'خطای نامشخص'), 'error');
+      showToast(err.message || 'خطا در ثبت سریع مشتری', 'error');
+      throw err;
+    } finally {
+      isSavingCustomerRef.current = false;
     }
-  };
-
-  const handleUpdateLeadStatus = async (leadId: string, status: LeadStatus) => {
-    try {
-      const updated = await updateColdLead(leadId, { status });
-      setColdLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
-      window.dispatchEvent(new CustomEvent('crm_lead_saved', { detail: updated }));
-      fetchBffStatus().then(setBffStatus).catch(() => {});
-      showToast('وضعیت لید بروزرسانی شد.', 'success');
-    } catch (err: any) {
-      showToast('خطا در بروزرسانی وضعیت لید: ' + (err.message || 'خطای نامشخص'), 'error');
-    }
-  };
-
-  const handleUpdateLeadAssignedTo = async (leadId: string, assignedToId: string) => {
-    try {
-      const updated = await updateColdLead(leadId, { assigned_to: assignedToId });
-      setColdLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
-      window.dispatchEvent(new CustomEvent('crm_lead_saved', { detail: updated }));
-      fetchBffStatus().then(setBffStatus).catch(() => {});
-    } catch (err: any) {
-      showToast('خطا در تغییر بازاریاب لید: ' + (err.message || 'خطای نامشخص'), 'error');
-    }
-  };
-
-  const handleBulkAssignLeads = async (leadIds: string[], targetMarketerId: string) => {
-    await bulkAssignColdLeads(leadIds, targetMarketerId);
-    const refreshed = await fetchColdLeads();
-    setColdLeads(refreshed);
-    for (const lid of leadIds) {
-      window.dispatchEvent(new CustomEvent('crm_lead_saved', { detail: { id: lid, assigned_to: targetMarketerId } }));
-    }
-    fetchBffStatus().then(setBffStatus).catch(() => {});
-  };
-
-  const handleDeleteLead = async (leadId: string) => {
-    await deleteColdLead(leadId);
-    setColdLeads((prev) => prev.filter((l) => l.id !== leadId));
-    window.dispatchEvent(new CustomEvent('crm_lead_deleted', { detail: { id: leadId } }));
-    fetchBffStatus().then(setBffStatus).catch(() => {});
-  };
-
-  const handleConvertToCustomer = (lead: ColdLead) => {
-    setPrefilledLeadPhone(lead.phone_number);
-    setPrefilledLeadName(lead.contact_name || '');
-    setPrefilledLeadNotes(`لید اولیه از ${lead.source}. یادداشت: ${lead.notes || 'ندارد'}`);
-    setEditingCustomer(null);
-    setIsCustomerModalOpen(true);
   };
 
   // Handler for Daily Admin Reports (Create or Edit)
@@ -1050,6 +1094,9 @@ export default function App() {
   const openCustomerDetail = (customer: Customer) => {
     if (!customer || !customer.id) return;
     const cid = String(customer.id);
+    if (justClaimedCustomerId && justClaimedCustomerId !== cid) {
+      setJustClaimedCustomerId(null);
+    }
     setCustomerModalCache((prev) => ({ ...prev, [cid]: customer }));
     // If it was minimized, remove from minimized list so it expands
     setMinimizedCustomerIds((prev) => prev.filter((id) => id !== cid));
@@ -1078,6 +1125,7 @@ export default function App() {
 
   const handleCloseCustomerModal = (customerId: string) => {
     setActiveCustomerModalId((curr) => (curr === customerId ? null : curr));
+    setJustClaimedCustomerId((curr) => (curr === customerId ? null : curr));
     setMinimizedCustomerIds((prev) => prev.filter((id) => id !== customerId));
   };
 
@@ -1164,7 +1212,6 @@ export default function App() {
           customers: dashboardSummary?.total_customers ?? userScopedCustomers.length,
           expiredCustomers: dashboardSummary?.expired_customers_count ?? expiredCount,
           freeCustomers: dashboardSummary?.free_customers_count ?? freeCustomersCount,
-          coldLeads: dashboardSummary?.total_cold_leads_count ?? (isCurrentUserAdmin ? coldLeads.length : coldLeads.filter((l) => l.assigned_to === currentPersonnel?.id).length),
           reports: dashboardSummary?.total_reports_count ?? userScopedReports.length,
           adminReports: dashboardSummary?.admin_reports_count ?? adminReports.length,
           pendingLeaves: leaveRequests.filter((r) => r.status === 'pending').length,
@@ -1206,13 +1253,10 @@ export default function App() {
           }}
           onOpenNewCustomer={() => {
             setEditingCustomer(null);
-            setPrefilledLeadPhone('');
-            setPrefilledLeadName('');
-            setPrefilledLeadNotes('');
             setIsCustomerModalOpen(true);
           }}
-          onOpenNewLead={() => {
-            setIsAddLeadModalOpen(true);
+          onOpenQuickAddCustomer={() => {
+            setIsQuickAddModalOpen(true);
           }}
           isMobileMenuOpen={isMobileMenuOpen}
           onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -1243,7 +1287,6 @@ export default function App() {
                   <DashboardView
                     customers={userScopedCustomers}
                     reports={userScopedReports}
-                    coldLeads={coldLeads}
                     adminReports={adminReports}
                     personnelList={personnelList}
                     bffStatus={bffStatus}
@@ -1254,7 +1297,7 @@ export default function App() {
                       setEditingCustomer(null);
                       setIsCustomerModalOpen(true);
                     }}
-                    onOpenNewLead={() => setIsAddLeadModalOpen(true)}
+                    onOpenQuickAddCustomer={() => setIsQuickAddModalOpen(true)}
                     onOpenAddReport={() => {
                       setReportPreselectedCustomerId(undefined);
                       setIsAddReportModalOpen(true);
@@ -1276,11 +1319,9 @@ export default function App() {
                     onSelectCustomer={openCustomerDetail}
                     onOpenNewCustomerModal={() => {
                       setEditingCustomer(null);
-                      setPrefilledLeadPhone('');
-                      setPrefilledLeadName('');
-                      setPrefilledLeadNotes('');
                       setIsCustomerModalOpen(true);
                     }}
+                    onOpenQuickAddCustomer={() => setIsQuickAddModalOpen(true)}
                     onOpenMergeModal={() => {
                       setMergeInitialCustomerIds([]);
                       setIsMergeModalOpen(true);
@@ -1336,24 +1377,6 @@ export default function App() {
                     isAdmin={isCurrentUserAdmin}
                     activeTenantId={activeTenantId}
                     onSelectCustomer={openCustomerDetail}
-                  />
-                )}
-
-                {activeTab === 'cold_leads' && (
-                  <ColdLeadsView
-                    coldLeads={coldLeads}
-                    personnelList={personnelList}
-                    currentPersonnel={currentPersonnel}
-                    currentUser={currentUser}
-                    isAdmin={isCurrentUserAdmin}
-                    activeTenantId={activeTenantId}
-                    onAddLead={handleAddColdLead}
-                    onUpdateLeadStatus={handleUpdateLeadStatus}
-                    onUpdateLeadAssignedTo={handleUpdateLeadAssignedTo}
-                    onBulkAssignLeads={handleBulkAssignLeads}
-                    onDeleteLead={handleDeleteLead}
-                    onConvertToCustomer={handleConvertToCustomer}
-                    showToast={showToast}
                   />
                 )}
 
@@ -1449,10 +1472,15 @@ export default function App() {
                         customer={activeCust}
                         isOpen={true}
                         isPopup={false}
-                        onClose={() => handleNavigateToTab('customers')}
+                        onClose={() => {
+                          setJustClaimedCustomerId(null);
+                          handleNavigateToTab('customers');
+                        }}
                         onAddReport={handleAddCustomerReport}
                         onReassign={handleReassignCustomer}
                         onAddContact={handleAddCustomerContact}
+                        onClaimFreeCustomer={handleClaimAndOpenReports}
+                        justClaimedFromDuplicate={justClaimedCustomerId === String(activeCust.id)}
                         onEdit={(cust) => {
                           setEditingCustomer(cust);
                           setIsCustomerModalOpen(true);
@@ -1548,16 +1576,6 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => handleNavigateToTab('cold_leads')}
-            className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors cursor-pointer ${
-              activeTab === 'cold_leads' ? 'text-emerald-600 dark:text-[#1DB954] font-bold' : 'text-slate-500 dark:text-[#888888] hover:text-slate-800 dark:hover:text-white'
-            }`}
-          >
-            <PhoneCall className="w-4 h-4 mb-0.5" />
-            <span>لیدها</span>
-          </button>
-
-          <button
             onClick={() => handleNavigateToTab('admin_reports')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors cursor-pointer ${
               activeTab === 'admin_reports' ? 'text-emerald-600 dark:text-[#1DB954] font-bold' : 'text-slate-500 dark:text-[#888888] hover:text-slate-800 dark:hover:text-white'
@@ -1584,19 +1602,14 @@ export default function App() {
         onClose={() => {
           setIsCustomerModalOpen(false);
           setEditingCustomer(null);
-          setPrefilledLeadPhone('');
-          setPrefilledLeadName('');
-          setPrefilledLeadNotes('');
         }}
         onSave={handleSaveCustomer}
+        onClaimFreeCustomer={handleClaimAndOpenReports}
         editingCustomer={editingCustomer}
         personnelList={personnelList}
         currentPersonnel={currentPersonnel}
         currentUser={currentUser}
         isAdmin={isCurrentUserAdmin}
-        prefilledPhone={prefilledLeadPhone}
-        prefilledName={prefilledLeadName}
-        prefilledNotes={prefilledLeadNotes}
       />
 
       {/* Active Customer Detail Modal (Full Popup) */}
@@ -1617,6 +1630,8 @@ export default function App() {
             onAddReport={handleAddCustomerReport}
             onReassign={handleReassignCustomer}
             onAddContact={handleAddCustomerContact}
+            onClaimFreeCustomer={handleClaimAndOpenReports}
+            justClaimedFromDuplicate={justClaimedCustomerId === String(activeCust.id)}
             onEdit={(cust) => {
               setEditingCustomer(cust);
               setIsCustomerModalOpen(true);
@@ -1728,11 +1743,12 @@ export default function App() {
         onMerge={handleMergeCustomers}
       />
 
-      {/* Quick Add Cold Lead Modal */}
-      <AddColdLeadModal
-        isOpen={isAddLeadModalOpen}
-        onClose={() => setIsAddLeadModalOpen(false)}
-        onAddLead={handleAddColdLead}
+      {/* Quick Add Customer by Phone Modal */}
+      <QuickAddCustomerModal
+        isOpen={isQuickAddModalOpen}
+        onClose={() => setIsQuickAddModalOpen(false)}
+        onQuickAdd={handleQuickAddCustomer}
+        onClaimFreeCustomer={handleClaimAndOpenReports}
         personnelList={personnelList}
         currentPersonnel={currentPersonnel}
         currentUser={currentUser}

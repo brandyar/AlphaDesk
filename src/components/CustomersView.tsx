@@ -6,6 +6,7 @@ import {
   Clock,
   AlertTriangle,
   Phone,
+  PhoneCall,
   Send,
   Instagram,
   Plus,
@@ -39,6 +40,7 @@ interface CustomersViewProps {
   isAdmin?: boolean;
   onSelectCustomer: (customer: Customer) => void;
   onOpenNewCustomerModal: () => void;
+  onOpenQuickAddCustomer?: () => void;
   onOpenMergeModal?: () => void;
   selectedMarketerId: string;
   onSelectMarketerId: (id: string) => void;
@@ -57,6 +59,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   isAdmin,
   onSelectCustomer,
   onOpenNewCustomerModal,
+  onOpenQuickAddCustomer,
   onOpenMergeModal,
   selectedMarketerId,
   onSelectMarketerId,
@@ -104,9 +107,11 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     return items.slice(0, pageSize);
   }, [items, pageSize]);
 
-  const loadData = (targetPage = currentPage) => {
+  const loadData = (targetPage = currentPage, options?: { silent?: boolean }) => {
     const currentVersion = ++fetchVersionRef.current;
-    setIsLoadingPage(true);
+    if (!options?.silent) {
+      setIsLoadingPage(true);
+    }
 
     fetchCustomersPaginated({
       page: targetPage,
@@ -138,6 +143,32 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const loadDataRef = useRef(loadData);
   loadDataRef.current = loadData;
 
+  const customersPropRef = useRef(customers);
+  customersPropRef.current = customers;
+
+  const filterStateRef = useRef({
+    statusFilter,
+    selectedMarketerId,
+    showExpiredOnly,
+    followupFilter,
+    debouncedSearch,
+    sortOption,
+    currentPage,
+    pageSize,
+    totalPages,
+  });
+  filterStateRef.current = {
+    statusFilter,
+    selectedMarketerId,
+    showExpiredOnly,
+    followupFilter,
+    debouncedSearch,
+    sortOption,
+    currentPage,
+    pageSize,
+    totalPages,
+  };
+
   const filterKey = `${statusFilter}_${selectedMarketerId}_${showExpiredOnly}_${followupFilter}_${debouncedSearch}_${activeTenantId}_${sortOption}_${pageSize}`;
   const prevFilterKeyRef = useRef(filterKey);
 
@@ -155,17 +186,212 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     loadData(currentPage);
   }, [currentPage, filterKey]);
 
-  // Listen to customer save/update/delete events stably without re-attaching listeners
+  // Listen to report & customer save/update/delete events for instant list repositioning
   useEffect(() => {
-    const handleRefresh = () => {
-      loadDataRef.current();
+    const matchesFollowup = (nextDate: string | null | undefined, ff: string): boolean => {
+      if (!ff || ff === 'همه' || ff === 'all') return true;
+      if (!nextDate) return ff === 'no_followup';
+      const fTime = new Date(nextDate).getTime();
+      if (isNaN(fTime)) return ff === 'no_followup';
+
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const startTodayMs = startOfToday.getTime();
+
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      const endTodayMs = endOfToday.getTime();
+      const nowMs = Date.now();
+
+      if (ff === 'active') return fTime >= startTodayMs;
+      if (ff === 'today') return fTime >= startTodayMs && fTime <= endTodayMs;
+      if (ff === 'due_3_days') return fTime >= nowMs && fTime <= nowMs + 3 * 86400000;
+      if (ff === 'due_7_days') return fTime >= nowMs && fTime <= nowMs + 7 * 86400000;
+      if (ff === 'overdue') return fTime < startTodayMs;
+      if (ff === 'no_followup') return false;
+      return true;
     };
 
-    window.addEventListener('crm_customer_saved', handleRefresh);
-    window.addEventListener('crm_customer_deleted', handleRefresh);
+    const matchesStatus = (custStatus: string | undefined, filterStatus: string): boolean => {
+      if (!filterStatus || filterStatus === 'همه') return true;
+      const norm = (s?: string) => (s === 'قرارداد / فاکتور' || s === 'قرارداد/فاکتور' ? 'قرارداد' : s || '');
+      return norm(custStatus) === norm(filterStatus);
+    };
+
+    const sortList = (list: Customer[], sortKey: string): Customer[] => {
+      const startOfTodayMs = new Date().setHours(0, 0, 0, 0);
+      const copy = [...list];
+      if (sortKey === 'next_followup_asc' || sortKey === 'next_followup_date') {
+        return copy.sort((a, b) => {
+          const aTime = a.next_followup_date ? new Date(a.next_followup_date).getTime() : NaN;
+          const bTime = b.next_followup_date ? new Date(b.next_followup_date).getTime() : NaN;
+          const aValid = !isNaN(aTime);
+          const bValid = !isNaN(bTime);
+          if (!aValid && !bValid) return 0;
+          if (!aValid) return 1;
+          if (!bValid) return -1;
+          const aUp = aTime >= startOfTodayMs;
+          const bUp = bTime >= startOfTodayMs;
+          if (aUp && !bUp) return -1;
+          if (!aUp && bUp) return 1;
+          if (aUp && bUp) return aTime - bTime;
+          return bTime - aTime;
+        });
+      }
+      if (sortKey === 'next_followup_desc' || sortKey === '-next_followup_date') {
+        return copy.sort((a, b) => {
+          const aTime = a.next_followup_date ? new Date(a.next_followup_date).getTime() : NaN;
+          const bTime = b.next_followup_date ? new Date(b.next_followup_date).getTime() : NaN;
+          const aValid = !isNaN(aTime);
+          const bValid = !isNaN(bTime);
+          if (!aValid && !bValid) return 0;
+          if (!aValid) return 1;
+          if (!bValid) return -1;
+          return bTime - aTime;
+        });
+      }
+      if (sortKey === 'company_name_asc') {
+        return copy.sort((a, b) => (a.company_name || '').localeCompare(b.company_name || '', 'fa'));
+      }
+      if (sortKey === 'deadline_asc') {
+        return copy.sort((a, b) => {
+          if (!a.assignment_deadline && !b.assignment_deadline) return 0;
+          if (!a.assignment_deadline) return 1;
+          if (!b.assignment_deadline) return -1;
+          return new Date(a.assignment_deadline).getTime() - new Date(b.assignment_deadline).getTime();
+        });
+      }
+      return copy.sort(
+        (a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
+      );
+    };
+
+    const applyOptimisticCustomerPatch = (
+      custId: string,
+      patch: Partial<Customer>,
+      fallbackCustomer?: Customer
+    ) => {
+      const state = filterStateRef.current;
+      let removedFromList = false;
+      let addedToList = false;
+
+      setItems((prev) => {
+        const existingIdx = prev.findIndex((c) => String(c.id) === custId);
+        const baseCustomer =
+          existingIdx >= 0
+            ? prev[existingIdx]
+            : fallbackCustomer || customersPropRef.current.find((c) => String(c.id) === custId);
+
+        if (!baseCustomer) return prev;
+
+        const updated: Customer = {
+          ...baseCustomer,
+          ...patch,
+        };
+
+        const stillMatches =
+          matchesFollowup(updated.next_followup_date, state.followupFilter) &&
+          matchesStatus(updated.status, state.statusFilter) &&
+          (!state.showExpiredOnly || Boolean(updated.is_expired)) &&
+          (state.selectedMarketerId === 'همه' ||
+            String(updated.assigned_marketer_id || '') === String(state.selectedMarketerId));
+
+        if (!stillMatches) {
+          if (existingIdx >= 0) {
+            removedFromList = true;
+            return prev.filter((c) => String(c.id) !== custId);
+          }
+          return prev;
+        }
+
+        if (existingIdx < 0) {
+          if (state.currentPage !== 1 || state.debouncedSearch.trim()) {
+            return prev;
+          }
+          addedToList = true;
+          const sorted = sortList([updated, ...prev], state.sortOption);
+          return sorted.slice(0, state.pageSize);
+        }
+
+        const replaced = prev.map((c) => (String(c.id) === custId ? updated : c));
+        const sorted = sortList(replaced, state.sortOption);
+
+        // If multi-page and sorted ascending by next_followup_date and item dropped to the end of page,
+        // remove it immediately so it moves off the current page cleanly until silent fetch refills.
+        if (
+          state.sortOption === 'next_followup_asc' &&
+          state.currentPage < state.totalPages &&
+          sorted.length >= state.pageSize &&
+          sorted.length >= 2 &&
+          String(sorted[sorted.length - 1].id) === custId
+        ) {
+          const prevTime = sorted[sorted.length - 2].next_followup_date
+            ? new Date(sorted[sorted.length - 2].next_followup_date!).getTime()
+            : Infinity;
+          const curTime = updated.next_followup_date
+            ? new Date(updated.next_followup_date).getTime()
+            : Infinity;
+          if (curTime > prevTime) {
+            return sorted.slice(0, -1);
+          }
+        }
+
+        return sorted.slice(0, state.pageSize);
+      });
+
+      if (removedFromList) {
+        setTotalCount((c) => Math.max(0, c - 1));
+      } else if (addedToList) {
+        setTotalCount((c) => c + 1);
+      }
+    };
+
+    const handleReportSaved = (e: any) => {
+      const saved = e?.detail;
+      if (!saved) return;
+      const custId =
+        typeof saved.customer_id === 'object' && saved.customer_id !== null
+          ? String(saved.customer_id.id || '')
+          : String(saved.customer_id || '');
+      if (custId) {
+        const patch: Partial<Customer> = {
+          next_followup_date: saved.next_followup_date ?? null,
+        };
+        if (saved.negotiation_status) {
+          patch.status =
+            saved.negotiation_status === 'قرارداد / فاکتور' || saved.negotiation_status === 'قرارداد/فاکتور'
+              ? 'قرارداد'
+              : saved.negotiation_status;
+        }
+        applyOptimisticCustomerPatch(custId, patch);
+      }
+      loadDataRef.current(filterStateRef.current.currentPage, { silent: true });
+    };
+
+    const handleCustomerSaved = (e: any) => {
+      const updatedCust: Customer | undefined = e?.detail;
+      if (updatedCust?.id) {
+        applyOptimisticCustomerPatch(String(updatedCust.id), updatedCust, updatedCust);
+      }
+      loadDataRef.current(filterStateRef.current.currentPage, { silent: true });
+    };
+
+    const handleCustomerDeleted = (e: any) => {
+      const deletedId = e?.detail?.id;
+      if (deletedId) {
+        setItems((prev) => prev.filter((c) => String(c.id) !== String(deletedId)));
+        setTotalCount((c) => Math.max(0, c - 1));
+      }
+      loadDataRef.current(filterStateRef.current.currentPage, { silent: true });
+    };
+
+    window.addEventListener('crm_report_saved', handleReportSaved);
+    window.addEventListener('crm_customer_saved', handleCustomerSaved);
+    window.addEventListener('crm_customer_deleted', handleCustomerDeleted);
     return () => {
-      window.removeEventListener('crm_customer_saved', handleRefresh);
-      window.removeEventListener('crm_customer_deleted', handleRefresh);
+      window.removeEventListener('crm_report_saved', handleReportSaved);
+      window.removeEventListener('crm_customer_saved', handleCustomerSaved);
+      window.removeEventListener('crm_customer_deleted', handleCustomerDeleted);
     };
   }, []);
 
@@ -218,6 +444,19 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
             >
               <GitMerge className="w-3.5 h-3.5" />
               <span>ادغام پرونده‌ها</span>
+            </button>
+          )}
+
+          {/* Quick Add Customer by Phone Button */}
+          {onOpenQuickAddCustomer && (
+            <button
+              onClick={onOpenQuickAddCustomer}
+              className="h-9 px-3 sm:px-3.5 rounded-full bg-white hover:bg-blue-50 dark:bg-[#282828] dark:hover:bg-[#333333] text-slate-700 hover:text-blue-700 dark:text-white border border-slate-200 dark:border-[#3e3e3e] font-bold text-xs flex items-center gap-1.5 transition-all hover:scale-105 shadow-xs flex-shrink-0 cursor-pointer"
+              title="افزودن سریع شماره (ثبت مشتری)"
+              aria-label="افزودن سریع شماره (ثبت مشتری)"
+            >
+              <PhoneCall className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
+              <span className="hidden sm:inline">افزودن سریع</span>
             </button>
           )}
 

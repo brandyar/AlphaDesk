@@ -17,6 +17,7 @@ import { getSafeDirectusPersonnelForeignKey, resolveDirectusTenantId } from '../
 import { cleanCustomerPayloadForDirectus, normalizePersianString } from '../services/phoneNormalizer.ts';
 import { getRequestUser, getRequestTenantId, matchesTenant } from '../middlewares/auth.middleware.ts';
 import { CustomerReport } from '../types.ts';
+import { invalidateDashboardSummaryCache } from './system.routes.ts';
 
 export function normalizeToIsoDateTime(dateVal?: any): string | null {
   if (dateVal === undefined || dateVal === null || dateVal === '') return null;
@@ -220,13 +221,18 @@ router.get('/', async (req: Request, res: Response) => {
       // Handle category tab filters directly in Directus
       if (activeFilter === 'active_followups') {
         // Active follow-ups MUST only include dates that have not passed yet (>= start of today)
+        // and must match customers whose current next_followup_date is still >= start of today
         directusPath += `&filter[_and][${andIdx++}][next_followup_date][_gte]=${encodeURIComponent(startOfTodayIso)}`;
+        directusPath += `&filter[_and][${andIdx++}][customer_id][next_followup_date][_gte]=${encodeURIComponent(startOfTodayIso)}`;
       } else if (activeFilter === 'overdue_followups') {
-        // Overdue follow-ups: follow-up date is in the past (< start of today)
+        // Overdue follow-ups: customer's current follow-up date is in the past (< start of today)
         directusPath += `&filter[_and][${andIdx++}][next_followup_date][_nnull]=true`;
         directusPath += `&filter[_and][${andIdx++}][next_followup_date][_lt]=${encodeURIComponent(startOfTodayIso)}`;
+        directusPath += `&filter[_and][${andIdx++}][customer_id][next_followup_date][_nnull]=true`;
+        directusPath += `&filter[_and][${andIdx++}][customer_id][next_followup_date][_lt]=${encodeURIComponent(startOfTodayIso)}`;
       } else if (activeFilter === 'no_followup') {
         directusPath += `&filter[_and][${andIdx++}][next_followup_date][_null]=true`;
+        directusPath += `&filter[_and][${andIdx++}][customer_id][next_followup_date][_null]=true`;
       } else if (activeFilter === 'expired_customers' || activeFilter === 'expired') {
         const nowIso = new Date().toISOString();
         directusPath += `&filter[_and][${andIdx}][_or][0][customer_id][is_expired][_eq]=true` +
@@ -243,8 +249,8 @@ router.get('/', async (req: Request, res: Response) => {
         const daysNum = activeFilter === 'due_less_3_days' ? 3 : activeFilter === 'due_less_7_days' ? 7 : 10;
         const nowIso = new Date().toISOString();
         const maxIso = new Date(Date.now() + daysNum * 86400000).toISOString();
-        directusPath += `&filter[_and][${andIdx}][_or][0][_and][0][next_followup_date][_gte]=${encodeURIComponent(nowIso)}` +
-          `&filter[_and][${andIdx}][_or][0][_and][1][next_followup_date][_lte]=${encodeURIComponent(maxIso)}` +
+        directusPath += `&filter[_and][${andIdx}][_or][0][_and][0][customer_id][next_followup_date][_gte]=${encodeURIComponent(nowIso)}` +
+          `&filter[_and][${andIdx}][_or][0][_and][1][customer_id][next_followup_date][_lte]=${encodeURIComponent(maxIso)}` +
           `&filter[_and][${andIdx}][_or][1][_and][0][customer_id][assignment_deadline][_gte]=${encodeURIComponent(nowIso)}` +
           `&filter[_and][${andIdx}][_or][1][_and][1][customer_id][assignment_deadline][_lte]=${encodeURIComponent(maxIso)}`;
         andIdx++;
@@ -292,13 +298,72 @@ router.get('/', async (req: Request, res: Response) => {
       console.log('[Directus Reports Query] resData meta:', resData?.meta);
       if (resData && Array.isArray(resData.data)) {
         let items = resData.data;
-        const totalCount = resData.meta?.filter_count ?? resData.meta?.total_count ?? items.length;
+        let totalCount = resData.meta?.filter_count ?? resData.meta?.total_count ?? items.length;
 
         // If client specifically requested more than 100 items (e.g. export or unlimited)
         if (reqLimit > 100 && totalCount > items.length && items.length >= 100) {
           const allRes = await directusFetchAllPages(directusPath, {}).catch(() => null);
           if (allRes && Array.isArray(allRes.data) && allRes.data.length > 0) {
             items = allRes.data.slice(0, reqLimit);
+          }
+        }
+
+        // For customer follow-up queue tabs, remove superseded older reports of the same customer
+        const isFollowupQueueTab = [
+          'active_followups',
+          'overdue_followups',
+          'no_followup',
+          'due_less_3_days',
+          'due_less_7_days',
+          'due_less_10_days',
+          'latest_reports',
+        ].includes(activeFilter);
+
+        if (isFollowupQueueTab && !customer_id) {
+          const beforeLen = items.length;
+
+          // 1. Drop reports whose follow-up date was superseded by a newer customer.next_followup_date
+          if (activeFilter !== 'latest_reports') {
+            items = items.filter((r: any) => {
+              const custObj = typeof r.customer_id === 'object' && r.customer_id !== null ? r.customer_id : null;
+              if (!custObj || custObj.next_followup_date === undefined) return true;
+              const rTime = r.next_followup_date ? new Date(r.next_followup_date).getTime() : null;
+              const cTime = custObj.next_followup_date ? new Date(custObj.next_followup_date).getTime() : null;
+              if (rTime === null && cTime === null) return true;
+              if (rTime === null || cTime === null) return false;
+              return Math.abs(rTime - cTime) <= 60000;
+            });
+          }
+
+          // 2. Deduplicate by customer_id keeping only the latest report by date_created
+          const bestByCust = new Map<string, any>();
+          for (const r of items) {
+            const cId = typeof r.customer_id === 'object' && r.customer_id !== null
+              ? String(r.customer_id.id || '')
+              : String(r.customer_id || '');
+            if (!cId) continue;
+            const prev = bestByCust.get(cId);
+            if (!prev) {
+              bestByCust.set(cId, r);
+            } else {
+              const prevTime = new Date(prev.date_created || 0).getTime();
+              const curTime = new Date(r.date_created || 0).getTime();
+              if (curTime > prevTime) {
+                bestByCust.set(cId, r);
+              }
+            }
+          }
+          const keepIds = new Set(Array.from(bestByCust.values()).map((r) => String(r.id)));
+          items = items.filter((r: any) => {
+            const cId = typeof r.customer_id === 'object' && r.customer_id !== null
+              ? String(r.customer_id.id || '')
+              : String(r.customer_id || '');
+            return !cId || keepIds.has(String(r.id));
+          });
+
+          const removedCount = beforeLen - items.length;
+          if (removedCount > 0) {
+            totalCount = Math.max(items.length, totalCount - removedCount);
           }
         }
 
@@ -326,6 +391,27 @@ router.get('/', async (req: Request, res: Response) => {
 
   const allCustomers = await ensureCustomersCache().catch(() => customersData);
   const rawReports = await ensureReportsCache().catch(() => reportsData);
+
+  // Track the single latest report ID per customer so superseded reports leave follow-up queues
+  const latestReportIdByCust = new Map<string, string>();
+  const sortedForLatest = [...rawReports].sort(
+    (a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
+  );
+  for (const r of sortedForLatest) {
+    const cId = typeof r.customer_id === 'object' && r.customer_id !== null
+      ? String((r.customer_id as any).id || '')
+      : String(r.customer_id || '');
+    if (cId && !latestReportIdByCust.has(cId)) {
+      latestReportIdByCust.set(cId, String(r.id));
+    }
+  }
+  const isLatestCustomerReport = (r: any): boolean => {
+    const cId = typeof r.customer_id === 'object' && r.customer_id !== null
+      ? String((r.customer_id as any).id || '')
+      : String(r.customer_id || '');
+    if (!cId) return true;
+    return latestReportIdByCust.get(cId) === String(r.id);
+  };
 
   // Sort according to requested sort option (default: newest first)
   const allReports = [...rawReports].sort((a, b) => {
@@ -458,15 +544,17 @@ router.get('/', async (req: Request, res: Response) => {
       switch (admin_filter) {
         case 'active_followups':
           result = result.filter((r) => {
+            if (!isLatestCustomerReport(r)) return false;
             const customer = allCustomers.find((c) => c.id === r.customer_id);
-            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            const followupDate = customer?.next_followup_date !== undefined ? customer.next_followup_date : r.next_followup_date;
             return isActiveDate(followupDate);
           });
           break;
         case 'overdue_followups':
           result = result.filter((r) => {
+            if (!isLatestCustomerReport(r)) return false;
             const customer = allCustomers.find((c) => c.id === r.customer_id);
-            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            const followupDate = customer?.next_followup_date !== undefined ? customer.next_followup_date : r.next_followup_date;
             if (!followupDate) return false;
             const days = getDaysUntil(followupDate);
             return days !== null && days < 0;
@@ -474,19 +562,14 @@ router.get('/', async (req: Request, res: Response) => {
           break;
         case 'no_followup':
           result = result.filter((r) => {
+            if (!isLatestCustomerReport(r)) return false;
             const customer = allCustomers.find((c) => c.id === r.customer_id);
-            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            const followupDate = customer?.next_followup_date !== undefined ? customer.next_followup_date : r.next_followup_date;
             return !followupDate;
           });
           break;
         case 'latest_reports': {
-          const latestMap = new Map<string, any>();
-          for (const rep of result) {
-            if (!latestMap.has(rep.customer_id)) {
-              latestMap.set(rep.customer_id, rep);
-            }
-          }
-          result = Array.from(latestMap.values());
+          result = result.filter((r) => isLatestCustomerReport(r));
           break;
         }
         case 'expired_customers':
@@ -512,15 +595,17 @@ router.get('/', async (req: Request, res: Response) => {
       switch (staff_filter) {
         case 'active_followups':
           result = result.filter((r) => {
+            if (!isLatestCustomerReport(r)) return false;
             const customer = allCustomers.find((c) => c.id === r.customer_id);
-            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            const followupDate = customer?.next_followup_date !== undefined ? customer.next_followup_date : r.next_followup_date;
             return isActiveDate(followupDate);
           });
           break;
         case 'overdue_followups':
           result = result.filter((r) => {
+            if (!isLatestCustomerReport(r)) return false;
             const customer = allCustomers.find((c) => c.id === r.customer_id);
-            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            const followupDate = customer?.next_followup_date !== undefined ? customer.next_followup_date : r.next_followup_date;
             if (!followupDate) return false;
             const days = getDaysUntil(followupDate);
             return days !== null && days < 0;
@@ -528,8 +613,9 @@ router.get('/', async (req: Request, res: Response) => {
           break;
         case 'no_followup':
           result = result.filter((r) => {
+            if (!isLatestCustomerReport(r)) return false;
             const customer = allCustomers.find((c) => c.id === r.customer_id);
-            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            const followupDate = customer?.next_followup_date !== undefined ? customer.next_followup_date : r.next_followup_date;
             return !followupDate;
           });
           break;
@@ -538,8 +624,9 @@ router.get('/', async (req: Request, res: Response) => {
         case 'due_less_10_days': {
           const maxDays = staff_filter === 'due_less_3_days' ? 3 : staff_filter === 'due_less_7_days' ? 7 : 10;
           result = result.filter((r) => {
+            if (!isLatestCustomerReport(r)) return false;
             const customer = allCustomers.find((c) => c.id === r.customer_id);
-            const followupDate = r.next_followup_date || customer?.next_followup_date;
+            const followupDate = customer?.next_followup_date !== undefined ? customer.next_followup_date : r.next_followup_date;
             const deadline = customer?.assignment_deadline;
             const daysF = getDaysUntil(followupDate);
             const daysD = getDaysUntil(deadline);
@@ -756,6 +843,7 @@ router.post('/', async (req: Request, res: Response) => {
 
       invalidateCustomersCache();
       invalidateReportsCache();
+      invalidateDashboardSummaryCache();
 
       return res.status(201).json(created.data || newReport);
     } catch (err: any) {
@@ -777,6 +865,7 @@ router.post('/', async (req: Request, res: Response) => {
 
   invalidateCustomersCache();
   invalidateReportsCache();
+  invalidateDashboardSummaryCache();
 
   res.status(201).json(newReport);
 });
@@ -807,6 +896,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       }
 
       invalidateReportsCache();
+      invalidateDashboardSummaryCache();
       return res.status(204).send();
     } catch (err: any) {
       return res.status(500).json({
@@ -824,6 +914,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     await syncCustomerFollowupFromLatestReport(deletedCustId);
   }
   invalidateReportsCache();
+  invalidateDashboardSummaryCache();
   res.status(204).send();
 });
 

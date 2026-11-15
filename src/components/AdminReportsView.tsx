@@ -624,7 +624,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 dark:bg-black/85 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-6 max-h-[95vh] flex flex-col">
-            <div className="p-4 sm:p-5 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between">
+            <div className="p-4 sm:p-5 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-[#1DB954] flex items-center justify-center flex-shrink-0">
                   <ClipboardCheck className="w-5 h-5" />
@@ -638,15 +638,45 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  setShowAddModal(false);
-                  setEditingReport(null);
-                }}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center text-slate-500 dark:text-[#A7A7A7] hover:text-slate-900 dark:hover:text-white cursor-pointer"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => handleSubmit('draft')}
+                  className="h-8 px-3 rounded-full bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-700 dark:text-amber-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  {submitting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  <span className="hidden sm:inline">ذخیره پیش‌نویس</span>
+                  <span className="sm:hidden">پیش‌نویس</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => handleSubmit('submitted')}
+                  className="h-8 px-3.5 sm:px-4 rounded-full bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ED760] text-white dark:text-black font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  {submitting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5 stroke-[2.5]" />
+                  )}
+                  <span>{editingReport ? 'ثبت نهایی' : 'ثبت و ارسال نهایی'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditingReport(null);
+                  }}
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center text-slate-500 dark:text-[#A7A7A7] hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">

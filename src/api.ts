@@ -1279,7 +1279,56 @@ export async function updateProjectSettings(payload: Partial<ProjectSettings>): 
     headers: getBffHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(payload),
   });
-  return handleResponse(res, 'خطا در بروزرسانی تنظیمات سامانه');
+  const data = await handleResponse<any>(res, 'خطا در بروزرسانی تنظیمات سامانه');
+  return data?.settings || data;
+}
+
+export async function fetchTenantSettings(tenantId?: string): Promise<{
+  id: string | number | null;
+  tenant_id: string;
+  sms_phones: string[];
+  items?: Array<{ id: string | number; tenant_id: string; sms_phones: string[] }>;
+}> {
+  const query = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : '';
+  const res = await fetch(`${BASE_URL}/tenant-settings${query}`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse(res, 'خطا در دریافت تنظیمات پیامک سازمان');
+}
+
+export async function updateTenantSettings(
+  tenantId: string,
+  smsPhones: string[] | string
+): Promise<{
+  success: boolean;
+  id?: string | number;
+  tenant_id: string;
+  sms_phones: string[];
+}> {
+  const res = await fetch(`${BASE_URL}/tenant-settings`, {
+    method: 'PATCH',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      tenant_id: tenantId,
+      sms_phones: smsPhones,
+    }),
+  });
+  return handleResponse(res, 'خطا در ذخیره شماره‌های پیامک سازمان');
+}
+
+export async function sendTestSms(payload: {
+  phone: string;
+  pattern_code: string;
+  variables: Record<string, string>;
+  api_key?: string;
+  sender?: string;
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const res = await fetch(`${BASE_URL}/project-settings/test-sms`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, 'خطا در ارسال پیامک تست');
 }
 
 // ----------------- Tenants / Multi-Tenancy APIs ----------------- //

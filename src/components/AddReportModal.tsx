@@ -170,16 +170,27 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
               <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-[#A7A7A7] truncate">گزارش پیگیری‌ها و تغییر وضعیت مرحله مشتری</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors cursor-pointer shrink-0"
-            aria-label="بستن"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="submit"
+              form="add-report-form"
+              disabled={saving}
+              className="h-8 sm:h-9 px-3.5 sm:px-5 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all shadow-md shadow-[#1DB954]/20 cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <span>{saving ? 'در حال ثبت...' : 'ثبت و اعمال گزارش'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors cursor-pointer shrink-0"
+              aria-label="بستن"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-3.5 sm:p-5 md:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
+        <form id="add-report-form" onSubmit={handleSubmit} className="p-3.5 sm:p-5 md:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
           {/* Error Message Banner */}
           {formError && (
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-300 dark:bg-rose-950/40 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-400 font-bold flex items-center gap-2 animate-in fade-in">

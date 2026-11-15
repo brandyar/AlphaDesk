@@ -418,7 +418,14 @@ router.post('/batch-delete', async (req: Request, res: Response) => {
 });
 
 router.post('/me/profile', async (req: Request, res: Response) => {
-  const { userId, personnelId, userEmail, userName } = getRequestUser(req);
+  const reqUser = getRequestUser(req);
+  if (!reqUser.isAuthenticated) {
+    return res.status(401).json({
+      error: 'UNAUTHORIZED',
+      message: 'نشست کاربری معتبر نیست. لطفاً مجدداً وارد شوید.',
+    });
+  }
+  const { userId, personnelId, userEmail, userName, isAdmin } = reqUser;
   const {
     name,
     phone,
@@ -435,27 +442,56 @@ router.post('/me/profile', async (req: Request, res: Response) => {
   } = req.body;
 
   const targetId = personnelId || userId;
-  const personnelPatch: Record<string, any> = {};
+  const existing = personnelData.find(
+    (p) =>
+      p.id === targetId ||
+      (userId && p.user_id === userId) ||
+      (userEmail && p.email?.toLowerCase() === userEmail?.toLowerCase())
+  );
 
-  if (name !== undefined) personnelPatch.name = String(name).trim();
-  if (phone !== undefined) personnelPatch.phone = String(phone).trim();
-  if (username !== undefined) personnelPatch.username = String(username).trim();
+  if (!isAdmin) {
+    const hasUnauthorizedIdentityChange =
+      (name !== undefined && String(name).trim() !== String(existing?.name || '').trim()) ||
+      (phone !== undefined && String(phone).trim() !== String(existing?.phone || '').trim()) ||
+      (username !== undefined && String(username).trim() !== String(existing?.username || '').trim()) ||
+      (national_id !== undefined && String(national_id).trim() !== String(existing?.national_id || '').trim()) ||
+      (avatar !== undefined && String(avatar || '').trim() !== String(existing?.avatar || existing?.profile_image || '').trim()) ||
+      emergency_contact_name !== undefined ||
+      emergency_contact_phone !== undefined ||
+      emergency_contact_relation !== undefined ||
+      family_contacts !== undefined ||
+      phones !== undefined;
+
+    if (hasUnauthorizedIdentityChange) {
+      return res.status(403).json({
+        error: 'FORBIDDEN',
+        message: 'تنها مدیر سیستم مجاز به تغییر اطلاعات هویتی و پرسنلی می‌باشد. شما فقط می‌توانید شماره کارت بانکی و شماره شبا را ویرایش کنید.',
+      });
+    }
+  }
+
+  const personnelPatch: Record<string, any> = {};
+  if (isAdmin) {
+    if (name !== undefined) personnelPatch.name = String(name).trim();
+    if (phone !== undefined) personnelPatch.phone = String(phone).trim();
+    if (username !== undefined) personnelPatch.username = String(username).trim();
+    if (national_id !== undefined) personnelPatch.national_id = String(national_id).trim();
+    if (avatar !== undefined) personnelPatch.avatar = avatar;
+    if (emergency_contact_name !== undefined) personnelPatch.emergency_contact_name = String(emergency_contact_name).trim();
+    if (emergency_contact_phone !== undefined) personnelPatch.emergency_contact_phone = String(emergency_contact_phone).trim();
+    if (emergency_contact_relation !== undefined) personnelPatch.emergency_contact_relation = String(emergency_contact_relation).trim();
+    if (family_contacts !== undefined) personnelPatch.family_contacts = family_contacts;
+    if (phones !== undefined) personnelPatch.phones = phones;
+  }
   if (bank_card_number !== undefined) personnelPatch.bank_card_number = String(bank_card_number).trim();
   if (iban !== undefined) personnelPatch.iban = String(iban).trim();
-  if (national_id !== undefined) personnelPatch.national_id = String(national_id).trim();
-  if (avatar !== undefined) personnelPatch.avatar = avatar;
-  if (emergency_contact_name !== undefined) personnelPatch.emergency_contact_name = String(emergency_contact_name).trim();
-  if (emergency_contact_phone !== undefined) personnelPatch.emergency_contact_phone = String(emergency_contact_phone).trim();
-  if (emergency_contact_relation !== undefined) personnelPatch.emergency_contact_relation = String(emergency_contact_relation).trim();
-  if (family_contacts !== undefined) personnelPatch.family_contacts = family_contacts;
-  if (phones !== undefined) personnelPatch.phones = phones;
 
   let targetPersonnel: any = null;
 
   if (directusUrl && directusAdminToken && targetId) {
     try {
       const directusPersonnelPatch: Record<string, any> = { ...personnelPatch };
-      if (avatar !== undefined) {
+      if (isAdmin && avatar !== undefined) {
         const fileId = extractFileId(avatar);
         if (fileId) directusPersonnelPatch.avatar = fileId;
         else if (!avatar) directusPersonnelPatch.avatar = null;
@@ -470,7 +506,7 @@ router.post('/me/profile', async (req: Request, res: Response) => {
         targetPersonnel = enrichPersonnel(patched.data);
       }
 
-      if (userId) {
+      if (isAdmin && userId) {
         const fileId = extractFileId(avatar);
         const userPatch: Record<string, any> = {};
         if (name !== undefined) userPatch.first_name = String(name).trim();
@@ -502,9 +538,9 @@ router.post('/me/profile', async (req: Request, res: Response) => {
   } else {
     const newLocal: Personnel = {
       id: targetId || 'p-1',
-      name: name || userName || 'کاربر سیستم',
+      name: (isAdmin ? name : undefined) || userName || 'کاربر سیستم',
       email: userEmail || '',
-      phone: phone || '',
+      phone: (isAdmin ? phone : undefined) || '',
       role: 'marketer',
       status: 'active',
       active: true,

@@ -163,7 +163,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-[#A7A7A7] mt-0.5">
-                جداسازی و ایزولاسیون کامل پرونده‌های مشتریان، مذاکرات، لیدها و پرسنل برای هر شرکت یا سازمان
+                جداسازی و ایزولاسیون کامل پرونده‌های مشتریان، مذاکرات و پرسنل برای هر شرکت یا سازمان
               </p>
             </div>
           </div>
@@ -243,7 +243,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
       {/* Add / Edit Form Modal or Card */}
       {isAdding && (
         <div className="bg-[#161616] border-2 border-[#1DB954]/40 rounded-2xl p-5 sm:p-6 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center justify-between border-b border-[#252525] pb-4 mb-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#252525] pb-4 mb-5">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-[#1DB954]/15 flex items-center justify-center text-[#1DB954]">
                 <Sparkles className="w-4 h-4" />
@@ -252,20 +252,30 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                 {editingTenant ? 'ویرایش مشخصات سازمان' : 'ساخت و تعریف سازمان جدید'}
               </h3>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setIsAdding(false);
-                setEditingTenant(null);
-              }}
-              className="text-xs text-[#888] hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#282828] transition-colors"
-            >
-              <ArrowRight className="w-3.5 h-3.5" />
-              <span>بستن فرم</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                form="tenant-view-form"
+                disabled={isSubmitting}
+                className="px-4 py-1.5 rounded-lg bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold text-xs shadow-md shadow-[#1DB954]/20 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isSubmitting ? 'در حال ثبت...' : editingTenant ? 'ذخیره تغییرات' : 'ایجاد و ثبت سازمان'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAdding(false);
+                  setEditingTenant(null);
+                }}
+                className="text-xs text-[#888] hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#282828] transition-colors"
+              >
+                <ArrowRight className="w-3.5 h-3.5" />
+                <span>بستن فرم</span>
+              </button>
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form id="tenant-view-form" onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">

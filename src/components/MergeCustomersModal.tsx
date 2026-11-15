@@ -181,7 +181,7 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
         dir="rtl"
       >
         {/* Header */}
-        <div className="p-4 sm:p-5 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between">
+        <div className="p-4 sm:p-5 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-[#1DB954]/15 text-emerald-700 dark:text-[#1DB954] flex items-center justify-center shrink-0">
               <GitMerge className="w-5 h-5 stroke-[2.5]" />
@@ -198,12 +198,35 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#242424] dark:hover:bg-[#333] dark:text-[#A7A7A7] dark:hover:text-white transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            {step === 'select' ? (
+              <button
+                type="button"
+                disabled={selectedCustomers.length < 2 || !primaryCustomer}
+                onClick={() => setStep('confirm')}
+                className="h-9 px-4 rounded-full bg-[#1DB954] hover:bg-[#1ED760] disabled:opacity-50 disabled:pointer-events-none text-black font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <span>مرحله بعد: پیش‌نمایش و تأیید</span>
+                <ArrowLeft className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={merging}
+                onClick={handleExecuteMerge}
+                className="h-9 px-4 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <GitMerge className="w-3.5 h-3.5 stroke-[3]" />
+                <span>{merging ? 'در حال ادغام پرونده‌ها...' : 'تأیید و ادغام نهایی'}</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#242424] dark:hover:bg-[#333] dark:text-[#A7A7A7] dark:hover:text-white transition-colors flex items-center justify-center"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {step === 'select' ? (

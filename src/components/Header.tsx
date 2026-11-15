@@ -37,7 +37,7 @@ interface HeaderProps {
   expiredCount: number;
   onViewExpired: () => void;
   onOpenNewCustomer: () => void;
-  onOpenNewLead: () => void;
+  onOpenQuickAddCustomer: () => void;
   onToggleMobileMenu?: () => void;
   isMobileMenuOpen?: boolean;
   onNavigateToPortal?: (subTab: 'profile' | 'leave' | 'advance') => void;
@@ -59,7 +59,7 @@ export const Header: React.FC<HeaderProps> = ({
   expiredCount,
   onViewExpired,
   onOpenNewCustomer,
-  onOpenNewLead,
+  onOpenQuickAddCustomer,
   onToggleMobileMenu,
   isMobileMenuOpen,
   onNavigateToPortal,
@@ -163,12 +163,12 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Quick Action: Theme Mode Toggle */}
         <ThemeToggle />
 
-        {/* Quick Action: New Lead (Icon only) */}
+        {/* Quick Action: Quick Add Customer by Phone (Icon only) */}
         <button
-          onClick={onOpenNewLead}
-          className="w-8 sm:w-9 h-8 sm:h-9 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#282828] dark:hover:bg-[#333333] text-slate-700 dark:text-white border border-slate-200 dark:border-[#3e3e3e] flex items-center justify-center transition-all hover:scale-105 shadow-xs"
-          title="افزودن شماره"
-          aria-label="افزودن شماره"
+          onClick={onOpenQuickAddCustomer}
+          className="w-8 sm:w-9 h-8 sm:h-9 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#282828] dark:hover:bg-[#333333] text-slate-700 dark:text-white border border-slate-200 dark:border-[#3e3e3e] flex items-center justify-center transition-all hover:scale-105 shadow-xs cursor-pointer"
+          title="افزودن سریع شماره (ثبت مشتری)"
+          aria-label="افزودن سریع شماره (ثبت مشتری)"
         >
           <PhoneCall className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-emerald-600 dark:text-[#1DB954]" />
         </button>
