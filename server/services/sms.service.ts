@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import {
   directusUrl,
   directusAdminToken,
@@ -298,6 +299,76 @@ export function resolvePatternVariables(
 let cachedWorkingAttemptLabel: string | null = null;
 const tenantAdminPhonesCache = new Map<string, { phones: string[]; timestamp: number }>();
 
+export interface SendSmsResult {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+  deduplicated?: boolean;
+}
+
+export interface SendSmsOptions {
+  skipDedup?: boolean;
+}
+
+export interface SendTenantAdminsSmsOptions {
+  excludePhones?: Array<string | null | undefined>;
+}
+
+const SMS_DEDUP_WINDOW_MS = 60 * 1000; // 60 seconds idempotency window
+const MAX_RECENT_SMS_CACHE_SIZE = 2000;
+const inFlightSmsMap = new Map<string, Promise<SendSmsResult>>();
+const recentSentSmsMap = new Map<string, { timestamp: number; messageId?: string }>();
+
+export function normalizeCanonicalSmsPhone(rawPhone: string | null | undefined): string | null {
+  if (!rawPhone) return null;
+  const ascii = String(rawPhone)
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+    .replace(/[\s\-_()]/g, '')
+    .trim();
+
+  if (!ascii) return null;
+
+  let clean = ascii.replace(/^(\+98|0098)/, '0');
+  if (/^98(9\d{9})$/.test(clean)) {
+    clean = '0' + clean.slice(2);
+  } else if (/^9\d{9}$/.test(clean)) {
+    clean = '0' + clean;
+  }
+
+  return /^09\d{9}$/.test(clean) ? clean : null;
+}
+
+function pruneRecentSentSmsCache(now: number) {
+  for (const [k, v] of recentSentSmsMap.entries()) {
+    if (now - v.timestamp >= SMS_DEDUP_WINDOW_MS) {
+      recentSentSmsMap.delete(k);
+    }
+  }
+  if (recentSentSmsMap.size > MAX_RECENT_SMS_CACHE_SIZE) {
+    const excess = recentSentSmsMap.size - MAX_RECENT_SMS_CACHE_SIZE;
+    const keys = Array.from(recentSentSmsMap.keys()).slice(0, excess);
+    for (const k of keys) recentSentSmsMap.delete(k);
+  }
+}
+
+function buildSmsDedupKey(
+  cleanPhone: string,
+  patternCode: string,
+  cleanVars: Record<string, string>
+): string {
+  // Exclude volatile current-clock fields so double-submits across a minute boundary are still deduplicated
+  const stableEntries = Object.entries(cleanVars)
+    .filter(([k]) => k !== 'time' && k !== 'client_time')
+    .sort(([a], [b]) => a.localeCompare(b));
+  const payload = JSON.stringify({
+    phone: cleanPhone,
+    pattern: patternCode.trim(),
+    vars: stableEntries,
+  });
+  return crypto.createHash('sha256').update(payload).digest('hex');
+}
+
 export function invalidateTenantAdminPhonesCache(tenantId?: string | number | null) {
   if (tenantId !== undefined && tenantId !== null) {
     const raw = String(tenantId).trim();
@@ -314,8 +385,9 @@ export async function sendIppanelSmsPattern(
   patternCode: string | null | undefined,
   variables: Record<string, string | number> = {},
   overrideApiKey?: string,
-  overrideSender?: string
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  overrideSender?: string,
+  options?: SendSmsOptions
+): Promise<SendSmsResult> {
   if (
     (!projectSettingsData.ippanel_api || !projectSettingsData.ippanel_api.trim()) &&
     directusUrl &&
@@ -338,242 +410,302 @@ export async function sendIppanelSmsPattern(
   }
 
   const cleanApiKey = rawKey.replace(/^(Bearer|AccessKey)\s+/i, '').trim();
+  const cleanPhone = normalizeCanonicalSmsPhone(recipientPhone);
 
-  let cleanPhone = String(recipientPhone).replace(/[\s\-_()]/g, '').trim();
-  cleanPhone = cleanPhone.replace(/^(\+98|0098)/, '0');
-  if (/^9\d{9}$/.test(cleanPhone)) {
-    cleanPhone = '0' + cleanPhone;
-  }
-
-  if (!/^09\d{9}$/.test(cleanPhone)) {
+  if (!cleanPhone) {
     console.warn(`[IPPanel SMS] Skipped invalid phone number: ${recipientPhone}`);
     return { success: false, error: 'شماره تلفن گیرنده نامعتبر است (فرمت مجاز: 09xxxxxxxxx)' };
   }
 
-  const senderLine = (
-    overrideSender ||
-    projectSettingsData.ippanel_sender ||
-    projectSettingsData.ippanel_line_number ||
-    '90001356'
-  ).trim();
-  const senderWithoutPlus = senderLine.replace(/^\+/, '');
-  const cleanPhoneE164 = cleanPhone.startsWith('0')
-    ? '+98' + cleanPhone.substring(1)
-    : cleanPhone.startsWith('+98')
-    ? cleanPhone
-    : '+98' + cleanPhone;
-  const cleanPhone98 = cleanPhone.startsWith('0') ? '98' + cleanPhone.substring(1) : cleanPhone;
+  const cleanPattern = patternCode.trim();
+  const cleanVars = resolvePatternVariables(cleanPattern, cleanPhone, variables);
+  const dedupKey = buildSmsDedupKey(cleanPhone, cleanPattern, cleanVars);
 
-  const cleanVars = resolvePatternVariables(patternCode.trim(), cleanPhone, variables);
+  // 1. Coalesce any concurrent in-flight dispatch for the exact same SMS
+  const existingInFlight = inFlightSmsMap.get(dedupKey);
+  if (existingInFlight) {
+    console.log(
+      `[IPPanel SMS] Coalesced concurrent duplicate dispatch to ${cleanPhone} (pattern: '${cleanPattern}')`
+    );
+    const sharedRes = await existingInFlight;
+    return { ...sharedRes, deduplicated: true };
+  }
 
-  const restPayload98 = {
-    pattern_code: patternCode.trim(),
-    originator: senderLine,
-    recipient: cleanPhone98,
-    values: cleanVars,
-  };
-
-  const restPayload09 = {
-    pattern_code: patternCode.trim(),
-    originator: senderLine,
-    recipient: cleanPhone,
-    values: cleanVars,
-  };
-
-  const restPayloadAltSender = {
-    pattern_code: patternCode.trim(),
-    originator: senderWithoutPlus,
-    recipient: cleanPhone98,
-    values: cleanVars,
-  };
-
-  const api2Payload = {
-    code: patternCode.trim(),
-    sender: senderLine,
-    recipient: cleanPhone,
-    variable: cleanVars,
-  };
-
-  const edgePayload = {
-    sending_type: 'pattern',
-    from_number: senderLine,
-    code: patternCode.trim(),
-    recipients: [cleanPhoneE164],
-    params: cleanVars,
-  };
-
-  console.log(
-    `[IPPanel SMS] Sending pattern '${patternCode}' to ${cleanPhone} (sender: ${senderLine}) with variables:`,
-    cleanVars
-  );
-
-  const baseAttempts: Array<{
-    url: string;
-    headers: Record<string, string>;
-    body: string;
-    label: string;
-  }> = [
-    {
-      url: 'https://api2.ippanel.com/api/v1/sms/pattern/normal/send',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: cleanApiKey,
-      },
-      body: JSON.stringify(api2Payload),
-      label: 'api2.ippanel.com (apikey)',
-    },
-    {
-      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: cleanApiKey,
-      },
-      body: JSON.stringify(restPayload98),
-      label: 'rest.ippanel.com (apikey, 989...)',
-    },
-    {
-      url: 'https://api2.ippanel.com/api/v1/sms/pattern/normal/send',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `AccessKey ${cleanApiKey}`,
-      },
-      body: JSON.stringify(api2Payload),
-      label: 'api2.ippanel.com (AccessKey)',
-    },
-    {
-      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: cleanApiKey,
-      },
-      body: JSON.stringify(restPayload09),
-      label: 'rest.ippanel.com (apikey, 09...)',
-    },
-    {
-      url: 'https://edge.ippanel.com/v1/api/send',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `AccessKey ${cleanApiKey}`,
-      },
-      body: JSON.stringify(edgePayload),
-      label: 'edge.ippanel.com (AccessKey)',
-    },
-    {
-      url: 'https://edge.ippanel.com/v1/api/send',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: cleanApiKey,
-      },
-      body: JSON.stringify(edgePayload),
-      label: 'edge.ippanel.com (apikey)',
-    },
-    {
-      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `AccessKey ${cleanApiKey}`,
-      },
-      body: JSON.stringify(restPayload98),
-      label: 'rest.ippanel.com (AccessKey)',
-    },
-    {
-      url: 'https://rest.ippanel.com/v1/messages/patterns/send',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: cleanApiKey,
-      },
-      body: JSON.stringify(restPayloadAltSender),
-      label: 'rest.ippanel.com (alt sender)',
-    },
-    {
-      url: 'https://ippanel.com/api/v1/sms/pattern/normal/send',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: cleanApiKey,
-      },
-      body: JSON.stringify(api2Payload),
-      label: 'ippanel.com (apikey)',
-    },
-  ];
-
-  // If a specific endpoint succeeded previously, put it at index 0 for immediate zero-delay dispatch!
-  const attempts = [...baseAttempts];
-  if (cachedWorkingAttemptLabel) {
-    const cachedIdx = attempts.findIndex((a) => a.label === cachedWorkingAttemptLabel);
-    if (cachedIdx > 0) {
-      const [favored] = attempts.splice(cachedIdx, 1);
-      attempts.unshift(favored);
+  // 2. Prevent duplicate dispatches within the idempotency window
+  const now = Date.now();
+  pruneRecentSentSmsCache(now);
+  if (!options?.skipDedup) {
+    const recent = recentSentSmsMap.get(dedupKey);
+    if (recent && now - recent.timestamp < SMS_DEDUP_WINDOW_MS) {
+      console.log(
+        `[IPPanel SMS] Suppressed duplicate SMS to ${cleanPhone} (pattern: '${cleanPattern}', sent ${now - recent.timestamp}ms ago)`
+      );
+      return {
+        success: true,
+        messageId: recent.messageId || 'DEDUPLICATED',
+        deduplicated: true,
+      };
     }
   }
 
-  let lastError = '';
+  const dispatchPromise = (async (): Promise<SendSmsResult> => {
+    const senderLine = (
+      overrideSender ||
+      projectSettingsData.ippanel_sender ||
+      projectSettingsData.ippanel_line_number ||
+      '90001356'
+    ).trim();
+    const senderWithoutPlus = senderLine.replace(/^\+/, '');
+    const cleanPhoneE164 = cleanPhone.startsWith('0')
+      ? '+98' + cleanPhone.substring(1)
+      : cleanPhone.startsWith('+98')
+      ? cleanPhone
+      : '+98' + cleanPhone;
+    const cleanPhone98 = cleanPhone.startsWith('0') ? '98' + cleanPhone.substring(1) : cleanPhone;
 
-  for (const attempt of attempts) {
-    const controller = new AbortController();
-    const timeoutTimer = setTimeout(() => controller.abort(), 3200);
+    const restPayload98 = {
+      pattern_code: cleanPattern,
+      originator: senderLine,
+      recipient: cleanPhone98,
+      values: cleanVars,
+    };
 
-    try {
-      const res = await fetch(attempt.url, {
-        method: 'POST',
-        headers: attempt.headers,
-        body: attempt.body,
-        signal: controller.signal,
-      });
+    const restPayload09 = {
+      pattern_code: cleanPattern,
+      originator: senderLine,
+      recipient: cleanPhone,
+      values: cleanVars,
+    };
 
-      if (res.ok) {
-        const json: any = await res.json().catch(() => ({}));
-        cachedWorkingAttemptLabel = attempt.label; // Lock in the fast working endpoint!
-        console.log(`[IPPanel SMS] Successfully sent via ${attempt.label}:`, json);
-        return {
-          success: true,
-          messageId: String(json?.data || json?.bulk_id || json?.message_id || json?.id || 'OK'),
-        };
-      } else {
-        const errBody = await res.text().catch(() => '');
-        console.warn(`[IPPanel SMS] ${attempt.label} failed with status ${res.status}:`, errBody);
+    const restPayloadAltSender = {
+      pattern_code: cleanPattern,
+      originator: senderWithoutPlus,
+      recipient: cleanPhone98,
+      values: cleanVars,
+    };
 
-        let detailedMsg = errBody;
-        try {
-          const parsed = JSON.parse(errBody);
-          if (parsed?.data?.error) {
-            detailedMsg = parsed.data.error;
-          } else if (parsed?.message) {
-            detailedMsg = parsed.message;
-          } else if (parsed?.error) {
-            detailedMsg = parsed.error;
+    const api2Payload = {
+      code: cleanPattern,
+      sender: senderLine,
+      recipient: cleanPhone,
+      variable: cleanVars,
+    };
+
+    const edgePayload = {
+      sending_type: 'pattern',
+      from_number: senderLine,
+      code: cleanPattern,
+      recipients: [cleanPhoneE164],
+      params: cleanVars,
+    };
+
+    console.log(
+      `[IPPanel SMS] Sending pattern '${cleanPattern}' to ${cleanPhone} (sender: ${senderLine}) with variables:`,
+      cleanVars
+    );
+
+    const baseAttempts: Array<{
+      url: string;
+      headers: Record<string, string>;
+      body: string;
+      label: string;
+    }> = [
+      {
+        url: 'https://api2.ippanel.com/api/v1/sms/pattern/normal/send',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: cleanApiKey,
+        },
+        body: JSON.stringify(api2Payload),
+        label: 'api2.ippanel.com (apikey)',
+      },
+      {
+        url: 'https://rest.ippanel.com/v1/messages/patterns/send',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: cleanApiKey,
+        },
+        body: JSON.stringify(restPayload98),
+        label: 'rest.ippanel.com (apikey, 989...)',
+      },
+      {
+        url: 'https://api2.ippanel.com/api/v1/sms/pattern/normal/send',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `AccessKey ${cleanApiKey}`,
+        },
+        body: JSON.stringify(api2Payload),
+        label: 'api2.ippanel.com (AccessKey)',
+      },
+      {
+        url: 'https://rest.ippanel.com/v1/messages/patterns/send',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: cleanApiKey,
+        },
+        body: JSON.stringify(restPayload09),
+        label: 'rest.ippanel.com (apikey, 09...)',
+      },
+      {
+        url: 'https://edge.ippanel.com/v1/api/send',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `AccessKey ${cleanApiKey}`,
+        },
+        body: JSON.stringify(edgePayload),
+        label: 'edge.ippanel.com (AccessKey)',
+      },
+      {
+        url: 'https://edge.ippanel.com/v1/api/send',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: cleanApiKey,
+        },
+        body: JSON.stringify(edgePayload),
+        label: 'edge.ippanel.com (apikey)',
+      },
+      {
+        url: 'https://rest.ippanel.com/v1/messages/patterns/send',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `AccessKey ${cleanApiKey}`,
+        },
+        body: JSON.stringify(restPayload98),
+        label: 'rest.ippanel.com (AccessKey)',
+      },
+      {
+        url: 'https://rest.ippanel.com/v1/messages/patterns/send',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: cleanApiKey,
+        },
+        body: JSON.stringify(restPayloadAltSender),
+        label: 'rest.ippanel.com (alt sender)',
+      },
+      {
+        url: 'https://ippanel.com/api/v1/sms/pattern/normal/send',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: cleanApiKey,
+        },
+        body: JSON.stringify(api2Payload),
+        label: 'ippanel.com (apikey)',
+      },
+    ];
+
+    // If a specific endpoint succeeded previously, put it at index 0 for immediate zero-delay dispatch!
+    const attempts = [...baseAttempts];
+    if (cachedWorkingAttemptLabel) {
+      const cachedIdx = attempts.findIndex((a) => a.label === cachedWorkingAttemptLabel);
+      if (cachedIdx > 0) {
+        const [favored] = attempts.splice(cachedIdx, 1);
+        attempts.unshift(favored);
+      }
+    }
+
+    let lastError = '';
+
+    for (const attempt of attempts) {
+      const controller = new AbortController();
+      // Use a generous 12s timeout so slow gateway replies don't prematurely abort and trigger duplicate fallback sends
+      const timeoutTimer = setTimeout(() => controller.abort(), 12000);
+
+      try {
+        const res = await fetch(attempt.url, {
+          method: 'POST',
+          headers: attempt.headers,
+          body: attempt.body,
+          signal: controller.signal,
+        });
+
+        if (res.ok) {
+          const json: any = await res.json().catch(() => ({}));
+          cachedWorkingAttemptLabel = attempt.label; // Lock in the fast working endpoint!
+          const msgId = String(json?.data || json?.bulk_id || json?.message_id || json?.id || 'OK');
+          recentSentSmsMap.set(dedupKey, { timestamp: Date.now(), messageId: msgId });
+          console.log(`[IPPanel SMS] Successfully sent via ${attempt.label}:`, json);
+          return {
+            success: true,
+            messageId: msgId,
+          };
+        } else {
+          const errBody = await res.text().catch(() => '');
+          console.warn(`[IPPanel SMS] ${attempt.label} failed with status ${res.status}:`, errBody);
+
+          let detailedMsg = errBody;
+          try {
+            const parsed = JSON.parse(errBody);
+            if (parsed?.data?.error) {
+              detailedMsg = parsed.data.error;
+            } else if (parsed?.message) {
+              detailedMsg = parsed.message;
+            } else if (parsed?.error) {
+              detailedMsg = parsed.error;
+            }
+          } catch {
+            if (res.status === 502 && (errBody.includes('ArvanCloud') || errBody.includes('502'))) {
+              detailedMsg =
+                'درگاه IPPanel به دلیل محدودیت شبکه (Geo-IP) به درخواست‌های خارج از کشور پاسخ نمی‌دهد (خطای 502 سرور میانی). پس از دیپلوی روی سرور ایران پیامک با موفقیت ارسال خواهد شد.';
+            }
           }
-        } catch {
-          if (res.status === 502 && (errBody.includes('ArvanCloud') || errBody.includes('502'))) {
-            detailedMsg =
-              'درگاه IPPanel به دلیل محدودیت شبکه (Geo-IP) به درخواست‌های خارج از کشور پاسخ نمی‌دهد (خطای 502 سرور میانی). پس از دیپلوی روی سرور ایران پیامک با موفقیت ارسال خواهد شد.';
+
+          lastError = detailedMsg || `HTTP ${res.status}`;
+
+          if (
+            detailedMsg.includes('اعتبار') ||
+            detailedMsg.includes('balance') ||
+            detailedMsg.includes('credit')
+          ) {
+            break;
+          }
+
+          // If upstream timed out (504), or the known working endpoint returned 5xx,
+          // or ArvanCloud blocked at edge (502), stop retrying to avoid duplicate SMS dispatch.
+          if (
+            res.status === 504 ||
+            (res.status === 502 && errBody.includes('ArvanCloud')) ||
+            (res.status >= 500 && cachedWorkingAttemptLabel === attempt.label)
+          ) {
+            if (res.status === 504 || res.status === 500) {
+              recentSentSmsMap.set(dedupKey, { timestamp: Date.now(), messageId: 'AMBIGUOUS_5XX' });
+            }
+            break;
           }
         }
+      } catch (fetchErr: any) {
+        const isAbortTimeout =
+          fetchErr?.name === 'AbortError' ||
+          String(fetchErr?.message || '').toLowerCase().includes('aborted');
+        lastError = `[${attempt.label}] Network error: ${fetchErr.message}`;
+        console.warn(`[IPPanel SMS] Network error connecting to ${attempt.label}:`, fetchErr.message);
 
-        lastError = detailedMsg || `HTTP ${res.status}`;
-
-        if (
-          detailedMsg.includes('اعتبار') ||
-          detailedMsg.includes('balance') ||
-          detailedMsg.includes('credit')
-        ) {
+        // If the POST timed out after 12s, the gateway may have already accepted and sent the SMS.
+        // Do NOT retry on another endpoint, and record in recentSentSmsMap to prevent duplicate retries.
+        if (isAbortTimeout) {
+          recentSentSmsMap.set(dedupKey, { timestamp: Date.now(), messageId: 'TIMEOUT_GUARD' });
           break;
         }
+      } finally {
+        clearTimeout(timeoutTimer);
       }
-    } catch (fetchErr: any) {
-      lastError = `[${attempt.label}] Network error: ${fetchErr.message}`;
-      console.warn(`[IPPanel SMS] Network error connecting to ${attempt.label}:`, fetchErr.message);
-    } finally {
-      clearTimeout(timeoutTimer);
     }
-  }
 
-  return { success: false, error: lastError || 'خطا در برقراری ارتباط با درگاه IPPanel' };
+    return { success: false, error: lastError || 'خطا در برقراری ارتباط با درگاه IPPanel' };
+  })();
+
+  inFlightSmsMap.set(dedupKey, dispatchPromise);
+  try {
+    return await dispatchPromise;
+  } finally {
+    inFlightSmsMap.delete(dedupKey);
+  }
 }
 
 export async function sendTenantAdminsSmsPattern(
   tenantId: string | number | null | undefined,
   patternCode: string | null | undefined,
-  variables: Record<string, string | number> = {}
+  variables: Record<string, string | number> = {},
+  options?: SendTenantAdminsSmsOptions
 ) {
   if (!patternCode) return;
   const rawTenantStr = tenantId !== undefined && tenantId !== null ? String(tenantId).trim() : 'default';
@@ -581,11 +713,16 @@ export async function sendTenantAdminsSmsPattern(
   const effectiveKey = resolvedNum ? String(resolvedNum) : rawTenantStr || 'default';
 
   const collectedPhones = new Set<string>();
+  const addNormalizedPhone = (raw: string | null | undefined) => {
+    const clean = normalizeCanonicalSmsPhone(raw);
+    if (clean) collectedPhones.add(clean);
+  };
+
   const now = Date.now();
   const cached = tenantAdminPhonesCache.get(effectiveKey);
 
   if (cached && now - cached.timestamp < 60000) {
-    cached.phones.forEach((p) => collectedPhones.add(p));
+    cached.phones.forEach((p) => addNormalizedPhone(p));
   } else if (directusUrl && directusAdminToken) {
     try {
       const filterTarget = resolvedNum ? String(resolvedNum) : rawTenantStr;
@@ -607,22 +744,19 @@ export async function sendTenantAdminsSmsPattern(
 
       if (res?.data) {
         const items = Array.isArray(res.data) ? res.data : [res.data];
-        const fetchedPhones: string[] = [];
         for (const item of items) {
           const phones = parseSmsPhones(item?.sms_phones);
-          phones.forEach((cp) => {
-            collectedPhones.add(cp);
-            fetchedPhones.push(cp);
-          });
-          if (items[0]?.id) {
-            tenantSettingsMap.set(effectiveKey, {
-              id: String(items[0].id),
-              tenant_id: effectiveKey,
-              sms_phones: fetchedPhones,
-            });
-          }
+          phones.forEach((cp) => addNormalizedPhone(cp));
         }
-        tenantAdminPhonesCache.set(effectiveKey, { phones: fetchedPhones, timestamp: now });
+        const uniqueFetchedPhones = Array.from(collectedPhones);
+        if (items[0]?.id) {
+          tenantSettingsMap.set(effectiveKey, {
+            id: String(items[0].id),
+            tenant_id: effectiveKey,
+            sms_phones: uniqueFetchedPhones,
+          });
+        }
+        tenantAdminPhonesCache.set(effectiveKey, { phones: uniqueFetchedPhones, timestamp: now });
       }
     } catch (err: any) {
       console.warn('[IPPanel SMS] Directus tenant_settings lookup warning:', err.message);
@@ -633,22 +767,35 @@ export async function sendTenantAdminsSmsPattern(
   if (collectedPhones.size === 0) {
     const localEntry = tenantSettingsMap.get(effectiveKey) || tenantSettingsMap.get(rawTenantStr);
     if (localEntry?.sms_phones) {
-      parseSmsPhones(localEntry.sms_phones).forEach((p) => collectedPhones.add(p));
+      parseSmsPhones(localEntry.sms_phones).forEach((p) => addNormalizedPhone(p));
     }
   }
 
-  if (collectedPhones.size === 0) {
-    console.warn(`[IPPanel SMS] No admin phone numbers found in tenant_settings for tenant ${effectiveKey} to send notification.`);
+  // Exclude phones that already received (or are receiving) this exact notification directly (e.g. applicant/user)
+  const excludedSet = new Set<string>();
+  if (options?.excludePhones) {
+    for (const ex of options.excludePhones) {
+      const cleanEx = normalizeCanonicalSmsPhone(ex);
+      if (cleanEx) excludedSet.add(cleanEx);
+    }
+  }
+
+  const phoneList = Array.from(collectedPhones).filter((p) => !excludedSet.has(p));
+
+  if (phoneList.length === 0) {
+    if (collectedPhones.size === 0) {
+      console.warn(
+        `[IPPanel SMS] No admin phone numbers found in tenant_settings for tenant ${effectiveKey} to send notification.`
+      );
+    }
     return;
   }
 
   console.log(
-    `[IPPanel SMS] Notifying ${collectedPhones.size} tenant (${effectiveKey}) admins concurrently with pattern '${patternCode}'...`
+    `[IPPanel SMS] Notifying ${phoneList.length} tenant (${effectiveKey}) admins concurrently with pattern '${patternCode}'...`
   );
 
-  // Send to all admin phones CONCURRENTLY via Promise.allSettled without blocking
-  const phoneList = Array.from(collectedPhones);
-  Promise.allSettled(
+  await Promise.allSettled(
     phoneList.map((phone) =>
       sendIppanelSmsPattern(phone, patternCode, variables).catch((e) =>
         console.warn(`[IPPanel SMS] Failed to notify tenant admin ${phone}:`, e.message)

@@ -241,8 +241,9 @@ router.post('/api/leave-requests', async (req: Request, res: Response) => {
       sendIppanelSmsPattern(applicantPhone, patternToUse, leaveVars)
         .catch(e => console.warn('Leave request SMS to applicant error:', e.message));
     }
-    sendTenantAdminsSmsPattern(targetTenantId, patternToUse, leaveVars)
-      .catch(e => console.warn('Leave request SMS to admin error:', e.message));
+    sendTenantAdminsSmsPattern(targetTenantId, patternToUse, leaveVars, {
+      excludePhones: [applicantPhone],
+    }).catch(e => console.warn('Leave request SMS to admin error:', e.message));
   } else {
     console.warn(`[Leave Request SMS] No SMS pattern configured for leave type: ${newRequest.leave_type}`);
   }
@@ -347,7 +348,10 @@ router.patch('/api/leave-requests/:id', async (req: Request, res: Response) => {
     } catch {}
   }
 
-  if (targetReq) {
+  const nextStatus = status || 'pending';
+  const statusChanged = targetReq ? targetReq.status !== nextStatus : false;
+
+  if (targetReq && statusChanged) {
     const applicantInfo = await getPersonnelFullName(targetReq.personnel_id, targetReq.personnel_name);
     const applicantFullName = applicantInfo.fullName || targetReq.personnel_name;
     const applicantP = personnelData.find(p => p.id === targetReq!.personnel_id || p.user_id === targetReq!.personnel_id || p.name === targetReq!.personnel_name);

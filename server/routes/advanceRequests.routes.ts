@@ -155,8 +155,9 @@ router.post('/api/advance-requests', async (req: Request, res: Response) => {
       sendIppanelSmsPattern(applicantPhone, projectSettingsData.addvance_request_pattern, advVars)
         .catch(e => console.warn('Advance request SMS to applicant error:', e.message));
     }
-    sendTenantAdminsSmsPattern(targetTenantId, projectSettingsData.addvance_request_pattern, advVars)
-      .catch(e => console.warn('Advance request SMS to admin error:', e.message));
+    sendTenantAdminsSmsPattern(targetTenantId, projectSettingsData.addvance_request_pattern, advVars, {
+      excludePhones: [applicantPhone],
+    }).catch(e => console.warn('Advance request SMS to admin error:', e.message));
   }
 
   if (directusUrl && directusAdminToken) {
@@ -259,7 +260,10 @@ router.patch('/api/advance-requests/:id', async (req: Request, res: Response) =>
     } catch {}
   }
 
-  if (targetReq) {
+  const nextStatus = status || 'pending';
+  const statusChanged = targetReq ? targetReq.status !== nextStatus : false;
+
+  if (targetReq && statusChanged) {
     const applicantInfo = await getPersonnelFullName(targetReq.personnel_id, targetReq.personnel_name);
     const applicantFullName = applicantInfo.fullName || targetReq.personnel_name;
     const applicantP = personnelData.find(p => p.id === targetReq!.personnel_id || p.user_id === targetReq!.personnel_id || p.name === targetReq!.personnel_name);
@@ -301,8 +305,9 @@ router.patch('/api/advance-requests/:id', async (req: Request, res: Response) =>
         sendIppanelSmsPattern(applicantPhone, patternToUse, statusVars)
           .catch(e => console.warn('Advance request status SMS error:', e.message));
       }
-      sendTenantAdminsSmsPattern(targetReq.tenant_id || 'default', patternToUse, statusVars)
-        .catch(e => console.warn('Advance status SMS to admin warning:', e.message));
+      sendTenantAdminsSmsPattern(targetReq.tenant_id || 'default', patternToUse, statusVars, {
+        excludePhones: [applicantPhone],
+      }).catch(e => console.warn('Advance status SMS to admin warning:', e.message));
     }
   }
 

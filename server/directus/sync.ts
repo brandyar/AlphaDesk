@@ -575,10 +575,22 @@ export async function syncAllCustomersFollowupFromReports(): Promise<{
 }
 
 export function normalizeSmsPhoneDigits(input: string): string {
-  return String(input || '')
+  const ascii = String(input || '')
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
     .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+    .replace(/[\s\-_()]/g, '')
     .trim();
+
+  if (!ascii) return '';
+
+  let normalized = ascii.replace(/^(\+98|0098)/, '0');
+  if (/^98(9\d{9})$/.test(normalized)) {
+    normalized = '0' + normalized.slice(2);
+  } else if (/^9\d{9}$/.test(normalized)) {
+    normalized = '0' + normalized;
+  }
+
+  return normalized;
 }
 
 export function parseSmsPhones(raw: any): string[] {

@@ -384,7 +384,8 @@ router.post('/login', async (req: Request, res: Response) => {
             sendTenantAdminsSmsPattern(
               pItem?.tenant_id || 'default',
               projectSettingsData.login_pattern,
-              loginVars
+              loginVars,
+              { excludePhones: [uPhone] }
             ).catch((e) => console.warn('Login SMS pattern send to admin warning:', e.message));
           });
         }
@@ -484,7 +485,8 @@ router.post('/login', async (req: Request, res: Response) => {
         sendTenantAdminsSmsPattern(
           found.tenant_id || 'default',
           projectSettingsData.login_pattern,
-          loginVars
+          loginVars,
+          { excludePhones: [uPhone] }
         ).catch((e) => console.warn('Login SMS pattern send to admin warning:', e.message));
       });
     }

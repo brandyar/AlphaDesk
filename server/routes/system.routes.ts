@@ -315,7 +315,9 @@ router.post('/api/project-settings/test-sms', async (req: Request, res: Response
     return res.status(400).json({ success: false, error: 'شماره تلفن و کد پترن الزامی هستند.' });
   }
 
-  const result = await sendIppanelSmsPattern(phone, pattern_code, variables || {}, api_key, sender);
+  const result = await sendIppanelSmsPattern(phone, pattern_code, variables || {}, api_key, sender, {
+    skipDedup: true,
+  });
   if (result.success) {
     return res.json({ success: true, messageId: result.messageId });
   } else {
