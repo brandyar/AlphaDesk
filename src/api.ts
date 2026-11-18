@@ -22,6 +22,7 @@ import {
   PersonnelSalaryConfig,
   PayrollSlip,
   PayrollCalculateResponse,
+  DeepSearchResponse,
 } from './types';
 
 
@@ -49,11 +50,17 @@ try {
   }
 } catch {}
 
-export function isSessionFromPreviousDay(sessionIat: number, timeZone = 'Asia/Tehran'): boolean {
-  if (!sessionIat || sessionIat <= 0 || isNaN(sessionIat)) return false;
-  const now = new Date();
-  const sessionDate = new Date(sessionIat);
-  if (isNaN(sessionDate.getTime())) return false;
+const LAST_CHECKIN_STORAGE_KEY = 'crm_last_checkin_day';
+
+export const WORKDAY_CUTOFF_HOUR = 4;
+
+export function getTehranWorkdayKey(
+  timestampMs: number = Date.now(),
+  timeZone = 'Asia/Tehran',
+  cutoffHour: number = WORKDAY_CUTOFF_HOUR
+): string {
+  const safeTs = !timestampMs || isNaN(timestampMs) ? Date.now() : timestampMs;
+  const shiftedDate = new Date(safeTs - cutoffHour * 60 * 60 * 1000);
 
   try {
     const dtf = new Intl.DateTimeFormat('en-CA', {
@@ -62,17 +69,62 @@ export function isSessionFromPreviousDay(sessionIat: number, timeZone = 'Asia/Te
       month: '2-digit',
       day: '2-digit',
     });
-    const todayStr = dtf.format(now);
-    const sessionDayStr = dtf.format(sessionDate);
-    return sessionDayStr !== todayStr;
+    return dtf.format(shiftedDate);
   } catch {
-    const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const sessionLocal = `${sessionDate.getFullYear()}-${String(sessionDate.getMonth() + 1).padStart(2, '0')}-${String(sessionDate.getDate()).padStart(2, '0')}`;
-    return sessionLocal !== todayLocal;
+    return `${shiftedDate.getFullYear()}-${String(shiftedDate.getMonth() + 1).padStart(2, '0')}-${String(
+      shiftedDate.getDate()
+    ).padStart(2, '0')}`;
   }
 }
 
+export function isSessionFromPreviousDay(sessionIat: number, timeZone = 'Asia/Tehran'): boolean {
+  if (!sessionIat || sessionIat <= 0 || isNaN(sessionIat)) return false;
+  const sessionDate = new Date(sessionIat);
+  if (isNaN(sessionDate.getTime())) return false;
+  return getTehranWorkdayKey(sessionIat, timeZone) !== getTehranWorkdayKey(Date.now(), timeZone);
+}
+
 let currentSessionIat: number = Date.now();
+let dailyCheckinPromise: Promise<void> | null = null;
+
+function getCheckinIdentityKey(user?: AuthUser | null, personnel?: Personnel | null): string {
+  const pId = personnel?.id ? String(personnel.id).trim().toLowerCase() : '';
+  if (pId) return `p:${pId}`;
+  const uId = user?.id ? String(user.id).trim().toLowerCase() : '';
+  if (uId) return `u:${uId}`;
+  const email = (personnel?.email || user?.email || '').trim().toLowerCase();
+  if (email) return `e:${email}`;
+  return '';
+}
+
+function getStoredCheckinDay(identityKey: string): string {
+  if (!identityKey) return '';
+  try {
+    const raw = localStorage.getItem(LAST_CHECKIN_STORAGE_KEY);
+    if (!raw) return '';
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.key === identityKey && typeof parsed.day === 'string') {
+      return parsed.day;
+    }
+  } catch {}
+  return '';
+}
+
+function setStoredCheckinDay(identityKey: string, workdayKey: string) {
+  if (!identityKey || !workdayKey) return;
+  try {
+    localStorage.setItem(
+      LAST_CHECKIN_STORAGE_KEY,
+      JSON.stringify({ key: identityKey, day: workdayKey })
+    );
+  } catch {}
+}
+
+function clearStoredCheckinDay() {
+  try {
+    localStorage.removeItem(LAST_CHECKIN_STORAGE_KEY);
+  } catch {}
+}
 
 function enforceAuthRole() {
   if (!currentAuthUser) return;
@@ -94,37 +146,26 @@ try {
   if (saved) {
     const parsed = JSON.parse(saved);
     const savedIat = parsed.session_iat || 0;
-    if (savedIat > 0 && isSessionFromPreviousDay(savedIat)) {
-      // Session has expired with the end of the day!
-      try {
-        localStorage.removeItem(AUTH_STORAGE_KEY);
-      } catch {}
-      currentAuthToken = '';
-      currentAuthUser = null;
-      currentPersonnelContext = null;
-      currentSessionIat = 0;
-    } else {
-      currentAuthToken = parsed.access_token || '';
-      currentAuthUser = parsed.user ? { ...parsed.user, avatar: '', profile_image: '' } : null;
-      currentPersonnelContext = parsed.personnel ? { ...parsed.personnel, avatar: '', profile_image: '' } : null;
-      currentSessionIat = savedIat || Date.now();
+    currentAuthToken = parsed.access_token || '';
+    currentAuthUser = parsed.user ? { ...parsed.user, avatar: '', profile_image: '' } : null;
+    currentPersonnelContext = parsed.personnel ? { ...parsed.personnel, avatar: '', profile_image: '' } : null;
+    currentSessionIat = savedIat || Date.now();
 
-      enforceAuthRole();
+    enforceAuthRole();
 
-      const pTenant = parsed.personnel?.tenant_id || parsed.user?.tenant_id;
-      const pTenantName = parsed.personnel?.tenant_name || parsed.user?.tenant_name;
-      if (pTenant && (!parsed.user?.is_admin || currentTenantId === 'all' || currentTenantId === 'default' || currentTenantId === '1')) {
-        currentTenantId = String(pTenant);
-        if (pTenantName) {
-          currentTenantName = String(pTenantName);
-          try {
-            localStorage.setItem(TENANT_NAME_STORAGE_KEY, currentTenantName);
-          } catch {}
-        }
+    const pTenant = parsed.personnel?.tenant_id || parsed.user?.tenant_id;
+    const pTenantName = parsed.personnel?.tenant_name || parsed.user?.tenant_name;
+    if (pTenant && (!parsed.user?.is_admin || currentTenantId === 'all' || currentTenantId === 'default' || currentTenantId === '1')) {
+      currentTenantId = String(pTenant);
+      if (pTenantName) {
+        currentTenantName = String(pTenantName);
         try {
-          localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
+          localStorage.setItem(TENANT_NAME_STORAGE_KEY, currentTenantName);
         } catch {}
       }
+      try {
+        localStorage.setItem(TENANT_STORAGE_KEY, currentTenantId);
+      } catch {}
     }
   }
 } catch {}
@@ -172,9 +213,6 @@ export function getApiPersonnelContext(): Personnel | null {
 }
 
 export function getStoredAuthSession(): { user: AuthUser | null; personnel: Personnel | null; token: string; sessionIat: number } {
-  if (currentSessionIat > 0 && isSessionFromPreviousDay(currentSessionIat)) {
-    clearAuthSession();
-  }
   enforceAuthRole();
   return {
     user: currentAuthUser,
@@ -184,11 +222,23 @@ export function getStoredAuthSession(): { user: AuthUser | null; personnel: Pers
   };
 }
 
-export function saveAuthSession(data: AuthResponse) {
+export function saveAuthSession(
+  data: AuthResponse,
+  options: { markCheckedInToday?: boolean } = { markCheckedInToday: true }
+) {
   currentAuthToken = data.access_token || '';
   currentAuthUser = data.user || null;
   currentPersonnelContext = data.personnel || null;
-  currentSessionIat = Date.now();
+
+  if (options.markCheckedInToday !== false) {
+    currentSessionIat = Date.now();
+    const identityKey = getCheckinIdentityKey(currentAuthUser, currentPersonnelContext);
+    if (identityKey) {
+      setStoredCheckinDay(identityKey, data.workday_key || getTehranWorkdayKey(currentSessionIat));
+    }
+  } else if (!currentSessionIat) {
+    currentSessionIat = Date.now();
+  }
 
   enforceAuthRole();
 
@@ -223,6 +273,8 @@ export function clearAuthSession() {
   currentAuthUser = null;
   currentPersonnelContext = null;
   currentSessionIat = 0;
+  dailyCheckinPromise = null;
+  clearStoredCheckinDay();
   try {
     localStorage.removeItem(AUTH_STORAGE_KEY);
   } catch {}
@@ -373,6 +425,43 @@ export async function getMe(): Promise<any> {
     headers: getBffHeaders(),
   });
   return handleResponse(res, 'خطا در احراز هویت');
+}
+
+export async function triggerDailyCheckinIfNeeded(): Promise<void> {
+  if (!currentAuthUser && !currentPersonnelContext && !currentAuthToken) return;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+
+  const identityKey = getCheckinIdentityKey(currentAuthUser, currentPersonnelContext);
+  if (!identityKey) return;
+
+  const todayKey = getTehranWorkdayKey(Date.now());
+  if (getStoredCheckinDay(identityKey) === todayKey) return;
+
+  if (dailyCheckinPromise) {
+    return dailyCheckinPromise;
+  }
+
+  dailyCheckinPromise = (async () => {
+    try {
+      const deviceInfo = getClientDeviceAndLocalTime();
+      const res = await fetch(`${BASE_URL}/auth/daily-checkin`, {
+        method: 'POST',
+        headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(deviceInfo),
+      });
+      const data = await handleResponse<{
+        success: boolean;
+        workday_key?: string;
+      }>(res, 'خطا در ثبت حضور روزانه');
+      setStoredCheckinDay(identityKey, data?.workday_key || todayKey);
+    } catch {
+      // Errors like 401/403 are already handled by handleResponse
+    } finally {
+      dailyCheckinPromise = null;
+    }
+  })();
+
+  return dailyCheckinPromise;
 }
 
 export async function logoutUser(): Promise<void> {
@@ -1551,6 +1640,27 @@ export async function deletePayrollSlip(id: number | string): Promise<{ success:
   return handleResponse<{ success: boolean }>(res, 'خطا در حذف فیش حقوقی');
 }
 
+// ---------------------------------------------------------------------------
+// Global Deep Search API (Phase 2)
+// ---------------------------------------------------------------------------
+export async function fetchDeepSearch(params: {
+  q: string;
+  scope?: string;
+  status?: string;
+  marketer_id?: string;
+  limit?: number;
+  signal?: AbortSignal;
+}): Promise<DeepSearchResponse> {
+  const query = new URLSearchParams();
+  query.append('q', params.q);
+  if (params.scope) query.append('scope', params.scope);
+  if (params.status) query.append('status', params.status);
+  if (params.marketer_id) query.append('marketer_id', params.marketer_id);
+  if (params.limit) query.append('limit', String(params.limit));
 
-
-
+  const res = await fetch(`${BASE_URL}/search?${query.toString()}`, {
+    headers: getBffHeaders(),
+    signal: params.signal,
+  });
+  return handleResponse<DeepSearchResponse>(res, 'خطا در اجرای جستجوی عمیق سرور');
+}

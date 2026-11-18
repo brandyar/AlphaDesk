@@ -1,5 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import {
   directusUrl,
   directusAdminToken,
@@ -15,12 +18,66 @@ import { directusFetch, isDirectusCircuitOpen } from '../directus/client.ts';
 import {
   formatAvatarUrl,
   getRequestUser,
+  getTehranWorkdayKey,
 } from '../middlewares/auth.middleware.ts';
 import { sendIppanelSmsPattern, sendTenantAdminsSmsPattern, getPersonnelFullName } from '../services/sms.service.ts';
 import { enrichPersonnel } from './personnel.routes.ts';
 import { localAvatarCacheMap, handleAssetProxy } from './system.routes.ts';
 
 const router = Router();
+
+const DAILY_CHECKIN_CACHE_FILE = path.join(os.tmpdir(), 'alphadesk-daily-checkin.json');
+const dailyCheckinMap = new Map<string, string>();
+const inFlightDailyCheckinKeys = new Set<string>();
+
+try {
+  if (fs.existsSync(DAILY_CHECKIN_CACHE_FILE)) {
+    const raw = fs.readFileSync(DAILY_CHECKIN_CACHE_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof k === 'string' && typeof v === 'string') {
+          dailyCheckinMap.set(k, v);
+        }
+      }
+    }
+  }
+} catch {}
+
+function persistDailyCheckinMap() {
+  try {
+    const obj: Record<string, string> = {};
+    for (const [k, v] of dailyCheckinMap.entries()) {
+      obj[k] = v;
+    }
+    fs.writeFileSync(DAILY_CHECKIN_CACHE_FILE, JSON.stringify(obj), 'utf8');
+  } catch {}
+}
+
+function buildDailyCheckinKey(
+  personnelId?: string | null,
+  userId?: string | null,
+  email?: string | null
+): string {
+  const cleanP = personnelId ? String(personnelId).trim().toLowerCase() : '';
+  if (cleanP) return `p:${cleanP}`;
+  const cleanU = userId ? String(userId).trim().toLowerCase() : '';
+  if (cleanU) return `u:${cleanU}`;
+  const cleanE = email ? String(email).trim().toLowerCase() : '';
+  if (cleanE) return `e:${cleanE}`;
+  return '';
+}
+
+function hasCheckedInForWorkday(checkinKey: string, workdayKey: string): boolean {
+  if (!checkinKey || !workdayKey) return false;
+  return dailyCheckinMap.get(checkinKey) === workdayKey;
+}
+
+function markCheckedInForWorkday(checkinKey: string, workdayKey: string) {
+  if (!checkinKey || !workdayKey) return;
+  dailyCheckinMap.set(checkinKey, workdayKey);
+  persistDailyCheckinMap();
+}
 
 function detectDeviceType(userAgent?: string, clientReported?: string): 'موبایل' | 'دسکتاپ' {
   if (clientReported) {
@@ -50,6 +107,68 @@ function resolveUserTimeAndDate(clientTime?: string, clientDate?: string): { tim
     time: (clientTime || '').trim() || defaultTehranTime,
     date: (clientDate || '').trim() || defaultTehranDate,
   };
+}
+
+function dispatchLoginSms(
+  req: Request,
+  info: {
+    fullName: string;
+    phone?: string;
+    username?: string;
+    tenantId?: string | number | null;
+  }
+) {
+  if (!projectSettingsData.login_pattern) return;
+
+  const fullName = (info.fullName || 'همکار گرامی').trim();
+  const uPhone = (info.phone || '').trim();
+  const parts = fullName.split(' ');
+  const fName = parts[0] || 'همکار';
+  const lName = parts.length > 1 ? parts.slice(1).join(' ') : 'گرامی';
+
+  const detectedDevice = detectDeviceType(
+    req.headers['user-agent'] as string,
+    req.body?.device || req.body?.client_device
+  );
+  const { time: finalTime, date: finalDate } = resolveUserTimeAndDate(
+    req.body?.client_time || req.body?.time,
+    req.body?.client_date || req.body?.date
+  );
+
+  const loginVars = {
+    name: fullName,
+    fullName: fullName,
+    user_name: fullName,
+    personnel_name: fullName,
+    family: lName,
+    first_name: fName,
+    mobile: uPhone || 'نامشخص',
+    phone: uPhone || 'نامشخص',
+    date: finalDate,
+    time: finalTime,
+    client_date: finalDate,
+    client_time: finalTime,
+    ip: (req.headers['x-forwarded-for'] as string) || req.ip || '127.0.0.1',
+    device: detectedDevice,
+    client_device: detectedDevice,
+    device_type: detectedDevice,
+    username: info.username || fullName,
+  };
+
+  queueMicrotask(() => {
+    if (uPhone) {
+      sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars).catch((e) =>
+        console.warn('Login SMS pattern send to user warning:', e.message)
+      );
+    }
+
+    sendTenantAdminsSmsPattern(
+      info.tenantId || 'default',
+      projectSettingsData.login_pattern,
+      loginVars,
+      { excludePhones: [uPhone] }
+    ).catch((e) => console.warn('Login SMS pattern send to admin warning:', e.message));
+  });
 }
 
 router.get('/assets/:id', handleAssetProxy);
@@ -337,63 +456,29 @@ router.post('/login', async (req: Request, res: Response) => {
           pItem.avatar = avatarUrl;
         }
 
-        if (projectSettingsData.login_pattern) {
-          const fullName = pItem?.name || `${meUser.first_name || ''} ${meUser.last_name || ''}`.trim() || meUser.email;
-          const uPhone = pItem?.phone || '';
-          const parts = fullName.split(' ');
-          const fName = parts[0] || 'همکار';
-          const lName = parts.length > 1 ? parts.slice(1).join(' ') : 'گرامی';
-
-          const detectedDevice = detectDeviceType(
-            req.headers['user-agent'] as string,
-            req.body.device || req.body.client_device
-          );
-          const { time: finalTime, date: finalDate } = resolveUserTimeAndDate(
-            req.body.client_time || req.body.time,
-            req.body.client_date || req.body.date
-          );
-
-          const loginVars = {
-            name: fullName,
-            fullName: fullName,
-            user_name: fullName,
-            personnel_name: fullName,
-            family: lName,
-            first_name: fName,
-            mobile: uPhone || 'نامشخص',
-            phone: uPhone || 'نامشخص',
-            date: finalDate,
-            time: finalTime,
-            client_date: finalDate,
-            client_time: finalTime,
-            ip: (req.headers['x-forwarded-for'] as string) || req.ip || '127.0.0.1',
-            device: detectedDevice,
-            client_device: detectedDevice,
-            device_type: detectedDevice,
-            username: meUser.email,
-          };
-
-          // Dispatch SMS asynchronously in the background so the login HTTP response is instantaneous
-          queueMicrotask(() => {
-            if (uPhone) {
-              sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars).catch(
-                (e) => console.warn('Login SMS pattern send to user warning:', e.message)
-              );
-            }
-
-            sendTenantAdminsSmsPattern(
-              pItem?.tenant_id || 'default',
-              projectSettingsData.login_pattern,
-              loginVars,
-              { excludePhones: [uPhone] }
-            ).catch((e) => console.warn('Login SMS pattern send to admin warning:', e.message));
-          });
+        const fullName =
+          pItem?.name ||
+          `${meUser.first_name || ''} ${meUser.last_name || ''}`.trim() ||
+          meUser.email;
+        const todayWorkdayKey = getTehranWorkdayKey();
+        const checkinKey = buildDailyCheckinKey(pItem?.id, meUser.id, meUser.email);
+        if (checkinKey) {
+          markCheckedInForWorkday(checkinKey, todayWorkdayKey);
         }
+
+        // Manual login always sends the login notification SMS (even if re-logging in on the same workday)
+        dispatchLoginSms(req, {
+          fullName,
+          phone: pItem?.phone || '',
+          username: pItem?.username || meUser.email,
+          tenantId: pItem?.tenant_id || 'default',
+        });
 
         return res.json({
           success: true,
           access_token: accessToken,
           refresh_token: loginRes.data.refresh_token,
+          workday_key: todayWorkdayKey,
           user: {
             id: meUser.id,
             email: meUser.email,
@@ -439,57 +524,19 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
-    if (projectSettingsData.login_pattern) {
-      const fullName = found.name || found.email;
-      const uPhone = found.phone || '';
-      const parts = fullName.split(' ');
-      const fName = parts[0] || 'همکار';
-      const lName = parts.length > 1 ? parts.slice(1).join(' ') : 'گرامی';
-
-      const detectedDevice = detectDeviceType(
-        req.headers['user-agent'] as string,
-        req.body.device || req.body.client_device
-      );
-      const { time: finalTime, date: finalDate } = resolveUserTimeAndDate(
-        req.body.client_time || req.body.time,
-        req.body.client_date || req.body.date
-      );
-
-      const loginVars = {
-        name: fullName,
-        fullName: fullName,
-        user_name: fullName,
-        personnel_name: fullName,
-        family: lName,
-        first_name: fName,
-        mobile: uPhone || 'نامشخص',
-        phone: uPhone || 'نامشخص',
-        date: finalDate,
-        time: finalTime,
-        client_date: finalDate,
-        client_time: finalTime,
-        ip: (req.headers['x-forwarded-for'] as string) || req.ip || '127.0.0.1',
-        device: detectedDevice,
-        client_device: detectedDevice,
-        device_type: detectedDevice,
-        username: found.username || found.email,
-      };
-
-      queueMicrotask(() => {
-        if (uPhone) {
-          sendIppanelSmsPattern(uPhone, projectSettingsData.login_pattern, loginVars).catch(
-            (e) => console.warn('Login SMS pattern send to user warning:', e.message)
-          );
-        }
-
-        sendTenantAdminsSmsPattern(
-          found.tenant_id || 'default',
-          projectSettingsData.login_pattern,
-          loginVars,
-          { excludePhones: [uPhone] }
-        ).catch((e) => console.warn('Login SMS pattern send to admin warning:', e.message));
-      });
+    const todayWorkdayKey = getTehranWorkdayKey();
+    const checkinKey = buildDailyCheckinKey(found.id, found.user_id || found.id, found.email);
+    if (checkinKey) {
+      markCheckedInForWorkday(checkinKey, todayWorkdayKey);
     }
+
+    // Manual login always sends the login notification SMS
+    dispatchLoginSms(req, {
+      fullName: found.name || found.email,
+      phone: found.phone || '',
+      username: found.username || found.email,
+      tenantId: found.tenant_id || 'default',
+    });
 
     let fallbackAvatarUrl: string | undefined = undefined;
     if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
@@ -520,6 +567,7 @@ router.post('/login', async (req: Request, res: Response) => {
     return res.json({
       success: true,
       access_token: 'local-token-' + found.id,
+      workday_key: todayWorkdayKey,
       user: {
         id: found.id,
         email: found.email,
@@ -537,13 +585,113 @@ router.post('/login', async (req: Request, res: Response) => {
   res.status(401).json({ error: 'کاربری با این مشخصات یافت نشد.' });
 });
 
-router.get('/me', async (req: Request, res: Response) => {
-  const { userId, personnelId, userRole, isAdmin, userName, userEmail, isSessionRevoked, isDayExpired } =
+router.post('/daily-checkin', async (req: Request, res: Response) => {
+  const { userId, personnelId, userName, userEmail, isSessionRevoked, isInactive, isAuthenticated } =
     getRequestUser(req);
-  if (isDayExpired) {
+
+  if (isInactive) {
+    return res.status(403).json({
+      error: 'ACCOUNT_INACTIVE',
+      message: 'حساب کاربری شما توسط مدیریت غیرفعال شده است و امکان استفاده از سامانه را ندارید.',
+    });
+  }
+
+  if (isSessionRevoked || !isAuthenticated || (!userId && !personnelId && !userEmail)) {
     return res.status(401).json({
-      error: 'SESSION_EXPIRED',
-      message: 'نشست کاری شما با پایان روز کاری منقضی شده است. لطفاً مجدداً وارد شوید.',
+      error: 'ALL_SESSIONS_REVOKED',
+      message: 'نشست کاری شما معتبر نیست. لطفاً مجدداً وارد شوید.',
+    });
+  }
+
+  let pItem: any = null;
+
+  if (directusUrl && directusAdminToken && !isDirectusCircuitOpen() && personnelId) {
+    try {
+      const pRes = await directusFetch(`/items/personnel/${personnelId}`).catch(() => null);
+      if (pRes?.data) pItem = pRes.data;
+    } catch {}
+  }
+
+  if (!pItem) {
+    pItem = personnelData.find((p) => {
+      if (!p) return false;
+      const pId = p.id ? String(p.id).trim().toLowerCase() : '';
+      const pUserId = p.user_id ? String(p.user_id).trim().toLowerCase() : '';
+      const pEmail = p.email ? String(p.email).trim().toLowerCase() : '';
+
+      const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
+      const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
+      const cleanUEmail = userEmail ? String(userEmail).trim().toLowerCase() : '';
+
+      if (cleanPId && pId && pId === cleanPId) return true;
+      if (cleanUId && pUserId && pUserId === cleanUId) return true;
+      if (cleanUId && pId && pId === cleanUId) return true;
+      if (cleanUEmail && pEmail && pEmail === cleanUEmail) return true;
+      return false;
+    });
+  }
+
+  if (pItem && (pItem.status === 'inactive' || pItem.active === false)) {
+    return res.status(403).json({
+      error: 'ACCOUNT_INACTIVE',
+      message: 'حساب کاربری شما توسط مدیریت غیرفعال شده است و امکان استفاده از سامانه را ندارید.',
+    });
+  }
+
+  const todayWorkdayKey = getTehranWorkdayKey();
+  const checkinKey = buildDailyCheckinKey(pItem?.id || personnelId, userId, pItem?.email || userEmail);
+  const lockKey = `${checkinKey}:${todayWorkdayKey}`;
+
+  if (!checkinKey) {
+    return res.json({
+      success: true,
+      sms_sent: false,
+      already_checked_in: true,
+      workday_key: todayWorkdayKey,
+    });
+  }
+
+  if (hasCheckedInForWorkday(checkinKey, todayWorkdayKey) || inFlightDailyCheckinKeys.has(lockKey)) {
+    return res.json({
+      success: true,
+      sms_sent: false,
+      already_checked_in: true,
+      workday_key: todayWorkdayKey,
+    });
+  }
+
+  inFlightDailyCheckinKeys.add(lockKey);
+  try {
+    markCheckedInForWorkday(checkinKey, todayWorkdayKey);
+
+    const fullName = pItem?.name || userName || userEmail || 'همکار گرامی';
+    const hasPattern = Boolean(projectSettingsData.login_pattern);
+
+    dispatchLoginSms(req, {
+      fullName,
+      phone: pItem?.phone || '',
+      username: pItem?.username || userEmail || fullName,
+      tenantId: pItem?.tenant_id || 'default',
+    });
+
+    return res.json({
+      success: true,
+      sms_sent: hasPattern,
+      already_checked_in: false,
+      workday_key: todayWorkdayKey,
+    });
+  } finally {
+    inFlightDailyCheckinKeys.delete(lockKey);
+  }
+});
+
+router.get('/me', async (req: Request, res: Response) => {
+  const { userId, personnelId, userRole, isAdmin, userName, userEmail, isSessionRevoked, isInactive } =
+    getRequestUser(req);
+  if (isInactive) {
+    return res.status(403).json({
+      error: 'ACCOUNT_INACTIVE',
+      message: 'حساب کاربری شما توسط مدیریت غیرفعال شده است و امکان استفاده از سامانه را ندارید.',
     });
   }
   if (isSessionRevoked || (!userId && !personnelId && !userEmail)) {

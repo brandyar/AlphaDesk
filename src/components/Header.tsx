@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Search,
   AlertTriangle,
   Plus,
   PhoneCall,
@@ -15,15 +14,16 @@ import {
   CalendarDays,
   Building2,
   Layers,
-  Check,
   Sun,
   Moon,
   Laptop,
 } from 'lucide-react';
-import { Personnel, AuthUser, Tenant } from '../types';
+import { Personnel, AuthUser, Tenant, Customer, CustomerReport } from '../types';
 import { getAvatarUrl, getUserAllowedTenants } from '../utils';
 import { ThemeToggle } from './ThemeToggle';
 import { useTheme } from '../context/ThemeContext';
+import { GlobalSearch } from './GlobalSearch';
+import { NavTab } from './Sidebar';
 
 interface HeaderProps {
   searchQuery: string;
@@ -45,6 +45,15 @@ interface HeaderProps {
   activeTenantId?: string;
   onSelectTenant?: (tenantId: string) => void;
   onOpenTenantsManagement?: () => void;
+  customers?: Customer[];
+  allCustomers?: Customer[];
+  reports?: CustomerReport[];
+  canViewAllCustomers?: boolean;
+  onSelectCustomer?: (customer: Customer) => void;
+  onOpenAddReport?: (customerId?: string) => void;
+  onOpenQuickAddWithPhone?: (initialPhone?: string) => void;
+  onNavigateToTab?: (tab: NavTab, subTab?: string) => void;
+  onApplyToCustomersList?: (query: string, status?: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -67,6 +76,15 @@ export const Header: React.FC<HeaderProps> = ({
   activeTenantId = 'all',
   onSelectTenant,
   onOpenTenantsManagement,
+  customers = [],
+  allCustomers = [],
+  reports = [],
+  canViewAllCustomers = false,
+  onSelectCustomer,
+  onOpenAddReport,
+  onOpenQuickAddWithPhone,
+  onNavigateToTab,
+  onApplyToCustomersList,
 }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isOrgMenuOpen, setIsOrgMenuOpen] = useState(false);
@@ -144,16 +162,38 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="h-16 sm:h-18 bg-white dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] sticky top-0 z-30 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 select-none shadow-xs transition-colors">
-      {/* Mobile Hamburger */}
-      <div className="flex items-center gap-2">
+      {/* Mobile Hamburger & Responsive Global Search */}
+      <div className="flex items-center gap-2 flex-1 min-w-0">
         <button
           onClick={onToggleMobileMenu}
-          className="lg:hidden p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#1e1e1e] dark:hover:bg-[#282828] text-slate-700 hover:text-slate-900 dark:text-white dark:hover:text-[#1DB954] focus:outline-none transition-colors border border-slate-200 dark:border-[#2e2e2e]"
+          className="lg:hidden p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#1e1e1e] dark:hover:bg-[#282828] text-slate-700 hover:text-slate-900 dark:text-white dark:hover:text-[#1DB954] focus:outline-none transition-colors border border-slate-200 dark:border-[#2e2e2e] shrink-0"
           aria-label={isMobileMenuOpen ? 'بستن منو' : 'باز کردن منو'}
           title="منوی اصلی"
         >
           {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
+
+        {currentUser && (
+          <GlobalSearch
+            searchQuery={searchQuery}
+            onSearchChange={onSearchChange}
+            customers={customers}
+            allCustomers={allCustomers}
+            reports={reports}
+            personnelList={personnelList}
+            currentPersonnel={currentPersonnel}
+            currentUser={currentUser}
+            isAdmin={isAdmin}
+            canViewAllCustomers={canViewAllCustomers}
+            onSelectCustomer={(c) => onSelectCustomer?.(c)}
+            onOpenAddReport={(cid) => onOpenAddReport?.(cid)}
+            onOpenQuickAddWithPhone={(phone) =>
+              onOpenQuickAddWithPhone ? onOpenQuickAddWithPhone(phone) : onOpenQuickAddCustomer()
+            }
+            onNavigateToTab={(tab, sub) => onNavigateToTab?.(tab, sub)}
+            onApplyToCustomersList={onApplyToCustomersList}
+          />
+        )}
       </div>
 
 

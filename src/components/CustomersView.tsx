@@ -49,6 +49,7 @@ interface CustomersViewProps {
   showExpiredOnly: boolean;
   onToggleExpiredOnly: (val: boolean) => void;
   activeTenantId?: string;
+  externalSearchQuery?: string;
 }
 
 export const CustomersView: React.FC<CustomersViewProps> = ({
@@ -68,12 +69,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   showExpiredOnly,
   onToggleExpiredOnly,
   activeTenantId,
+  externalSearchQuery,
 }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(25);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>(externalSearchQuery || '');
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(externalSearchQuery || '');
   const [sortOption, setSortOption] = useState<string>('next_followup_asc');
   const [followupFilter, setFollowupFilter] = useState<string>('active');
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState<boolean>(false);
@@ -92,6 +94,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     !customers || customers.length === 0
   );
   const fetchVersionRef = useRef(0);
+
+  useEffect(() => {
+    if (externalSearchQuery !== undefined) {
+      setSearchQuery(externalSearchQuery);
+      setDebouncedSearch(externalSearchQuery);
+    }
+  }, [externalSearchQuery]);
 
   // 300ms debounce for search query to avoid lag on typing
   useEffect(() => {

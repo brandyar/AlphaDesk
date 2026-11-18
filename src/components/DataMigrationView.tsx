@@ -443,19 +443,19 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
   return (
     <div className="space-y-6 pb-12">
       {/* سربرگ معرفی */}
-      <div className="bg-[#181818] border border-[#282828] rounded-2xl p-6 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-[#1DB954]/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl p-6 relative overflow-hidden shadow-sm dark:shadow-none">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-emerald-500/10 dark:bg-[#1DB954]/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
           <div>
-            <div className="flex items-center gap-2.5 text-[#1DB954] text-xs font-bold uppercase tracking-wider mb-1.5">
+            <div className="flex items-center gap-2.5 text-emerald-600 dark:text-[#1DB954] text-xs font-bold uppercase tracking-wider mb-1.5">
               <Database className="w-4 h-4" />
               <span>مرکز مهاجرت و انتقال داده‌های سازمانی</span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-white">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
               انتقال هوشمند اطلاعات از سامانه قبلی
             </h1>
-            <p className="text-xs sm:text-sm text-[#A7A7A7] mt-1 max-w-2xl leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-[#A7A7A7] mt-1 max-w-2xl leading-relaxed">
               پشتیبانی از درون‌ریزی انبوه (حتی بیش از ۳۵,۰۰۰ گزارش) با قابلیت آپلود فایل، دسته‌بندی خودکار، نرمال‌سازی شماره‌ها و پیشگیری هوشمند از رکوردهای تکراری.
             </p>
           </div>
@@ -463,41 +463,41 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={handleResetCache}
-              className="px-3.5 py-2 rounded-xl bg-[#252525] hover:bg-[#303030] border border-[#3e3e3e] text-xs font-bold text-[#CCC] hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#252525] dark:hover:bg-[#303030] border border-slate-200 dark:border-[#3e3e3e] text-xs font-bold text-slate-700 hover:text-slate-900 dark:text-[#CCC] dark:hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-xs dark:shadow-sm"
               title="پاکسازی حافظه موقت سرور جهت شروع مجدد و درون‌ریزی تمیز"
             >
-              <RefreshCw className="w-4 h-4 text-amber-400" />
+              <RefreshCw className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <span>پاکسازی حافظه موقت درون‌ریزی</span>
             </button>
             <button
               onClick={handleBackfillTenants}
               disabled={isBackfilling || isSubmitting}
-              className="px-3.5 py-2 rounded-xl bg-[#252525] hover:bg-[#303030] border border-[#3e3e3e] text-xs font-bold text-[#CCC] hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#252525] dark:hover:bg-[#303030] border border-slate-200 dark:border-[#3e3e3e] text-xs font-bold text-slate-700 hover:text-slate-900 dark:text-[#CCC] dark:hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-xs dark:shadow-sm disabled:opacity-50"
               title="اصلاح و درج شناسه سازمان برای پرونده‌ها و گزارش‌هایی که قبلاً بدون شناسه سازمان ثبت شده‌اند"
             >
-              <Layers className={`w-4 h-4 text-[#1DB954] ${isBackfilling ? 'animate-spin' : ''}`} />
+              <Layers className={`w-4 h-4 text-emerald-600 dark:text-[#1DB954] ${isBackfilling ? 'animate-spin' : ''}`} />
               <span>{isBackfilling ? 'در حال اصلاح شناسه‌ها...' : 'اصلاح شناسه سازمان رکوردهای قبلی'}</span>
             </button>
             <button
               onClick={() => setIsRepairModalOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-bold text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 flex items-center gap-2 transition-all cursor-pointer shadow-xs dark:shadow-sm"
               title="اصلاح بدون خطای نام مذاکره‌کنندگان بر اساس فایل خروجی ۲۵ هزار گزارش بدون آسیب به داده‌های جدید پروداکشن"
             >
-              <Sparkles className="w-4 h-4 text-amber-400" />
+              <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <span>ترمیم نام مذاکره‌کنندگان (۲۵ هزار گزارش)</span>
             </button>
             <button
               onClick={handleLoadSampleData}
-              className="px-3.5 py-2 rounded-xl bg-[#252525] hover:bg-[#303030] border border-[#3e3e3e] text-xs font-bold text-[#CCC] hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#252525] dark:hover:bg-[#303030] border border-slate-200 dark:border-[#3e3e3e] text-xs font-bold text-slate-700 hover:text-slate-900 dark:text-[#CCC] dark:hover:text-white flex items-center gap-2 transition-all cursor-pointer shadow-xs dark:shadow-sm"
             >
-              <Sparkles className="w-4 h-4 text-[#1DB954]" />
+              <Sparkles className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
               <span>بارگذاری داده‌های تستی</span>
             </button>
           </div>
         </div>
 
         {/* نشانگر مراحل */}
-        <div className="mt-8 pt-6 border-t border-[#252525] grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="mt-8 pt-6 border-t border-slate-200 dark:border-[#252525] grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { num: 1, title: 'کارشناسان و پرسنل', subtitle: 'جدول حساب‌های کاربری', count: parsedAccounts.length },
             { num: 2, title: 'پرونده‌های مشتریان', subtitle: 'جدول اطلاعات مشتریان', count: parsedContacts.length },
@@ -512,26 +512,26 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                 onClick={() => setActiveStep(s.num as any)}
                 className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
                   isCurrent
-                    ? 'bg-[#1DB954]/10 border-[#1DB954] text-white shadow-lg shadow-[#1DB954]/5'
+                    ? 'bg-emerald-50 dark:bg-[#1DB954]/10 border-emerald-500 dark:border-[#1DB954] text-slate-900 dark:text-white shadow-md shadow-emerald-500/10 dark:shadow-lg dark:shadow-[#1DB954]/5'
                     : isCompleted
-                    ? 'bg-[#202020] border-[#333] text-[#AAA]'
-                    : 'bg-[#141414] border-[#222] text-[#666]'
+                    ? 'bg-slate-100 dark:bg-[#202020] border-slate-300 dark:border-[#333] text-slate-700 dark:text-[#AAA]'
+                    : 'bg-slate-50 dark:bg-[#141414] border-slate-200 dark:border-[#222] text-slate-500 dark:text-[#666]'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                    isCurrent ? 'bg-[#1DB954] text-black' : isCompleted ? 'bg-[#333] text-white' : 'bg-[#222] text-[#777]'
+                    isCurrent ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black' : isCompleted ? 'bg-slate-300 dark:bg-[#333] text-slate-800 dark:text-white' : 'bg-slate-200 dark:bg-[#222] text-slate-500 dark:text-[#777]'
                   }`}>
                     {isCompleted ? <Check className="w-3 h-3" /> : s.num}
                   </span>
                   {s.count !== null && (
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/40 text-[#1DB954]">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 dark:bg-black/40 text-emerald-700 dark:text-[#1DB954]">
                       {s.count} رکورد
                     </span>
                   )}
                 </div>
                 <div className="text-xs font-bold truncate">{s.title}</div>
-                <div className="text-[10px] text-[#777] truncate">{s.subtitle}</div>
+                <div className="text-[10px] text-slate-500 dark:text-[#777] truncate">{s.subtitle}</div>
               </button>
             );
           })}
@@ -539,17 +539,17 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
       </div>
 
       {/* کارت ابزار هوشمند ساماندهی مشتریان آزاد گزارش‌دار */}
-      <div className="bg-[#181818] border border-[#1DB954]/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl shadow-[#1DB954]/5">
+      <div className="bg-white dark:bg-[#181818] border border-emerald-300 dark:border-[#1DB954]/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm dark:shadow-xl dark:shadow-[#1DB954]/5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954] flex-shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 dark:bg-[#1DB954]/15 border border-emerald-500/30 dark:border-[#1DB954]/30 flex items-center justify-center text-emerald-600 dark:text-[#1DB954] flex-shrink-0">
             <UserCheck className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+            <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <span>اتصال و ساماندهی خودکار مشتریان آزاد گزارش‌دار به آخرین بازاریاب</span>
-              <span className="text-[10px] bg-[#1DB954]/20 text-[#1DB954] px-2 py-0.5 rounded-full font-bold">هوشمند</span>
+              <span className="text-[10px] bg-emerald-500/15 dark:bg-[#1DB954]/20 text-emerald-700 dark:text-[#1DB954] px-2 py-0.5 rounded-full font-bold">هوشمند</span>
             </div>
-            <div className="text-[11px] text-[#A7A7A7] mt-0.5">
+            <div className="text-[11px] text-slate-600 dark:text-[#A7A7A7] mt-0.5">
               شماره‌ها و پرونده‌هایی که آزاد ثبت شده‌اند اما دارای گزارش مذاکره هستند، به صورت خودکار به آخرین بازاریابی که برایشان گزارش نوشته وصل و فعال می‌گردند.
             </div>
           </div>
@@ -559,7 +559,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           type="button"
           onClick={handleAutoAssignFreeCustomers}
           disabled={isAutoAssigning || isSubmitting}
-          className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] disabled:opacity-50 text-black font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-[#1DB954]/20 cursor-pointer flex-shrink-0"
+          className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] disabled:opacity-50 text-white dark:text-black font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20 dark:shadow-[#1DB954]/20 cursor-pointer flex-shrink-0"
         >
           {isAutoAssigning ? (
             <>
@@ -576,17 +576,17 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
       </div>
 
       {/* کارت ابزار ترمیم و اصلاح نام مذاکره‌کنندگان ۲۵ هزار گزارش */}
-      <div className="bg-[#181818] border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl shadow-amber-500/5">
+      <div className="bg-white dark:bg-[#181818] border border-amber-300 dark:border-amber-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm dark:shadow-xl dark:shadow-amber-500/5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 flex-shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400 flex-shrink-0">
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+            <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <span>ابزار ترمیم و اصلاح نام مذاکره‌کنندگان (۲۵,۰۰۰ گزارش مذاکره)</span>
-              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">بدون ریسک پروداکشن</span>
+              <span className="text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full font-bold">بدون ریسک پروداکشن</span>
             </div>
-            <div className="text-[11px] text-[#A7A7A7] mt-0.5 max-w-2xl leading-relaxed">
+            <div className="text-[11px] text-slate-600 dark:text-[#A7A7A7] mt-0.5 max-w-2xl leading-relaxed">
               اصلاح دقیق فیلد اشتباه نام مذاکره‌کننده (`negotiator_name`) بر اساس فایل خروجی دیتابیس قدیمی با تطبیق شماره تماس (`callNum`) و تاریخ ثبت (`insertDate`) بدون کوچک‌ترین تغییر یا آسیب در گزارش‌ها و مشتریان جدید پروداکشن.
             </div>
           </div>
@@ -595,33 +595,33 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
         <button
           type="button"
           onClick={() => setIsRepairModalOpen(true)}
-          className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-amber-500/20 cursor-pointer flex-shrink-0"
+          className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white dark:text-black font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-amber-500/20 cursor-pointer flex-shrink-0"
         >
           <FileSpreadsheet className="w-4 h-4" />
           <span>باز کردن ابزار ترمیم ۲۵ هزار گزارش</span>
         </button>
       </div>
       {activeStep === 1 && (
-        <div className="bg-[#181818] border border-[#282828] rounded-2xl p-6 space-y-4">
+        <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl p-6 space-y-4 shadow-sm dark:shadow-none">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 font-bold">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400 font-bold">
                 ۱
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">ورود اطلاعات همکاران و بازاریاب‌ها</h2>
-                <p className="text-xs text-[#888]">محتوای جدول را به صورت انتخاب فایل اکسل/CSV یا کپی پیست متن در کادر زیر وارد کنید.</p>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">ورود اطلاعات همکاران و بازاریاب‌ها</h2>
+                <p className="text-xs text-slate-500 dark:text-[#888]">محتوای جدول را به صورت انتخاب فایل اکسل/CSV یا کپی پیست متن در کادر زیر وارد کنید.</p>
               </div>
             </div>
-            <div className="text-xs font-mono text-[#1DB954] bg-[#1DB954]/10 px-3 py-1 rounded-lg border border-[#1DB954]/20">
+            <div className="text-xs font-mono text-emerald-700 dark:text-[#1DB954] bg-emerald-500/10 dark:bg-[#1DB954]/10 px-3 py-1 rounded-lg border border-emerald-500/20 dark:border-[#1DB954]/20">
               تعداد شناسایی‌شده: {parsedAccounts.length}
             </div>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول اطلاعات پرسنل:</label>
-              <label className="px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#2e2e2e] text-xs font-bold text-[#1DB954] cursor-pointer flex items-center gap-1.5 transition-all border border-[#333]">
+              <label className="text-xs font-medium text-slate-600 dark:text-[#AAA]">متن یا خروجی جدول اطلاعات پرسنل:</label>
+              <label className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#222] dark:hover:bg-[#2e2e2e] text-xs font-bold text-emerald-700 dark:text-[#1DB954] cursor-pointer flex items-center gap-1.5 transition-all border border-slate-200 dark:border-[#333]">
                 <UploadCloud className="w-3.5 h-3.5" />
                 <span>{accountFileName ? `فایل: ${accountFileName}` : 'بارگذاری فایل (.csv / .tsv)'}</span>
                 <input
@@ -637,17 +637,17 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
               value={accountText}
               onChange={(e) => setAccountText(e.target.value)}
               placeholder="ستون‌های جدول: uid fname lname contacts userlevel username ..."
-              className="w-full bg-[#121212] border border-[#2e2e2e] rounded-xl p-3 text-xs font-mono text-[#DDD] focus:outline-none focus:border-[#1DB954] resize-y leading-relaxed dir-ltr"
+              className="w-full bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#2e2e2e] rounded-xl p-3 text-xs font-mono text-slate-900 dark:text-[#DDD] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] resize-y leading-relaxed dir-ltr"
             />
           </div>
 
           {/* پیش‌نمایش پرسنل */}
           {parsedAccounts.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-[#252525]">
-              <div className="text-xs font-bold text-white mb-2">پیش‌نمایش رکوردهای پرسنل ({parsedAccounts.length} مورد):</div>
-              <div className="overflow-x-auto rounded-xl border border-[#282828]">
+            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-[#252525]">
+              <div className="text-xs font-bold text-slate-900 dark:text-white mb-2">پیش‌نمایش رکوردهای پرسنل ({parsedAccounts.length} مورد):</div>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-[#282828]">
                 <table className="w-full text-right text-xs">
-                  <thead className="bg-[#202020] text-[#888] font-semibold border-b border-[#282828]">
+                  <thead className="bg-slate-50 dark:bg-[#202020] text-slate-500 dark:text-[#888] font-semibold border-b border-slate-200 dark:border-[#282828]">
                     <tr>
                       <th className="p-2.5">کد کارشناس</th>
                       <th className="p-2.5">نام و نام خانوادگی</th>
@@ -656,14 +656,14 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                       <th className="p-2.5">سطح دسترسی</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#222]">
+                  <tbody className="divide-y divide-slate-200 dark:divide-[#222]">
                     {parsedAccounts.slice(0, 5).map((row, idx) => (
-                      <tr key={idx} className="hover:bg-[#1c1c1c]">
-                        <td className="p-2.5 font-mono text-[#1DB954]">{row.uid || row.id}</td>
-                        <td className="p-2.5 font-bold text-white">{(row.fname + ' ' + (row.lname || '')).trim() || '-'}</td>
-                        <td className="p-2.5 font-mono text-[#AAA]">{row.username || '-'}</td>
-                        <td className="p-2.5 font-mono text-[#AAA]">{row.contacts || row.phone || '-'}</td>
-                        <td className="p-2.5 text-[#AAA]">{row.userlevel === '0' ? 'مدیر ارشد' : 'کارشناس فروش'}</td>
+                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-[#1c1c1c]">
+                        <td className="p-2.5 font-mono text-emerald-600 dark:text-[#1DB954]">{row.uid || row.id}</td>
+                        <td className="p-2.5 font-bold text-slate-900 dark:text-white">{(row.fname + ' ' + (row.lname || '')).trim() || '-'}</td>
+                        <td className="p-2.5 font-mono text-slate-600 dark:text-[#AAA]">{row.username || '-'}</td>
+                        <td className="p-2.5 font-mono text-slate-600 dark:text-[#AAA]">{row.contacts || row.phone || '-'}</td>
+                        <td className="p-2.5 text-slate-600 dark:text-[#AAA]">{row.userlevel === '0' ? 'مدیر ارشد' : 'کارشناس فروش'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -675,7 +675,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           <div className="flex justify-end pt-4">
             <button
               onClick={() => setActiveStep(2)}
-              className="px-5 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md"
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md"
             >
               <span>مرحله بعد: ورود مشتریان</span>
               <ArrowLeft className="w-4 h-4" />
@@ -686,35 +686,35 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
       {/* گام ۲: مشتریان */}
       {activeStep === 2 && (
-        <div className="bg-[#181818] border border-[#282828] rounded-2xl p-6 space-y-4">
+        <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl p-6 space-y-4 shadow-sm dark:shadow-none">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 font-bold">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold">
                 ۲
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">ورود اطلاعات مشتریان و پرونده‌ها</h2>
-                <p className="text-xs text-[#888]">شامل نام شرکت، صنف، موبایل‌ها، وضعیت و اتصال به بازاریاب مسئول.</p>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">ورود اطلاعات مشتریان و پرونده‌ها</h2>
+                <p className="text-xs text-slate-500 dark:text-[#888]">شامل نام شرکت، صنف، موبایل‌ها، وضعیت و اتصال به بازاریاب مسئول.</p>
               </div>
             </div>
-            <div className="text-xs font-mono text-[#1DB954] bg-[#1DB954]/10 px-3 py-1 rounded-lg border border-[#1DB954]/20">
+            <div className="text-xs font-mono text-emerald-700 dark:text-[#1DB954] bg-emerald-500/10 dark:bg-[#1DB954]/10 px-3 py-1 rounded-lg border border-emerald-500/20 dark:border-[#1DB954]/20">
               تعداد شناسایی‌شده: {parsedContacts.length}
             </div>
           </div>
 
           {/* پیام راهنما برای اصلاح و بروزرسانی مالکیت پرونده‌ها */}
-          <div className="bg-[#132035] border border-blue-500/30 rounded-xl p-3.5 flex items-start gap-3">
-            <Sparkles className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
-            <div className="text-xs text-[#E0E0E0] leading-relaxed">
-              <span className="font-bold text-blue-400 block mb-0.5">اصلاح و به‌روزرسانی هوشمند مالکان پرونده‌ها:</span>
-              با بارگذاری فایل پرونده‌ها و پرسنل، <strong className="text-white">هیچ مشتری تکراری ایجاد نخواهد شد.</strong> پایگاه داده پرونده‌های موجود را شناسایی کرده و بازاریاب مسئول هر پرونده را بر اساس فیلدهای مرجع (<span className="font-mono text-[#1DB954]">Referrals / lockOwner / uid</span>) به کارشناس مربوطه اصلاح و به روزرسانی خواهد کرد.
+          <div className="bg-blue-50 dark:bg-[#132035] border border-blue-200 dark:border-blue-500/30 rounded-xl p-3.5 flex items-start gap-3">
+            <Sparkles className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+            <div className="text-xs text-slate-700 dark:text-[#E0E0E0] leading-relaxed">
+              <span className="font-bold text-blue-700 dark:text-blue-400 block mb-0.5">اصلاح و به‌روزرسانی هوشمند مالکان پرونده‌ها:</span>
+              با بارگذاری فایل پرونده‌ها و پرسنل، <strong className="text-slate-900 dark:text-white">هیچ مشتری تکراری ایجاد نخواهد شد.</strong> پایگاه داده پرونده‌های موجود را شناسایی کرده و بازاریاب مسئول هر پرونده را بر اساس فیلدهای مرجع (<span className="font-mono text-emerald-700 dark:text-[#1DB954]">Referrals / lockOwner / uid</span>) به کارشناس مربوطه اصلاح و به روزرسانی خواهد کرد.
             </div>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-[#AAA]">متن یا خروجی جدول مشتریان:</label>
-              <label className="px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#2e2e2e] text-xs font-bold text-[#1DB954] cursor-pointer flex items-center gap-1.5 transition-all border border-[#333]">
+              <label className="text-xs font-medium text-slate-600 dark:text-[#AAA]">متن یا خروجی جدول مشتریان:</label>
+              <label className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#222] dark:hover:bg-[#2e2e2e] text-xs font-bold text-emerald-700 dark:text-[#1DB954] cursor-pointer flex items-center gap-1.5 transition-all border border-slate-200 dark:border-[#333]">
                 <UploadCloud className="w-3.5 h-3.5" />
                 <span>{contactFileName ? `فایل: ${contactFileName}` : 'بارگذاری فایل (.csv / .tsv)'}</span>
                 <input
@@ -730,17 +730,17 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
               value={contactText}
               onChange={(e) => setContactText(e.target.value)}
               placeholder="ستون‌های جدول: CallID uid mobiles CompanyName job managerName lastStat ..."
-              className="w-full bg-[#121212] border border-[#2e2e2e] rounded-xl p-3 text-xs font-mono text-[#DDD] focus:outline-none focus:border-[#1DB954] resize-y leading-relaxed dir-ltr"
+              className="w-full bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#2e2e2e] rounded-xl p-3 text-xs font-mono text-slate-900 dark:text-[#DDD] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] resize-y leading-relaxed dir-ltr"
             />
           </div>
 
           {/* پیش‌نمایش مشتریان */}
           {parsedContacts.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-[#252525]">
-              <div className="text-xs font-bold text-white mb-2">پیش‌نمایش رکوردهای مشتریان ({parsedContacts.length} مورد):</div>
-              <div className="overflow-x-auto rounded-xl border border-[#282828]">
+            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-[#252525]">
+              <div className="text-xs font-bold text-slate-900 dark:text-white mb-2">پیش‌نمایش رکوردهای مشتریان ({parsedContacts.length} مورد):</div>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-[#282828]">
                 <table className="w-full text-right text-xs">
-                  <thead className="bg-[#202020] text-[#888] font-semibold border-b border-[#282828]">
+                  <thead className="bg-slate-50 dark:bg-[#202020] text-slate-500 dark:text-[#888] font-semibold border-b border-slate-200 dark:border-[#282828]">
                     <tr>
                       <th className="p-2.5">شناسه تماس</th>
                       <th className="p-2.5">نام شرکت یا برند</th>
@@ -750,15 +750,15 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                       <th className="p-2.5">وضعیت</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#222]">
+                  <tbody className="divide-y divide-slate-200 dark:divide-[#222]">
                     {parsedContacts.slice(0, 5).map((row, idx) => (
-                      <tr key={idx} className="hover:bg-[#1c1c1c]">
-                        <td className="p-2.5 font-mono text-[#1DB954]">{row.CallID || row.callid}</td>
-                        <td className="p-2.5 font-bold text-white">{row.CompanyName || row.marketName || '-'}</td>
-                        <td className="p-2.5 text-[#AAA]">{row.job || '-'}</td>
-                        <td className="p-2.5 font-mono text-[#AAA]">{row.mobiles || '-'}</td>
-                        <td className="p-2.5 text-[#CCC]">{row.managerName || '-'}</td>
-                        <td className="p-2.5 text-[#F59B23]">{normalizeLegacyStatus(row.lastStat || row.status)}</td>
+                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-[#1c1c1c]">
+                        <td className="p-2.5 font-mono text-emerald-600 dark:text-[#1DB954]">{row.CallID || row.callid}</td>
+                        <td className="p-2.5 font-bold text-slate-900 dark:text-white">{row.CompanyName || row.marketName || '-'}</td>
+                        <td className="p-2.5 text-slate-600 dark:text-[#AAA]">{row.job || '-'}</td>
+                        <td className="p-2.5 font-mono text-slate-600 dark:text-[#AAA]">{row.mobiles || '-'}</td>
+                        <td className="p-2.5 text-slate-700 dark:text-[#CCC]">{row.managerName || '-'}</td>
+                        <td className="p-2.5 text-amber-600 dark:text-[#F59B23]">{normalizeLegacyStatus(row.lastStat || row.status)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -770,14 +770,14 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           <div className="flex justify-between pt-4">
             <button
               onClick={() => setActiveStep(1)}
-              className="px-4 py-2.5 rounded-xl bg-[#252525] hover:bg-[#303030] text-[#CCC] font-bold text-xs flex items-center gap-2 cursor-pointer transition-all"
+              className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#252525] dark:hover:bg-[#303030] text-slate-700 dark:text-[#CCC] font-bold text-xs flex items-center gap-2 cursor-pointer transition-all border border-slate-200 dark:border-transparent"
             >
               <ArrowRight className="w-4 h-4" />
               <span>مرحله قبل</span>
             </button>
             <button
               onClick={() => setActiveStep(3)}
-              className="px-5 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md"
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md"
             >
               <span>مرحله بعد: ورود آخرین گزارش‌ها</span>
               <ArrowLeft className="w-4 h-4" />
@@ -788,35 +788,35 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
       {/* گام ۳: گزارش‌ها */}
       {activeStep === 3 && (
-        <div className="bg-[#181818] border border-[#282828] rounded-2xl p-6 space-y-4">
+        <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl p-6 space-y-4 shadow-sm dark:shadow-none">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold">
                 ۳
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">ورود گزارش‌های مذاکره (حجم کامل / ۳۵,۰۰۰+ رکورد)</h2>
-                <p className="text-xs text-[#888]">می‌توانید فایل کامل ۳۵,۰۰۰ گزارش را یکجا آپلود کنید. سیستم به صورت خودکار آن را دسته‌بندی و ارسال می‌کند.</p>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">ورود گزارش‌های مذاکره (حجم کامل / ۳۵,۰۰۰+ رکورد)</h2>
+                <p className="text-xs text-slate-500 dark:text-[#888]">می‌توانید فایل کامل ۳۵,۰۰۰ گزارش را یکجا آپلود کنید. سیستم به صورت خودکار آن را دسته‌بندی و ارسال می‌کند.</p>
               </div>
             </div>
-            <div className="text-xs font-mono text-[#1DB954] bg-[#1DB954]/10 px-3 py-1 rounded-lg border border-[#1DB954]/20">
+            <div className="text-xs font-mono text-emerald-700 dark:text-[#1DB954] bg-emerald-500/10 dark:bg-[#1DB954]/10 px-3 py-1 rounded-lg border border-emerald-500/20 dark:border-[#1DB954]/20">
               تعداد شناسایی‌شده: {parsedHistory.length}
             </div>
           </div>
 
           {/* پیام راهنما برای درون‌ریزی اختصاصی گزارش‌ها */}
-          <div className="bg-[#132A1D] border border-[#1DB954]/30 rounded-xl p-3.5 flex items-start gap-3">
-            <Sparkles className="w-5 h-5 text-[#1DB954] shrink-0 mt-0.5" />
-            <div className="text-xs text-[#E0E0E0] leading-relaxed">
-              <span className="font-bold text-[#1DB954] block mb-0.5">درون‌ریزی مستقیم/مجدد گزارش‌های مذاکره:</span>
-              اگر مشتریان و پرسنل قبلاً در سامانه ثبت شده‌اند، <strong className="text-white">نیازی به انتخاب مجدد یا پر کردن گام‌های ۱ و ۲ نیست.</strong> می‌توانید فقط فایل گزارش‌ها را بارگذاری کرده و دکمه ادامه را بزنید. سیستم گزارش‌ها را به صورت هوشمند با کارشناسان و مشتریان موجود در دیتابیس تطبیق داده و پیوند می‌دهد.
+          <div className="bg-emerald-50 dark:bg-[#132A1D] border border-emerald-200 dark:border-[#1DB954]/30 rounded-xl p-3.5 flex items-start gap-3">
+            <Sparkles className="w-5 h-5 text-emerald-600 dark:text-[#1DB954] shrink-0 mt-0.5" />
+            <div className="text-xs text-slate-700 dark:text-[#E0E0E0] leading-relaxed">
+              <span className="font-bold text-emerald-700 dark:text-[#1DB954] block mb-0.5">درون‌ریزی مستقیم/مجدد گزارش‌های مذاکره:</span>
+              اگر مشتریان و پرسنل قبلاً در سامانه ثبت شده‌اند، <strong className="text-slate-900 dark:text-white">نیازی به انتخاب مجدد یا پر کردن گام‌های ۱ و ۲ نیست.</strong> می‌توانید فقط فایل گزارش‌ها را بارگذاری کرده و دکمه ادامه را بزنید. سیستم گزارش‌ها را به صورت هوشمند با کارشناسان و مشتریان موجود در دیتابیس تطبیق داده و پیوند می‌دهد.
             </div>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-[#AAA]">متن یا خروجی فایل گزارش‌ها:</label>
-              <label className="px-3.5 py-2 rounded-xl bg-[#1DB954]/10 hover:bg-[#1DB954]/20 text-xs font-bold text-[#1DB954] cursor-pointer flex items-center gap-2 transition-all border border-[#1DB954]/30 shadow-sm">
+              <label className="text-xs font-medium text-slate-600 dark:text-[#AAA]">متن یا خروجی فایل گزارش‌ها:</label>
+              <label className="px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 dark:bg-[#1DB954]/10 dark:hover:bg-[#1DB954]/20 text-xs font-bold text-emerald-700 dark:text-[#1DB954] cursor-pointer flex items-center gap-2 transition-all border border-emerald-500/30 dark:border-[#1DB954]/30 shadow-sm">
                 <UploadCloud className="w-4 h-4" />
                 <span>{historyFileName ? `فایل انتخاب شده: ${historyFileName}` : 'بارگذاری فایل کامل ۳۵ هزار گزارش (.csv / .tsv)'}</span>
                 <input
@@ -832,17 +832,17 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
               value={historyText}
               onChange={(e) => setHistoryText(e.target.value)}
               placeholder="ستون‌های جدول: ID CallID report dateTime negotiator callNum nextFollow status rating ..."
-              className="w-full bg-[#121212] border border-[#2e2e2e] rounded-xl p-3 text-xs font-mono text-[#DDD] focus:outline-none focus:border-[#1DB954] resize-y leading-relaxed dir-ltr"
+              className="w-full bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#2e2e2e] rounded-xl p-3 text-xs font-mono text-slate-900 dark:text-[#DDD] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] resize-y leading-relaxed dir-ltr"
             />
           </div>
 
           {/* پیش‌نمایش گزارش‌ها */}
           {parsedHistory.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-[#252525]">
-              <div className="text-xs font-bold text-white mb-2">پیش‌نمایش گزارش‌ها (نمایش ۵ مورد از کل {parsedHistory.length} مورد):</div>
-              <div className="overflow-x-auto rounded-xl border border-[#282828]">
+            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-[#252525]">
+              <div className="text-xs font-bold text-slate-900 dark:text-white mb-2">پیش‌نمایش گزارش‌ها (نمایش ۵ مورد از کل {parsedHistory.length} مورد):</div>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-[#282828]">
                 <table className="w-full text-right text-xs">
-                  <thead className="bg-[#202020] text-[#888] font-semibold border-b border-[#282828]">
+                  <thead className="bg-slate-50 dark:bg-[#202020] text-slate-500 dark:text-[#888] font-semibold border-b border-slate-200 dark:border-[#282828]">
                     <tr>
                       <th className="p-2.5">شناسه تماس</th>
                       <th className="p-2.5">مذاکره‌کننده</th>
@@ -852,15 +852,15 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                       <th className="p-2.5">وضعیت حاصله</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#222]">
+                  <tbody className="divide-y divide-slate-200 dark:divide-[#222]">
                     {parsedHistory.slice(0, 5).map((row, idx) => (
-                      <tr key={idx} className="hover:bg-[#1c1c1c]">
-                        <td className="p-2.5 font-mono text-[#1DB954]">{row.CallID}</td>
-                        <td className="p-2.5 font-bold text-white">{row.negotiator || '-'}</td>
-                        <td className="p-2.5 text-[#AAA] max-w-[200px] truncate">{row.report || '-'}</td>
-                        <td className="p-2.5 font-mono text-amber-400">{row.rating || '-'}</td>
-                        <td className="p-2.5 font-mono text-[#888]">{row.nextFollow || '-'}</td>
-                        <td className="p-2.5 text-[#1ED760]">{normalizeLegacyStatus(row.status)}</td>
+                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-[#1c1c1c]">
+                        <td className="p-2.5 font-mono text-emerald-600 dark:text-[#1DB954]">{row.CallID}</td>
+                        <td className="p-2.5 font-bold text-slate-900 dark:text-white">{row.negotiator || '-'}</td>
+                        <td className="p-2.5 text-slate-600 dark:text-[#AAA] max-w-[200px] truncate">{row.report || '-'}</td>
+                        <td className="p-2.5 font-mono text-amber-600 dark:text-amber-400">{row.rating || '-'}</td>
+                        <td className="p-2.5 font-mono text-slate-500 dark:text-[#888]">{row.nextFollow || '-'}</td>
+                        <td className="p-2.5 text-emerald-700 dark:text-[#1ED760]">{normalizeLegacyStatus(row.status)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -872,14 +872,14 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           <div className="flex justify-between pt-4">
             <button
               onClick={() => setActiveStep(2)}
-              className="px-4 py-2.5 rounded-xl bg-[#252525] hover:bg-[#303030] text-[#CCC] font-bold text-xs flex items-center gap-2 cursor-pointer transition-all"
+              className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#252525] dark:hover:bg-[#303030] text-slate-700 dark:text-[#CCC] font-bold text-xs flex items-center gap-2 cursor-pointer transition-all border border-slate-200 dark:border-transparent"
             >
               <ArrowRight className="w-4 h-4" />
               <span>مرحله قبل</span>
             </button>
             <button
               onClick={() => setActiveStep(4)}
-              className="px-5 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md"
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md"
             >
               <span>مرحله بعد: بررسی نهایی و شروع درون‌ریزی</span>
               <ArrowLeft className="w-4 h-4" />
@@ -890,58 +890,58 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
 
       {/* گام ۴: پیش‌نمایش، پیشرفت زنده و اجرا */}
       {activeStep === 4 && (
-        <div className="bg-[#181818] border border-[#282828] rounded-2xl p-6 space-y-6">
+        <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl p-6 space-y-6 shadow-sm dark:shadow-none">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#1DB954]/10 border border-[#1DB954]/20 flex items-center justify-center text-[#1DB954] font-bold">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 dark:bg-[#1DB954]/10 border border-emerald-500/20 dark:border-[#1DB954]/20 flex items-center justify-center text-emerald-600 dark:text-[#1DB954] font-bold">
               ۴
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">بررسی خلاصه و اجرای عملیات درون‌ریزی</h2>
-              <p className="text-xs text-[#888]">سیستم کل {parsedHistory.length} گزارش را به صورت دسته‌های خودکار ارسال می‌کند تا بدون تایم‌اوت ثبت گردند.</p>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">بررسی خلاصه و اجرای عملیات درون‌ریزی</h2>
+              <p className="text-xs text-slate-500 dark:text-[#888]">سیستم کل {parsedHistory.length} گزارش را به صورت دسته‌های خودکار ارسال می‌کند تا بدون تایم‌اوت ثبت گردند.</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-[#121212] border border-[#282828] rounded-xl p-4 text-center">
-              <div className="text-2xl font-black font-mono text-[#1DB954] mb-1">
+            <div className="bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] rounded-xl p-4 text-center">
+              <div className="text-2xl font-black font-mono text-emerald-600 dark:text-[#1DB954] mb-1">
                 {parsedAccounts.length}
               </div>
-              <div className="text-xs font-bold text-white">کارشناس و همکار</div>
-              <div className="text-[10px] text-[#777] mt-0.5">آماده ثبت در جدول کارشناسان</div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white">کارشناس و همکار</div>
+              <div className="text-[10px] text-slate-500 dark:text-[#777] mt-0.5">آماده ثبت در جدول کارشناسان</div>
             </div>
 
-            <div className="bg-[#121212] border border-[#282828] rounded-xl p-4 text-center">
-              <div className="text-2xl font-black font-mono text-blue-400 mb-1">
+            <div className="bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] rounded-xl p-4 text-center">
+              <div className="text-2xl font-black font-mono text-blue-600 dark:text-blue-400 mb-1">
                 {parsedContacts.length}
               </div>
-              <div className="text-xs font-bold text-white">پرونده مشتری</div>
-              <div className="text-[10px] text-[#777] mt-0.5">آماده ثبت در جدول مشتریان</div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white">پرونده مشتری</div>
+              <div className="text-[10px] text-slate-500 dark:text-[#777] mt-0.5">آماده ثبت در جدول مشتریان</div>
             </div>
 
-            <div className="bg-[#121212] border border-[#282828] rounded-xl p-4 text-center">
-              <div className="text-2xl font-black font-mono text-amber-400 mb-1">
+            <div className="bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] rounded-xl p-4 text-center">
+              <div className="text-2xl font-black font-mono text-amber-600 dark:text-amber-400 mb-1">
                 {parsedHistory.length}
               </div>
-              <div className="text-xs font-bold text-white">گزارش مذاکره</div>
-              <div className="text-[10px] text-[#777] mt-0.5">درون‌ریزی کامل (ارسال دسته‌ای)</div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white">گزارش مذاکره</div>
+              <div className="text-[10px] text-slate-500 dark:text-[#777] mt-0.5">درون‌ریزی کامل (ارسال دسته‌ای)</div>
             </div>
           </div>
 
           {/* کادر پیشرفت زنده هنگام اجرا */}
           {isSubmitting && (
-            <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between text-xs font-bold text-white">
+            <div className="bg-slate-50 dark:bg-[#141414] border border-slate-200 dark:border-[#2a2a2a] rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-900 dark:text-white">
                 <span className="flex items-center gap-2">
-                  <RefreshCw className="w-3.5 h-3.5 text-[#1DB954] animate-spin" />
+                  <RefreshCw className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] animate-spin" />
                   <span>{currentPhaseText}</span>
                 </span>
-                <span className="font-mono text-[#1DB954]">{progressPercent}٪</span>
+                <span className="font-mono text-emerald-600 dark:text-[#1DB954]">{progressPercent}٪</span>
               </div>
 
               {/* نوار پیشرفت گرافیکی */}
-              <div className="w-full bg-[#202020] rounded-full h-2 overflow-hidden">
+              <div className="w-full bg-slate-200 dark:bg-[#202020] rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-[#1DB954] h-2 rounded-full transition-all duration-300"
+                  className="bg-emerald-600 dark:bg-[#1DB954] h-2 rounded-full transition-all duration-300"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
@@ -949,10 +949,10 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
               {/* کنسول لاگ زنده مراحل */}
               <div
                 ref={logContainerRef}
-                className="bg-black/60 rounded-lg p-2.5 font-mono text-[11px] text-[#888] max-h-32 overflow-y-auto space-y-1 dir-ltr text-left border border-white/5"
+                className="bg-slate-900 dark:bg-black/60 rounded-lg p-2.5 font-mono text-[11px] text-slate-300 dark:text-[#888] max-h-32 overflow-y-auto space-y-1 dir-ltr text-left border border-slate-700 dark:border-white/5"
               >
                 {progressLogs.map((log, idx) => (
-                  <div key={idx} className="text-[#A7A7A7]">{log}</div>
+                  <div key={idx} className="text-slate-200 dark:text-[#A7A7A7]">{log}</div>
                 ))}
               </div>
             </div>
@@ -961,29 +961,29 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
           {/* نتیجه موفقیت یا خطا */}
           {importResult && !isSubmitting && (
             <div className={`p-4 rounded-xl border ${
-              importResult.success ? 'bg-[#1DB954]/10 border-[#1DB954]/30 text-white' : 'bg-red-950/20 border-red-500/30 text-white'
+              importResult.success ? 'bg-emerald-50 dark:bg-[#1DB954]/10 border-emerald-300 dark:border-[#1DB954]/30 text-slate-900 dark:text-white' : 'bg-rose-50 dark:bg-red-950/20 border-rose-300 dark:border-red-500/30 text-slate-900 dark:text-white'
             }`}>
               <div className="flex items-center gap-2 font-bold text-sm mb-1">
-                {importResult.success ? <CheckCircle2 className="w-5 h-5 text-[#1DB954]" /> : <AlertTriangle className="w-5 h-5 text-red-400" />}
+                {importResult.success ? <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-[#1DB954]" /> : <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-red-400" />}
                 <span>{importResult.message}</span>
               </div>
-              <div className="text-xs text-[#AAA] mt-2 flex flex-wrap gap-4">
-                <span>کارشناسان ثبت‌شده: <b className="text-white font-mono">{importResult.importedPersonnelCount}</b></span>
-                <span>پرونده‌های مشتریان: <b className="text-white font-mono">{importResult.importedCustomersCount}</b></span>
-                <span>گزارش‌های ثبت‌شده: <b className="text-white font-mono">{importResult.importedReportsCount}</b></span>
+              <div className="text-xs text-slate-600 dark:text-[#AAA] mt-2 flex flex-wrap gap-4">
+                <span>کارشناسان ثبت‌شده: <b className="text-slate-900 dark:text-white font-mono">{importResult.importedPersonnelCount}</b></span>
+                <span>پرونده‌های مشتریان: <b className="text-slate-900 dark:text-white font-mono">{importResult.importedCustomersCount}</b></span>
+                <span>گزارش‌های ثبت‌شده: <b className="text-slate-900 dark:text-white font-mono">{importResult.importedReportsCount}</b></span>
                 {importResult.skippedCount > 0 && (
-                  <span className="text-amber-400">رکوردهای تکراری/غیرمجاز نادیده گرفته‌شده: <b className="font-mono">{importResult.skippedCount}</b></span>
+                  <span className="text-amber-600 dark:text-amber-400">رکوردهای تکراری/غیرمجاز نادیده گرفته‌شده: <b className="font-mono">{importResult.skippedCount}</b></span>
                 )}
-                <span className="text-[#1DB954] flex items-center gap-1 font-bold">
+                <span className="text-emerald-700 dark:text-[#1DB954] flex items-center gap-1 font-bold">
                   <Server className="w-3.5 h-3.5" />
                   ذخیره‌سازی مستقیم در پایگاه داده مرکزی دایرکتوس
                 </span>
               </div>
               {importResult.skippedDetails && importResult.skippedDetails.length > 0 && (
-                <div className="mt-4 pt-3 border-t border-amber-500/20 text-xs text-amber-200 space-y-2">
+                <div className="mt-4 pt-3 border-t border-amber-500/20 text-xs text-amber-800 dark:text-amber-200 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-bold flex items-center gap-1.5 text-amber-400">
-                      <AlertCircle className="w-4 h-4 text-amber-400" />
+                    <div className="font-bold flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+                      <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                       <span>دلایل و لیست رکوردهای نادیده گرفته‌شده ({toPersianDigits(importResult.skippedDetails.length)} مورد):</span>
                     </div>
                     <button
@@ -1000,21 +1000,21 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
                         link.click();
                         document.body.removeChild(link);
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[11px] border border-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-300 font-bold text-[11px] border border-amber-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>دانلود گزارش کامل ردیف‌های نادیده گرفته شده (TSV)</span>
                     </button>
                   </div>
-                  <div className="max-h-48 overflow-y-auto bg-black/50 rounded-xl p-3 space-y-1.5 font-sans border border-amber-500/10 text-[11px]">
+                  <div className="max-h-48 overflow-y-auto bg-white dark:bg-black/50 rounded-xl p-3 space-y-1.5 font-sans border border-amber-500/20 dark:border-amber-500/10 text-[11px]">
                     {importResult.skippedDetails.slice(0, 100).map((s: any, idx: number) => (
                       <div key={idx} className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/10 pb-1">
-                        <span className="font-bold text-white">{toPersianDigits(idx + 1)}. {s.companyName} ({s.phone})</span>
-                        <span className="text-amber-300/80 font-mono text-[10px]">{s.reason}</span>
+                        <span className="font-bold text-slate-900 dark:text-white">{toPersianDigits(idx + 1)}. {s.companyName} ({s.phone})</span>
+                        <span className="text-amber-700 dark:text-amber-300/80 font-mono text-[10px]">{s.reason}</span>
                       </div>
                     ))}
                     {importResult.skippedDetails.length > 100 && (
-                      <div className="text-center text-[#888] pt-1">و {toPersianDigits(importResult.skippedDetails.length - 100)} مورد دیگر (جهت مشاهده کامل روی دکمه دانلود فوق کلیک کنید)</div>
+                      <div className="text-center text-slate-500 dark:text-[#888] pt-1">و {toPersianDigits(importResult.skippedDetails.length - 100)} مورد دیگر (جهت مشاهده کامل روی دکمه دانلود فوق کلیک کنید)</div>
                     )}
                   </div>
                 </div>
@@ -1022,11 +1022,11 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-[#252525]">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200 dark:border-[#252525]">
             <button
               onClick={() => setActiveStep(3)}
               disabled={isSubmitting}
-              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#252525] hover:bg-[#303030] text-[#CCC] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#252525] dark:hover:bg-[#303030] text-slate-700 dark:text-[#CCC] font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 border border-slate-200 dark:border-transparent"
             >
               <ArrowRight className="w-4 h-4" />
               <span>بازگشت به مراحل قبل</span>
@@ -1035,7 +1035,7 @@ export const DataMigrationView: React.FC<DataMigrationViewProps> = ({
             <button
               onClick={handleExecuteImport}
               disabled={isSubmitting || (parsedAccounts.length === 0 && parsedContacts.length === 0 && parsedHistory.length === 0)}
-              className="w-full sm:w-auto px-8 py-3 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] disabled:opacity-50 text-black font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-all shadow-lg shadow-[#1DB954]/20"
+              className="w-full sm:w-auto px-8 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] disabled:opacity-50 text-white dark:text-black font-black text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer transition-all shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/20"
             >
               {isSubmitting ? (
                 <>

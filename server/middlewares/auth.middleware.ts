@@ -148,11 +148,15 @@ export function resolveUserAvatar(user?: any, personnel?: any): string {
 }
 
 
-export function isSessionFromPreviousDay(sessionIat: number, timeZone = 'Asia/Tehran'): boolean {
-  if (!sessionIat || sessionIat <= 0 || isNaN(sessionIat)) return false;
-  const now = new Date();
-  const sessionDate = new Date(sessionIat);
-  if (isNaN(sessionDate.getTime())) return false;
+export const WORKDAY_CUTOFF_HOUR = 4;
+
+export function getTehranWorkdayKey(
+  timestampMs: number = Date.now(),
+  timeZone = 'Asia/Tehran',
+  cutoffHour: number = WORKDAY_CUTOFF_HOUR
+): string {
+  const safeTs = !timestampMs || isNaN(timestampMs) ? Date.now() : timestampMs;
+  const shiftedDate = new Date(safeTs - cutoffHour * 60 * 60 * 1000);
 
   try {
     const dtf = new Intl.DateTimeFormat('en-CA', {
@@ -161,14 +165,19 @@ export function isSessionFromPreviousDay(sessionIat: number, timeZone = 'Asia/Te
       month: '2-digit',
       day: '2-digit',
     });
-    const todayStr = dtf.format(now);
-    const sessionDayStr = dtf.format(sessionDate);
-    return sessionDayStr !== todayStr;
+    return dtf.format(shiftedDate);
   } catch {
-    const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const sessionLocal = `${sessionDate.getFullYear()}-${String(sessionDate.getMonth() + 1).padStart(2, '0')}-${String(sessionDate.getDate()).padStart(2, '0')}`;
-    return sessionLocal !== todayLocal;
+    return `${shiftedDate.getFullYear()}-${String(shiftedDate.getMonth() + 1).padStart(2, '0')}-${String(
+      shiftedDate.getDate()
+    ).padStart(2, '0')}`;
   }
+}
+
+export function isSessionFromPreviousDay(sessionIat: number, timeZone = 'Asia/Tehran'): boolean {
+  if (!sessionIat || sessionIat <= 0 || isNaN(sessionIat)) return false;
+  const sessionDate = new Date(sessionIat);
+  if (isNaN(sessionDate.getTime())) return false;
+  return getTehranWorkdayKey(sessionIat, timeZone) !== getTehranWorkdayKey(Date.now(), timeZone);
 }
 
 export function getRequestUser(req: Request): RequestUserContext {
@@ -195,11 +204,10 @@ export function getRequestUser(req: Request): RequestUserContext {
 
   const rawSessionIat = req.headers['x-session-iat'] as string;
   const sessionIat = rawSessionIat ? parseInt(rawSessionIat, 10) : 0;
-  const isDayExpired = Boolean(sessionIat > 0 && isSessionFromPreviousDay(sessionIat));
+  const isDayExpired = false;
   const isSessionRevoked = Boolean(
-    isDayExpired ||
-    (globalSessionRevocationTimestamp > 0 &&
-      (!sessionIat || sessionIat < globalSessionRevocationTimestamp))
+    globalSessionRevocationTimestamp > 0 &&
+      (!sessionIat || sessionIat < globalSessionRevocationTimestamp)
   );
 
   const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
@@ -314,12 +322,6 @@ export function checkInactivePersonnel(req: Request, res: any, next: any) {
   }
 
   const user = getRequestUser(req);
-  if (user.isDayExpired) {
-    return res.status(401).json({
-      error: 'SESSION_EXPIRED',
-      message: 'نشست کاری شما با پایان روز کاری منقضی شده است. لطفاً مجدداً وارد شوید.',
-    });
-  }
 
   if (user.isInactive) {
     return res.status(403).json({

@@ -51,6 +51,7 @@ interface QuickAddCustomerModalProps {
   currentPersonnel: Personnel | null;
   currentUser?: AuthUser | null;
   isAdmin?: boolean;
+  initialPhone?: string;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -78,6 +79,7 @@ export const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
   currentPersonnel,
   currentUser,
   isAdmin,
+  initialPhone,
   showToast,
 }) => {
   const userIsAdmin = Boolean(
@@ -106,21 +108,49 @@ export const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      const normalizedInitPhone = initialPhone ? normalizeInputDigits(initialPhone).trim() : '';
       setPersonName('');
       setBusinessName('');
-      setPhones([{ channel_type: 'mobile', value: '', is_primary: true }]);
+      setPhones([{ channel_type: 'mobile', value: normalizedInitPhone, is_primary: true }]);
       setNextFollowupDate(getTomorrowDefaultIso());
       setNotes('');
       setSubmitError(null);
       setAssignedMarketerId(
         currentPersonnel?.id || currentUser?.id || personnelList[0]?.id || ''
       );
+
+      if (normalizedInitPhone.length >= 4) {
+        setPhones([{ channel_type: 'mobile', value: normalizedInitPhone, is_primary: true, isChecking: true }]);
+        checkDuplicateContact(normalizedInitPhone, 'mobile')
+          .then((res) => {
+            setPhones((prev) => {
+              const copy = [...prev];
+              if (copy[0]) {
+                copy[0] = {
+                  ...copy[0],
+                  duplicateWarning: res.isDuplicate ? res : null,
+                  isChecking: false,
+                };
+              }
+              return copy;
+            });
+          })
+          .catch(() => {
+            setPhones((prev) => {
+              const copy = [...prev];
+              if (copy[0]) {
+                copy[0] = { ...copy[0], isChecking: false };
+              }
+              return copy;
+            });
+          });
+      }
     }
     return () => {
       Object.values(debounceTimers.current).forEach((t) => clearTimeout(t));
       debounceTimers.current = {};
     };
-  }, [isOpen, currentPersonnel?.id, currentUser?.id, personnelList]);
+  }, [isOpen, initialPhone, currentPersonnel?.id, currentUser?.id, personnelList]);
 
   if (!isOpen) return null;
 

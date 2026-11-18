@@ -135,7 +135,7 @@ export const PERSONNEL_ROLE_CONFIG: Record<
   admin: {
     label: 'مدیر ارشد / سیستم',
     description: 'دسترسی کامل مدیریتی به تمامی منوها، پرونده‌ها و تنظیمات سامانه',
-    badgeClass: 'bg-[#1DB954]/15 text-[#1DB954] border-[#1DB954]/30',
+    badgeClass: 'bg-emerald-500/15 dark:bg-[#1DB954]/15 text-emerald-700 dark:text-[#1DB954] border-emerald-500/30 dark:border-[#1DB954]/30',
     icon: ShieldCheck,
     defaultMenus: [
       'dashboard',
@@ -153,7 +153,7 @@ export const PERSONNEL_ROLE_CONFIG: Record<
   sales_manager: {
     label: 'مدیر فروش و بازاریابی',
     description: 'مدیریت تیم، تمدید و سوئیچ مالکیت‌ها، نظارت بر پایپ‌لاین و گزارش‌ها',
-    badgeClass: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+    badgeClass: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30',
     icon: Briefcase,
     defaultMenus: [
       'dashboard',
@@ -170,7 +170,7 @@ export const PERSONNEL_ROLE_CONFIG: Record<
   marketer: {
     label: 'کارشناس فروش و مذاکره',
     description: 'پیگیری پرونده‌ها، ثبت مذاکرات، فاکتورها و گزارش کار روزانه',
-    badgeClass: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+    badgeClass: 'bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30',
     icon: PhoneCall,
     defaultMenus: [
       'dashboard',
@@ -185,7 +185,7 @@ export const PERSONNEL_ROLE_CONFIG: Record<
   office_staff: {
     label: 'همکار اداری و دفتری',
     description: 'انجام وظایف اداری و سازمانی، ثبت گزارش عملکرد روزانه و امور پرسنلی',
-    badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+    badgeClass: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30',
     icon: ClipboardCheck,
     defaultMenus: ['dashboard', 'admin_reports', 'personal_portal'],
     defaultReportScope: 'own_only',
@@ -193,7 +193,7 @@ export const PERSONNEL_ROLE_CONFIG: Record<
   remote_task: {
     label: 'همکار دورکاری و تسک‌محور',
     description: 'فعالیت پروژه‌ای و تسک‌محور دورکاری با دسترسی به ثبت کار روزانه و امور پرسنلی',
-    badgeClass: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
+    badgeClass: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border-cyan-500/30',
     icon: Laptop,
     defaultMenus: ['admin_reports', 'personal_portal'],
     defaultReportScope: 'own_only',
@@ -201,7 +201,7 @@ export const PERSONNEL_ROLE_CONFIG: Record<
   operator: {
     label: 'اپراتور پشتیبانی و ورود اطلاعات',
     description: 'پاسخگویی اولیه، ثبت سریع مشتری و ثبت گزارش عملکرد',
-    badgeClass: 'bg-teal-500/15 text-teal-400 border-teal-500/30',
+    badgeClass: 'bg-teal-500/15 text-teal-700 dark:text-teal-400 border-teal-500/30',
     icon: Headphones,
     defaultMenus: ['dashboard', 'customers', 'admin_reports', 'personal_portal'],
     defaultReportScope: 'own_only',
@@ -209,7 +209,7 @@ export const PERSONNEL_ROLE_CONFIG: Record<
   finance: {
     label: 'امور مالی و حسابداری',
     description: 'بررسی مبالغ قراردادها، فاکتورها و کارتابل درخواست‌های مساعده',
-    badgeClass: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+    badgeClass: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30',
     icon: DollarSign,
     defaultMenus: ['dashboard', 'reports', 'analytics', 'personal_portal'],
     defaultReportScope: 'own_only',
@@ -217,7 +217,7 @@ export const PERSONNEL_ROLE_CONFIG: Record<
   custom: {
     label: 'نقش سفارشی (تخصیص دستی دسترسی‌ها)',
     description: 'تعیین دلخواه و تیک زدن موردی منوها، اختیارات کاری و گزارش‌ها',
-    badgeClass: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
+    badgeClass: 'bg-zinc-500/15 text-zinc-700 dark:text-zinc-300 border-zinc-500/30',
     icon: Layers,
     defaultMenus: ['dashboard', 'admin_reports', 'personal_portal'],
     defaultReportScope: 'own_only',
@@ -1314,7 +1314,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               <span
                 className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
                   activeSubTab === 'leave_approvals'
-                    ? 'bg-black text-[#1DB954]'
+                    ? 'bg-white text-emerald-700 dark:bg-black dark:text-[#1DB954]'
                     : 'bg-amber-500 text-black'
                 }`}
               >
@@ -1337,7 +1337,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               <span
                 className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
                   activeSubTab === 'import_data'
-                    ? 'bg-black text-[#1DB954]'
+                    ? 'bg-white text-emerald-700 dark:bg-black dark:text-[#1DB954]'
                     : 'bg-emerald-500/20 text-emerald-700 dark:text-[#1DB954]'
                 }`}
               >
@@ -1366,32 +1366,32 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {/* 2. TAB CONTENT 1: Register New Colleague                      */}
       {/* ------------------------------------------------------------- */}
       {activeSubTab === 'new_colleague' && (
-        <div className="max-w-4xl bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-7 space-y-7 shadow-2xl">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#282828] pb-4">
+        <div className="max-w-4xl bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl p-5 sm:p-7 space-y-7 shadow-sm dark:shadow-2xl">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-[#282828] pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954]">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 dark:bg-[#1DB954]/15 border border-emerald-500/30 dark:border-[#1DB954]/30 flex items-center justify-center text-emerald-600 dark:text-[#1DB954]">
                 <UserPlus className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">ثبت و ایجاد همکار جدید</h3>
-                <p className="text-xs text-[#888]">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">ثبت و ایجاد همکار جدید</h3>
+                <p className="text-xs text-slate-500 dark:text-[#888]">
                   تعریف عضو جدید، چند راه تماس، نقش سازمانی و تنظیم تیک‌به‌تیک سطوح دسترسی و گزارش‌ها
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2.5">
-              <span className="hidden md:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#222] border border-[#333] text-[11px] text-[#A7A7A7]">
-                <Sparkles className="w-3.5 h-3.5 text-[#1DB954]" />
+              <span className="hidden md:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-[#222] border border-slate-200 dark:border-[#333] text-[11px] text-slate-600 dark:text-[#A7A7A7]">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                 <span>پیکربندی هوشمند دسترسی‌ها</span>
               </span>
               <button
                 type="submit"
                 form="register-colleague-form"
                 disabled={isSubmittingPersonnel}
-                className="px-4 py-2 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold text-xs shadow-lg shadow-[#1DB954]/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black font-extrabold text-xs shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {isSubmittingPersonnel ? (
-                  <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <div className="w-3.5 h-3.5 border-2 border-white dark:border-black border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <Check className="w-3.5 h-3.5 stroke-[3]" />
                 )}
@@ -1403,15 +1403,15 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           <form id="register-colleague-form" onSubmit={handleRegisterColleague} className="space-y-6">
             {/* Section A: Identity & Credentials */}
             <div className="space-y-3">
-              <div className="text-xs font-bold text-white flex items-center gap-2">
-                <UserCheck className="w-4 h-4 text-[#1DB954]" />
+              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                 <span>۱. مشخصات هویتی و حساب کاربری</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 bg-[#141414] p-4 rounded-xl border border-[#262626]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 bg-slate-50 dark:bg-[#141414] p-4 rounded-xl border border-slate-200 dark:border-[#262626]">
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    نام و نام خانوادگی <span className="text-[#E22134]">*</span>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-[#B3B3B3] mb-1.5">
+                    نام و نام خانوادگی <span className="text-rose-600 dark:text-[#E22134]">*</span>
                   </label>
                   <input
                     type="text"
@@ -1419,14 +1419,14 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     onChange={(e) => setColleagueName(e.target.value)}
                     placeholder="مثلاً: سارا احمدی"
                     required
-                    className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none"
+                    className="w-full h-10 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5 flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-[#B3B3B3] mb-1.5 flex items-center justify-between">
                     <span>نام کاربری یکتا</span>
-                    <span className="text-[10px] text-[#777]">جهت ورود به سیستم</span>
+                    <span className="text-[10px] text-slate-400 dark:text-[#777]">جهت ورود به سیستم</span>
                   </label>
                   <input
                     type="text"
@@ -1434,13 +1434,13 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     value={colleagueUsername}
                     onChange={(e) => setColleagueUsername(e.target.value)}
                     placeholder="sara_ahmadi"
-                    className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono"
+                    className="w-full h-10 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
-                    ایمیل سازمانی <span className="text-[#E22134]">*</span>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-[#B3B3B3] mb-1.5">
+                    ایمیل سازمانی <span className="text-rose-600 dark:text-[#E22134]">*</span>
                   </label>
                   <input
                     type="email"
@@ -1449,21 +1449,21 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     onChange={(e) => setColleagueEmail(e.target.value)}
                     placeholder="sara.ahmadi@company.ir"
                     required
-                    className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono"
+                    className="w-full h-10 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5 flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-[#B3B3B3] mb-1.5 flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
-                      <Building2 className="w-3.5 h-3.5 text-[#1DB954]" />
+                      <Building2 className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                       <span>سازمان / شعبه اصلی همکار</span>
                     </span>
                     {onOpenTenantsModal && (
                       <button
                         type="button"
                         onClick={onOpenTenantsModal}
-                        className="text-[10px] text-[#1DB954] hover:underline"
+                        className="text-[10px] text-emerald-600 dark:text-[#1DB954] hover:underline"
                       >
                         + مدیریت شعب
                       </button>
@@ -1478,7 +1478,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         setColleagueAllowedTenantIds([...colleagueAllowedTenantIds, val]);
                       }
                     }}
-                    className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none cursor-pointer"
+                    className="w-full h-10 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none cursor-pointer"
                   >
                     {tenants.map((t) => (
                       <option key={t.id} value={t.id}>
@@ -1492,13 +1492,13 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 </div>
 
                 {tenants.length > 1 && (
-                  <div className="sm:col-span-2 p-3.5 bg-[#161616] rounded-xl border border-[#2a2a2a] space-y-2">
-                    <label className="block text-xs font-semibold text-[#CCC] flex items-center justify-between">
+                  <div className="sm:col-span-2 p-3.5 bg-white dark:bg-[#161616] rounded-xl border border-slate-200 dark:border-[#2a2a2a] space-y-2">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-[#CCC] flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
-                        <Layers className="w-3.5 h-3.5 text-blue-400" />
+                        <Layers className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                         <span>سازمان‌ها و شعب مجاز جهت سوییچ (عضویت در چند شعبه):</span>
                       </span>
-                      <span className="text-[10px] text-[#888]">
+                      <span className="text-[10px] text-slate-500 dark:text-[#888]">
                         کاربر غیرادمین فقط بین شعب تیک‌خورده مجاز به سوییچ خواهد بود
                       </span>
                     </label>
@@ -1512,8 +1512,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                             key={t.id}
                             className={`p-2 rounded-lg border text-xs cursor-pointer flex items-center gap-2 select-none transition-colors ${
                               isChecked
-                                ? 'bg-[#1a2e20]/60 border-[#1DB954]/50 text-white'
-                                : 'bg-[#1c1c1c] border-[#2c2c2c] text-[#777] hover:text-[#bbb]'
+                                ? 'bg-emerald-50 dark:bg-[#1a2e20]/60 border-emerald-500/50 dark:border-[#1DB954]/50 text-slate-900 dark:text-white'
+                                : 'bg-slate-50 dark:bg-[#1c1c1c] border-slate-200 dark:border-[#2c2c2c] text-slate-500 dark:text-[#777] hover:text-slate-800 dark:hover:text-[#bbb]'
                             }`}
                           >
                             <input
@@ -1533,11 +1533,11 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                                   );
                                 }
                               }}
-                              className="accent-[#1DB954]"
+                              className="accent-emerald-600 dark:accent-[#1DB954]"
                             />
                             <span className="truncate">{t.name}</span>
                             {colleagueTenantId === String(t.id) && (
-                              <span className="text-[9px] text-[#1DB954] bg-[#1DB954]/10 px-1 py-0.2 rounded font-mono mr-auto">
+                              <span className="text-[9px] text-emerald-700 dark:text-[#1DB954] bg-emerald-500/10 dark:bg-[#1DB954]/10 px-1 py-0.2 rounded font-mono mr-auto">
                                 شعبه اصلی
                               </span>
                             )}
@@ -1549,7 +1549,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 )}
 
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-[#B3B3B3] mb-1.5">
                     کلمه عبور اولیه (اختیاری)
                   </label>
                   <input
@@ -1558,7 +1558,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     value={colleaguePassword}
                     onChange={(e) => setColleaguePassword(e.target.value)}
                     placeholder="حداقل ۶ کاراکتر (در صورت خالی بودن، بعداً توسط همکار یا مدیر قابل تنظیم است)"
-                    className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono"
+                    className="w-full h-10 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -1567,28 +1567,28 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             {/* Section B: Multiple Contact Numbers */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="text-xs font-bold text-white flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-blue-400" />
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   <span>۲. شماره‌ها و راه‌های ارتباطی همکار (ثبت چند شماره)</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleAddColleaguePhone}
-                  className="px-3 py-1.5 rounded-lg bg-[#242424] hover:bg-[#303030] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors border border-[#3a3a3a]"
+                  className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#242424] dark:hover:bg-[#303030] text-slate-800 dark:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 dark:border-[#3a3a3a]"
                 >
-                  <Plus className="w-3.5 h-3.5 text-[#1DB954]" />
+                  <Plus className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                   <span>افزودن شماره تماس دیگر</span>
                 </button>
               </div>
 
-              <div className="space-y-2 bg-[#141414] p-4 rounded-xl border border-[#262626]">
+              <div className="space-y-2 bg-slate-50 dark:bg-[#141414] p-4 rounded-xl border border-slate-200 dark:border-[#262626]">
                 {colleaguePhones.map((ph, idx) => (
                   <div key={ph.id} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                     <div className="w-full sm:w-48 flex-shrink-0">
                       <select
                         value={ph.label}
                         onChange={(e) => handleChangeColleaguePhone(ph.id, 'label', e.target.value)}
-                        className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none cursor-pointer"
+                        className="w-full h-10 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none cursor-pointer"
                       >
                         {COMMON_PHONE_LABELS.map((lbl) => (
                           <option key={lbl} value={lbl}>
@@ -1605,7 +1605,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         value={ph.number}
                         onChange={(e) => handleChangeColleaguePhone(ph.id, 'number', e.target.value)}
                         placeholder={idx === 0 ? '0912xxxxxxx (شماره اصلی)' : 'شماره تماس یا آیدی'}
-                        className="w-full h-10 px-3 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono"
+                        className="w-full h-10 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono"
                       />
                     </div>
 
@@ -1613,7 +1613,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       <button
                         type="button"
                         onClick={() => handleRemoveColleaguePhone(ph.id)}
-                        className="h-10 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center justify-center transition-colors flex-shrink-0"
+                        className="h-10 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center transition-colors flex-shrink-0"
                         title="حذف این شماره"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1621,7 +1621,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     )}
                   </div>
                 ))}
-                <p className="text-[11px] text-[#777] pt-1">
+                <p className="text-[11px] text-slate-500 dark:text-[#777] pt-1">
                   * شماره اول به عنوان شماره تماس اصلی در سامانه‌های تماس سریع و پیام‌رسان استفاده خواهد شد.
                 </p>
               </div>
@@ -1630,32 +1630,32 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             {/* Section C: Family & Emergency Contacts */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="text-xs font-bold text-white flex items-center gap-2">
-                  <HeartHandshake className="w-4 h-4 text-rose-400" />
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <HeartHandshake className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                   <span>۳. اطلاعات تماس بستگان و خانواده همکار (تماس اضطراری)</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleAddColleagueFamilyContact}
-                  className="px-3 py-1.5 rounded-lg bg-[#242424] hover:bg-[#303030] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors border border-[#3a3a3a]"
+                  className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#242424] dark:hover:bg-[#303030] text-slate-800 dark:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 dark:border-[#3a3a3a]"
                 >
-                  <Plus className="w-3.5 h-3.5 text-[#1DB954]" />
+                  <Plus className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                   <span>افزودن عضو دیگر خانواده</span>
                 </button>
               </div>
 
-              <div className="space-y-3 bg-[#141414] p-4 rounded-xl border border-[#262626]">
-                <p className="text-[11px] text-[#888] leading-relaxed">
+              <div className="space-y-3 bg-slate-50 dark:bg-[#141414] p-4 rounded-xl border border-slate-200 dark:border-[#262626]">
+                <p className="text-[11px] text-slate-500 dark:text-[#888] leading-relaxed">
                   * ثبت شماره تماس خانواده و بستگان درجه یک جهت پیگیری‌های ضروری، حوادث غیرمترقبه و ارتباط سازمانی با خانواده همکار الزامی است.
                 </p>
 
                 {colleagueFamilyContacts.map((fc, idx) => (
                   <div
                     key={fc.id}
-                    className="p-3 bg-[#1a1a1a] rounded-xl border border-[#2c2c2c] space-y-2.5"
+                    className="p-3 bg-white dark:bg-[#1a1a1a] rounded-xl border border-slate-200 dark:border-[#2c2c2c] space-y-2.5"
                   >
-                    <div className="flex items-center justify-between border-b border-[#262626] pb-2">
-                      <span className="text-[11px] font-bold text-[#1DB954] flex items-center gap-1.5">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-[#262626] pb-2">
+                      <span className="text-[11px] font-bold text-emerald-700 dark:text-[#1DB954] flex items-center gap-1.5">
                         <HeartHandshake className="w-3.5 h-3.5" />
                         <span>عضو شماره {toPersianDigits(idx + 1)} خانواده</span>
                       </span>
@@ -1663,7 +1663,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         <button
                           type="button"
                           onClick={() => handleRemoveColleagueFamilyContact(fc.id)}
-                          className="text-rose-400 hover:text-rose-300 text-[11px] flex items-center gap-1"
+                          className="text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 text-[11px] flex items-center gap-1"
                         >
                           <Trash2 className="w-3 h-3" />
                           <span>حذف این عضو</span>
@@ -1673,7 +1673,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                       <div>
-                        <label className="block text-[11px] text-[#A7A7A7] mb-1">
+                        <label className="block text-[11px] text-slate-500 dark:text-[#A7A7A7] mb-1">
                           نام و نام خانوادگی عضو خانواده
                         </label>
                         <input
@@ -1681,18 +1681,18 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           value={fc.name}
                           onChange={(e) => handleChangeColleagueFamilyContact(fc.id, 'name', e.target.value)}
                           placeholder="مثلاً: احمد احمدی"
-                          className="w-full h-9 px-2.5 bg-[#121212] rounded-lg text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none"
+                          className="w-full h-9 px-2.5 bg-slate-50 dark:bg-[#121212] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[11px] text-[#A7A7A7] mb-1">
+                        <label className="block text-[11px] text-slate-500 dark:text-[#A7A7A7] mb-1">
                           نسبت خانوادگی
                         </label>
                         <select
                           value={fc.relation}
                           onChange={(e) => handleChangeColleagueFamilyContact(fc.id, 'relation', e.target.value)}
-                          className="w-full h-9 px-2.5 bg-[#121212] rounded-lg text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none cursor-pointer"
+                          className="w-full h-9 px-2.5 bg-slate-50 dark:bg-[#121212] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none cursor-pointer"
                         >
                           {FAMILY_RELATION_OPTIONS.map((rel) => (
                             <option key={rel} value={rel}>
@@ -1703,7 +1703,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       </div>
 
                       <div>
-                        <label className="block text-[11px] text-[#A7A7A7] mb-1">
+                        <label className="block text-[11px] text-slate-500 dark:text-[#A7A7A7] mb-1">
                           شماره تماس همراه (موبایل)
                         </label>
                         <input
@@ -1712,12 +1712,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           value={fc.phone}
                           onChange={(e) => handleChangeColleagueFamilyContact(fc.id, 'phone', e.target.value)}
                           placeholder="0912xxxxxxx"
-                          className="w-full h-9 px-2.5 bg-[#121212] rounded-lg text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono"
+                          className="w-full h-9 px-2.5 bg-slate-50 dark:bg-[#121212] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[11px] text-[#A7A7A7] mb-1">
+                        <label className="block text-[11px] text-slate-500 dark:text-[#A7A7A7] mb-1">
                           تلفن منزل / شماره دوم (اختیاری)
                         </label>
                         <input
@@ -1726,7 +1726,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           value={fc.phone2 || ''}
                           onChange={(e) => handleChangeColleagueFamilyContact(fc.id, 'phone2', e.target.value)}
                           placeholder="021-xxxxxxxx"
-                          className="w-full h-9 px-2.5 bg-[#121212] rounded-lg text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono"
+                          className="w-full h-9 px-2.5 bg-slate-50 dark:bg-[#121212] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono"
                         />
                       </div>
                     </div>
@@ -1737,7 +1737,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         value={fc.notes || ''}
                         onChange={(e) => handleChangeColleagueFamilyContact(fc.id, 'notes', e.target.value)}
                         placeholder="نشانی محل سکونت یا توضیحات بیشتر (اختیاری)"
-                        className="w-full h-8 px-2.5 bg-[#121212] rounded-lg text-[11px] text-white border border-[#282828] focus:border-[#1DB954] focus:outline-none"
+                        className="w-full h-8 px-2.5 bg-slate-50 dark:bg-[#121212] rounded-lg text-[11px] text-slate-900 dark:text-white border border-slate-200 dark:border-[#282828] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
                       />
                     </div>
                   </div>
@@ -1747,8 +1747,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
 
             {/* Section D: Role Archetype Picker */}
             <div className="space-y-3">
-              <div className="text-xs font-bold text-white flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-purple-400" />
+              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 <span>۴. انتخاب نقش سازمانی و الگوی دسترسی</span>
               </div>
 
@@ -1765,18 +1765,18 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       onClick={() => handleRoleChange(rKey)}
                       className={`text-right p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 ${
                         isSelected
-                          ? 'bg-[#1e1e1e] border-[#1DB954] shadow-md shadow-[#1DB954]/10 ring-1 ring-[#1DB954]'
-                          : 'bg-[#141414] border-[#282828] hover:border-[#383838] opacity-80 hover:opacity-100'
+                          ? 'bg-emerald-50/70 dark:bg-[#1e1e1e] border-emerald-500 dark:border-[#1DB954] shadow-md shadow-emerald-500/10 dark:shadow-[#1DB954]/10 ring-1 ring-emerald-500 dark:ring-[#1DB954]'
+                          : 'bg-slate-50 dark:bg-[#141414] border-slate-200 dark:border-[#282828] hover:border-slate-300 dark:hover:border-[#383838] opacity-90 hover:opacity-100'
                       }`}
                     >
                       <div className="flex items-center justify-between w-full">
-                        <span className="font-bold text-xs text-white flex items-center gap-1.5">
-                          <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-[#1DB954]' : 'text-[#888]'}`} />
+                        <span className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                          <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
                           <span>{cfg.label}</span>
                         </span>
-                        {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-[#1DB954]" />}
+                        {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />}
                       </div>
-                      <p className="text-[10px] text-[#888] leading-relaxed line-clamp-2">
+                      <p className="text-[10px] text-slate-500 dark:text-[#888] leading-relaxed line-clamp-2">
                         {cfg.description}
                       </p>
                     </button>
@@ -1786,14 +1786,14 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             </div>
 
             {/* Section D: Granular Permissions Matrix */}
-            <div className="space-y-4 bg-[#141414] p-5 rounded-2xl border border-[#262626]">
-              <div className="flex items-center justify-between border-b border-[#242424] pb-3">
-                <div className="text-xs font-bold text-white flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-amber-400" />
+            <div className="space-y-4 bg-slate-50 dark:bg-[#141414] p-5 rounded-2xl border border-slate-200 dark:border-[#262626]">
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#242424] pb-3">
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                   <span>۴. تنظیمات دسترسی ریزدانه (تیک زدن منوها و اختیارات)</span>
                 </div>
-                <span className="text-[11px] text-[#A7A7A7]">
-                  نقش انتخاب‌شده: <span className="text-[#1DB954] font-bold">{PERSONNEL_ROLE_CONFIG[colleagueRole]?.label}</span>
+                <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">
+                  نقش انتخاب‌شده: <span className="text-emerald-700 dark:text-[#1DB954] font-bold">{PERSONNEL_ROLE_CONFIG[colleagueRole]?.label}</span>
                 </span>
               </div>
 
@@ -1811,17 +1811,17 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             </div>
 
             {/* Submit Action */}
-            <div className="pt-2 flex items-center justify-between border-t border-[#282828]">
-              <div className="text-[11px] text-[#777]">
+            <div className="pt-2 flex items-center justify-between border-t border-slate-200 dark:border-[#282828]">
+              <div className="text-[11px] text-slate-500 dark:text-[#777]">
                 با ثبت همکار، دسترسی‌ها فوراً اعمال شده و در حساب وی فعال می‌شود.
               </div>
               <button
                 type="submit"
                 disabled={isSubmittingPersonnel}
-                className="px-6 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold text-xs shadow-lg shadow-[#1DB954]/25 transition-all flex items-center gap-2 hover:scale-[1.02]"
+                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black font-extrabold text-xs shadow-lg shadow-emerald-600/25 dark:shadow-[#1DB954]/25 transition-all flex items-center gap-2 hover:scale-[1.02]"
               >
                 {isSubmittingPersonnel ? (
-                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white dark:border-black border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <Check className="w-4 h-4 stroke-[3]" />
                 )}
@@ -1837,32 +1837,32 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {/* ------------------------------------------------------------- */}
       {activeSubTab === 'colleagues_list' && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-[#181818] p-3 sm:p-4 rounded-2xl border border-[#282828]">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-[#181818] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-[#282828] shadow-sm dark:shadow-none">
             <div className="relative flex-1 min-w-[220px]">
-              <Search className="w-4 h-4 text-[#888] absolute right-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-slate-400 dark:text-[#888] absolute right-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={personnelSearch}
                 onChange={(e) => setPersonnelSearch(e.target.value)}
                 placeholder="جستجو بر اساس نام، ایمیل، شماره تماس..."
-                className="w-full h-9 pr-9 pl-3 bg-[#121212] rounded-xl text-xs text-white border border-[#2c2c2c] focus:border-[#1DB954] focus:outline-none"
+                className="w-full h-9 pr-9 pl-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
               />
             </div>
 
             {/* Organization / Tenant Filter */}
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#121212] border border-[#2c2c2c] text-xs text-[#B3B3B3]">
-                <Building2 className="w-3.5 h-3.5 text-[#1DB954]" />
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#2c2c2c] text-xs text-slate-600 dark:text-[#B3B3B3]">
+                <Building2 className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                 <select
                   value={selectedTenantFilter}
                   onChange={(e) => setSelectedTenantFilter(e.target.value)}
-                  className="bg-transparent text-xs text-white focus:outline-none cursor-pointer"
+                  className="bg-transparent text-xs text-slate-900 dark:text-white focus:outline-none cursor-pointer"
                 >
-                  <option value="all" className="bg-[#181818]">
+                  <option value="all" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                     همه سازمان‌ها ({toPersianDigits(personnelList.length)})
                   </option>
                   {tenants.map((t) => (
-                    <option key={t.id} value={t.id} className="bg-[#181818]">
+                    <option key={t.id} value={t.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                       {t.name}
                     </option>
                   ))}
@@ -1873,23 +1873,23 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 <button
                   type="button"
                   onClick={onOpenTenantsModal}
-                  className="p-2 rounded-xl bg-[#222] hover:bg-[#282828] text-[#888] hover:text-white transition-colors"
+                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#222] dark:hover:bg-[#282828] text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white border border-slate-200 dark:border-transparent transition-colors"
                   title="مدیریت سازمان‌ها و شعب"
                 >
-                  <Building2 className="w-4 h-4 text-[#1DB954]" />
+                  <Building2 className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                 </button>
               )}
             </div>
 
             {/* View Mode Toggle Switcher: List vs Card Grid */}
-            <div className="flex items-center gap-1 bg-[#121212] p-1 rounded-xl border border-[#2c2c2c]">
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#121212] p-1 rounded-xl border border-slate-200 dark:border-[#2c2c2c]">
               <button
                 type="button"
                 onClick={() => setColleagueViewMode('list')}
                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   colleagueViewMode === 'list'
-                    ? 'bg-[#1DB954] text-black font-bold shadow-md'
-                    : 'text-[#888] hover:text-white'
+                    ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black font-bold shadow-md'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white'
                 }`}
                 title="نمایش لیستی (جدولی - دسکتاپ)"
               >
@@ -1901,8 +1901,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 onClick={() => setColleagueViewMode('grid')}
                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   colleagueViewMode === 'grid'
-                    ? 'bg-[#1DB954] text-black font-bold shadow-md'
-                    : 'text-[#888] hover:text-white'
+                    ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black font-bold shadow-md'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white'
                 }`}
                 title="نمایش کارتی (موبایل)"
               >
@@ -1913,7 +1913,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
 
             <button
               onClick={() => setActiveSubTab('new_colleague')}
-              className="px-4 py-2 rounded-xl bg-[#1DB954] text-black font-bold text-xs flex items-center gap-1.5 shadow-md hover:bg-[#1ed760] transition-colors"
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black font-bold text-xs flex items-center gap-1.5 shadow-md transition-colors"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>افزودن همکار</span>
@@ -1921,11 +1921,11 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           </div>
 
           {/* DESKTOP TABLE LIST VIEW (Visible on md screens and above when list mode active) */}
-          <div className={`${colleagueViewMode === 'list' ? 'hidden md:block' : 'hidden'} bg-[#181818] border border-[#282828] rounded-2xl overflow-hidden shadow-xl`}>
+          <div className={`${colleagueViewMode === 'list' ? 'hidden md:block' : 'hidden'} bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl overflow-hidden shadow-sm dark:shadow-xl`}>
             <div className="overflow-x-auto">
               <table className="w-full text-right border-collapse">
                 <thead>
-                  <tr className="bg-[#141414] border-b border-[#282828] text-[#888888] text-xs font-semibold">
+                  <tr className="bg-slate-50 dark:bg-[#141414] border-b border-slate-200 dark:border-[#282828] text-slate-500 dark:text-[#888888] text-xs font-semibold">
                     <th className="py-3.5 px-4">مشخصات همکار</th>
                     <th className="py-3.5 px-4">نقش سازمانی و شعب</th>
                     <th className="py-3.5 px-4">اطلاعات تماس</th>
@@ -1934,7 +1934,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     <th className="py-3.5 px-4 text-left">عملیات</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#222222] text-xs text-[#CCCCCC]">
+                <tbody className="divide-y divide-slate-100 dark:divide-[#222222] text-xs text-slate-700 dark:text-[#CCCCCC]">
                   {filteredPersonnel.map((p) => {
                     const assignedCusts = customers.filter((c) => matchPersonnelToCustomer(c, p));
                     const wonCusts = assignedCusts.filter((c) => {
@@ -1943,7 +1943,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     });
                     const roleCfg = PERSONNEL_ROLE_CONFIG[p.role as PersonnelRole] || {
                       label: p.role,
-                      badgeClass: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
+                      badgeClass: 'bg-zinc-500/15 text-zinc-700 dark:text-zinc-300 border-zinc-500/30',
                       icon: UserCheck,
                     };
                     const RoleIcon = roleCfg.icon;
@@ -1962,11 +1962,11 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     }
 
                     return (
-                      <tr key={p.id} className="hover:bg-[#202020] transition-colors">
+                      <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-[#202020] transition-colors">
                         {/* Colleague Name & Avatar */}
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-[#222] border border-[#1DB954] overflow-hidden flex items-center justify-center flex-shrink-0 text-white font-bold text-sm relative">
+                            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-[#222] border border-emerald-500 dark:border-[#1DB954] overflow-hidden flex items-center justify-center flex-shrink-0 text-slate-800 dark:text-white font-bold text-sm relative">
                               {getAvatarUrl(p.profile_image || p.avatar, p.name) ? (
                                 <img
                                   key={getAvatarUrl(p.profile_image || p.avatar, p.name)}
@@ -1981,14 +1981,14 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                               <span>{(p.name || 'U').trim().charAt(0).toUpperCase()}</span>
                             </div>
                             <div className="truncate">
-                              <div className="font-bold text-sm text-white flex items-center gap-1.5">
+                              <div className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
                                 <span>{p.name}</span>
                                 {p.role === 'admin' && (
-                                  <Shield className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                                  <Shield className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 flex-shrink-0" />
                                 )}
                               </div>
                               {p.username && (
-                                <div className="text-[11px] font-mono text-[#1DB954]" dir="ltr">
+                                <div className="text-[11px] font-mono text-emerald-700 dark:text-[#1DB954]" dir="ltr">
                                   @{p.username}
                                 </div>
                               )}
@@ -2007,18 +2007,18 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                                 <span>{roleCfg.label}</span>
                               </span>
                               {p.status === 'inactive' || p.active === false ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30">
                                   <EyeOff className="w-3 h-3" />
                                   <span>غیرفعال</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md text-[9px] font-medium bg-[#1a2e20]/60 text-[#1DB954] border border-[#1DB954]/30">
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md text-[9px] font-medium bg-emerald-50 dark:bg-[#1a2e20]/60 text-emerald-700 dark:text-[#1DB954] border border-emerald-500/30 dark:border-[#1DB954]/30">
                                   <span>فعال</span>
                                 </span>
                               )}
                             </div>
-                            <span className="text-[11px] text-[#A7A7A7] flex items-center gap-1">
-                              <Building2 className="w-3 h-3 text-[#1DB954]" />
+                            <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7] flex items-center gap-1">
+                              <Building2 className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
                               <span>{p.tenant_name || 'سازمان مرکزی'}</span>
                             </span>
                           </div>
@@ -2027,7 +2027,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         {/* Contact Info */}
                         <td className="py-3.5 px-4">
                           <div className="space-y-1">
-                            <div className="text-[11px] text-[#BBB] font-mono" dir="ltr">
+                            <div className="text-[11px] text-slate-600 dark:text-[#BBB] font-mono" dir="ltr">
                               {p.email}
                             </div>
                             {cardPhones.length > 0 && (
@@ -2037,7 +2037,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                                     key={idx}
                                     href={`tel:${ph.number}`}
                                     dir="ltr"
-                                    className="font-mono text-[11px] text-white hover:text-[#1DB954] bg-[#121212] px-2 py-0.5 rounded border border-[#2c2c2c] transition-colors"
+                                    className="font-mono text-[11px] text-slate-800 dark:text-white hover:text-emerald-600 dark:hover:text-[#1DB954] bg-slate-100 dark:bg-[#121212] px-2 py-0.5 rounded border border-slate-200 dark:border-[#2c2c2c] transition-colors"
                                   >
                                     {ph.number}
                                   </a>
@@ -2050,13 +2050,13 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         {/* Customer Stats */}
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           <div className="flex items-center gap-3 text-xs font-mono">
-                            <div className="bg-[#121212] px-2.5 py-1 rounded-lg border border-[#2a2a2a]">
-                              <span className="text-[10px] text-[#888]">فعال: </span>
-                              <span className="text-white font-bold">{toPersianDigits(assignedCusts.length)}</span>
+                            <div className="bg-slate-50 dark:bg-[#121212] px-2.5 py-1 rounded-lg border border-slate-200 dark:border-[#2a2a2a]">
+                              <span className="text-[10px] text-slate-500 dark:text-[#888]">فعال: </span>
+                              <span className="text-slate-900 dark:text-white font-bold">{toPersianDigits(assignedCusts.length)}</span>
                             </div>
-                            <div className="bg-[#121212] px-2.5 py-1 rounded-lg border border-[#2a2a2a]">
-                              <span className="text-[10px] text-[#888]">قرارداد: </span>
-                              <span className="text-[#1DB954] font-bold">{toPersianDigits(wonCusts.length)}</span>
+                            <div className="bg-slate-50 dark:bg-[#121212] px-2.5 py-1 rounded-lg border border-slate-200 dark:border-[#2a2a2a]">
+                              <span className="text-[10px] text-slate-500 dark:text-[#888]">قرارداد: </span>
+                              <span className="text-emerald-700 dark:text-[#1DB954] font-bold">{toPersianDigits(wonCusts.length)}</span>
                             </div>
                           </div>
                         </td>
@@ -2067,16 +2067,16 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                             <button
                               type="button"
                               onClick={() => setViewingFamilyModalPersonnel(p)}
-                              className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                              className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/25 text-xs font-semibold flex items-center gap-1.5 transition-colors"
                             >
-                              <HeartHandshake className="w-3.5 h-3.5 text-rose-400" />
+                              <HeartHandshake className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                               <span>تماس خانواده ({toPersianDigits(p.family_contacts?.length || 1)})</span>
                             </button>
                           ) : (
                             <button
                               type="button"
                               onClick={() => openEditColleague(p)}
-                              className="px-2.5 py-1 rounded-lg bg-[#141414] hover:bg-[#202020] text-[#777] border border-dashed border-[#2c2c2c] text-xs transition-colors"
+                              className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-[#141414] hover:bg-slate-100 dark:hover:bg-[#202020] text-slate-500 dark:text-[#777] border border-dashed border-slate-300 dark:border-[#2c2c2c] text-xs transition-colors"
                             >
                               + شماره خانواده
                             </button>
@@ -2088,10 +2088,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           <div className="flex items-center gap-1.5 justify-end">
                             <button
                               onClick={() => openEditColleague(p)}
-                              className="p-1.5 rounded-lg bg-[#222] text-[#A7A7A7] hover:text-white hover:bg-[#333] transition-colors"
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#222] dark:hover:bg-[#333] text-slate-600 dark:text-[#A7A7A7] hover:text-slate-900 dark:hover:text-white transition-colors"
                               title="ویرایش مشخصات و دسترسی‌ها"
                             >
-                              <Edit2 className="w-3.5 h-3.5 text-[#1DB954]" />
+                              <Edit2 className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                             </button>
                             <button
                               onClick={async () => {
@@ -2100,7 +2100,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                                   showToast(`همکار «${p.name}» با موفقیت حذف شد.`);
                                 }
                               }}
-                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors"
+                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
                               title="حذف همکار"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -2125,7 +2125,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 });
                 const roleCfg = PERSONNEL_ROLE_CONFIG[p.role as PersonnelRole] || {
                   label: p.role,
-                  badgeClass: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
+                  badgeClass: 'bg-zinc-500/15 text-zinc-700 dark:text-zinc-300 border-zinc-500/30',
                   icon: UserCheck,
                 };
                 const RoleIcon = roleCfg.icon;
@@ -2155,11 +2155,11 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 return (
                   <div
                     key={p.id}
-                    className="bg-[#181818] border border-[#282828] hover:border-[#383838] rounded-2xl p-4 sm:p-5 space-y-4 transition-all shadow-md hover:shadow-xl"
+                    className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] hover:border-slate-300 dark:hover:border-[#383838] rounded-2xl p-4 sm:p-5 space-y-4 transition-all shadow-sm hover:shadow-md dark:shadow-md dark:hover:shadow-xl"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-12 h-12 rounded-2xl bg-[#222] border-2 border-[#1DB954] overflow-hidden flex items-center justify-center flex-shrink-0 shadow-md text-white font-bold text-base relative">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-[#222] border-2 border-emerald-500 dark:border-[#1DB954] overflow-hidden flex items-center justify-center flex-shrink-0 shadow-md text-slate-800 dark:text-white font-bold text-base relative">
                           {getAvatarUrl(p.profile_image || p.avatar, p.name) ? (
                             <img
                               key={getAvatarUrl(p.profile_image || p.avatar, p.name)}
@@ -2174,10 +2174,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           <span>{(p.name || 'U').trim().charAt(0).toUpperCase()}</span>
                         </div>
                         <div className="truncate">
-                          <div className="font-bold text-sm text-white truncate flex items-center gap-1.5">
+                          <div className="font-bold text-sm text-slate-900 dark:text-white truncate flex items-center gap-1.5">
                             <span>{p.name}</span>
                             {p.role === 'admin' && (
-                              <Shield className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                              <Shield className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 flex-shrink-0" />
                             )}
                           </div>
                           <div className="mt-1 flex items-center gap-1.5 flex-wrap">
@@ -2188,17 +2188,17 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                               <span>{roleCfg.label}</span>
                             </span>
                             {p.status === 'inactive' || p.active === false ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30">
                                 <EyeOff className="w-3 h-3" />
                                 <span>غیرفعال</span>
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md text-[9px] font-medium bg-[#1a2e20]/60 text-[#1DB954] border border-[#1DB954]/30">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md text-[9px] font-medium bg-emerald-50 dark:bg-[#1a2e20]/60 text-emerald-700 dark:text-[#1DB954] border border-emerald-500/30 dark:border-[#1DB954]/30">
                                 <span>فعال</span>
                               </span>
                             )}
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-[#121212] border border-[#2c2c2c] text-[#A7A7A7]">
-                              <Building2 className="w-3 h-3 text-[#1DB954]" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 dark:bg-[#121212] border border-slate-200 dark:border-[#2c2c2c] text-slate-600 dark:text-[#A7A7A7]">
+                              <Building2 className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
                               <span>{p.tenant_name || 'سازمان مرکزی'}</span>
                             </span>
                           </div>
@@ -2208,10 +2208,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => openEditColleague(p)}
-                          className="p-1.5 rounded-lg bg-[#222] text-[#A7A7A7] hover:text-white hover:bg-[#333] transition-colors"
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#222] dark:hover:bg-[#333] text-slate-600 dark:text-[#A7A7A7] hover:text-slate-900 dark:hover:text-white transition-colors"
                           title="ویرایش مشخصات و دسترسی‌ها"
                         >
-                          <Edit2 className="w-3.5 h-3.5 text-[#1DB954]" />
+                          <Edit2 className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                         </button>
                         <button
                           onClick={async () => {
@@ -2220,7 +2220,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                               showToast(`همکار «${p.name}» با موفقیت حذف شد.`);
                             }
                           }}
-                          className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors"
+                          className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
                           title="حذف همکار"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -2229,16 +2229,16 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     </div>
 
                     {/* Contact info & multiple phone numbers */}
-                    <div className="space-y-2 text-xs border-t border-[#242424] pt-3">
-                      <div className="flex items-center justify-between text-xs text-[#999]">
+                    <div className="space-y-2 text-xs border-t border-slate-100 dark:border-[#242424] pt-3">
+                      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-[#999]">
                         <div className="flex items-center gap-2 truncate">
-                          <Mail className="w-3.5 h-3.5 text-[#666] flex-shrink-0" />
+                          <Mail className="w-3.5 h-3.5 text-slate-400 dark:text-[#666] flex-shrink-0" />
                           <span className="font-mono text-[11px] truncate" dir="ltr">
                             {p.email}
                           </span>
                         </div>
                         {p.username && (
-                          <span className="font-mono text-[10px] text-[#1DB954] bg-[#1DB954]/10 px-1.5 py-0.5 rounded" dir="ltr">
+                          <span className="font-mono text-[10px] text-emerald-700 dark:text-[#1DB954] bg-emerald-500/10 dark:bg-[#1DB954]/10 px-1.5 py-0.5 rounded" dir="ltr">
                             @{p.username}
                           </span>
                         )}
@@ -2250,15 +2250,15 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           {cardPhones.map((ph, phIdx) => (
                             <div
                               key={phIdx}
-                              className="flex items-center justify-between text-xs bg-[#121212] px-2.5 py-1.5 rounded-lg border border-[#222]"
+                              className="flex items-center justify-between text-xs bg-slate-50 dark:bg-[#121212] px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-[#222]"
                             >
                               <div className="flex items-center gap-2 min-w-0">
-                                <Phone className="w-3 h-3 text-[#1DB954] flex-shrink-0" />
-                                <span className="text-[10px] text-[#888] truncate">{ph.label}:</span>
+                                <Phone className="w-3 h-3 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />
+                                <span className="text-[10px] text-slate-500 dark:text-[#888] truncate">{ph.label}:</span>
                                 <a
                                   href={`tel:${ph.number}`}
                                   dir="ltr"
-                                  className="font-mono text-[11px] text-white hover:text-[#1DB954] transition-colors"
+                                  className="font-mono text-[11px] text-slate-800 dark:text-white hover:text-emerald-600 dark:hover:text-[#1DB954] transition-colors"
                                 >
                                   {ph.number}
                                 </a>
@@ -2269,7 +2269,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                                   navigator.clipboard.writeText(ph.number);
                                   showToast(`شماره ${ph.number} در حافظه کپی شد.`, 'info');
                                 }}
-                                className="text-[#666] hover:text-white p-1 rounded"
+                                className="text-slate-400 hover:text-slate-800 dark:text-[#666] dark:hover:text-white p-1 rounded"
                                 title="کپی شماره"
                               >
                                 <Copy className="w-3 h-3" />
@@ -2281,30 +2281,30 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     </div>
 
                     {/* Granular permissions overview badges */}
-                    <div className="flex items-center flex-wrap gap-1.5 pt-2 border-t border-[#222] text-[10px]">
-                      <span className="px-2 py-0.5 rounded-md bg-[#121212] border border-[#262626] text-[#BBB] flex items-center gap-1">
-                        <Layers className="w-3 h-3 text-[#1DB954]" />
+                    <div className="flex items-center flex-wrap gap-1.5 pt-2 border-t border-slate-100 dark:border-[#222] text-[10px]">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#262626] text-slate-700 dark:text-[#BBB] flex items-center gap-1">
+                        <Layers className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
                         <span>{toPersianDigits(allowedCount)} منوی مجاز</span>
                       </span>
-                      <span className="px-2 py-0.5 rounded-md bg-[#121212] border border-[#262626] text-[#BBB] flex items-center gap-1">
-                        <Eye className="w-3 h-3 text-blue-400" />
+                      <span className="px-2 py-0.5 rounded-md bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#262626] text-slate-700 dark:text-[#BBB] flex items-center gap-1">
+                        <Eye className="w-3 h-3 text-blue-600 dark:text-blue-400" />
                         <span>دید گزارش: {scopeLabel}</span>
                       </span>
                     </div>
 
                     {/* Family Contacts Quick Action */}
-                    <div className="pt-2 border-t border-[#222]">
+                    <div className="pt-2 border-t border-slate-100 dark:border-[#222]">
                       {(p.family_contacts && p.family_contacts.length > 0) || p.emergency_contact_phone ? (
                         <button
                           type="button"
                           onClick={() => setViewingFamilyModalPersonnel(p)}
-                          className="w-full py-1.5 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/25 text-[11px] font-semibold flex items-center justify-between transition-colors shadow-sm"
+                          className="w-full py-1.5 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/25 text-[11px] font-semibold flex items-center justify-between transition-colors shadow-sm"
                         >
                           <span className="flex items-center gap-1.5">
-                            <HeartHandshake className="w-3.5 h-3.5 text-rose-400" />
+                            <HeartHandshake className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                             <span>اطلاعات تماس خانواده</span>
                           </span>
-                          <span className="px-2 py-0.5 bg-rose-500/20 rounded-md text-[10px] font-bold text-rose-200">
+                          <span className="px-2 py-0.5 bg-rose-500/20 rounded-md text-[10px] font-bold text-rose-800 dark:text-rose-200">
                             {toPersianDigits(
                               p.family_contacts && p.family_contacts.length > 0
                                 ? p.family_contacts.length
@@ -2317,25 +2317,25 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         <button
                           type="button"
                           onClick={() => openEditColleague(p)}
-                          className="w-full py-1.5 px-2.5 rounded-xl bg-[#141414] hover:bg-[#202020] text-[#777] hover:text-[#B3B3B3] border border-dashed border-[#2c2c2c] text-[11px] flex items-center justify-center gap-1.5 transition-colors"
+                          className="w-full py-1.5 px-2.5 rounded-xl bg-slate-50 dark:bg-[#141414] hover:bg-slate-100 dark:hover:bg-[#202020] text-slate-500 dark:text-[#777] hover:text-slate-700 dark:hover:text-[#B3B3B3] border border-dashed border-slate-300 dark:border-[#2c2c2c] text-[11px] flex items-center justify-center gap-1.5 transition-colors"
                         >
-                          <HeartHandshake className="w-3.5 h-3.5 text-[#666]" />
+                          <HeartHandshake className="w-3.5 h-3.5 text-slate-400 dark:text-[#666]" />
                           <span>ثبت شماره تماس خانواده همکار</span>
                         </button>
                       )}
                     </div>
 
                     {/* Stats snippet */}
-                    <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-[#121212] p-2.5 rounded-xl border border-[#222]">
+                    <div className="grid grid-cols-2 gap-2 text-xs font-mono bg-slate-50 dark:bg-[#121212] p-2.5 rounded-xl border border-slate-200 dark:border-[#222]">
                       <div>
-                        <div className="text-[10px] text-[#777] font-sans">پرونده‌های فعال</div>
-                        <div className="text-white font-bold mt-0.5">
+                        <div className="text-[10px] text-slate-500 dark:text-[#777] font-sans">پرونده‌های فعال</div>
+                        <div className="text-slate-900 dark:text-white font-bold mt-0.5">
                           {toPersianDigits(assignedCusts.length)} مشتری
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-[#777] font-sans">قرارداد نهایی</div>
-                        <div className="text-[#1DB954] font-bold mt-0.5">
+                        <div className="text-[10px] text-slate-500 dark:text-[#777] font-sans">قرارداد نهایی</div>
+                        <div className="text-emerald-700 dark:text-[#1DB954] font-bold mt-0.5">
                           {toPersianDigits(wonCusts.length)} فقره
                         </div>
                       </div>
@@ -2351,22 +2351,22 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {/* 4. TAB CONTENT 3: Extend Ownership (تمدید مالکیت مشتریان)     */}
       {/* ------------------------------------------------------------- */}
       {activeSubTab === 'extend_ownership' && (
-        <div className="bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-6 space-y-6">
+        <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl p-5 sm:p-6 space-y-6 shadow-sm dark:shadow-none">
           {/* Quick Global Reset Banner / Tool */}
-          <div className="bg-gradient-to-r from-[#1c2e22] via-[#16221a] to-[#181818] border border-[#1DB954]/40 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
+          <div className="bg-gradient-to-r from-emerald-50 via-white to-slate-50 dark:from-[#1c2e22] dark:via-[#16221a] dark:to-[#181818] border border-emerald-500/30 dark:border-[#1DB954]/40 rounded-2xl p-4 sm:p-5 shadow-sm dark:shadow-lg space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#1DB954]/20 border border-[#1DB954]/30 flex items-center justify-center shrink-0">
-                  <CalendarDays className="w-5 h-5 text-[#1DB954]" />
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/15 dark:bg-[#1DB954]/20 border border-emerald-500/30 dark:border-[#1DB954]/30 flex items-center justify-center shrink-0">
+                  <CalendarDays className="w-5 h-5 text-emerald-600 dark:text-[#1DB954]" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
                     <span>تنظیم سراسری مهلت مالکیت (ریست روزهای باقیمانده به عدد دلخواه)</span>
-                    <span className="text-[10px] bg-[#1DB954]/20 text-[#1DB954] px-2 py-0.5 rounded-full font-mono border border-[#1DB954]/30">
+                    <span className="text-[10px] bg-emerald-500/15 dark:bg-[#1DB954]/20 text-emerald-700 dark:text-[#1DB954] px-2 py-0.5 rounded-full font-mono border border-emerald-500/30 dark:border-[#1DB954]/30">
                       اقدام دسته‌جمعی
                     </span>
                   </h4>
-                  <p className="text-xs text-[#a0a0a0] mt-0.5">
+                  <p className="text-xs text-slate-600 dark:text-[#a0a0a0] mt-0.5">
                     تغییر یکپارچه روزهای باقیمانده مالکیت به عدد دلخواه شما (مثلاً ۳۰ روز یا هر مقدار دیگر) از تاریخ امروز
                   </p>
                 </div>
@@ -2377,12 +2377,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 type="button"
                 onClick={handleApplyGlobalExtend}
                 disabled={isSubmittingGlobalExtend}
-                className="self-stretch sm:self-auto px-5 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] disabled:opacity-50 text-black font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                className="self-stretch sm:self-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] disabled:opacity-50 text-white dark:text-black font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
               >
                 {isSubmittingGlobalExtend ? (
-                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white dark:border-black border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <Sparkles className="w-4 h-4 fill-black stroke-black" />
+                  <Sparkles className="w-4 h-4 fill-white stroke-white dark:fill-black dark:stroke-black" />
                 )}
                 <span>
                   {isSubmittingGlobalExtend
@@ -2399,10 +2399,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             </div>
 
             {/* Scope Selection & Days Input Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-2 border-t border-[#1DB954]/20">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-2 border-t border-emerald-500/20 dark:border-[#1DB954]/20">
               {/* Scope Selector (7 cols) */}
               <div className="md:col-span-7 space-y-2">
-                <span className="text-[11px] font-semibold text-[#B3B3B3] block">
+                <span className="text-[11px] font-semibold text-slate-600 dark:text-[#B3B3B3] block">
                   دامنه اعمال تغییرات:
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -2411,12 +2411,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     onClick={() => setGlobalExtendScope('all')}
                     className={`px-3 py-2 rounded-xl text-xs font-medium border text-center transition-all ${
                       globalExtendScope === 'all'
-                        ? 'bg-[#1DB954]/20 border-[#1DB954] text-white shadow-sm'
-                        : 'bg-[#121212] border-[#2c2c2c] text-[#888] hover:text-white'
+                        ? 'bg-emerald-500/15 dark:bg-[#1DB954]/20 border-emerald-500 dark:border-[#1DB954] text-slate-900 dark:text-white shadow-sm'
+                        : 'bg-white dark:bg-[#121212] border-slate-200 dark:border-[#2c2c2c] text-slate-600 dark:text-[#888] hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
                     <div>همه مشتریان</div>
-                    <div className="text-[10px] text-[#777] mt-0.5 font-mono">
+                    <div className="text-[10px] text-slate-500 dark:text-[#777] mt-0.5 font-mono">
                       {toPersianDigits(dashboardSummary?.total_customers ?? (extendTotalCount || (customers?.length || 0)))} پرونده
                     </div>
                   </button>
@@ -2426,12 +2426,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     onClick={() => setGlobalExtendScope('marketer')}
                     className={`px-3 py-2 rounded-xl text-xs font-medium border text-center transition-all ${
                       globalExtendScope === 'marketer'
-                        ? 'bg-[#1DB954]/20 border-[#1DB954] text-white shadow-sm'
-                        : 'bg-[#121212] border-[#2c2c2c] text-[#888] hover:text-white'
+                        ? 'bg-emerald-500/15 dark:bg-[#1DB954]/20 border-emerald-500 dark:border-[#1DB954] text-slate-900 dark:text-white shadow-sm'
+                        : 'bg-white dark:bg-[#121212] border-slate-200 dark:border-[#2c2c2c] text-slate-600 dark:text-[#888] hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
                     <div>مشتریان یک بازاریاب</div>
-                    <div className="text-[10px] text-[#777] mt-0.5">تفکیک بازاریاب</div>
+                    <div className="text-[10px] text-slate-500 dark:text-[#777] mt-0.5">تفکیک بازاریاب</div>
                   </button>
 
                   <button
@@ -2439,12 +2439,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     onClick={() => setGlobalExtendScope('selected')}
                     className={`px-3 py-2 rounded-xl text-xs font-medium border text-center transition-all ${
                       globalExtendScope === 'selected'
-                        ? 'bg-[#1DB954]/20 border-[#1DB954] text-white shadow-sm'
-                        : 'bg-[#121212] border-[#2c2c2c] text-[#888] hover:text-white'
+                        ? 'bg-emerald-500/15 dark:bg-[#1DB954]/20 border-emerald-500 dark:border-[#1DB954] text-slate-900 dark:text-white shadow-sm'
+                        : 'bg-white dark:bg-[#121212] border-slate-200 dark:border-[#2c2c2c] text-slate-600 dark:text-[#888] hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
                     <div>انتخاب‌شده‌های لیست</div>
-                    <div className="text-[10px] text-[#777] mt-0.5 font-mono">
+                    <div className="text-[10px] text-slate-500 dark:text-[#777] mt-0.5 font-mono">
                       {toPersianDigits(selectedExtendCustomerIds.length)} پرونده
                     </div>
                   </button>
@@ -2456,7 +2456,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     <select
                       value={globalExtendMarketerId}
                       onChange={(e) => setGlobalExtendMarketerId(e.target.value)}
-                      className="w-full h-9 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#1DB954]/50 focus:outline-none"
+                      className="w-full h-9 px-3 bg-white dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-emerald-500/50 dark:border-[#1DB954]/50 focus:outline-none"
                     >
                       <option value="">-- انتخاب بازاریاب مسئول --</option>
                       {personnelList.map((p) => (
@@ -2471,7 +2471,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
 
               {/* Number of Days Input (5 cols) */}
               <div className="md:col-span-5 space-y-2">
-                <span className="text-[11px] font-semibold text-[#B3B3B3] block">
+                <span className="text-[11px] font-semibold text-slate-600 dark:text-[#B3B3B3] block">
                   تعداد روزهای مهلت از امروز (عدد دلخواه):
                 </span>
                 <div className="flex items-center gap-2">
@@ -2482,9 +2482,9 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       max={3650}
                       value={customExtendDays}
                       onChange={(e) => setCustomExtendDays(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full h-10 px-3 pr-4 pl-12 bg-[#121212] rounded-xl text-sm font-bold text-white border border-[#333] focus:border-[#1DB954] focus:outline-none"
+                      className="w-full h-10 px-3 pr-4 pl-12 bg-white dark:bg-[#121212] rounded-xl text-sm font-bold text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
                     />
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#888]">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 dark:text-[#888]">
                       روز
                     </span>
                   </div>
@@ -2492,7 +2492,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
 
                 {/* Quick select presets */}
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] text-[#666]">پیش‌فرض‌ها:</span>
+                  <span className="text-[10px] text-slate-500 dark:text-[#666]">پیش‌فرض‌ها:</span>
                   {[
                     { days: 15, label: '۱۵ روز' },
                     { days: 30, label: '۳۰ روز (۱ ماه)' },
@@ -2506,8 +2506,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       onClick={() => setCustomExtendDays(preset.days)}
                       className={`text-[11px] px-2 py-0.5 rounded-lg border transition-all ${
                         customExtendDays === preset.days
-                          ? 'bg-[#1DB954] text-black font-bold border-[#1DB954]'
-                          : 'bg-[#121212] text-[#888] hover:text-white border-[#2b2b2b]'
+                          ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black font-bold border-emerald-600 dark:border-[#1DB954]'
+                          : 'bg-white dark:bg-[#121212] text-slate-600 dark:text-[#888] hover:text-slate-900 dark:hover:text-white border-slate-200 dark:border-[#2b2b2b]'
                       }`}
                     >
                       {preset.label}
@@ -2518,12 +2518,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#282828] pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-[#282828] pb-4">
             <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-[#1DB954]" />
+              <Clock className="w-5 h-5 text-emerald-600 dark:text-[#1DB954]" />
               <div>
-                <h3 className="text-base font-bold text-white">تمدید مهلت مالکیت پرونده‌های مشتریان</h3>
-                <p className="text-xs text-[#888]">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">تمدید مهلت مالکیت پرونده‌های مشتریان</h3>
+                <p className="text-xs text-slate-500 dark:text-[#888]">
                   انتخاب پرونده‌های در آستانه انقضا و تمدید مهلت پیگیری بازاریاب مسئول
                 </p>
               </div>
@@ -2531,11 +2531,11 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
 
             {/* Bulk Action Controls */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-[#A7A7A7]">مدت تمدید:</span>
+              <span className="text-xs text-slate-600 dark:text-[#A7A7A7]">مدت تمدید:</span>
               <select
                 value={extendDaysCount}
                 onChange={(e) => setExtendDaysCount(Number(e.target.value))}
-                className="h-9 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954]"
+                className="h-9 px-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954]"
               >
                 <option value={3}>۳ روز</option>
                 <option value={7}>۷ روز (یک هفته)</option>
@@ -2546,10 +2546,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               <button
                 onClick={handleConfirmExtendOwnership}
                 disabled={isSubmittingExtend || selectedExtendCustomerIds.length === 0}
-                className="px-4 py-2 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] disabled:opacity-40 disabled:hover:bg-[#1DB954] text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] disabled:opacity-40 disabled:hover:bg-emerald-600 dark:disabled:hover:bg-[#1DB954] text-white dark:text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5"
               >
                 {isSubmittingExtend ? (
-                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white dark:border-black border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <Clock className="w-4 h-4 stroke-[2.5]" />
                 )}
@@ -2559,23 +2559,23 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           </div>
 
           {/* Filters Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-[#121212] p-3 rounded-xl border border-[#242424]">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-[#121212] p-3 rounded-xl border border-slate-200 dark:border-[#242424]">
             <div className="flex items-center gap-3 flex-1 min-w-[200px]">
               <div className="relative flex-1">
-                <Search className="w-4 h-4 text-[#888] absolute right-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-slate-400 dark:text-[#888] absolute right-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={extendSearch}
                   onChange={(e) => setExtendSearch(e.target.value)}
                   placeholder="جستجو در نام شرکت یا مدیریت..."
-                  className="w-full h-8 pr-9 pl-3 bg-[#181818] rounded-lg text-xs text-white border border-[#2c2c2c] focus:outline-none"
+                  className="w-full h-8 pr-9 pl-3 bg-white dark:bg-[#181818] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
                 />
               </div>
 
               <select
                 value={extendMarketerFilter}
                 onChange={(e) => setExtendMarketerFilter(e.target.value)}
-                className="h-8 px-2.5 bg-[#181818] rounded-lg text-xs text-white border border-[#2c2c2c]"
+                className="h-8 px-2.5 bg-white dark:bg-[#181818] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c]"
               >
                 <option value="all">همه بازاریابان</option>
                 {personnelList.map((p) => (
@@ -2588,7 +2588,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
 
             <button
               onClick={handleSelectAllExtend}
-              className="text-xs text-[#1DB954] hover:underline font-semibold"
+              className="text-xs text-emerald-700 dark:text-[#1DB954] hover:underline font-semibold"
             >
               {selectedExtendCustomerIds.length === extendCustomers.length && extendCustomers.length > 0
                 ? 'لغو انتخاب همه'
@@ -2599,12 +2599,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           {/* Customers Table */}
           <div className="space-y-2">
             {isLoadingExtend ? (
-              <div className="p-12 text-center text-xs text-[#888] flex flex-col items-center justify-center gap-3">
-                <Loader2 className="w-6 h-6 animate-spin text-[#1DB954]" />
+              <div className="p-12 text-center text-xs text-slate-500 dark:text-[#888] flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-6 h-6 animate-spin text-emerald-600 dark:text-[#1DB954]" />
                 <span>در حال دریافت لیست پرونده‌ها از پایگاه داده...</span>
               </div>
             ) : extendCustomers.length === 0 ? (
-              <div className="p-8 text-center text-xs text-[#888]">
+              <div className="p-8 text-center text-xs text-slate-500 dark:text-[#888]">
                 هیچ پرونده‌ای منطبق با فیلتر یافت نشد.
               </div>
             ) : (
@@ -2619,8 +2619,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     onClick={() => handleToggleSelectExtend(c.id)}
                     className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-[#1DB954]/10 border-[#1DB954]/60'
-                        : 'bg-[#121212] border-[#242424] hover:border-[#383838]'
+                        ? 'bg-emerald-50 dark:bg-[#1DB954]/10 border-emerald-500/60 dark:border-[#1DB954]/60'
+                        : 'bg-slate-50 dark:bg-[#121212] border-slate-200 dark:border-[#242424] hover:border-slate-300 dark:hover:border-[#383838]'
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -2628,10 +2628,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => {}}
-                        className="w-4 h-4 rounded text-[#1DB954] accent-[#1DB954] cursor-pointer"
+                        className="w-4 h-4 rounded text-emerald-600 dark:text-[#1DB954] accent-emerald-600 dark:accent-[#1DB954] cursor-pointer"
                       />
                       <div className="min-w-0">
-                        <div className="font-bold text-xs text-white truncate flex items-center gap-2">
+                        <div className="font-bold text-xs text-slate-900 dark:text-white truncate flex items-center gap-2">
                           <span>{c.company_name}</span>
                           <span
                             className={`text-[10px] px-2 py-0.2 rounded-full border ${statusTheme.bg} ${statusTheme.color}`}
@@ -2639,7 +2639,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                             {c.status}
                           </span>
                         </div>
-                        <div className="text-[11px] text-[#888] truncate mt-0.5">
+                        <div className="text-[11px] text-slate-500 dark:text-[#888] truncate mt-0.5">
                           مدیریت: {c.manager_name || 'نامشخص'} • بازاریاب مسئول: {c.assigned_marketer_name}
                         </div>
                       </div>
@@ -2674,13 +2674,13 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {/* 5. TAB CONTENT 4: Switch Ownership (سوئیچ و واگذاری پرونده‌ها) */}
       {/* ------------------------------------------------------------- */}
       {activeSubTab === 'switch_ownership' && (
-        <div className="bg-[#181818] border border-[#282828] rounded-2xl p-5 sm:p-6 space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#282828] pb-4">
+        <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl p-5 sm:p-6 space-y-6 shadow-sm dark:shadow-none">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-[#282828] pb-4">
             <div className="flex items-center gap-2">
-              <ArrowLeftRight className="w-5 h-5 text-blue-400" />
+              <ArrowLeftRight className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               <div>
-                <h3 className="text-base font-bold text-white">سوئیچ و واگذاری مالکیت پرونده‌ها</h3>
-                <p className="text-xs text-[#888]">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">سوئیچ و واگذاری مالکیت پرونده‌ها</h3>
+                <p className="text-xs text-slate-500 dark:text-[#888]">
                   انتقال تکی یا گروهی پرونده‌ها از یک همکار به همکار دیگر همراه با تعیین مهلت جدید
                 </p>
               </div>
@@ -2688,11 +2688,11 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
 
             {/* Target Colleague Selector & Submit Button */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-[#A7A7A7]">انتقال به همکار:</span>
+              <span className="text-xs text-slate-600 dark:text-[#A7A7A7]">انتقال به همکار:</span>
               <select
                 value={targetMarketerId}
                 onChange={(e) => setTargetMarketerId(e.target.value)}
-                className="h-9 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#333] focus:border-blue-500"
+                className="h-9 px-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-blue-500"
               >
                 <option value="">-- انتخاب همکار مقصد --</option>
                 {personnelList.map((p) => (
@@ -2705,7 +2705,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               <select
                 value={switchDurationDays}
                 onChange={(e) => setSwitchDurationDays(Number(e.target.value))}
-                className="h-9 px-3 bg-[#121212] rounded-xl text-xs text-white border border-[#333] focus:border-blue-500"
+                className="h-9 px-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-blue-500"
               >
                 <option value={3}>مهلت ۳ روز</option>
                 <option value={7}>مهلت ۷ روز</option>
@@ -2716,10 +2716,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               <button
                 onClick={handleConfirmSwitchOwnership}
                 disabled={isSubmittingSwitch || selectedSwitchCustomerIds.length === 0 || !targetMarketerId}
-                className="px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-400 disabled:opacity-40 disabled:hover:bg-blue-500 text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400 disabled:opacity-40 disabled:hover:bg-blue-600 dark:disabled:hover:bg-blue-500 text-white dark:text-black font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5"
               >
                 {isSubmittingSwitch ? (
-                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white dark:border-black border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <ArrowLeftRight className="w-4 h-4 stroke-[2.5]" />
                 )}
@@ -2729,23 +2729,23 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           </div>
 
           {/* Filters Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-[#121212] p-3 rounded-xl border border-[#242424]">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-[#121212] p-3 rounded-xl border border-slate-200 dark:border-[#242424]">
             <div className="flex items-center gap-3 flex-1 min-w-[200px]">
               <div className="relative flex-1">
-                <Search className="w-4 h-4 text-[#888] absolute right-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-slate-400 dark:text-[#888] absolute right-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={switchSearch}
                   onChange={(e) => setSwitchSearch(e.target.value)}
                   placeholder="جستجو در نام شرکت یا مدیریت..."
-                  className="w-full h-8 pr-9 pl-3 bg-[#181818] rounded-lg text-xs text-white border border-[#2c2c2c] focus:outline-none"
+                  className="w-full h-8 pr-9 pl-3 bg-white dark:bg-[#181818] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c] focus:border-blue-500 focus:outline-none"
                 />
               </div>
 
               <select
                 value={sourceMarketerId}
                 onChange={(e) => setSourceMarketerId(e.target.value)}
-                className="h-8 px-2.5 bg-[#181818] rounded-lg text-xs text-white border border-[#2c2c2c]"
+                className="h-8 px-2.5 bg-white dark:bg-[#181818] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c]"
               >
                 <option value="all">همه بازاریابان مبدا</option>
                 {personnelList.map((p) => (
@@ -2758,7 +2758,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
 
             <button
               onClick={handleSelectAllSwitch}
-              className="text-xs text-blue-400 hover:underline font-semibold"
+              className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-semibold"
             >
               {selectedSwitchCustomerIds.length === switchCustomers.length && switchCustomers.length > 0
                 ? 'لغو انتخاب همه'
@@ -2769,12 +2769,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           {/* Customers List */}
           <div className="space-y-2">
             {isLoadingSwitch ? (
-              <div className="p-12 text-center text-xs text-[#888] flex flex-col items-center justify-center gap-3">
-                <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+              <div className="p-12 text-center text-xs text-slate-500 dark:text-[#888] flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-600 dark:text-blue-400" />
                 <span>در حال دریافت لیست پرونده‌ها از پایگاه داده...</span>
               </div>
             ) : switchCustomers.length === 0 ? (
-              <div className="p-8 text-center text-xs text-[#888]">
+              <div className="p-8 text-center text-xs text-slate-500 dark:text-[#888]">
                 هیچ پرونده‌ای برای واگذاری یافت نشد.
               </div>
             ) : (
@@ -2789,8 +2789,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     onClick={() => handleToggleSelectSwitch(c.id)}
                     className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-blue-500/10 border-blue-500/60'
-                        : 'bg-[#121212] border-[#242424] hover:border-[#383838]'
+                        ? 'bg-blue-50 dark:bg-blue-500/10 border-blue-500/60'
+                        : 'bg-slate-50 dark:bg-[#121212] border-slate-200 dark:border-[#242424] hover:border-slate-300 dark:hover:border-[#383838]'
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -2798,10 +2798,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => {}}
-                        className="w-4 h-4 rounded text-blue-500 accent-blue-500 cursor-pointer"
+                        className="w-4 h-4 rounded text-blue-600 dark:text-blue-500 accent-blue-600 dark:accent-blue-500 cursor-pointer"
                       />
                       <div className="min-w-0">
-                        <div className="font-bold text-xs text-white truncate flex items-center gap-2">
+                        <div className="font-bold text-xs text-slate-900 dark:text-white truncate flex items-center gap-2">
                           <span>{c.company_name}</span>
                           <span
                             className={`text-[10px] px-2 py-0.2 rounded-full border ${statusTheme.bg} ${statusTheme.color}`}
@@ -2809,8 +2809,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                             {c.status}
                           </span>
                         </div>
-                        <div className="text-[11px] text-[#888] truncate mt-0.5">
-                          بازاریاب فعلی: <span className="text-white font-semibold">{c.assigned_marketer_name}</span> • شهر: {c.city || 'نامشخص'}
+                        <div className="text-[11px] text-slate-500 dark:text-[#888] truncate mt-0.5">
+                          بازاریاب فعلی: <span className="text-slate-900 dark:text-white font-semibold">{c.assigned_marketer_name}</span> • شهر: {c.city || 'نامشخص'}
                         </div>
                       </div>
                     </div>
@@ -2917,19 +2917,19 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       {/* 7. MODALS: Edit Colleague Modal                               */}
       {/* ------------------------------------------------------------- */}
       {editingColleague && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-sm overflow-y-auto animate-in fade-in">
-          <div className="bg-[#181818] border border-[#282828] rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/50 dark:bg-black/85 backdrop-blur-sm overflow-y-auto animate-in fade-in">
+          <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
             {/* Modal Header */}
-            <div className="p-3.5 sm:p-5 bg-[#121212] border-b border-[#282828] flex items-center justify-between flex-shrink-0 gap-3">
+            <div className="p-3.5 sm:p-5 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between flex-shrink-0 gap-3">
               <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954] flex-shrink-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 dark:bg-[#1DB954]/15 border border-emerald-500/30 dark:border-[#1DB954]/30 flex items-center justify-center text-emerald-600 dark:text-[#1DB954] flex-shrink-0">
                   <Edit2 className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="font-bold text-sm sm:text-base text-white truncate">
+                  <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
                     ویرایش همکار: {editingColleague.name}
                   </h3>
-                  <p className="text-[10px] sm:text-[11px] text-[#888] truncate">
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-[#888] truncate">
                     اصلاح اطلاعات فردی، راه‌های تماس چندگانه و وضعیت فعالیت
                   </p>
                 </div>
@@ -2939,10 +2939,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                   type="button"
                   onClick={handleSaveColleagueEdit}
                   disabled={isUpdatingColleague}
-                  className="px-3.5 py-1.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black text-xs font-extrabold shadow-md shadow-[#1DB954]/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black text-xs font-extrabold shadow-md shadow-emerald-600/20 dark:shadow-[#1DB954]/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {isUpdatingColleague ? (
-                    <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    <div className="w-3.5 h-3.5 border-2 border-white dark:border-black border-t-transparent rounded-full animate-spin" />
                   ) : (
                     <Check className="w-3.5 h-3.5 stroke-[3]" />
                   )}
@@ -2950,7 +2950,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 </button>
                 <button
                   onClick={() => setEditingColleague(null)}
-                  className="w-8 h-8 rounded-full bg-[#242424] hover:bg-[#303030] flex items-center justify-center text-[#888] hover:text-white transition-colors flex-shrink-0"
+                  className="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 dark:bg-[#242424] dark:hover:bg-[#303030] flex items-center justify-center text-slate-500 dark:text-[#888] hover:text-slate-900 dark:hover:text-white transition-colors flex-shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -2961,28 +2961,28 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto flex-1 text-xs overscroll-contain">
               {/* 1. Identity & Role */}
               <div className="space-y-2.5 sm:space-y-3">
-                <div className="text-xs font-bold text-white flex items-center gap-2">
-                  <UserCheck className="w-4 h-4 text-[#1DB954]" />
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
                   <span>مشخصات فردی، وضعیت و نقش سازمانی</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 bg-[#141414] p-3 sm:p-4 rounded-xl border border-[#262626]">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 bg-slate-50 dark:bg-[#141414] p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-[#262626]">
                   <div>
-                    <label className="block text-[#B3B3B3] mb-1 font-semibold">نام و نام خانوادگی</label>
+                    <label className="block text-slate-600 dark:text-[#B3B3B3] mb-1 font-semibold">نام و نام خانوادگی</label>
                     <input
                       type="text"
                       value={editingColleague.name}
                       onChange={(e) =>
                         setEditingColleague({ ...editingColleague, name: e.target.value })
                       }
-                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] text-xs"
+                      className="w-full h-9 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] text-xs"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#B3B3B3] mb-1 font-semibold flex items-center justify-between">
+                    <label className="block text-slate-600 dark:text-[#B3B3B3] mb-1 font-semibold flex items-center justify-between">
                       <span>نام کاربری ورود</span>
-                      <span className="text-[10px] text-[#777]">یکتا</span>
+                      <span className="text-[10px] text-slate-400 dark:text-[#777]">یکتا</span>
                     </label>
                     <input
                       type="text"
@@ -2992,12 +2992,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         setEditingColleague({ ...editingColleague, username: e.target.value })
                       }
                       placeholder="sara_ahmadi"
-                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono text-xs"
+                      className="w-full h-9 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] font-mono text-xs"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#B3B3B3] mb-1 font-semibold">ایمیل سازمانی</label>
+                    <label className="block text-slate-600 dark:text-[#B3B3B3] mb-1 font-semibold">ایمیل سازمانی</label>
                     <input
                       type="email"
                       dir="ltr"
@@ -3005,16 +3005,16 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       onChange={(e) =>
                         setEditingColleague({ ...editingColleague, email: e.target.value })
                       }
-                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono text-xs"
+                      className="w-full h-9 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] font-mono text-xs"
                     />
                   </div>
 
                   {/* Status Selection (Active / Inactive) */}
                   <div>
-                    <label className="block text-[#B3B3B3] mb-1 font-semibold flex items-center justify-between">
+                    <label className="block text-slate-600 dark:text-[#B3B3B3] mb-1 font-semibold flex items-center justify-between">
                       <span>وضعیت حساب کاربری</span>
                       <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                        editingStatus === 'active' ? 'bg-[#1DB954]/20 text-[#1DB954]' : 'bg-rose-500/20 text-rose-400'
+                        editingStatus === 'active' ? 'bg-emerald-500/15 dark:bg-[#1DB954]/20 text-emerald-700 dark:text-[#1DB954]' : 'bg-rose-500/20 text-rose-700 dark:text-rose-400'
                       }`}>
                         {editingStatus === 'active' ? 'فعال' : 'غیرفعال (مسدود)'}
                       </span>
@@ -3024,23 +3024,23 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       onChange={(e) => setEditingStatus(e.target.value as 'active' | 'inactive')}
                       className={`w-full h-9 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                         editingStatus === 'active'
-                          ? 'bg-[#1e1e1e] text-[#1DB954] border-[#1DB954]/50 focus:border-[#1DB954]'
-                          : 'bg-rose-950/30 text-rose-400 border-rose-500/50 focus:border-rose-500'
+                          ? 'bg-white dark:bg-[#1e1e1e] text-emerald-700 dark:text-[#1DB954] border-emerald-500/50 dark:border-[#1DB954]/50 focus:border-emerald-600 dark:focus:border-[#1DB954]'
+                          : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 border-rose-500/50 focus:border-rose-500'
                       }`}
                     >
-                      <option value="active" className="bg-[#181818] text-[#1DB954]">
+                      <option value="active" className="bg-white dark:bg-[#181818] text-emerald-700 dark:text-[#1DB954]">
                         ✓ فعال (مجاز به ورود و فعالیت در سامانه)
                       </option>
-                      <option value="inactive" className="bg-[#181818] text-rose-400">
+                      <option value="inactive" className="bg-white dark:bg-[#181818] text-rose-700 dark:text-rose-400">
                         ✕ غیرفعال (مسدود شده - عدم امکان ورود و فعالیت)
                       </option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-[#B3B3B3] mb-1 font-semibold flex items-center justify-between">
+                    <label className="block text-slate-600 dark:text-[#B3B3B3] mb-1 font-semibold flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
-                        <Building2 className="w-3.5 h-3.5 text-[#1DB954]" />
+                        <Building2 className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                         <span>سازمان / شعبه اصلی</span>
                       </span>
                     </label>
@@ -3053,7 +3053,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           setEditingAllowedTenantIds([...editingAllowedTenantIds, val]);
                         }
                       }}
-                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] cursor-pointer text-xs"
+                      className="w-full h-9 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer text-xs"
                     >
                       {tenants.map((t) => (
                         <option key={t.id} value={t.id}>
@@ -3067,7 +3067,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-[#B3B3B3] mb-1 font-semibold">نقش سازمانی</label>
+                    <label className="block text-slate-600 dark:text-[#B3B3B3] mb-1 font-semibold">نقش سازمانی</label>
                     <select
                       value={editingRole}
                       onChange={(e) => {
@@ -3079,7 +3079,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                           setEditingReportScope(cfg.defaultReportScope);
                         }
                       }}
-                      className="w-full h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] cursor-pointer text-xs"
+                      className="w-full h-9 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer text-xs"
                     >
                       {(Object.keys(PERSONNEL_ROLE_CONFIG) as PersonnelRole[]).map((rKey) => (
                         <option key={rKey} value={rKey}>
@@ -3090,13 +3090,13 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                   </div>
 
                   {tenants.length > 1 && (
-                    <div className="sm:col-span-2 p-3 bg-[#181818] rounded-xl border border-[#2e2e2e] space-y-2 mt-1">
-                      <label className="block text-xs font-semibold text-[#CCC] flex items-center justify-between">
+                    <div className="sm:col-span-2 p-3 bg-white dark:bg-[#181818] rounded-xl border border-slate-200 dark:border-[#2e2e2e] space-y-2 mt-1">
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-[#CCC] flex items-center justify-between">
                         <span className="flex items-center gap-1.5">
-                          <Layers className="w-3.5 h-3.5 text-blue-400" />
+                          <Layers className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                           <span>سازمان‌ها و شعب مجاز جهت سوییچ (عضویت در چند شعبه):</span>
                         </span>
-                        <span className="text-[10px] text-[#888]">
+                        <span className="text-[10px] text-slate-500 dark:text-[#888]">
                           فقط در شعب تیک‌خورده مجاز به فعالیت خواهد بود
                         </span>
                       </label>
@@ -3110,8 +3110,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                               key={t.id}
                               className={`p-2 rounded-lg border text-xs cursor-pointer flex items-center gap-2 select-none transition-colors ${
                                 isChecked
-                                  ? 'bg-[#1a2e20]/60 border-[#1DB954]/50 text-white'
-                                  : 'bg-[#121212] border-[#2c2c2c] text-[#777] hover:text-[#bbb]'
+                                  ? 'bg-emerald-50 dark:bg-[#1a2e20]/60 border-emerald-500/50 dark:border-[#1DB954]/50 text-slate-900 dark:text-white'
+                                  : 'bg-slate-50 dark:bg-[#121212] border-slate-200 dark:border-[#2c2c2c] text-slate-500 dark:text-[#777] hover:text-slate-800 dark:hover:text-[#bbb]'
                               }`}
                             >
                               <input
@@ -3131,11 +3131,11 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                                     );
                                   }
                                 }}
-                                className="accent-[#1DB954]"
+                                className="accent-emerald-600 dark:accent-[#1DB954]"
                               />
                               <span className="truncate">{t.name}</span>
                               {editingTenantId === String(t.id) && (
-                                <span className="text-[9px] text-[#1DB954] bg-[#1DB954]/10 px-1 py-0.2 rounded font-mono mr-auto">
+                                <span className="text-[9px] text-emerald-700 dark:text-[#1DB954] bg-emerald-500/10 dark:bg-[#1DB954]/10 px-1 py-0.2 rounded font-mono mr-auto">
                                   شعبه اصلی
                                 </span>
                               )}
@@ -3151,8 +3151,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               {/* 2. Multiple Phones & Contact Methods */}
               <div className="space-y-2.5 sm:space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold text-white flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-blue-400" />
+                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     <span>شماره‌ها و راه‌های ارتباطی همکار</span>
                   </div>
                   <button
@@ -3163,14 +3163,14 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         { id: 'ep-' + Date.now(), label: 'شماره دوم', number: '' },
                       ]);
                     }}
-                    className="px-2.5 py-1 rounded-lg bg-[#242424] hover:bg-[#303030] text-white text-xs flex items-center gap-1 border border-[#333]"
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#242424] dark:hover:bg-[#303030] text-slate-800 dark:text-white text-xs flex items-center gap-1 border border-slate-200 dark:border-[#333]"
                   >
-                    <Plus className="w-3 h-3 text-[#1DB954]" />
+                    <Plus className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
                     <span>افزودن شماره</span>
                   </button>
                 </div>
 
-                <div className="space-y-2.5 bg-[#141414] p-3 sm:p-4 rounded-xl border border-[#262626]">
+                <div className="space-y-2.5 bg-slate-50 dark:bg-[#141414] p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-[#262626]">
                   {editingPhones.map((ph, idx) => (
                     <div key={ph.id} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <div className="w-full sm:w-36 flex-shrink-0">
@@ -3182,7 +3182,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                               prev.map((item) => (item.id === ph.id ? { ...item, label: val } : item))
                             );
                           }}
-                          className="w-full h-9 px-2 bg-[#1e1e1e] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] cursor-pointer"
+                          className="w-full h-9 px-2 bg-white dark:bg-[#1e1e1e] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
                         >
                           {COMMON_PHONE_LABELS.map((lbl) => (
                             <option key={lbl} value={lbl}>
@@ -3204,7 +3204,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                             );
                           }}
                           placeholder={idx === 0 ? 'شماره اصلی' : 'شماره تماس'}
-                          className="flex-1 h-9 px-3 bg-[#1e1e1e] rounded-xl text-white border border-[#333] focus:border-[#1DB954] font-mono text-xs"
+                          className="flex-1 h-9 px-3 bg-white dark:bg-[#1e1e1e] rounded-xl text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] font-mono text-xs"
                         />
 
                         {editingPhones.length > 1 && (
@@ -3213,7 +3213,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                             onClick={() => {
                               setEditingPhones(editingPhones.filter((item) => item.id !== ph.id));
                             }}
-                            className="w-9 h-9 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center justify-center flex-shrink-0"
+                            className="w-9 h-9 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center flex-shrink-0"
                             title="حذف"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -3226,9 +3226,9 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
               </div>
 
               {/* 3. Granular Permissions (Menus, Capabilities, Reports Scope) */}
-              <div className="space-y-4 bg-[#141414] p-3 sm:p-4 rounded-xl border border-[#262626]">
-                <div className="text-xs font-bold text-white flex items-center gap-2 border-b border-[#242424] pb-2.5">
-                  <Shield className="w-4 h-4 text-amber-400" />
+              <div className="space-y-4 bg-slate-50 dark:bg-[#141414] p-3 sm:p-4 rounded-xl border border-slate-200 dark:border-[#262626]">
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-200 dark:border-[#242424] pb-2.5">
+                  <Shield className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                   <span>سطوح دسترسی ریزدانه و اختیارات</span>
                 </div>
 
@@ -3247,11 +3247,11 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="p-3.5 sm:p-4 bg-[#121212] border-t border-[#282828] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-2.5 flex-shrink-0">
+            <div className="p-3.5 sm:p-4 bg-slate-50 dark:bg-[#121212] border-t border-slate-200 dark:border-[#282828] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-2.5 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => setEditingColleague(null)}
-                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#282828] hover:bg-[#333] text-white text-xs font-bold transition-colors text-center"
+                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-[#282828] dark:hover:bg-[#333] text-slate-800 dark:text-white text-xs font-bold transition-colors text-center"
               >
                 انصراف
               </button>
@@ -3259,10 +3259,10 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 type="button"
                 onClick={handleSaveColleagueEdit}
                 disabled={isUpdatingColleague}
-                className="w-full sm:w-auto px-6 py-2 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black text-xs font-extrabold shadow-md shadow-[#1DB954]/20 transition-all flex items-center justify-center gap-1.5"
+                className="w-full sm:w-auto px-6 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black text-xs font-extrabold shadow-md shadow-emerald-600/20 dark:shadow-[#1DB954]/20 transition-all flex items-center justify-center gap-1.5"
               >
                 {isUpdatingColleague ? (
-                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white dark:border-black border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <Check className="w-4 h-4 stroke-[3]" />
                 )}
@@ -3287,31 +3287,31 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       />
       {/* Modal: Confirmation for Logout All Active Users */}
       {isLogoutAllModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-[#181818] border border-red-500/30 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl relative">
-            <div className="flex items-center justify-between pb-3 border-b border-[#282828]">
-              <div className="flex items-center gap-2.5 text-red-400 font-bold text-base">
-                <ShieldAlert className="w-5 h-5 text-red-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 dark:bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#181818] border border-red-500/30 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-[#282828]">
+              <div className="flex items-center gap-2.5 text-red-600 dark:text-red-400 font-bold text-base">
+                <ShieldAlert className="w-5 h-5 text-red-600 dark:text-red-400" />
                 <span>تایید خروج همگانی کاربران</span>
               </div>
               <button
                 onClick={() => setIsLogoutAllModalOpen(false)}
-                className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800"
+                className="text-slate-400 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <p className="text-sm text-zinc-300 leading-relaxed">
+            <p className="text-sm text-slate-600 dark:text-zinc-300 leading-relaxed">
               آیا از خروج همگانی تمامی کاربران آنلاین و فعال مطمئن هستید؟
               با تایید این گزینه، نشست کاری تمامی کاربران غیرفعال شده و از سامانه خارج خواهند شد.
             </p>
 
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#282828]">
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-[#282828]">
               <button
                 type="button"
                 onClick={() => setIsLogoutAllModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-zinc-300 hover:bg-zinc-800 transition-colors"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
                 disabled={isSubmittingLogoutAll}
               >
                 انصراف

@@ -335,6 +335,7 @@ export interface AuthResponse {
   user: AuthUser;
   personnel: Personnel;
   message?: string;
+  workday_key?: string;
 }
 
 export interface RegisterPayload {
@@ -538,6 +539,42 @@ export interface PayrollCalculateResponse {
   total_contracts: number;
   total_advances: number;
   items: PayrollCalculateItem[];
+}
+
+export interface DeepSearchCustomerItem extends Customer {
+  match_reason?: string;
+}
+
+export interface DeepSearchReportItem extends CustomerReport {
+  match_reason?: string;
+}
+
+export interface DeepSearchLeadItem extends ColdLead {
+  match_reason?: string;
+}
+
+export interface DeepSearchPersonnelItem {
+  id: string;
+  name: string;
+  username?: string;
+  role: string;
+  phone?: string;
+  avatar?: string;
+}
+
+export interface DeepSearchResponse {
+  customers: DeepSearchCustomerItem[];
+  free_pool: DeepSearchCustomerItem[];
+  reports: DeepSearchReportItem[];
+  cold_leads: DeepSearchLeadItem[];
+  personnel: DeepSearchPersonnelItem[];
+  phoneConflict: DuplicateCheckResult | null;
+  meta: {
+    query: string;
+    normalized_phone?: string | null;
+    elapsed_ms: number;
+    source: 'directus' | 'memory';
+  };
 }
 
 

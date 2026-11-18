@@ -145,24 +145,24 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Banner & Overview */}
-      <div className="bg-gradient-to-r from-[#181818] via-[#1c1c1c] to-[#141414] border border-[#282828] rounded-2xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-[#1DB954]/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="bg-gradient-to-r from-white via-slate-50 to-emerald-50/40 dark:from-[#181818] dark:via-[#1c1c1c] dark:to-[#141414] border border-slate-200 dark:border-[#282828] rounded-2xl p-5 sm:p-6 shadow-sm dark:shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-emerald-500/10 dark:bg-[#1DB954]/5 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-[#1DB954]/15 border border-[#1DB954]/30 flex items-center justify-center text-[#1DB954] flex-shrink-0 shadow-lg shadow-[#1DB954]/10">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 dark:bg-[#1DB954]/15 border border-emerald-500/30 dark:border-[#1DB954]/30 flex items-center justify-center text-emerald-600 dark:text-[#1DB954] flex-shrink-0 shadow-lg shadow-emerald-500/10 dark:shadow-[#1DB954]/10">
               <Building2 className="w-6 h-6 stroke-[2.2]" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-lg sm:text-xl font-black text-white">
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
                   مدیریت سازمان‌ها، شرکت‌ها و شعب
                 </h2>
-                <span className="px-2 py-0.5 rounded-full bg-[#1DB954]/15 text-[#1DB954] text-[11px] font-mono border border-[#1DB954]/30">
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 dark:bg-[#1DB954]/15 text-emerald-700 dark:text-[#1DB954] text-[11px] font-mono border border-emerald-500/30 dark:border-[#1DB954]/30">
                   Multi-Tenancy
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-[#A7A7A7] mt-0.5">
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-[#A7A7A7] mt-0.5">
                 جداسازی و ایزولاسیون کامل پرونده‌های مشتریان، مذاکرات و پرسنل برای هر شرکت یا سازمان
               </p>
             </div>
@@ -173,7 +173,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
               <button
                 type="button"
                 onClick={handleOpenAdd}
-                className="px-4 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ED760] text-black font-extrabold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-[#1DB954]/20 transition-all cursor-pointer hover:scale-[1.02]"
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ED760] text-white dark:text-black font-extrabold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/20 transition-all cursor-pointer hover:scale-[1.02]"
               >
                 <Plus className="w-4 h-4 stroke-[3]" />
                 <span>ساخت سازمان جدید</span>
@@ -185,11 +185,11 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
               onClick={() => onSelectTenant('all')}
               className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer border ${
                 activeTenantId === 'all'
-                  ? 'bg-[#1DB954]/20 text-[#1DB954] border-[#1DB954]/40 shadow-sm'
-                  : 'bg-[#222222] hover:bg-[#2a2a2a] text-[#B3B3B3] hover:text-white border-[#333333]'
+                  ? 'bg-emerald-500/15 dark:bg-[#1DB954]/20 text-emerald-700 dark:text-[#1DB954] border-emerald-500/40 dark:border-[#1DB954]/40 shadow-sm'
+                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-[#222222] dark:hover:bg-[#2a2a2a] text-slate-700 hover:text-slate-900 dark:text-[#B3B3B3] dark:hover:text-white border-slate-200 dark:border-[#333333]'
               }`}
             >
-              <Layers className="w-4 h-4 text-[#1DB954]" />
+              <Layers className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
               <span>دید کلان (همه سازمان‌ها)</span>
               {activeTenantId === 'all' && <Check className="w-3.5 h-3.5 stroke-[3]" />}
             </button>
@@ -197,44 +197,44 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
         </div>
 
         {/* Quick Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-5 border-t border-[#252525]">
-          <div className="bg-[#121212]/70 border border-[#242424] rounded-xl p-3.5">
-            <div className="text-[11px] text-[#888] font-medium flex items-center gap-1.5 mb-1">
-              <Building2 className="w-3.5 h-3.5 text-[#1DB954]" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-5 border-t border-slate-200 dark:border-[#252525]">
+          <div className="bg-white/90 dark:bg-[#121212]/70 border border-slate-200 dark:border-[#242424] rounded-xl p-3.5 shadow-xs dark:shadow-none">
+            <div className="text-[11px] text-slate-500 dark:text-[#888] font-medium flex items-center gap-1.5 mb-1">
+              <Building2 className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
               <span>تعداد کل سازمان‌ها</span>
             </div>
-            <div className="text-xl font-black text-white font-mono">
-              {tenants.length} <span className="text-xs font-normal text-[#888]">شرکت</span>
+            <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
+              {tenants.length} <span className="text-xs font-normal text-slate-500 dark:text-[#888]">شرکت</span>
             </div>
           </div>
 
-          <div className="bg-[#121212]/70 border border-[#242424] rounded-xl p-3.5">
-            <div className="text-[11px] text-[#888] font-medium flex items-center gap-1.5 mb-1">
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
+          <div className="bg-white/90 dark:bg-[#121212]/70 border border-slate-200 dark:border-[#242424] rounded-xl p-3.5 shadow-xs dark:shadow-none">
+            <div className="text-[11px] text-slate-500 dark:text-[#888] font-medium flex items-center gap-1.5 mb-1">
+              <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>سازمان فعال فعلی</span>
             </div>
-            <div className="text-xs sm:text-sm font-bold text-[#1DB954] truncate">
+            <div className="text-xs sm:text-sm font-bold text-emerald-600 dark:text-[#1DB954] truncate">
               {activeTenantName}
             </div>
           </div>
 
-          <div className="bg-[#121212]/70 border border-[#242424] rounded-xl p-3.5">
-            <div className="text-[11px] text-[#888] font-medium flex items-center gap-1.5 mb-1">
-              <Users className="w-3.5 h-3.5 text-blue-400" />
+          <div className="bg-white/90 dark:bg-[#121212]/70 border border-slate-200 dark:border-[#242424] rounded-xl p-3.5 shadow-xs dark:shadow-none">
+            <div className="text-[11px] text-slate-500 dark:text-[#888] font-medium flex items-center gap-1.5 mb-1">
+              <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
               <span>مشتریان در سامانه</span>
             </div>
-            <div className="text-xl font-black text-white font-mono">
-              {customers.length} <span className="text-xs font-normal text-[#888]">پرونده</span>
+            <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
+              {customers.length} <span className="text-xs font-normal text-slate-500 dark:text-[#888]">پرونده</span>
             </div>
           </div>
 
-          <div className="bg-[#121212]/70 border border-[#242424] rounded-xl p-3.5">
-            <div className="text-[11px] text-[#888] font-medium flex items-center gap-1.5 mb-1">
-              <Briefcase className="w-3.5 h-3.5 text-amber-400" />
+          <div className="bg-white/90 dark:bg-[#121212]/70 border border-slate-200 dark:border-[#242424] rounded-xl p-3.5 shadow-xs dark:shadow-none">
+            <div className="text-[11px] text-slate-500 dark:text-[#888] font-medium flex items-center gap-1.5 mb-1">
+              <Briefcase className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
               <span>پرسنل ثبت‌شده</span>
             </div>
-            <div className="text-xl font-black text-white font-mono">
-              {personnelList.length} <span className="text-xs font-normal text-[#888]">نفر</span>
+            <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
+              {personnelList.length} <span className="text-xs font-normal text-slate-500 dark:text-[#888]">نفر</span>
             </div>
           </div>
         </div>
@@ -242,13 +242,13 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
 
       {/* Add / Edit Form Modal or Card */}
       {isAdding && (
-        <div className="bg-[#161616] border-2 border-[#1DB954]/40 rounded-2xl p-5 sm:p-6 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#252525] pb-4 mb-5">
+        <div className="bg-white dark:bg-[#161616] border-2 border-emerald-500/40 dark:border-[#1DB954]/40 rounded-2xl p-5 sm:p-6 shadow-xl dark:shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-[#252525] pb-4 mb-5">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#1DB954]/15 flex items-center justify-center text-[#1DB954]">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/15 dark:bg-[#1DB954]/15 flex items-center justify-center text-emerald-600 dark:text-[#1DB954]">
                 <Sparkles className="w-4 h-4" />
               </div>
-              <h3 className="text-base font-bold text-white">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
                 {editingTenant ? 'ویرایش مشخصات سازمان' : 'ساخت و تعریف سازمان جدید'}
               </h3>
             </div>
@@ -257,7 +257,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                 type="submit"
                 form="tenant-view-form"
                 disabled={isSubmitting}
-                className="px-4 py-1.5 rounded-lg bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold text-xs shadow-md shadow-[#1DB954]/20 transition-all disabled:opacity-50 cursor-pointer"
+                className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black font-extrabold text-xs shadow-md shadow-emerald-600/20 dark:shadow-[#1DB954]/20 transition-all disabled:opacity-50 cursor-pointer"
               >
                 {isSubmitting ? 'در حال ثبت...' : editingTenant ? 'ذخیره تغییرات' : 'ایجاد و ثبت سازمان'}
               </button>
@@ -267,7 +267,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                   setIsAdding(false);
                   setEditingTenant(null);
                 }}
-                className="text-xs text-[#888] hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#282828] transition-colors"
+                className="text-xs text-slate-600 hover:text-slate-900 dark:text-[#888] dark:hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#222] dark:hover:bg-[#282828] border border-slate-200 dark:border-transparent transition-colors"
               >
                 <ArrowRight className="w-3.5 h-3.5" />
                 <span>بستن فرم</span>
@@ -278,7 +278,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
           <form id="tenant-view-form" onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                   نام سازمان / شرکت / شعبه <span className="text-[#E22134]">*</span>
                 </label>
                 <input
@@ -287,14 +287,14 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="مثلاً: هلدینگ بازرگانی کیان یا شعبه اصفهان"
                   required
-                  className="w-full h-11 px-3.5 bg-[#1f1f1f] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:ring-1 focus:ring-[#1DB954] focus:outline-none transition-all"
+                  className="w-full h-11 px-3.5 bg-slate-50 dark:bg-[#1f1f1f] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954] focus:outline-none transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5 flex items-center justify-between">
                   <span>شناسه یا کد لاتین یکتا (Slug)</span>
-                  <span className="text-[10px] text-[#777]">اختیاری</span>
+                  <span className="text-[10px] text-slate-400 dark:text-[#777]">اختیاری</span>
                 </label>
                 <input
                   type="text"
@@ -302,12 +302,12 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                   value={formData.slug}
                   onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
                   placeholder="kian-holding"
-                  className="w-full h-11 px-3.5 bg-[#1f1f1f] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono transition-all"
+                  className="w-full h-11 px-3.5 bg-slate-50 dark:bg-[#1f1f1f] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                   شماره تماس دفتر یا سازمان
                 </label>
                 <input
@@ -316,12 +316,12 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   placeholder="021-xxxxxxxx"
-                  className="w-full h-11 px-3.5 bg-[#1f1f1f] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none font-mono transition-all"
+                  className="w-full h-11 px-3.5 bg-slate-50 dark:bg-[#1f1f1f] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none font-mono transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                   وضعیت فعالیت سازمان
                 </label>
                 <select
@@ -332,7 +332,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                       status: e.target.value as 'active' | 'inactive',
                     })
                   }
-                  className="w-full h-11 px-3.5 bg-[#1f1f1f] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none cursor-pointer"
+                  className="w-full h-11 px-3.5 bg-slate-50 dark:bg-[#1f1f1f] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none cursor-pointer"
                 >
                   <option value="active">فعال (Active)</option>
                   <option value="inactive">تعلیق / غیرفعال (Inactive)</option>
@@ -340,7 +340,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-[#B3B3B3] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                   نشانی و آدرس دفتر مرکزی شعبه
                 </label>
                 <input
@@ -348,26 +348,26 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   placeholder="تهران، خیابان ولیعصر..."
-                  className="w-full h-11 px-3.5 bg-[#1f1f1f] rounded-xl text-xs text-white border border-[#333] focus:border-[#1DB954] focus:outline-none transition-all"
+                  className="w-full h-11 px-3.5 bg-slate-50 dark:bg-[#1f1f1f] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none transition-all"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#252525]">
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-[#252525]">
               <button
                 type="button"
                 onClick={() => {
                   setIsAdding(false);
                   setEditingTenant(null);
                 }}
-                className="px-4 py-2.5 rounded-xl bg-[#222] hover:bg-[#282828] text-xs text-white transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#222] dark:hover:bg-[#282828] text-xs text-slate-700 dark:text-white font-semibold transition-colors cursor-pointer"
               >
                 انصراف
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-6 py-2.5 rounded-xl bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold text-xs shadow-lg shadow-[#1DB954]/20 transition-all disabled:opacity-50 cursor-pointer"
+                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black font-extrabold text-xs shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/20 transition-all disabled:opacity-50 cursor-pointer"
               >
                 {isSubmitting ? 'در حال ثبت...' : editingTenant ? 'ذخیره تغییرات' : 'ایجاد و ثبت سازمان'}
               </button>
@@ -378,23 +378,23 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
 
       {/* Organizations Grid */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-[#1DB954]" />
-            <h3 className="text-sm font-bold text-white">
+            <Building2 className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
               لیست شرکت‌ها و شعب ثبت‌شده ({tenants.length} سازمان)
             </h3>
           </div>
-          <span className="text-xs text-[#888]">
-            برای سوییچ بین سازمان‌ها، روی دکمه «انتخاب سازمان» کلیک نمایید
+          <span className="text-xs text-slate-500 dark:text-[#888]">
+            برای سوییچ بین سازمان‌ها، روی دکمه «سوییچ به این سازمان» کلیک نمایید
           </span>
         </div>
 
         {tenants.length === 0 ? (
-          <div className="bg-[#181818] border border-[#282828] rounded-2xl p-12 text-center space-y-3">
-            <Building2 className="w-12 h-12 text-[#555] mx-auto" />
-            <h4 className="text-sm font-bold text-white">هنوز سازمانی ثبت نشده است</h4>
-            <p className="text-xs text-[#888]">
+          <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl p-12 text-center space-y-3 shadow-sm dark:shadow-none">
+            <Building2 className="w-12 h-12 text-slate-300 dark:text-[#555] mx-auto" />
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white">هنوز سازمانی ثبت نشده است</h4>
+            <p className="text-xs text-slate-500 dark:text-[#888]">
               با کلیک بر روی دکمه «ساخت سازمان جدید»، اولین شعبه یا شرکت خود را تعریف کنید.
             </p>
           </div>
@@ -411,32 +411,32 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                   key={t.id}
                   className={`p-5 rounded-2xl border transition-all relative flex flex-col justify-between gap-4 ${
                     isSelected
-                      ? 'bg-gradient-to-br from-[#1a2e21] to-[#141414] border-[#1DB954] shadow-xl shadow-[#1DB954]/10 ring-1 ring-[#1DB954]'
-                      : 'bg-[#181818] border-[#282828] hover:border-[#383838]'
+                      ? 'bg-gradient-to-br from-emerald-50 to-white dark:from-[#1a2e21] dark:to-[#141414] border-emerald-500 dark:border-[#1DB954] shadow-lg shadow-emerald-500/10 dark:shadow-[#1DB954]/10 ring-1 ring-emerald-500 dark:ring-[#1DB954]'
+                      : 'bg-white dark:bg-[#181818] border-slate-200 dark:border-[#282828] hover:border-slate-300 dark:hover:border-[#383838] shadow-xs dark:shadow-none'
                   }`}
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <div
-                          className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md ${
+                          className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${
                             isSelected
-                              ? 'bg-[#1DB954] text-black font-black'
-                              : 'bg-[#222222] text-[#888] border border-[#333]'
+                              ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black font-black'
+                              : 'bg-slate-100 dark:bg-[#222222] text-slate-500 dark:text-[#888] border border-slate-200 dark:border-[#333]'
                           }`}
                         >
                           <Building2 className="w-5 h-5 stroke-[2.2]" />
                         </div>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="text-sm font-extrabold text-white">{t.name}</h4>
+                            <h4 className="text-sm font-extrabold text-slate-900 dark:text-white">{t.name}</h4>
                             {isDefaultOrg && (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-semibold">
+                              <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 text-[10px] font-semibold">
                                 پیش‌فرض سامانه
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-[#888] font-mono mt-0.5">
+                          <div className="text-[11px] text-slate-500 dark:text-[#888] font-mono mt-0.5">
                             کد شناسه: {t.slug || `org-${t.id}`}
                           </div>
                         </div>
@@ -445,18 +445,18 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                       <span
                         className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
                           t.status === 'active'
-                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                            : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                            : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30'
                         }`}
                       >
                         {t.status === 'active' ? 'فعال' : 'تعلیق'}
                       </span>
                     </div>
 
-                    <div className="space-y-1.5 text-xs text-[#A7A7A7] pt-2 border-t border-[#252525]">
+                    <div className="space-y-1.5 text-xs text-slate-600 dark:text-[#A7A7A7] pt-2 border-t border-slate-200 dark:border-[#252525]">
                       {t.phone ? (
                         <div className="flex items-center gap-2">
-                          <Phone className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                          <Phone className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                           <span dir="ltr" className="font-mono text-[11px]">
                             {t.phone}
                           </span>
@@ -465,23 +465,23 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
 
                       {t.address ? (
                         <div className="flex items-center gap-2">
-                          <MapPin className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                          <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                           <span className="line-clamp-1 text-[11px]">{t.address}</span>
                         </div>
                       ) : null}
 
                       {t.description ? (
-                        <div className="text-[11px] text-[#777] line-clamp-1 italic">
+                        <div className="text-[11px] text-slate-500 dark:text-[#777] line-clamp-1 italic">
                           {t.description}
                         </div>
                       ) : null}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-[#252525] mt-1">
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-[#252525] mt-1">
                     <div className="flex items-center gap-2">
                       {isSelected ? (
-                        <span className="px-3 py-1.5 rounded-xl bg-[#1DB954]/20 border border-[#1DB954]/40 text-[#1DB954] text-xs font-black flex items-center gap-1.5">
+                        <span className="px-3 py-1.5 rounded-xl bg-emerald-500/15 dark:bg-[#1DB954]/20 border border-emerald-500/40 dark:border-[#1DB954]/40 text-emerald-700 dark:text-[#1DB954] text-xs font-black flex items-center gap-1.5">
                           <Check className="w-4 h-4 stroke-[3]" />
                           <span>سازمان فعال فعلی</span>
                         </span>
@@ -492,9 +492,9 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                             onSelectTenant(String(t.id));
                             showToast(`سازمان فعال به «${t.name}» تغییر یافت.`, 'success');
                           }}
-                          className="px-3.5 py-1.5 rounded-xl bg-[#222222] hover:bg-[#2e2e2e] text-white hover:text-[#1DB954] text-xs font-bold flex items-center gap-1.5 transition-all border border-[#333333] cursor-pointer"
+                          className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#222222] dark:hover:bg-[#2e2e2e] text-slate-800 hover:text-emerald-700 dark:text-white dark:hover:text-[#1DB954] text-xs font-bold flex items-center gap-1.5 transition-all border border-slate-200 dark:border-[#333333] cursor-pointer"
                         >
-                          <Check className="w-3.5 h-3.5 text-[#1DB954]" />
+                          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
                           <span>سوییچ به این سازمان</span>
                         </button>
                       )}
@@ -505,7 +505,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(t)}
-                          className="p-2 rounded-xl text-[#888] hover:text-white bg-[#202020] hover:bg-[#282828] border border-[#2e2e2e] transition-colors cursor-pointer"
+                          className="p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white bg-slate-100 hover:bg-slate-200 dark:bg-[#202020] dark:hover:bg-[#282828] border border-slate-200 dark:border-[#2e2e2e] transition-colors cursor-pointer"
                           title="ویرایش مشخصات"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -514,7 +514,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                           <button
                             type="button"
                             onClick={() => handleDelete(t)}
-                            className="p-2 rounded-xl text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors cursor-pointer"
+                            className="p-2 rounded-xl text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors cursor-pointer"
                             title="حذف سازمان"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -531,11 +531,11 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
       </div>
 
       {/* Security & Multi-Tenancy Info Footer Card */}
-      <div className="bg-[#141414] border border-[#242424] rounded-2xl p-4 flex items-center justify-between text-xs text-[#888]">
+      <div className="bg-slate-50 dark:bg-[#141414] border border-slate-200 dark:border-[#242424] rounded-2xl p-4 flex items-center justify-between text-xs text-slate-600 dark:text-[#888]">
         <div className="flex items-center gap-2.5">
-          <ShieldCheck className="w-4 h-4 text-[#1DB954] flex-shrink-0" />
+          <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-[#1DB954] flex-shrink-0" />
           <span>
-            امنیت پایگاه داده: تمامی درخواست‌ها با هدر استاندارد <code className="text-[#1DB954] font-mono">x-tenant-id</code> ایزوله شده و تداخل مالکیتی بین سازمان‌ها غیرممکن است.
+            امنیت پایگاه داده: تمامی درخواست‌ها با هدر استاندارد <code className="text-emerald-700 dark:text-[#1DB954] font-mono">x-tenant-id</code> ایزوله شده و تداخل مالکیتی بین سازمان‌ها غیرممکن است.
           </span>
         </div>
       </div>

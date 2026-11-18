@@ -26,6 +26,7 @@ import analyticsRoutes from './routes/analytics.routes.ts';
 import contactRoutes from './routes/contacts.routes.ts';
 import systemRoutes from './routes/system.routes.ts';
 import payrollRoutes from './routes/payroll.routes.ts';
+import searchRoutes from './routes/search.routes.ts';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -83,6 +84,8 @@ app.use(systemRoutes);
 app.use(payrollRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/payroll', payrollRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/search', searchRoutes);
 
 
 export async function startServer() {

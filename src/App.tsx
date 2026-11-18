@@ -101,8 +101,7 @@ import {
   fetchDashboardSummary,
   DashboardSummary,
   getMe,
-  isSessionFromPreviousDay,
-  clearAuthSession,
+  triggerDailyCheckinIfNeeded,
 } from './api';
 import { matchPersonnelToCustomer, matchPersonnelToReport, getUserAllowedTenants, getStatusTheme, formatStatusLabel, toPersianDigits } from './utils';
 
@@ -153,6 +152,8 @@ export default function App() {
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [externalCustomerSearch, setExternalCustomerSearch] = useState<string | undefined>(undefined);
   const [selectedMarketerId, setSelectedMarketerId] = useState<string>('همه');
   const [statusFilter, setStatusFilter] = useState<string>('همه');
   const [showExpiredOnly, setShowExpiredOnly] = useState(false);
@@ -166,6 +167,7 @@ export default function App() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isAddReportModalOpen, setIsAddReportModalOpen] = useState(false);
   const [isQuickAddModalOpen, setIsQuickAddModalOpen] = useState(false);
+  const [quickAddInitialPhone, setQuickAddInitialPhone] = useState<string | undefined>(undefined);
   const [reportPreselectedCustomerId, setReportPreselectedCustomerId] = useState<string | undefined>(undefined);
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
   const [mergeInitialCustomerIds, setMergeInitialCustomerIds] = useState<string[]>([]);
@@ -354,30 +356,21 @@ export default function App() {
   }, [loading]);
 
   useEffect(() => {
-    // Check end of day session expiry immediately
-    const checkDayExpiry = () => {
-      const stored = getStoredAuthSession();
-      if (stored.sessionIat && isSessionFromPreviousDay(stored.sessionIat)) {
-        clearAuthSession();
-        handleLogout();
-        setIsAuthModalOpen(true);
-        showToast('نشست کاری شما با پایان روز کاری منقضی شد. لطفاً دوباره وارد شوید.', 'error');
-        return true;
+    const checkDailyCheckin = () => {
+      if (document.visibilityState === 'visible') {
+        triggerDailyCheckinIfNeeded().catch(() => {});
       }
-      return false;
     };
-
-    if (checkDayExpiry()) {
-      setLoading(false);
-      return;
-    }
 
     const stored = getStoredAuthSession();
     if (stored.token || stored.user) {
       // Immediately load with stored context so the view renders right away
       loadAllData(stored.personnel, stored.user);
 
-      // Verify token in background without causing UI jumping
+      // Send daily check-in SMS if entering a new workday (after 04:00 AM Tehran)
+      checkDailyCheckin();
+
+      // Verify user context in background without resetting daily check-in state
       getMe()
         .then((data) => {
           if (data && data.user) {
@@ -386,12 +379,15 @@ export default function App() {
               setCurrentPersonnel((prev) => ({ ...prev, ...data.personnel }));
               setApiPersonnelContext(data.personnel);
             }
-            saveAuthSession({
-              success: true,
-              access_token: stored.token || 'verified',
-              user: data.user,
-              personnel: data.personnel || stored.personnel,
-            });
+            saveAuthSession(
+              {
+                success: true,
+                access_token: stored.token || 'verified',
+                user: data.user,
+                personnel: data.personnel || stored.personnel,
+              },
+              { markCheckedInToday: false }
+            );
           }
         })
         .catch(() => {});
@@ -399,27 +395,27 @@ export default function App() {
       loadAllData(null, null);
     }
 
-    // Periodic check for end of day expiration (every 30 seconds) & status refresh
+    // Periodic check for new workday (4:00 AM Tehran) & status refresh while tab is visible
     const interval = setInterval(() => {
-      checkDayExpiry();
       if (document.visibilityState === 'visible') {
+        checkDailyCheckin();
         fetchBffStatus().then(setBffStatus).catch(() => {});
       }
     }, 30000);
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        checkDayExpiry();
+        checkDailyCheckin();
         fetchBffStatus().then(setBffStatus).catch(() => {});
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', checkDayExpiry);
+    window.addEventListener('focus', checkDailyCheckin);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', checkDayExpiry);
+      window.removeEventListener('focus', checkDailyCheckin);
     };
   }, []);
 
@@ -1038,12 +1034,15 @@ export default function App() {
           avater: effectiveAvatar,
         };
         setCurrentUser(updatedUser);
-        saveAuthSession({
-          success: true,
-          access_token: getStoredAuthSession().token,
-          user: updatedUser,
-          personnel: res.personnel,
-        });
+        saveAuthSession(
+          {
+            success: true,
+            access_token: getStoredAuthSession().token,
+            user: updatedUser,
+            personnel: res.personnel,
+          },
+          { markCheckedInToday: false }
+        );
       }
       setPersonnelList((prev) =>
         prev.map((p) => (p.id === res.personnel.id ? { ...p, ...res.personnel } : p))
@@ -1239,8 +1238,8 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         {/* Top Header */}
         <Header
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
+          searchQuery={globalSearchQuery}
+          onSearchChange={setGlobalSearchQuery}
           personnelList={personnelList}
           currentPersonnel={currentPersonnel}
           currentUser={currentUser}
@@ -1256,6 +1255,7 @@ export default function App() {
             setIsCustomerModalOpen(true);
           }}
           onOpenQuickAddCustomer={() => {
+            setQuickAddInitialPhone(undefined);
             setIsQuickAddModalOpen(true);
           }}
           isMobileMenuOpen={isMobileMenuOpen}
@@ -1267,6 +1267,35 @@ export default function App() {
           activeTenantId={activeTenantId}
           onSelectTenant={handleSelectTenant}
           onOpenTenantsManagement={() => setIsTenantsModalOpen(true)}
+          customers={userScopedCustomers}
+          allCustomers={customers}
+          reports={userScopedReports}
+          canViewAllCustomers={canViewAllCustomers}
+          onSelectCustomer={openCustomerDetail}
+          onOpenAddReport={(customerId) => {
+            setReportPreselectedCustomerId(customerId);
+            setIsAddReportModalOpen(true);
+          }}
+          onOpenQuickAddWithPhone={(initialPhone) => {
+            setQuickAddInitialPhone(initialPhone);
+            setIsQuickAddModalOpen(true);
+          }}
+          onNavigateToTab={handleNavigateToTab}
+          onApplyToCustomersList={(q, status) => {
+            setExternalCustomerSearch(q);
+            setSearchQuery(q);
+            if (status === 'expired') {
+              setShowExpiredOnly(true);
+              setStatusFilter('همه');
+            } else if (status) {
+              setShowExpiredOnly(false);
+              setStatusFilter(status);
+            } else {
+              setShowExpiredOnly(false);
+              setStatusFilter('همه');
+            }
+            handleNavigateToTab('customers');
+          }}
         />
 
         {/* Dynamic Main View */}
@@ -1332,6 +1361,7 @@ export default function App() {
                     onSelectStatusFilter={setStatusFilter}
                     showExpiredOnly={showExpiredOnly}
                     onToggleExpiredOnly={setShowExpiredOnly}
+                    externalSearchQuery={externalCustomerSearch}
                   />
                 )}
 
@@ -1746,7 +1776,10 @@ export default function App() {
       {/* Quick Add Customer by Phone Modal */}
       <QuickAddCustomerModal
         isOpen={isQuickAddModalOpen}
-        onClose={() => setIsQuickAddModalOpen(false)}
+        onClose={() => {
+          setIsQuickAddModalOpen(false);
+          setQuickAddInitialPhone(undefined);
+        }}
         onQuickAdd={handleQuickAddCustomer}
         onClaimFreeCustomer={handleClaimAndOpenReports}
         personnelList={personnelList}
@@ -1757,6 +1790,7 @@ export default function App() {
           currentUser?.app_role === 'admin' ||
           currentPersonnel?.role === 'admin'
         )}
+        initialPhone={quickAddInitialPhone}
         showToast={showToast}
       />
 
