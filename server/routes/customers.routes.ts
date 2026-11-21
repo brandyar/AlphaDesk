@@ -14,6 +14,8 @@ import { directusFetch, directusFetchAllPages, directusSafeBatchPatch, chunkArra
 import {
   ensureCustomersCache,
   invalidateCustomersCache,
+  upsertCustomerInCache,
+  removeCustomerFromCache,
   invalidateReportsCache,
   computeCustomerExpiration,
   updateExpirationFlags,
@@ -154,6 +156,7 @@ export function matchesCustomerSearch(c: any, searchStr?: string | null): boolea
   if (!searchStr || !searchStr.trim()) return true;
   const raw = searchStr.trim().toLowerCase();
   const normRaw = normalizePersianString(raw);
+  const normRawNoSpace = normRaw.replace(/\s+/g, '');
 
   const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
   const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
@@ -162,22 +165,25 @@ export function matchesCustomerSearch(c: any, searchStr?: string | null): boolea
     .replace(/[٠-٩]/g, (w) => arabicDigits.indexOf(w).toString())
     .replace(/[^\d]/g, '');
 
+  const matchesTextField = (val?: string | null): boolean => {
+    if (!val) return false;
+    const str = String(val);
+    if (str.toLowerCase().includes(raw)) return true;
+    const normVal = normalizePersianString(str);
+    if (normRaw && normVal.includes(normRaw)) return true;
+    if (normRawNoSpace.length >= 3 && normVal.replace(/\s+/g, '').includes(normRawNoSpace)) return true;
+    return false;
+  };
+
   // 1. Text match in primary fields
   if (
-    c.company_name?.toLowerCase().includes(raw) ||
-    normalizePersianString(c.company_name).includes(normRaw) ||
-    c.manager_name?.toLowerCase().includes(raw) ||
-    normalizePersianString(c.manager_name).includes(normRaw) ||
-    c.negotiator_name?.toLowerCase().includes(raw) ||
-    normalizePersianString(c.negotiator_name).includes(normRaw) ||
-    c.city?.toLowerCase().includes(raw) ||
-    normalizePersianString(c.city).includes(normRaw) ||
-    c.province?.toLowerCase().includes(raw) ||
-    normalizePersianString(c.province).includes(normRaw) ||
-    c.business_type?.toLowerCase().includes(raw) ||
-    normalizePersianString(c.business_type).includes(normRaw) ||
-    c.assigned_marketer_name?.toLowerCase().includes(raw) ||
-    normalizePersianString(c.assigned_marketer_name).includes(normRaw)
+    matchesTextField(c.company_name) ||
+    matchesTextField(c.manager_name) ||
+    matchesTextField(c.negotiator_name) ||
+    matchesTextField(c.city) ||
+    matchesTextField(c.province) ||
+    matchesTextField(c.business_type) ||
+    matchesTextField(c.assigned_marketer_name)
   ) {
     return true;
   }
@@ -435,6 +441,158 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   if (directusUrl && directusAdminToken) {
+    // Unified Persian-aware search path: guarantees 100% parity with GlobalSearch
+    // (handles آ/ا, ی/ي, ک/ك, ZWNJ, space-collapsed names like محمدآبادی/محمد آبادی, Persian digits, marketer names & contacts)
+    if (search && typeof search === 'string' && search.trim()) {
+      try {
+        const cleanSearch = search.trim();
+        const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
+        const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
+        const digits = cleanSearch
+          .replace(/[۰-۹]/g, (w) => persianDigits.indexOf(w).toString())
+          .replace(/[٠-٩]/g, (w) => arabicDigits.indexOf(w).toString())
+          .replace(/[^\d]/g, '');
+        const persianVariant = cleanSearch.replace(/ي/g, 'ی').replace(/ك/g, 'ک');
+        const arabicVariant = cleanSearch.replace(/ی/g, 'ي').replace(/ک/g, 'ك');
+        const searchVariants = Array.from(new Set([cleanSearch, persianVariant, arabicVariant].filter(Boolean)));
+
+        const contactOrFilters: string[] = [];
+        let cOrIdx = 0;
+        for (const sv of searchVariants) {
+          contactOrFilters.push(`filter[_or][${cOrIdx++}][value][_icontains]=${encodeURIComponent(sv)}`);
+          contactOrFilters.push(`filter[_or][${cOrIdx++}][normalized_value][_icontains]=${encodeURIComponent(sv)}`);
+          contactOrFilters.push(`filter[_or][${cOrIdx++}][contact_name][_icontains]=${encodeURIComponent(sv)}`);
+        }
+        if (digits.length >= 3) {
+          contactOrFilters.push(`filter[_or][${cOrIdx++}][value][_icontains]=${encodeURIComponent(digits)}`);
+          contactOrFilters.push(`filter[_or][${cOrIdx++}][normalized_value][_icontains]=${encodeURIComponent(digits)}`);
+        }
+
+        const [cachedAll, contactsRes] = await Promise.all([
+          ensureCustomersCache().catch(() => null),
+          directusFetch(`/items/customer_contacts?${contactOrFilters.join('&')}&fields=customer_id&limit=500`).catch(
+            () => null
+          ),
+        ]);
+
+        if (Array.isArray(cachedAll) && cachedAll.length > 0) {
+          const contactMatchedIdSet = new Set<string>(
+            (contactsRes?.data && Array.isArray(contactsRes.data) ? contactsRes.data : [])
+              .map((ct: any) => (typeof ct.customer_id === 'object' ? ct.customer_id?.id : ct.customer_id))
+              .filter(Boolean)
+              .map(String)
+          );
+
+          let list = cachedAll.map((c: any) => computeCustomerExpiration(c));
+
+          if (tenantId && tenantId !== 'all') {
+            list = list.filter((c: any) => matchesTenant(c.tenant_id, tenantId));
+          }
+
+          if (!isAdmin && !canViewAllCustomers && (userId || personnelId || userName) && !isFreeOnly) {
+            const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
+            const rawUid = cleanPId.replace(/^p-/, '');
+            const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
+            const normUserName = normalizePersianString(userName);
+
+            list = list.filter((c: any) => {
+              const cId = c.assigned_marketer_id ? String(c.assigned_marketer_id).trim().toLowerCase() : '';
+              if (cleanPId && (cId === cleanPId || cId === rawUid || cId === `p-${rawUid}`)) return true;
+              if (cleanUId && (cId === cleanUId || cId === rawUid || cId === `p-${rawUid}`)) return true;
+              const cNameNorm = normalizePersianString(c.assigned_marketer_name);
+              if (normUserName && cNameNorm && (cNameNorm === normUserName || cNameNorm.includes(normUserName))) {
+                return true;
+              }
+              return false;
+            });
+          }
+
+          if (status && status !== 'همه') {
+            const normSt = (v: any) => {
+              const s = String(v || '').trim();
+              return s === 'قرارداد / فاکتور' || s === 'قرارداد/فاکتور' ? 'قرارداد' : s;
+            };
+            const targetSt = normSt(status);
+            list = list.filter((c: any) => normSt(c.status) === targetSt);
+          }
+
+          if (marketer_id && marketer_id !== 'همه') {
+            const targetM = String(marketer_id).trim().toLowerCase();
+            const rawTargetM = targetM.replace(/^p-/, '');
+            list = list.filter((c: any) => {
+              const cM = String(c.assigned_marketer_id || '').trim().toLowerCase();
+              return cM === targetM || cM === rawTargetM || cM === `p-${rawTargetM}`;
+            });
+          }
+
+          if (expired_only === 'true') {
+            list = list.filter((c: any) => Boolean(c.is_expired));
+          }
+
+          if (isFreeOnly) {
+            list = list.filter((c: any) => !c.assigned_marketer_id || c.is_expired);
+          }
+
+          list = list.filter(
+            (c: any) => contactMatchedIdSet.has(String(c.id)) || matchesCustomerSearch(c, cleanSearch)
+          );
+
+          if (followup_filter && followup_filter !== 'همه' && followup_filter !== 'all') {
+            const ff = String(followup_filter);
+            const startTodayMs = startOfToday.getTime();
+            const endTodayMs = endOfToday.getTime();
+            const nowMs = Date.now();
+
+            list = list.filter((c: any) => {
+              if (!c.next_followup_date) return ff === 'no_followup';
+              const fTime = new Date(c.next_followup_date).getTime();
+              if (isNaN(fTime)) return ff === 'no_followup';
+
+              if (ff === 'active') return fTime >= startTodayMs;
+              if (ff === 'today') return fTime >= startTodayMs && fTime <= endTodayMs;
+              if (ff === 'due_3_days') return fTime >= nowMs && fTime <= nowMs + 3 * 86400000;
+              if (ff === 'due_7_days') return fTime >= nowMs && fTime <= nowMs + 7 * 86400000;
+              if (ff === 'overdue') return fTime < startTodayMs;
+              if (ff === 'no_followup') return false;
+              return true;
+            });
+          }
+
+          list = sortCustomersList(list, sortKey);
+
+          const filterCount = list.length;
+          const totalPages = Math.max(1, Math.ceil(filterCount / reqLimit));
+          const startIndex = (reqPage - 1) * reqLimit;
+          let pagedItems = list.slice(startIndex, startIndex + reqLimit);
+
+          pagedItems = await enrichCustomersWithLatestReportFollowup(pagedItems);
+          pagedItems = sortCustomersList(pagedItems, sortKey);
+
+          res.setHeader('X-Total-Count', String(filterCount));
+          res.setHeader('X-Filter-Count', String(filterCount));
+          res.setHeader('X-Page', String(reqPage));
+          res.setHeader('X-Limit', String(reqLimit));
+
+          if (isUnlimited) {
+            return res.json(pagedItems);
+          }
+
+          return res.json({
+            data: pagedItems,
+            meta: {
+              filter_count: filterCount,
+              total_count: filterCount,
+              page: reqPage,
+              limit: reqLimit,
+              total_pages: totalPages,
+            },
+          });
+        }
+      } catch (searchErr: any) {
+        console.warn('Unified customer search cache fallback to Directus query:', searchErr?.message || searchErr);
+      }
+    }
+
     try {
       const isFollowupSort =
         sortKey === 'next_followup_asc' ||
@@ -448,16 +606,17 @@ router.get('/', async (req: Request, res: Response) => {
       else if (sortKey === 'next_followup_desc' || sortKey === '-next_followup_date') dSort = '-next_followup_date';
       else if (sortKey === 'company_name_asc') dSort = 'company_name';
       else if (sortKey === 'deadline_asc') dSort = 'assignment_deadline';
+      else if (sortKey === 'date_updated_desc' || sortKey === '-date_updated') dSort = '-date_updated';
 
       const fieldsQuery = `&fields=id,company_name,business_type,province,city,manager_name,manager_phones,negotiator_name,negotiator_phones,mobile_numbers,landline_numbers,telegram_phone,telegram_ids,instagram_ids,emails,websites,next_followup_date,assigned_marketer_id,assigned_marketer_name,assignment_deadline,status,is_expired,claimed_from_pool,date_created,date_updated,tenant_id`;
 
       let filterQuery = '';
       let andIdx = 0;
 
-      // Tenant filter
+      // Tenant filter (apply cleanly for all specific numeric tenant IDs including 1)
       if (tenantId && tenantId !== 'all') {
         const tenantNum = resolveDirectusTenantId(tenantId);
-        if (tenantNum && tenantNum > 1) {
+        if (tenantNum && tenantNum >= 1) {
           filterQuery += `&filter[_and][${andIdx++}][tenant_id][_eq]=${tenantNum}`;
         }
       }
@@ -521,7 +680,7 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
 
-      // Contact matching for phone numbers if search query is provided
+      // Contact matching for phone numbers if search query is provided (fallback path)
       let contactMatchedCustomerIds: string[] = [];
       if (search && typeof search === 'string' && search.trim()) {
         const cleanSearch = search.trim();
@@ -543,7 +702,7 @@ router.get('/', async (req: Request, res: Response) => {
             contactOrFilters.push(`filter[_or][${cOrIdx++}][normalized_value][_icontains]=${encodeURIComponent(digits)}`);
           }
           const cRes = await directusFetch(
-            `/items/customer_contacts?${contactOrFilters.join('&')}&fields=customer_id&limit=500`
+            `/items/customer_contacts?${contactOrFilters.join('&')}&fields=customer_id&limit=100`
           ).catch(() => null);
           if (cRes?.data && Array.isArray(cRes.data)) {
             contactMatchedCustomerIds = cRes.data
@@ -562,8 +721,10 @@ router.get('/', async (req: Request, res: Response) => {
         }
         filterQuery += `&filter[_and][${andIdx}][_or][${sOrIdx++}][telegram_phone][_icontains]=${encodeURIComponent(cleanSearch)}`;
 
-        for (const cid of contactMatchedCustomerIds) {
-          filterQuery += `&filter[_and][${andIdx}][_or][${sOrIdx++}][id][_eq]=${encodeURIComponent(cid)}`;
+        if (contactMatchedCustomerIds.length > 0) {
+          filterQuery += `&filter[_and][${andIdx}][_or][${sOrIdx++}][id][_in]=${encodeURIComponent(
+            contactMatchedCustomerIds.slice(0, 80).join(',')
+          )}`;
         }
         andIdx++;
       }
@@ -1130,13 +1291,13 @@ router.post('/', async (req: Request, res: Response) => {
           }
         }
 
-        invalidateCustomersCache();
-        invalidateDashboardSummaryCache();
-
         const fullCustomer = computeCustomerExpiration({
           ...(createdCust.data || cleanPayload),
           contacts: createdContactsData,
         });
+
+        upsertCustomerInCache(fullCustomer);
+        invalidateDashboardSummaryCache();
 
         recentCustomerCreations.push({
           id: newId,
@@ -1180,6 +1341,14 @@ router.post('/', async (req: Request, res: Response) => {
 router.patch('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const payload = req.body;
+  const userCtx = getRequestUser(req);
+
+  if (!userCtx.isAuthenticated) {
+    return res.status(401).json({
+      error: 'UNAUTHORIZED',
+      message: 'برای ویرایش پرونده مشتری باید وارد حساب کاربری خود شوید.',
+    });
+  }
 
   if (payload.contacts && Array.isArray(payload.contacts)) {
     for (const ct of payload.contacts) {
@@ -1219,7 +1388,16 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
   delete patchPayload.date_created;
   // Never overwrite existing tenant, pool, expiration, followup, or deadline metadata unless explicitly provided
-  if (payload.tenant_id === undefined) delete patchPayload.tenant_id;
+  if (payload.tenant_id === undefined) {
+    delete patchPayload.tenant_id;
+  } else {
+    // Guard against accidentally resetting a non-default tenant customer back to default (1)
+    const explicitTenantNum = resolveDirectusTenantId(payload.tenant_id);
+    const reqTenantNum = userCtx.tenantId && userCtx.tenantId !== 'all' ? resolveDirectusTenantId(userCtx.tenantId) : null;
+    if (explicitTenantNum === 1 && reqTenantNum && reqTenantNum > 1) {
+      patchPayload.tenant_id = reqTenantNum;
+    }
+  }
   if (payload.claimed_from_pool === undefined) delete patchPayload.claimed_from_pool;
   if (payload.claimed_from_pool_at === undefined) delete patchPayload.claimed_from_pool_at;
   if (payload.is_expired === undefined) delete patchPayload.is_expired;
@@ -1231,7 +1409,67 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
-      const patchedCust = await directusFetch(`/items/customers/${id}`, {
+      const needsOwnershipCheck = !userCtx.isAdmin && !userCtx.isPersonnelAdmin && !userCtx.canViewAllCustomers;
+      const existingRes =
+        needsOwnershipCheck || patchPayload.tenant_id === undefined
+          ? await directusFetch(
+              `/items/customers/${encodeURIComponent(id)}?fields=id,tenant_id,assigned_marketer_id,assigned_marketer_name,is_expired,assignment_deadline`
+            ).catch(() => null)
+          : null;
+
+      if (needsOwnershipCheck && existingRes?.data) {
+        const ex = computeCustomerExpiration(existingRes.data);
+        const cleanPId = userCtx.personnelId ? String(userCtx.personnelId).trim().toLowerCase() : '';
+        const rawUid = cleanPId.replace(/^p-/, '');
+        const cleanUId = userCtx.userId ? String(userCtx.userId).trim().toLowerCase() : '';
+        const normUserName = normalizePersianString(userCtx.userName);
+        const exMarketerId = ex.assigned_marketer_id ? String(ex.assigned_marketer_id).trim().toLowerCase() : '';
+        const exMarketerName = normalizePersianString(ex.assigned_marketer_name);
+
+        const isOwner =
+          (cleanPId && (exMarketerId === cleanPId || exMarketerId === rawUid || exMarketerId === `p-${rawUid}`)) ||
+          (cleanUId && (exMarketerId === cleanUId || exMarketerId === rawUid || exMarketerId === `p-${rawUid}`)) ||
+          (normUserName && exMarketerName && (exMarketerName === normUserName || exMarketerName.includes(normUserName)));
+        const isFree = !exMarketerId || Boolean(ex.is_expired);
+
+        if (!isOwner && !isFree) {
+          return res.status(403).json({
+            error: 'FORBIDDEN',
+            message: 'شما مجاز به ویرایش پرونده متعلق به بازاریاب دیگر نیستید.',
+          });
+        }
+      }
+
+      // Auto-heal if the existing DB record had its tenant_id corrupted to 1 while the marketer/request belongs to a specific tenant
+      if (patchPayload.tenant_id === undefined) {
+        const effectiveMarketerId = marketerId || existingRes?.data?.assigned_marketer_id;
+        const marketerMatch = effectiveMarketerId
+          ? personnelData.find(
+              (p) =>
+                p &&
+                (String(p.id).toLowerCase() === String(effectiveMarketerId).toLowerCase() ||
+                  String(p.id).toLowerCase() === `p-${String(effectiveMarketerId).replace(/^p-/i, '').toLowerCase()}`)
+            )
+          : null;
+        const marketerTenantNum = marketerMatch ? resolveDirectusTenantId(marketerMatch.tenant_id) : null;
+        const reqTenantNum =
+          userCtx.tenantId && userCtx.tenantId !== 'all' ? resolveDirectusTenantId(userCtx.tenantId) : null;
+        const expectedTenant =
+          marketerTenantNum && marketerTenantNum > 1
+            ? marketerTenantNum
+            : reqTenantNum && reqTenantNum > 1
+            ? reqTenantNum
+            : null;
+
+        if (expectedTenant && expectedTenant > 1) {
+          const existingTenantNum = resolveDirectusTenantId(existingRes?.data?.tenant_id);
+          if (!existingTenantNum || existingTenantNum === 1) {
+            patchPayload.tenant_id = expectedTenant;
+          }
+        }
+      }
+
+      const patchedCust = await directusFetch(`/items/customers/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         body: JSON.stringify(patchPayload),
       });
@@ -1244,7 +1482,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
           );
           if (oldContacts?.data && Array.isArray(oldContacts.data)) {
             for (const oldCt of oldContacts.data) {
-              await directusFetch(`/items/customer_contacts/${oldCt.id}`, {
+              await directusFetch(`/items/customer_contacts/${encodeURIComponent(oldCt.id)}`, {
                 method: 'DELETE',
               }).catch(() => {});
             }
@@ -1266,13 +1504,13 @@ router.patch('/:id', async (req: Request, res: Response) => {
         }
       }
 
-      invalidateCustomersCache();
-      invalidateDashboardSummaryCache();
-
       const updatedCust = computeCustomerExpiration({
         ...(patchedCust.data || patchPayload),
         ...(savedContacts ? { contacts: savedContacts } : {}),
       });
+
+      upsertCustomerInCache(updatedCust);
+      invalidateDashboardSummaryCache();
 
       // Keep local fallback store aligned if record exists there
       const memIdx = customersData.findIndex((c) => String(c.id) === String(id));
@@ -1371,7 +1609,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       contactsData.splice(0, contactsData.length, ...contactsData.filter((ct) => String(ct.customer_id) !== String(id)));
       reportsData.splice(0, reportsData.length, ...reportsData.filter((r) => String(r.customer_id) !== String(id)));
 
-      invalidateCustomersCache();
+      removeCustomerFromCache(id);
       invalidateReportsCache();
       invalidateDashboardSummaryCache();
       return res.status(204).send();
@@ -1385,7 +1623,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   setCustomersData(customersData.filter((c) => c.id !== id));
   contactsData.splice(0, contactsData.length, ...contactsData.filter((ct) => String(ct.customer_id) !== String(id)));
   reportsData.splice(0, reportsData.length, ...reportsData.filter((r) => String(r.customer_id) !== String(id)));
-  invalidateCustomersCache();
+  removeCustomerFromCache(id);
   invalidateReportsCache();
   invalidateDashboardSummaryCache();
   res.status(204).send();

@@ -722,6 +722,7 @@ export function matchesCustomerSearch(c: any, searchStr?: string | null): boolea
   if (!searchStr || !searchStr.trim()) return true;
   const raw = searchStr.trim().toLowerCase();
   const normRaw = normalizePersianText(raw);
+  const normRawNoSpace = normRaw.replace(/\s+/g, '');
 
   const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
   const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
@@ -730,22 +731,25 @@ export function matchesCustomerSearch(c: any, searchStr?: string | null): boolea
     .replace(/[٠-٩]/g, (w) => arabicDigits.indexOf(w).toString())
     .replace(/[^\d]/g, '');
 
+  const matchesTextField = (val?: string | null): boolean => {
+    if (!val) return false;
+    const str = String(val);
+    if (str.toLowerCase().includes(raw)) return true;
+    const normVal = normalizePersianText(str);
+    if (normRaw && normVal.includes(normRaw)) return true;
+    if (normRawNoSpace.length >= 3 && normVal.replace(/\s+/g, '').includes(normRawNoSpace)) return true;
+    return false;
+  };
+
   // 1. Text match in primary fields
   if (
-    c.company_name?.toLowerCase().includes(raw) ||
-    normalizePersianText(c.company_name).includes(normRaw) ||
-    c.manager_name?.toLowerCase().includes(raw) ||
-    normalizePersianText(c.manager_name).includes(normRaw) ||
-    c.negotiator_name?.toLowerCase().includes(raw) ||
-    normalizePersianText(c.negotiator_name).includes(normRaw) ||
-    c.city?.toLowerCase().includes(raw) ||
-    normalizePersianText(c.city).includes(normRaw) ||
-    c.province?.toLowerCase().includes(raw) ||
-    normalizePersianText(c.province).includes(normRaw) ||
-    c.business_type?.toLowerCase().includes(raw) ||
-    normalizePersianText(c.business_type).includes(normRaw) ||
-    c.assigned_marketer_name?.toLowerCase().includes(raw) ||
-    normalizePersianText(c.assigned_marketer_name).includes(normRaw)
+    matchesTextField(c.company_name) ||
+    matchesTextField(c.manager_name) ||
+    matchesTextField(c.negotiator_name) ||
+    matchesTextField(c.city) ||
+    matchesTextField(c.province) ||
+    matchesTextField(c.business_type) ||
+    matchesTextField(c.assigned_marketer_name)
   ) {
     return true;
   }

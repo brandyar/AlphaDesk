@@ -574,6 +574,75 @@ export async function syncAllCustomersFollowupFromReports(): Promise<{
   }
 }
 
+export async function repairMismatchedCustomerTenants(): Promise<{ repairedCount: number }> {
+  if (!directusUrl || !directusAdminToken || personnelData.length === 0) {
+    return { repairedCount: 0 };
+  }
+
+  try {
+    // Build fast lookup of personnel -> numeric tenant_id (only non-default specific tenants > 1)
+    const personnelTenantMap = new Map<string, number>();
+    for (const p of personnelData) {
+      if (!p) continue;
+      const tNum = resolveDirectusTenantId(p.tenant_id);
+      if (tNum && tNum > 1) {
+        if (p.id) {
+          const cleanId = String(p.id).trim().toLowerCase();
+          personnelTenantMap.set(cleanId, tNum);
+          const rawId = cleanId.replace(/^p-/, '');
+          if (rawId) {
+            personnelTenantMap.set(rawId, tNum);
+            personnelTenantMap.set(`p-${rawId}`, tNum);
+          }
+        }
+        if (p.user_id) {
+          personnelTenantMap.set(String(p.user_id).trim().toLowerCase(), tNum);
+        }
+      }
+    }
+
+    if (personnelTenantMap.size === 0) {
+      return { repairedCount: 0 };
+    }
+
+    const candidatesRes = await directusFetchAllPages(
+      '/items/customers?filter[_or][0][tenant_id][_eq]=1&filter[_or][1][tenant_id][_null]=true&fields=id,tenant_id,assigned_marketer_id',
+      {},
+      5000
+    ).catch(() => null);
+
+    const candidates = candidatesRes?.data || [];
+    if (candidates.length === 0) {
+      return { repairedCount: 0 };
+    }
+
+    const patchMap = new Map<string, any>();
+    for (const cust of candidates) {
+      if (!cust || !cust.id || !cust.assigned_marketer_id) continue;
+      const mKey = String(cust.assigned_marketer_id).trim().toLowerCase();
+      const targetTenant = personnelTenantMap.get(mKey);
+      if (targetTenant && targetTenant > 1) {
+        patchMap.set(String(cust.id), {
+          id: cust.id,
+          tenant_id: targetTenant,
+        });
+      }
+    }
+
+    if (patchMap.size > 0) {
+      console.log(`[AlphaDesk] Repairing ${patchMap.size} customer(s) with mismatched default tenant_id...`);
+      await directusSafeBatchPatch('customers', patchMap, 50);
+      invalidateCustomersCache();
+      console.log(`[AlphaDesk] Successfully repaired tenant_id on ${patchMap.size} customer(s).`);
+    }
+
+    return { repairedCount: patchMap.size };
+  } catch (err: any) {
+    console.warn('[AlphaDesk] Tenant repair warning:', err?.message || err);
+    return { repairedCount: 0 };
+  }
+}
+
 export function normalizeSmsPhoneDigits(input: string): string {
   const ascii = String(input || '')
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))

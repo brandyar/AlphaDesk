@@ -15,11 +15,32 @@ interface DataCache<T> {
 }
 
 let customersCache: DataCache<any[]> | null = null;
+let customersCacheInFlight: Promise<any[]> | null = null;
 let reportsCache: DataCache<any[]> | null = null;
 const CACHE_TTL_MS = 300000; // 5 minutes cache
 
 export function invalidateCustomersCache() {
   customersCache = null;
+  customersCacheInFlight = null;
+}
+
+export function upsertCustomerInCache(customer: any) {
+  if (!customer || !customer.id || !customersCache || !Array.isArray(customersCache.data)) return;
+  const targetId = String(customer.id);
+  const idx = customersCache.data.findIndex((c) => c && String(c.id) === targetId);
+  if (idx >= 0) {
+    customersCache.data[idx] = { ...customersCache.data[idx], ...customer };
+  } else {
+    customersCache.data.unshift(customer);
+  }
+  customersCache.meta = { total_count: customersCache.data.length };
+}
+
+export function removeCustomerFromCache(customerId: string) {
+  if (!customerId || !customersCache || !Array.isArray(customersCache.data)) return;
+  const targetId = String(customerId);
+  customersCache.data = customersCache.data.filter((c) => c && String(c.id) !== targetId);
+  customersCache.meta = { total_count: customersCache.data.length };
 }
 
 export function invalidateReportsCache() {
@@ -32,17 +53,30 @@ export async function ensureCustomersCache(forceRefresh = false): Promise<any[]>
     return customersCache.data;
   }
 
-  const res = await directusFetch('/items/customers?limit=5000&sort=-date_created').catch(() => null);
-  const items = res?.data || [];
-  if (items && items.length > 0) {
-    customersCache = {
-      timestamp: Date.now(),
-      data: items,
-      meta: { total_count: items.length },
-    };
-    return items;
+  if (!forceRefresh && customersCacheInFlight) {
+    return customersCacheInFlight;
   }
-  return customersCache?.data || customersData;
+
+  const refreshPromise = (async () => {
+    const res = await directusFetchAllPages('/items/customers?sort=-date_created', {}, 50000).catch(() => null);
+    const items = res?.data || [];
+    if (items && items.length > 0) {
+      customersCache = {
+        timestamp: Date.now(),
+        data: items,
+        meta: { total_count: items.length },
+      };
+      return items;
+    }
+    return customersCache?.data || customersData;
+  })().finally(() => {
+    if (customersCacheInFlight === refreshPromise) {
+      customersCacheInFlight = null;
+    }
+  });
+
+  customersCacheInFlight = refreshPromise;
+  return refreshPromise;
 }
 
 export async function ensureReportsCache(forceRefresh = false): Promise<any[]> {

@@ -551,9 +551,6 @@ const CustomerModalContent: React.FC<CustomerModalProps> = ({
         ...(editingCustomer && !marketerOrDurationChanged && editingCustomer.assignment_deadline
           ? { assignment_deadline: editingCustomer.assignment_deadline }
           : {}),
-        ...(editingCustomer && editingCustomer.tenant_id !== undefined
-          ? { tenant_id: editingCustomer.tenant_id }
-          : {}),
         ...(editingCustomer
           ? {
               is_expired: editingCustomer.is_expired,

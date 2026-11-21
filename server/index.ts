@@ -9,7 +9,7 @@ import {
   updateProjectSettingsData,
 } from './config.ts';
 import { directusFetch, probeDirectusConnection, isDirectusCircuitOpen } from './directus/client.ts';
-import { ensureDirectusTenants, ensureDirectusPersonnel, syncAllCustomersFollowupFromReports, syncDirectusTenantSettings } from './directus/sync.ts';
+import { ensureDirectusTenants, ensureDirectusPersonnel, syncAllCustomersFollowupFromReports, syncDirectusTenantSettings, repairMismatchedCustomerTenants } from './directus/sync.ts';
 import { rateLimiter } from './middlewares/rateLimit.middleware.ts';
 import { checkInactivePersonnel } from './middlewares/auth.middleware.ts';
 
@@ -192,6 +192,7 @@ export async function startServer() {
           ensureDirectusTenants()
             .then(() => syncDirectusTenantSettings())
             .then(() => ensureDirectusPersonnel())
+            .then(() => repairMismatchedCustomerTenants())
             .then(async () => {
               try {
                 const resp = await directusFetch('/items/project_settings').catch(() => null);
