@@ -20,6 +20,7 @@ import {
   MessageSquare,
   Lock,
   ShieldCheck,
+  ArrowRight,
 } from 'lucide-react';
 import { Customer, CustomerContact, Personnel, NegotiationStatus, ChannelType, DuplicateCheckResult, AuthUser } from '../types';
 import { checkDuplicateContact } from '../api';
@@ -27,6 +28,15 @@ import { PersianDatePicker } from './PersianDatePicker';
 import { FreePoolDuplicateAlert } from './FreePoolDuplicateAlert';
 import { IRAN_PROVINCES } from '../data/iranProvincesCities';
 import { toPersianDigits } from '../utils';
+
+const isPlaceholderContactName = (name?: string | null): boolean => {
+  if (!name) return false;
+  const normalized = name
+    .replace(/[\u200B-\u200D\uFEFF\u200C]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return normalized === 'بدون نام';
+};
 
 interface CustomerModalProps {
   isOpen: boolean;
@@ -38,6 +48,7 @@ interface CustomerModalProps {
   currentPersonnel?: Personnel | null;
   currentUser?: AuthUser | null;
   isAdmin?: boolean;
+  openedFromProfile?: boolean;
 }
 
 interface ContactRow {
@@ -63,8 +74,12 @@ const channelOptions: { type: ChannelType; label: string; icon: React.ReactNode;
   { type: 'other', label: 'سایر راه‌های ارتباطی', icon: <Globe className="w-3.5 h-3.5 text-gray-400" />, placeholder: 'لینک یا شماره' },
 ];
 
-export const CustomerModal: React.FC<CustomerModalProps> = ({
-  isOpen,
+export const CustomerModal: React.FC<CustomerModalProps> = (props) => {
+  if (!props.isOpen) return null;
+  return <CustomerModalContent key={props.editingCustomer?.id || 'new'} {...props} />;
+};
+
+const CustomerModalContent: React.FC<CustomerModalProps> = ({
   onClose,
   onSave,
   onClaimFreeCustomer,
@@ -73,8 +88,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   currentPersonnel,
   currentUser,
   isAdmin,
+  openedFromProfile = false,
 }) => {
-  if (!isOpen) return null;
 
   // Determine if the current user has Administrator privileges
   const userIsAdmin = Boolean(
@@ -233,9 +248,11 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
     editingCustomer?.interview_score || 7
   );
   const [nextFollowupDate, setNextFollowupDate] = useState(
-    editingCustomer?.next_followup_date?.split('T')[0] ||
-      new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    editingCustomer
+      ? editingCustomer.next_followup_date || ''
+      : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
   );
+  const [nextFollowupTouched, setNextFollowupTouched] = useState(false);
 
   // Marketer Assignment & Duration
   const [assignedMarketerId, setAssignedMarketerId] = useState(() => {
@@ -488,6 +505,24 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
       const emails = cleanContacts.filter((c) => c.channel_type === 'email').map((c) => c.value);
       const websites = cleanContacts.filter((c) => c.channel_type === 'website').map((c) => c.value);
 
+      const resolveNextFollowupIso = (): string | null => {
+        if (editingCustomer && !nextFollowupTouched) {
+          return editingCustomer.next_followup_date ?? null;
+        }
+        if (!nextFollowupDate || !nextFollowupDate.trim()) return null;
+        const raw = nextFollowupDate.trim();
+        // Date-only string ("YYYY-MM-DD") -> anchor to local midday so UTC conversion never shifts to previous day
+        const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+          ? new Date(`${raw}T12:00:00`)
+          : new Date(raw);
+        return isNaN(parsed.getTime()) ? null : parsed.toISOString();
+      };
+
+      const marketerOrDurationChanged =
+        !editingCustomer ||
+        String(finalMarketerId || '') !== String(editingCustomer.assigned_marketer_id || '') ||
+        Number(finalDurationDays) !== Number(editingCustomer.assignment_duration_days || 7);
+
       await onSave({
         company_name: companyName.trim(),
         business_type: businessType.trim(),
@@ -509,10 +544,23 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
         interview_status: interviewStatus,
         interview_report: interviewReport.trim(),
         interview_score: Number(interviewScore),
-        next_followup_date: nextFollowupDate ? new Date(nextFollowupDate).toISOString() : null,
+        next_followup_date: resolveNextFollowupIso(),
         assigned_marketer_id: finalMarketerId,
         assigned_marketer_name: finalMarketerName,
         assignment_duration_days: finalDurationDays,
+        ...(editingCustomer && !marketerOrDurationChanged && editingCustomer.assignment_deadline
+          ? { assignment_deadline: editingCustomer.assignment_deadline }
+          : {}),
+        ...(editingCustomer && editingCustomer.tenant_id !== undefined
+          ? { tenant_id: editingCustomer.tenant_id }
+          : {}),
+        ...(editingCustomer
+          ? {
+              is_expired: editingCustomer.is_expired,
+              claimed_from_pool: editingCustomer.claimed_from_pool,
+              claimed_from_pool_at: editingCustomer.claimed_from_pool_at,
+            }
+          : {}),
         status,
       });
       onClose();
@@ -536,19 +584,31 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
   const hasFreePoolDuplicate = contacts.some((c) => isFreePoolDup(c.duplicateWarning));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-150">
       <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden my-2 sm:my-8 max-h-[95vh] sm:max-h-[90vh] flex flex-col text-slate-900 dark:text-white">
         {/* Header */}
-        <div className="p-4 sm:p-6 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="p-4 sm:p-6 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            {openedFromProfile && (
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={saving || isSubmittingRef.current}
+                className="h-9 px-3 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-800 dark:bg-[#282828] dark:hover:bg-[#333333] dark:text-white text-xs font-bold flex items-center gap-1.5 transition-colors flex-shrink-0 cursor-pointer disabled:opacity-50"
+                title="بازگشت به پرونده مشتری"
+              >
+                <ArrowRight className="w-4 h-4" />
+                <span className="hidden sm:inline">بازگشت به پرونده</span>
+              </button>
+            )}
             <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-full bg-emerald-100 dark:bg-[#1DB954]/15 border border-emerald-300 dark:border-[#1DB954]/30 flex items-center justify-center text-emerald-600 dark:text-[#1DB954] flex-shrink-0">
               <Building className="w-4 sm:w-5 h-4 sm:h-5" />
             </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
                 {editingCustomer ? 'ویرایش پرونده مشتری' : 'ثبت پرونده مشتری جدید'}
               </h2>
-              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-[#A7A7A7]">
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-[#A7A7A7] truncate">
                 ثبت اطلاعات کامل شرکت، کانال‌های ارتباطی تفکیک‌شده و بررسی یکتایی شماره‌ها
               </p>
             </div>
@@ -565,7 +625,8 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors"
+              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333333] flex items-center justify-center dark:text-[#B3B3B3] dark:hover:text-white transition-colors cursor-pointer"
+              title={openedFromProfile ? 'بازگشت به پرونده' : 'بستن'}
             >
               <X className="w-4 h-4" />
             </button>
@@ -981,9 +1042,26 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                             <input
                               type="text"
                               value={contact.contact_name}
-                              onChange={(e) => handleContactChange(idx, 'contact_name', e.target.value)}
+                              onFocus={() => {
+                                if (isPlaceholderContactName(contact.contact_name)) {
+                                  handleContactChange(idx, 'contact_name', '');
+                                }
+                              }}
+                              onChange={(e) => {
+                                let nextVal = e.target.value;
+                                if (isPlaceholderContactName(contact.contact_name)) {
+                                  nextVal = nextVal
+                                    .replace(/بدون[\s\u200C]+نام/g, '')
+                                    .trimStart();
+                                }
+                                handleContactChange(idx, 'contact_name', nextVal);
+                              }}
                               placeholder="نام شخص"
-                              className="w-full h-8 px-2 bg-slate-50 dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                              className={`w-full h-8 px-2 bg-slate-50 dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                                isPlaceholderContactName(contact.contact_name)
+                                  ? 'text-slate-400 dark:text-[#777]'
+                                  : 'text-slate-900 dark:text-white'
+                              }`}
                             />
                             <input
                               type="text"
@@ -1133,7 +1211,10 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                 <PersianDatePicker
                   label="تاریخ پیگیری بعدی (شمسی)"
                   value={nextFollowupDate}
-                  onChange={(iso) => setNextFollowupDate(iso)}
+                  onChange={(iso) => {
+                    setNextFollowupDate(iso);
+                    setNextFollowupTouched(true);
+                  }}
                 />
               </div>
 
@@ -1172,14 +1253,15 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                 type="button"
                 onClick={onClose}
                 disabled={saving || isSubmittingRef.current}
-                className="px-4 py-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333] text-xs font-semibold dark:text-[#B3B3B3] dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 dark:bg-[#282828] dark:hover:bg-[#333] text-xs font-semibold dark:text-[#B3B3B3] dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 cursor-pointer"
               >
-                انصراف
+                {openedFromProfile && <ArrowRight className="w-3.5 h-3.5" />}
+                <span>{openedFromProfile ? 'بازگشت به پرونده' : 'انصراف'}</span>
               </button>
               <button
                 type="submit"
                 disabled={saving || isSubmittingRef.current}
-                className="px-6 py-2 rounded-full bg-[#1DB954] hover:bg-[#1ED760] disabled:bg-slate-300 dark:disabled:bg-[#333] disabled:text-slate-400 dark:disabled:text-[#666] disabled:cursor-not-allowed text-black text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
+                className="px-6 py-2 rounded-full bg-[#1DB954] hover:bg-[#1ED760] disabled:bg-slate-300 dark:disabled:bg-[#333] disabled:text-slate-400 dark:disabled:text-[#666] disabled:cursor-not-allowed text-black text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
               >
                 {saving || isSubmittingRef.current ? 'در حال ثبت اطلاعات پرونده...' : editingCustomer ? 'ذخیره تغییرات و شماره‌ها' : 'ثبت قطعی پرونده'}
               </button>

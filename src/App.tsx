@@ -566,10 +566,40 @@ export default function App() {
       let savedCustomer: Customer;
       if (editingCustomer) {
         const updated = await updateCustomer(editingCustomer.id, customerData);
-        savedCustomer = updated;
-        setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-        setCustomerModalCache((prev) => (prev[updated.id] ? { ...prev, [updated.id]: updated } : prev));
+        const existingCached = customerModalCache[String(updated.id)] || editingCustomer;
+        const mergedUpdated: Customer = {
+          ...existingCached,
+          ...updated,
+          contacts:
+            Array.isArray(updated.contacts) && updated.contacts.length > 0
+              ? updated.contacts
+              : Array.isArray(customerData.contacts) && customerData.contacts.length > 0
+              ? customerData.contacts
+              : existingCached?.contacts || [],
+          reports: Array.isArray(updated.reports)
+            ? updated.reports
+            : existingCached?.reports || [],
+        };
+        savedCustomer = mergedUpdated;
+        setCustomers((prev) => prev.map((c) => (String(c.id) === String(mergedUpdated.id) ? mergedUpdated : c)));
+        setCustomerModalCache((prev) =>
+          prev[String(mergedUpdated.id)]
+            ? { ...prev, [String(mergedUpdated.id)]: mergedUpdated }
+            : prev
+        );
         showToast('پرونده و شماره‌های مشتری با موفقیت ذخیره شدند.', 'success');
+
+        // Background sync to fetch fresh DB contact IDs & latest reports
+        fetchCustomerById(String(mergedUpdated.id))
+          .then((freshCust) => {
+            if (freshCust) {
+              setCustomers((prev) => prev.map((c) => (String(c.id) === String(freshCust.id) ? freshCust : c)));
+              setCustomerModalCache((prev) =>
+                prev[String(freshCust.id)] ? { ...prev, [String(freshCust.id)]: freshCust } : prev
+              );
+            }
+          })
+          .catch(() => {});
       } else {
         const created = await createCustomer(customerData);
         savedCustomer = created;
@@ -1626,25 +1656,16 @@ export default function App() {
         </nav>
       </div>
 
-      {/* Customer Registration & Edit Modal */}
-      <CustomerModal
-        isOpen={isCustomerModalOpen}
-        onClose={() => {
-          setIsCustomerModalOpen(false);
-          setEditingCustomer(null);
-        }}
-        onSave={handleSaveCustomer}
-        onClaimFreeCustomer={handleClaimAndOpenReports}
-        editingCustomer={editingCustomer}
-        personnelList={personnelList}
-        currentPersonnel={currentPersonnel}
-        currentUser={currentUser}
-        isAdmin={isCurrentUserAdmin}
-      />
-
-      {/* Active Customer Detail Modal (Full Popup) */}
+      {/* Active Customer Detail Modal (Full Popup) - smoothly swaps out while editing the same customer */}
       {(() => {
         if (!activeCustomerModalId) return null;
+        const isEditingThisPopupCustomer = Boolean(
+          isCustomerModalOpen &&
+            editingCustomer &&
+            String(editingCustomer.id) === String(activeCustomerModalId)
+        );
+        if (isEditingThisPopupCustomer) return null;
+
         const activeCust = customerModalCache[activeCustomerModalId] ||
           customers.find((c) => String(c.id) === String(activeCustomerModalId));
         if (!activeCust) return null;
@@ -1681,6 +1702,27 @@ export default function App() {
           />
         );
       })()}
+
+      {/* Customer Registration & Edit Modal (Rendered after DetailModal with higher z-index) */}
+      <CustomerModal
+        isOpen={isCustomerModalOpen}
+        onClose={() => {
+          setIsCustomerModalOpen(false);
+          setEditingCustomer(null);
+        }}
+        onSave={handleSaveCustomer}
+        onClaimFreeCustomer={handleClaimAndOpenReports}
+        editingCustomer={editingCustomer}
+        personnelList={personnelList}
+        currentPersonnel={currentPersonnel}
+        currentUser={currentUser}
+        isAdmin={isCurrentUserAdmin}
+        openedFromProfile={Boolean(
+          editingCustomer &&
+            ((activeCustomerModalId && String(editingCustomer.id) === String(activeCustomerModalId)) ||
+              activeTab === 'customer_detail')
+        )}
+      />
 
       {/* Responsive Multi-Customer Minimized Dock Bar (Bottom Dock Tray - Placed above mobile bottom nav bar on mobile) */}
       {minimizedCustomerIds.length > 0 && (

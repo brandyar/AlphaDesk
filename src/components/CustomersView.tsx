@@ -122,6 +122,16 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       setIsLoadingPage(true);
     }
 
+    const hasSearch = debouncedSearch.trim().length > 0;
+    // When user actively searches by text while on the default 'active' followup view,
+    // search across ALL follow-up dates (overdue, undated, future) so no customer is silently hidden.
+    const effectiveFollowupFilter =
+      hasSearch && followupFilter === 'active'
+        ? undefined
+        : followupFilter !== 'همه'
+        ? followupFilter
+        : undefined;
+
     fetchCustomersPaginated({
       page: targetPage,
       limit: pageSize,
@@ -129,7 +139,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       status: statusFilter !== 'همه' ? statusFilter : undefined,
       marketer_id: selectedMarketerId !== 'همه' ? selectedMarketerId : undefined,
       expired_only: showExpiredOnly,
-      followup_filter: followupFilter !== 'همه' ? followupFilter : undefined,
+      followup_filter: effectiveFollowupFilter,
       sort: sortOption,
     })
       .then((res) => {
@@ -228,7 +238,6 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     };
 
     const sortList = (list: Customer[], sortKey: string): Customer[] => {
-      const startOfTodayMs = new Date().setHours(0, 0, 0, 0);
       const copy = [...list];
       if (sortKey === 'next_followup_asc' || sortKey === 'next_followup_date') {
         return copy.sort((a, b) => {
@@ -239,12 +248,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           if (!aValid && !bValid) return 0;
           if (!aValid) return 1;
           if (!bValid) return -1;
-          const aUp = aTime >= startOfTodayMs;
-          const bUp = bTime >= startOfTodayMs;
-          if (aUp && !bUp) return -1;
-          if (!aUp && bUp) return 1;
-          if (aUp && bUp) return aTime - bTime;
-          return bTime - aTime;
+          return aTime - bTime;
         });
       }
       if (sortKey === 'next_followup_desc' || sortKey === '-next_followup_date') {
@@ -298,8 +302,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
           ...patch,
         };
 
+        const effectivePatchFollowup =
+          state.debouncedSearch.trim() && state.followupFilter === 'active'
+            ? 'همه'
+            : state.followupFilter;
+
         const stillMatches =
-          matchesFollowup(updated.next_followup_date, state.followupFilter) &&
+          matchesFollowup(updated.next_followup_date, effectivePatchFollowup) &&
           matchesStatus(updated.status, state.statusFilter) &&
           (!state.showExpiredOnly || Boolean(updated.is_expired)) &&
           (state.selectedMarketerId === 'همه' ||
@@ -711,12 +720,28 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               می‌توانید فیلترها را تغییر داده یا مشتری جدیدی به سامانه اضافه نمایید.
             </p>
           </div>
-          <button
-            onClick={onOpenNewCustomerModal}
-            className="px-5 py-2 rounded-full bg-[#1DB954] text-black font-bold text-xs hover:bg-[#1ED760] transition-transform hover:scale-105 cursor-pointer shadow-md shadow-[#1DB954]/20"
-          >
-            ثبت پرونده مشتری جدید
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2.5">
+            {(followupFilter !== 'همه' || statusFilter !== 'همه' || selectedMarketerId !== 'همه' || showExpiredOnly) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFollowupFilter('همه');
+                  onSelectStatusFilter('همه');
+                  onSelectMarketerId('همه');
+                  if (showExpiredOnly) onToggleExpiredOnly(false);
+                }}
+                className="px-4 py-2 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#282828] dark:hover:bg-[#333] text-slate-800 dark:text-white font-bold text-xs transition-colors cursor-pointer border border-slate-300 dark:border-[#3e3e3e]"
+              >
+                نمایش همه پرونده‌ها (حذف فیلترها)
+              </button>
+            )}
+            <button
+              onClick={onOpenNewCustomerModal}
+              className="px-5 py-2 rounded-full bg-[#1DB954] text-black font-bold text-xs hover:bg-[#1ED760] transition-transform hover:scale-105 cursor-pointer shadow-md shadow-[#1DB954]/20"
+            >
+              ثبت پرونده مشتری جدید
+            </button>
+          </div>
         </div>
       ) : (
         <div className={isLoadingPage ? 'opacity-60 pointer-events-none transition-opacity duration-150' : ''}>

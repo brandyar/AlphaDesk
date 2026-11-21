@@ -296,8 +296,6 @@ export async function enrichCustomersWithLatestReportFollowup(items: any[]): Pro
 export function sortCustomersList(items: any[], sortKey?: string): any[] {
   if (!items || items.length <= 1) return items || [];
   const list = [...items];
-  const nowMs = Date.now();
-  const startOfTodayMs = new Date().setHours(0, 0, 0, 0);
 
   if (sortKey === 'next_followup_asc' || sortKey === 'next_followup_date') {
     return list.sort((a, b) => {
@@ -309,20 +307,8 @@ export function sortCustomersList(items: any[], sortKey?: string): any[] {
       if (!aValid) return 1;
       if (!bValid) return -1;
 
-      // Group 1: Upcoming from start of today onwards (today and future)
-      const aIsUpcoming = aTime >= startOfTodayMs;
-      const bIsUpcoming = bTime >= startOfTodayMs;
-
-      if (aIsUpcoming && !bIsUpcoming) return -1;
-      if (!aIsUpcoming && bIsUpcoming) return 1;
-
-      // If both are upcoming (today/future): sort ascending by exact datetime (closest first)
-      if (aIsUpcoming && bIsUpcoming) {
-        return aTime - bTime;
-      }
-
-      // If both are overdue (in the past before today): sort closest to now first (most recent past date first)
-      return bTime - aTime;
+      // Chronological ascending: most overdue (oldest past) -> less overdue -> today -> future
+      return aTime - bTime;
     });
   }
 
@@ -335,6 +321,8 @@ export function sortCustomersList(items: any[], sortKey?: string): any[] {
       if (!aValid && !bValid) return 0;
       if (!aValid) return 1;
       if (!bValid) return -1;
+
+      // Chronological descending: furthest future -> today -> least overdue -> most overdue
       return bTime - aTime;
     });
   }
@@ -448,22 +436,29 @@ router.get('/', async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken) {
     try {
+      const isFollowupSort =
+        sortKey === 'next_followup_asc' ||
+        sortKey === 'next_followup_date' ||
+        sortKey === 'next_followup_desc' ||
+        sortKey === '-next_followup_date';
+      const isAllFollowups = !followup_filter || followup_filter === 'همه' || followup_filter === 'all';
+
       let dSort = '-date_created';
       if (sortKey === 'next_followup_asc' || sortKey === 'next_followup_date') dSort = 'next_followup_date';
       else if (sortKey === 'next_followup_desc' || sortKey === '-next_followup_date') dSort = '-next_followup_date';
       else if (sortKey === 'company_name_asc') dSort = 'company_name';
       else if (sortKey === 'deadline_asc') dSort = 'assignment_deadline';
 
-      let directusPath = `/items/customers?page=${reqPage}&limit=${reqLimit}&meta=*&sort=${encodeURIComponent(dSort)}`;
-      directusPath += `&fields=id,company_name,business_type,province,city,manager_name,manager_phones,negotiator_name,negotiator_phones,mobile_numbers,landline_numbers,telegram_phone,telegram_ids,instagram_ids,emails,websites,next_followup_date,assigned_marketer_id,assigned_marketer_name,assignment_deadline,status,is_expired,claimed_from_pool,date_created,date_updated,tenant_id`;
+      const fieldsQuery = `&fields=id,company_name,business_type,province,city,manager_name,manager_phones,negotiator_name,negotiator_phones,mobile_numbers,landline_numbers,telegram_phone,telegram_ids,instagram_ids,emails,websites,next_followup_date,assigned_marketer_id,assigned_marketer_name,assignment_deadline,status,is_expired,claimed_from_pool,date_created,date_updated,tenant_id`;
 
+      let filterQuery = '';
       let andIdx = 0;
 
       // Tenant filter
       if (tenantId && tenantId !== 'all') {
         const tenantNum = resolveDirectusTenantId(tenantId);
         if (tenantNum && tenantNum > 1) {
-          directusPath += `&filter[_and][${andIdx++}][tenant_id][_eq]=${tenantNum}`;
+          filterQuery += `&filter[_and][${andIdx++}][tenant_id][_eq]=${tenantNum}`;
         }
       }
 
@@ -476,53 +471,53 @@ router.get('/', async (req: Request, res: Response) => {
 
         let mOrIdx = 0;
         if (cleanPId) {
-          directusPath += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`;
+          filterQuery += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`;
           if (rawUid && rawUid !== cleanPId) {
-            directusPath += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(rawUid)}`;
-            directusPath += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent('p-' + rawUid)}`;
+            filterQuery += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(rawUid)}`;
+            filterQuery += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent('p-' + rawUid)}`;
           }
         }
         if (cleanUId && cleanUId !== cleanPId && cleanUId !== rawUid) {
-          directusPath += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(cleanUId)}`;
+          filterQuery += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(cleanUId)}`;
         }
         if (normUserName) {
-          directusPath += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_name][_icontains]=${encodeURIComponent(normUserName)}`;
+          filterQuery += `&filter[_and][${andIdx}][_or][${mOrIdx++}][assigned_marketer_name][_icontains]=${encodeURIComponent(normUserName)}`;
         }
         andIdx++;
       }
 
       if (status && status !== 'همه') {
-        directusPath += `&filter[_and][${andIdx++}][status][_eq]=${encodeURIComponent(String(status))}`;
+        filterQuery += `&filter[_and][${andIdx++}][status][_eq]=${encodeURIComponent(String(status))}`;
       }
       if (marketer_id && marketer_id !== 'همه') {
-        directusPath += `&filter[_and][${andIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(String(marketer_id))}`;
+        filterQuery += `&filter[_and][${andIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(String(marketer_id))}`;
       }
       if (expired_only === 'true') {
-        directusPath += `&filter[_and][${andIdx++}][is_expired][_eq]=true`;
+        filterQuery += `&filter[_and][${andIdx++}][is_expired][_eq]=true`;
       }
       if (isFreeOnly) {
-        directusPath += `&filter[_and][${andIdx}][_or][0][assigned_marketer_id][_null]=true&filter[_and][${andIdx}][_or][1][is_expired][_eq]=true`;
+        filterQuery += `&filter[_and][${andIdx}][_or][0][assigned_marketer_id][_null]=true&filter[_and][${andIdx}][_or][1][is_expired][_eq]=true`;
         andIdx++;
       }
 
-      if (followup_filter && followup_filter !== 'همه' && followup_filter !== 'all') {
+      if (!isAllFollowups) {
         const ff = String(followup_filter);
         if (ff === 'active') {
-          directusPath += `&filter[_and][${andIdx++}][next_followup_date][_gte]=${encodeURIComponent(startOfTodayIso)}`;
+          filterQuery += `&filter[_and][${andIdx++}][next_followup_date][_gte]=${encodeURIComponent(startOfTodayIso)}`;
         } else if (ff === 'today') {
-          directusPath += `&filter[_and][${andIdx}][next_followup_date][_gte]=${encodeURIComponent(startOfTodayIso)}&filter[_and][${andIdx}][next_followup_date][_lte]=${encodeURIComponent(endOfTodayIso)}`;
+          filterQuery += `&filter[_and][${andIdx}][next_followup_date][_gte]=${encodeURIComponent(startOfTodayIso)}&filter[_and][${andIdx}][next_followup_date][_lte]=${encodeURIComponent(endOfTodayIso)}`;
           andIdx++;
         } else if (ff === 'due_3_days') {
-          directusPath += `&filter[_and][${andIdx}][next_followup_date][_gte]=${encodeURIComponent(nowIso)}&filter[_and][${andIdx}][next_followup_date][_lte]=${encodeURIComponent(in3DaysIso)}`;
+          filterQuery += `&filter[_and][${andIdx}][next_followup_date][_gte]=${encodeURIComponent(nowIso)}&filter[_and][${andIdx}][next_followup_date][_lte]=${encodeURIComponent(in3DaysIso)}`;
           andIdx++;
         } else if (ff === 'due_7_days') {
-          directusPath += `&filter[_and][${andIdx}][next_followup_date][_gte]=${encodeURIComponent(nowIso)}&filter[_and][${andIdx}][next_followup_date][_lte]=${encodeURIComponent(in7DaysIso)}`;
+          filterQuery += `&filter[_and][${andIdx}][next_followup_date][_gte]=${encodeURIComponent(nowIso)}&filter[_and][${andIdx}][next_followup_date][_lte]=${encodeURIComponent(in7DaysIso)}`;
           andIdx++;
         } else if (ff === 'overdue') {
-          directusPath += `&filter[_and][${andIdx}][next_followup_date][_nnull]=true&filter[_and][${andIdx}][next_followup_date][_lt]=${encodeURIComponent(startOfTodayIso)}`;
+          filterQuery += `&filter[_and][${andIdx}][next_followup_date][_nnull]=true&filter[_and][${andIdx}][next_followup_date][_lt]=${encodeURIComponent(startOfTodayIso)}`;
           andIdx++;
         } else if (ff === 'no_followup') {
-          directusPath += `&filter[_and][${andIdx++}][next_followup_date][_null]=true`;
+          filterQuery += `&filter[_and][${andIdx++}][next_followup_date][_null]=true`;
         }
       }
 
@@ -531,15 +526,21 @@ router.get('/', async (req: Request, res: Response) => {
       if (search && typeof search === 'string' && search.trim()) {
         const cleanSearch = search.trim();
         const digits = cleanSearch.replace(/[^\d]/g, '');
+        const persianVariant = cleanSearch.replace(/ي/g, 'ی').replace(/ك/g, 'ک');
+        const arabicVariant = cleanSearch.replace(/ی/g, 'ي').replace(/ک/g, 'ك');
+        const searchVariants = Array.from(new Set([cleanSearch, persianVariant, arabicVariant].filter(Boolean)));
+
         try {
-          const contactOrFilters = [
-            `filter[_or][0][value][_icontains]=${encodeURIComponent(cleanSearch)}`,
-            `filter[_or][1][normalized_value][_icontains]=${encodeURIComponent(cleanSearch)}`,
-            `filter[_or][2][contact_name][_icontains]=${encodeURIComponent(cleanSearch)}`,
-          ];
+          const contactOrFilters: string[] = [];
+          let cOrIdx = 0;
+          for (const sv of searchVariants) {
+            contactOrFilters.push(`filter[_or][${cOrIdx++}][value][_icontains]=${encodeURIComponent(sv)}`);
+            contactOrFilters.push(`filter[_or][${cOrIdx++}][normalized_value][_icontains]=${encodeURIComponent(sv)}`);
+            contactOrFilters.push(`filter[_or][${cOrIdx++}][contact_name][_icontains]=${encodeURIComponent(sv)}`);
+          }
           if (digits.length >= 3) {
-            contactOrFilters.push(`filter[_or][3][value][_icontains]=${encodeURIComponent(digits)}`);
-            contactOrFilters.push(`filter[_or][4][normalized_value][_icontains]=${encodeURIComponent(digits)}`);
+            contactOrFilters.push(`filter[_or][${cOrIdx++}][value][_icontains]=${encodeURIComponent(digits)}`);
+            contactOrFilters.push(`filter[_or][${cOrIdx++}][normalized_value][_icontains]=${encodeURIComponent(digits)}`);
           }
           const cRes = await directusFetch(
             `/items/customer_contacts?${contactOrFilters.join('&')}&fields=customer_id&limit=500`
@@ -551,22 +552,72 @@ router.get('/', async (req: Request, res: Response) => {
           }
         } catch {}
 
-        const s = cleanSearch;
         let sOrIdx = 0;
-        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][company_name][_icontains]=${encodeURIComponent(s)}`;
-        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][manager_name][_icontains]=${encodeURIComponent(s)}`;
-        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][negotiator_name][_icontains]=${encodeURIComponent(s)}`;
-        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][city][_icontains]=${encodeURIComponent(s)}`;
-        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][business_type][_icontains]=${encodeURIComponent(s)}`;
-        directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][telegram_phone][_icontains]=${encodeURIComponent(s)}`;
+        for (const s of searchVariants) {
+          filterQuery += `&filter[_and][${andIdx}][_or][${sOrIdx++}][company_name][_icontains]=${encodeURIComponent(s)}`;
+          filterQuery += `&filter[_and][${andIdx}][_or][${sOrIdx++}][manager_name][_icontains]=${encodeURIComponent(s)}`;
+          filterQuery += `&filter[_and][${andIdx}][_or][${sOrIdx++}][negotiator_name][_icontains]=${encodeURIComponent(s)}`;
+          filterQuery += `&filter[_and][${andIdx}][_or][${sOrIdx++}][city][_icontains]=${encodeURIComponent(s)}`;
+          filterQuery += `&filter[_and][${andIdx}][_or][${sOrIdx++}][business_type][_icontains]=${encodeURIComponent(s)}`;
+        }
+        filterQuery += `&filter[_and][${andIdx}][_or][${sOrIdx++}][telegram_phone][_icontains]=${encodeURIComponent(cleanSearch)}`;
 
         for (const cid of contactMatchedCustomerIds) {
-          directusPath += `&filter[_and][${andIdx}][_or][${sOrIdx++}][id][_eq]=${encodeURIComponent(cid)}`;
+          filterQuery += `&filter[_and][${andIdx}][_or][${sOrIdx++}][id][_eq]=${encodeURIComponent(cid)}`;
         }
         andIdx++;
       }
 
-      const resData = await directusFetch(directusPath, {}, 1).catch(() => null);
+      let resData: any = null;
+
+      if (isFollowupSort && isAllFollowups) {
+        // Partition dated vs undated records so NULL next_followup_date items ALWAYS appear last
+        // across all pages regardless of database NULL ordering (Postgres DESC NULLS FIRST / MySQL ASC NULLS FIRST)
+        const offset = (reqPage - 1) * reqLimit;
+        const nonNullFilter = `${filterQuery}&filter[_and][${andIdx}][next_followup_date][_nnull]=true`;
+        const nullFilter = `${filterQuery}&filter[_and][${andIdx}][next_followup_date][_null]=true`;
+
+        const [nonNullRes, nullMetaRes] = await Promise.all([
+          directusFetch(
+            `/items/customers?offset=${offset}&limit=${reqLimit}&meta=*&sort=${encodeURIComponent(dSort)}${fieldsQuery}${nonNullFilter}`,
+            {},
+            1
+          ).catch(() => null),
+          directusFetch(`/items/customers?limit=1&meta=*&fields=id${nullFilter}`, {}, 1).catch(() => null),
+        ]);
+
+        if (nonNullRes && Array.isArray(nonNullRes.data)) {
+          const nonNullItems = nonNullRes.data;
+          const nonNullCount = Number(nonNullRes.meta?.filter_count ?? nonNullItems.length);
+          const nullCount = Number(nullMetaRes?.meta?.filter_count ?? 0);
+          let combinedItems = [...nonNullItems];
+
+          if (combinedItems.length < reqLimit && nullCount > 0) {
+            const neededNulls = reqLimit - combinedItems.length;
+            const nullOffset = Math.max(0, offset - nonNullCount);
+            const nullItemsRes = await directusFetch(
+              `/items/customers?offset=${nullOffset}&limit=${neededNulls}&sort=-date_created${fieldsQuery}${nullFilter}`,
+              {},
+              1
+            ).catch(() => null);
+            if (nullItemsRes?.data && Array.isArray(nullItemsRes.data)) {
+              combinedItems = [...combinedItems, ...nullItemsRes.data];
+            }
+          }
+
+          resData = {
+            data: combinedItems,
+            meta: {
+              filter_count: nonNullCount + nullCount,
+              total_count: nonNullRes.meta?.total_count ?? nonNullCount + nullCount,
+            },
+          };
+        }
+      } else {
+        const directusPath = `/items/customers?page=${reqPage}&limit=${reqLimit}&meta=*&sort=${encodeURIComponent(dSort)}${fieldsQuery}${filterQuery}`;
+        resData = await directusFetch(directusPath, {}, 1).catch(() => null);
+      }
+
       if (resData && Array.isArray(resData.data)) {
         let items = resData.data.map((c: any) => computeCustomerExpiration(c));
 
@@ -592,7 +643,10 @@ router.get('/', async (req: Request, res: Response) => {
         }
 
         if (search && typeof search === 'string' && search.trim()) {
-          items = items.filter((c: any) => matchesCustomerSearch(c, search));
+          const contactMatchedIdSet = new Set(contactMatchedCustomerIds.map(String));
+          items = items.filter(
+            (c: any) => contactMatchedIdSet.has(String(c.id)) || matchesCustomerSearch(c, search)
+          );
         }
 
         items = await enrichCustomersWithLatestReportFollowup(items);
@@ -1164,6 +1218,16 @@ router.patch('/:id', async (req: Request, res: Response) => {
   );
 
   delete patchPayload.date_created;
+  // Never overwrite existing tenant, pool, expiration, followup, or deadline metadata unless explicitly provided
+  if (payload.tenant_id === undefined) delete patchPayload.tenant_id;
+  if (payload.claimed_from_pool === undefined) delete patchPayload.claimed_from_pool;
+  if (payload.claimed_from_pool_at === undefined) delete patchPayload.claimed_from_pool_at;
+  if (payload.is_expired === undefined) delete patchPayload.is_expired;
+  if (payload.next_followup_date === undefined) delete patchPayload.next_followup_date;
+  if (payload.assignment_deadline === undefined && payload.assignment_duration_days === undefined) {
+    delete patchPayload.assignment_deadline;
+    delete patchPayload.assignment_duration_days;
+  }
 
   if (directusUrl && directusAdminToken) {
     try {
@@ -1172,6 +1236,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
         body: JSON.stringify(patchPayload),
       });
 
+      let savedContacts: CustomerContact[] | undefined = undefined;
       if (payload.contacts && Array.isArray(payload.contacts)) {
         try {
           const oldContacts = await directusFetch(
@@ -1187,18 +1252,34 @@ router.patch('/:id', async (req: Request, res: Response) => {
         } catch {}
 
         const newContacts = extractCustomerContacts(payload, id);
+        savedContacts = [];
         for (const ct of newContacts) {
-          await directusFetch('/items/customer_contacts', {
-            method: 'POST',
-            body: JSON.stringify(ct),
-          }).catch(() => {});
+          try {
+            const createdCt = await directusFetch('/items/customer_contacts', {
+              method: 'POST',
+              body: JSON.stringify(ct),
+            });
+            savedContacts.push(createdCt?.data || ct);
+          } catch {
+            savedContacts.push(ct);
+          }
         }
       }
 
       invalidateCustomersCache();
       invalidateDashboardSummaryCache();
 
-      const updatedCust = computeCustomerExpiration(patchedCust.data || patchPayload);
+      const updatedCust = computeCustomerExpiration({
+        ...(patchedCust.data || patchPayload),
+        ...(savedContacts ? { contacts: savedContacts } : {}),
+      });
+
+      // Keep local fallback store aligned if record exists there
+      const memIdx = customersData.findIndex((c) => String(c.id) === String(id));
+      if (memIdx !== -1) {
+        customersData[memIdx] = { ...customersData[memIdx], ...updatedCust };
+      }
+
       return res.json(updatedCust);
     } catch (err: any) {
       if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
@@ -1212,9 +1293,18 @@ router.patch('/:id', async (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Customer not found' });
   }
 
+  let updatedContacts = customersData[index].contacts;
+  if (payload.contacts && Array.isArray(payload.contacts)) {
+    const extracted = extractCustomerContacts(payload, id);
+    contactsData.splice(0, contactsData.length, ...contactsData.filter((ct) => String(ct.customer_id) !== String(id)));
+    extracted.forEach((ct) => contactsData.unshift(ct));
+    updatedContacts = extracted;
+  }
+
   const updatedCustomer = computeCustomerExpiration({
     ...customersData[index],
     ...patchPayload,
+    contacts: updatedContacts,
   });
 
   customersData[index] = updatedCustomer;
