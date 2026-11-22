@@ -44,6 +44,20 @@ export function enrichPersonnel(p: any): any {
 
   const formattedAvatar = formatAvatarUrl(p.avatar) || (typeof p.avatar === 'string' ? p.avatar : '');
 
+  const statusLower = String(p.status || '').trim().toLowerCase();
+  const isInactiveStatus =
+    statusLower === 'inactive' ||
+    statusLower === 'suspended' ||
+    statusLower === 'disabled' ||
+    statusLower === 'archived' ||
+    statusLower === 'غیرفعال';
+  const isActiveFlag =
+    p.active !== false &&
+    p.active !== 0 &&
+    p.active !== 'false' &&
+    p.active !== '0' &&
+    !isInactiveStatus;
+
   return {
     ...p,
     id: String(p.id),
@@ -54,7 +68,7 @@ export function enrichPersonnel(p: any): any {
       ...(p.permissions || {}),
       allowed_tenant_ids: allowed,
     },
-    active: p.active !== false && p.status !== 'inactive',
+    active: isActiveFlag,
     avatar: formattedAvatar,
   };
 }

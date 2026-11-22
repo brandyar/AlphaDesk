@@ -88,6 +88,7 @@ import {
   toPersianDigits,
   getAvatarUrl,
   matchPersonnelToCustomer,
+  isPersonnelActive,
 } from '../utils';
 import {
   fetchLeaveRequests,
@@ -666,21 +667,27 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
   };
 
   const filteredPersonnel = useMemo(() => {
-    return personnelList.filter((p) => {
-      if (selectedTenantFilter !== 'all') {
-        const pTenant = p.tenant_id || 'default';
-        if (pTenant !== selectedTenantFilter) return false;
-      }
-      if (!personnelSearch.trim()) return true;
-      const q = personnelSearch.toLowerCase();
-      const hasPhone = p.phone?.includes(q) || (Array.isArray(p.phones) && p.phones.some((ph) => (typeof ph === 'string' ? ph : ph.number)?.includes(q)));
-      return (
-        p.name?.toLowerCase().includes(q) ||
-        p.username?.toLowerCase().includes(q) ||
-        p.email?.toLowerCase().includes(q) ||
-        hasPhone
-      );
-    });
+    return personnelList
+      .filter((p) => {
+        if (selectedTenantFilter !== 'all') {
+          const pTenant = p.tenant_id || 'default';
+          if (pTenant !== selectedTenantFilter) return false;
+        }
+        if (!personnelSearch.trim()) return true;
+        const q = personnelSearch.toLowerCase();
+        const hasPhone = p.phone?.includes(q) || (Array.isArray(p.phones) && p.phones.some((ph) => (typeof ph === 'string' ? ph : ph.number)?.includes(q)));
+        return (
+          p.name?.toLowerCase().includes(q) ||
+          p.username?.toLowerCase().includes(q) ||
+          p.email?.toLowerCase().includes(q) ||
+          hasPhone
+        );
+      })
+      .sort((a, b) => {
+        const aActive = isPersonnelActive(a) ? 0 : 1;
+        const bActive = isPersonnelActive(b) ? 0 : 1;
+        return aActive - bActive;
+      });
   }, [personnelList, personnelSearch, selectedTenantFilter]);
 
   const handleSaveColleagueEdit = async () => {

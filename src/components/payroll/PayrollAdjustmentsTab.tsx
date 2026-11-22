@@ -26,7 +26,7 @@ import {
   updatePayrollAdjustment,
   deletePayrollAdjustment,
 } from '../../api';
-import { toPersianDigits, formatPersianDate, JALALI_MONTH_NAMES } from '../../utils';
+import { toPersianDigits, formatPersianDate, JALALI_MONTH_NAMES, isPersonnelActive } from '../../utils';
 import { ADJUSTMENT_CATEGORY_LABELS } from './PayrollAdjustmentsModal';
 
 interface PayrollAdjustmentsTabProps {
@@ -74,7 +74,7 @@ export const PayrollAdjustmentsTab: React.FC<PayrollAdjustmentsTabProps> = ({
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const activePersonnel = useMemo(
-    () => personnelList.filter((p) => p.status !== 'inactive' && p.active !== false),
+    () => personnelList.filter((p) => isPersonnelActive(p)),
     [personnelList]
   );
 

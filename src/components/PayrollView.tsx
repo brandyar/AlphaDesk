@@ -61,6 +61,7 @@ import {
   getTodayJalali,
   jalaliToGregorian,
   gregorianToJalali,
+  isPersonnelActive,
 } from '../utils';
 
 interface PayrollViewProps {
@@ -408,8 +409,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     }
   };
 
-  // Filtered personnel list for calculations
-  const activePersonnelList = personnelList.filter((p) => p.status !== 'inactive' && p.active !== false);
+  // Filtered personnel list for calculations & contracts (active personnel only)
+  const activePersonnelList = personnelList.filter((p) => isPersonnelActive(p));
   const filteredPersonnel = activePersonnelList.filter((p) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
@@ -981,7 +982,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       {activeSubTab === 'adjustments' && (
         <PayrollAdjustmentsTab
           adjustments={adjustmentsList}
-          personnelList={personnelList}
+          personnelList={activePersonnelList}
           selectedYear={selectedYear}
           selectedMonth={selectedMonth}
           isLoading={isLoadingAdjustments}
@@ -1025,7 +1026,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#222]">
-                  {personnelList.map((p) => {
+                  {activePersonnelList.map((p) => {
                     const cfg = salaryConfigs.find((c) => String(c.personnel_id) === String(p.id));
                     const hasConfig = Boolean(cfg);
 

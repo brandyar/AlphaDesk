@@ -1260,4 +1260,22 @@ export function normalizeToIsoDateTime(dateVal?: any): string | null {
   return null;
 }
 
-
+export function isPersonnelActive(
+  p?: { status?: string | null; active?: boolean | number | string | null } | null
+): boolean {
+  if (!p) return false;
+  if (p.active === false || p.active === 0 || p.active === 'false' || p.active === '0') {
+    return false;
+  }
+  const st = String(p.status || '').trim().toLowerCase();
+  if (
+    st === 'inactive' ||
+    st === 'suspended' ||
+    st === 'disabled' ||
+    st === 'archived' ||
+    st === 'غیرفعال'
+  ) {
+    return false;
+  }
+  return true;
+}
