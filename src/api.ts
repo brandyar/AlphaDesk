@@ -21,6 +21,7 @@ import {
   Tenant,
   PersonnelSalaryConfig,
   PayrollSlip,
+  PayrollAdjustment,
   PayrollCalculateResponse,
   DeepSearchResponse,
 } from './types';
@@ -1585,6 +1586,8 @@ export async function calculatePayrollSimulation(payload: {
   from_date?: string | null;
   to_date?: string | null;
   personnel_id?: string;
+  target_year?: number | null;
+  target_month?: number | null;
 }): Promise<PayrollCalculateResponse> {
   const res = await fetch(`${BASE_URL}/payroll/calculate`, {
     method: 'POST',
@@ -1610,7 +1613,9 @@ export async function fetchPayrollSlips(params?: {
 }
 
 export async function createPayrollSlip(
-  payload: Partial<PayrollSlip> | Partial<PayrollSlip>[]
+  payload:
+    | (Partial<PayrollSlip> & { adjustment_ids?: Array<string | number> })
+    | Array<Partial<PayrollSlip> & { adjustment_ids?: Array<string | number> }>
 ): Promise<PayrollSlip | PayrollSlip[]> {
   const res = await fetch(`${BASE_URL}/payroll/slips`, {
     method: 'POST',
@@ -1638,6 +1643,67 @@ export async function deletePayrollSlip(id: number | string): Promise<{ success:
     headers: getBffHeaders(),
   });
   return handleResponse<{ success: boolean }>(res, 'خطا در حذف فیش حقوقی');
+}
+
+// ---------------------------------------------------------------------------
+// Payroll Adjustments API (پاداش و کسری)
+// ---------------------------------------------------------------------------
+export async function fetchPayrollAdjustments(params?: {
+  personnel_id?: string;
+  type?: 'bonus' | 'deduction' | 'all';
+  status?: 'pending' | 'approved' | 'rejected' | 'all';
+  source?: 'self_request' | 'manager_direct' | 'all';
+  target_year?: number | string;
+  target_month?: number | string;
+  unlinked_only?: boolean;
+  scope?: 'mine';
+}): Promise<PayrollAdjustment[]> {
+  const query = new URLSearchParams();
+  if (params?.personnel_id && params.personnel_id !== 'all') query.append('personnel_id', params.personnel_id);
+  if (params?.type && params.type !== 'all') query.append('type', params.type);
+  if (params?.status && params.status !== 'all') query.append('status', params.status);
+  if (params?.source && params.source !== 'all') query.append('source', params.source);
+  if (params?.target_year && params.target_year !== 'all') query.append('target_year', String(params.target_year));
+  if (params?.target_month && params.target_month !== 'all') query.append('target_month', String(params.target_month));
+  if (params?.unlinked_only) query.append('unlinked_only', 'true');
+  if (params?.scope) query.append('scope', params.scope);
+  const qStr = query.toString() ? `?${query.toString()}` : '';
+
+  const res = await fetch(`${BASE_URL}/payroll-adjustments${qStr}`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse<PayrollAdjustment[]>(res, 'خطا در دریافت لیست پاداش‌ها و کسورات');
+}
+
+export async function createPayrollAdjustment(
+  payload: Partial<PayrollAdjustment>
+): Promise<PayrollAdjustment> {
+  const res = await fetch(`${BASE_URL}/payroll-adjustments`, {
+    method: 'POST',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<PayrollAdjustment>(res, 'خطا در ثبت پاداش یا کسری');
+}
+
+export async function updatePayrollAdjustment(
+  id: number | string,
+  patch: Partial<PayrollAdjustment>
+): Promise<PayrollAdjustment> {
+  const res = await fetch(`${BASE_URL}/payroll-adjustments/${encodeURIComponent(String(id))}`, {
+    method: 'PATCH',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(patch),
+  });
+  return handleResponse<PayrollAdjustment>(res, 'خطا در بروزرسانی وضعیت پاداش یا کسری');
+}
+
+export async function deletePayrollAdjustment(id: number | string): Promise<{ success: boolean }> {
+  const res = await fetch(`${BASE_URL}/payroll-adjustments/${encodeURIComponent(String(id))}`, {
+    method: 'DELETE',
+    headers: getBffHeaders(),
+  });
+  return handleResponse<{ success: boolean }>(res, 'خطا در حذف رکورد پاداش یا کسری');
 }
 
 // ---------------------------------------------------------------------------

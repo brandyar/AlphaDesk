@@ -247,6 +247,8 @@ export const SYSTEM_ACTIONS = [
   { key: 'can_switch_ownership', label: 'سوئیچ و واگذاری پرونده به بازاریاب دیگر' },
   { key: 'can_approve_leaves', label: 'تایید یا رد درخواست‌های مرخصی همکاران' },
   { key: 'can_approve_advances', label: 'بررسی و تایید درخواست‌های مساعده مالی' },
+  { key: 'can_request_bonus', label: 'امکان ثبت درخواست پاداش توسط خود همکار در پنل شخصی' },
+  { key: 'can_approve_bonuses', label: 'تایید/رد درخواست‌های پاداش و ثبت مستقیم پاداش و کسری' },
   { key: 'can_manage_tenants', label: 'مدیریت سازمان‌ها، شعب و ایجاد سازمان جدید' },
 ];
 
@@ -370,6 +372,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
     can_switch_ownership: false,
     can_approve_leaves: false,
     can_approve_advances: false,
+    can_request_bonus: false,
+    can_approve_bonuses: false,
     can_manage_tenants: false,
   });
   const [reportScope, setReportScope] = useState<'all' | 'own_only' | 'specific_personnel'>('own_only');
@@ -391,6 +395,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           can_switch_ownership: true,
           can_approve_leaves: true,
           can_approve_advances: true,
+          can_request_bonus: true,
+          can_approve_bonuses: true,
           can_manage_tenants: true,
         });
       } else if (newRole === 'sales_manager') {
@@ -403,6 +409,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           can_switch_ownership: true,
           can_approve_leaves: true,
           can_approve_advances: false,
+          can_request_bonus: false,
+          can_approve_bonuses: true,
           can_manage_tenants: false,
         });
       } else {
@@ -415,6 +423,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
           can_switch_ownership: false,
           can_approve_leaves: false,
           can_approve_advances: false,
+          can_request_bonus: false,
+          can_approve_bonuses: false,
           can_manage_tenants: false,
         });
       }
@@ -476,6 +486,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       const permissions: PersonnelPermissions = {
         allowed_menus: allowedMenus,
         ...actionPermissions,
+        can_request_bonus: Boolean(actionPermissions.can_request_bonus),
+        can_approve_bonuses: Boolean(actionPermissions.can_approve_bonuses),
         can_manage_tenants: Boolean(actionPermissions.can_manage_tenants),
         allowed_tenant_ids: effectiveAllowed,
         report_view_scope: reportScope,
@@ -644,6 +656,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       can_switch_ownership: getActionPerm('can_switch_ownership', isRoleAdminOrManager),
       can_approve_leaves: getActionPerm('can_approve_leaves', isRoleAdmin),
       can_approve_advances: getActionPerm('can_approve_advances', isRoleAdmin),
+      can_request_bonus: getActionPerm('can_request_bonus', isRoleAdmin),
+      can_approve_bonuses: getActionPerm('can_approve_bonuses', isRoleAdminOrManager),
       can_manage_tenants: getActionPerm('can_manage_tenants', isRoleAdmin),
     });
 
@@ -702,6 +716,8 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
       const permissions: PersonnelPermissions = {
         allowed_menus: editingAllowedMenus,
         ...editingActionPermissions,
+        can_request_bonus: Boolean(editingActionPermissions.can_request_bonus),
+        can_approve_bonuses: Boolean(editingActionPermissions.can_approve_bonuses),
         can_manage_tenants: Boolean(editingActionPermissions.can_manage_tenants),
         allowed_tenant_ids: effectiveAllowed,
         report_view_scope: editingReportScope,

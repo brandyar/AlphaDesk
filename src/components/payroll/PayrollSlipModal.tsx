@@ -12,8 +12,9 @@ import {
   CheckCircle2,
   Share2,
 } from 'lucide-react';
-import { PayrollSlip, Personnel } from '../../types';
+import { PayrollAdjustment, PayrollSlip, Personnel } from '../../types';
 import { toPersianDigits, formatPersianDate } from '../../utils';
+import { ADJUSTMENT_CATEGORY_LABELS } from './PayrollAdjustmentsModal';
 
 interface PayrollSlipModalProps {
   isOpen: boolean;
@@ -39,6 +40,12 @@ export const PayrollSlipModal: React.FC<PayrollSlipModalProps> = ({
   const handlePrint = () => {
     window.print();
   };
+
+  const adjustmentsList: PayrollAdjustment[] = Array.isArray(slip.calculation_breakdown?.adjustments)
+    ? slip.calculation_breakdown.adjustments
+    : [];
+  const bonusItems = adjustmentsList.filter((a) => a && a.type === 'bonus');
+  const deductionItems = adjustmentsList.filter((a) => a && a.type === 'deduction');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
@@ -182,14 +189,33 @@ export const PayrollSlipModal: React.FC<PayrollSlipModalProps> = ({
                     {formatToman(slip.commission_amount)}
                   </span>
                 </div>
-                {Number(slip.bonuses_amount) > 0 && (
+                {bonusItems.length > 0 ? (
+                  bonusItems.map((b, idx) => (
+                    <div
+                      key={b.id || `bonus-${idx}`}
+                      className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-[#222]"
+                    >
+                      <div className="min-w-0 pl-2">
+                        <span className="text-slate-700 dark:text-[#CCC] block truncate">{b.title}</span>
+                        {b.category && ADJUSTMENT_CATEGORY_LABELS[b.category] && (
+                          <span className="text-[10px] text-slate-400 block">
+                            ({ADJUSTMENT_CATEGORY_LABELS[b.category]})
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono font-bold text-emerald-600 dark:text-[#1DB954] shrink-0">
+                        + {formatToman(b.approved_amount ?? b.amount)}
+                      </span>
+                    </div>
+                  ))
+                ) : Number(slip.bonuses_amount) > 0 ? (
                   <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-[#222]">
                     <span className="text-slate-600 dark:text-[#A7A7A7]">پاداش‌های متفرقه:</span>
                     <span className="font-mono font-bold text-emerald-600 dark:text-[#1DB954]">
-                      {formatToman(slip.bonuses_amount)}
+                      + {formatToman(slip.bonuses_amount)}
                     </span>
                   </div>
-                )}
+                ) : null}
                 <div className="flex justify-between items-center pt-1 font-bold text-slate-900 dark:text-white">
                   <span>جمع ناخالص درآمد:</span>
                   <span className="font-mono">
@@ -215,14 +241,33 @@ export const PayrollSlipModal: React.FC<PayrollSlipModalProps> = ({
                     - {formatToman(slip.advances_deducted)}
                   </span>
                 </div>
-                {Number(slip.deductions_amount) > 0 && (
+                {deductionItems.length > 0 ? (
+                  deductionItems.map((d, idx) => (
+                    <div
+                      key={d.id || `ded-${idx}`}
+                      className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-[#222]"
+                    >
+                      <div className="min-w-0 pl-2">
+                        <span className="text-slate-700 dark:text-[#CCC] block truncate">{d.title}</span>
+                        {d.category && ADJUSTMENT_CATEGORY_LABELS[d.category] && (
+                          <span className="text-[10px] text-slate-400 block">
+                            ({ADJUSTMENT_CATEGORY_LABELS[d.category]})
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono font-bold text-rose-600 dark:text-rose-400 shrink-0">
+                        - {formatToman(d.approved_amount ?? d.amount)}
+                      </span>
+                    </div>
+                  ))
+                ) : Number(slip.deductions_amount) > 0 ? (
                   <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-[#222]">
                     <span className="text-slate-600 dark:text-[#A7A7A7]">سایر کسورات و جرایم:</span>
                     <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
                       - {formatToman(slip.deductions_amount)}
                     </span>
                   </div>
-                )}
+                ) : null}
                 <div className="flex justify-between items-center pt-1 font-bold text-slate-900 dark:text-white">
                   <span>جمع کل کسورات:</span>
                   <span className="font-mono text-rose-600 dark:text-rose-400">

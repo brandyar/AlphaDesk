@@ -29,6 +29,7 @@ import {
   Play,
   HelpCircle,
   AlertTriangle,
+  Award,
 } from 'lucide-react';
 import {
   Personnel,
@@ -36,6 +37,7 @@ import {
   PayrollSlip,
   PayrollCalculateItem,
   PayrollCalculateResponse,
+  PayrollAdjustment,
 } from '../types';
 import {
   fetchSalaryConfigs,
@@ -46,10 +48,13 @@ import {
   createPayrollSlip,
   updatePayrollSlip,
   deletePayrollSlip,
+  fetchPayrollAdjustments,
 } from '../api';
 import { SalaryConfigModal } from './payroll/SalaryConfigModal';
 import { ContractsBreakdownModal } from './payroll/ContractsBreakdownModal';
 import { PayrollSlipModal } from './payroll/PayrollSlipModal';
+import { PayrollAdjustmentsModal } from './payroll/PayrollAdjustmentsModal';
+import { PayrollAdjustmentsTab } from './payroll/PayrollAdjustmentsTab';
 import {
   toPersianDigits,
   formatPersianDate,
@@ -86,8 +91,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   isAdmin,
   showToast,
 }) => {
-  // Shortened SubTabs: 'calculations' (محاسبه ماهانه), 'configs' (قرارداد پرسنل), 'slips' (آرشیو فیش‌ها)
-  const [activeSubTab, setActiveSubTab] = useState<'calculations' | 'configs' | 'slips'>('calculations');
+  // SubTabs: 'calculations' (محاسبه ماهانه), 'adjustments' (پاداش و کسری), 'configs' (قرارداد پرسنل), 'slips' (آرشیو فیش‌ها)
+  const [activeSubTab, setActiveSubTab] = useState<'calculations' | 'adjustments' | 'configs' | 'slips'>('calculations');
 
   // Month & Year Filter
   const todayJalali = getTodayJalali();
@@ -100,6 +105,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   const [calculatedMap, setCalculatedMap] = useState<Record<string, PayrollCalculateItem>>({});
   const [salaryConfigs, setSalaryConfigs] = useState<PersonnelSalaryConfig[]>([]);
   const [payrollSlips, setPayrollSlips] = useState<PayrollSlip[]>([]);
+  const [adjustmentsList, setAdjustmentsList] = useState<PayrollAdjustment[]>([]);
+  const [isLoadingAdjustments, setIsLoadingAdjustments] = useState(false);
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,6 +119,13 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   const [isBreakdownModalOpen, setIsBreakdownModalOpen] = useState(false);
   const [viewingSlip, setViewingSlip] = useState<PayrollSlip | null>(null);
   const [isSlipModalOpen, setIsSlipModalOpen] = useState(false);
+  const [adjustingPersonnel, setAdjustingPersonnel] = useState<Personnel | null>(null);
+  const [pendingIssueWarning, setPendingIssueWarning] = useState<{
+    mode: 'single' | 'bulk';
+    item?: PayrollCalculateItem;
+    items?: PayrollCalculateItem[];
+    pendingCount: number;
+  } | null>(null);
 
   // Mark Paid Dialog State
   const [payingSlip, setPayingSlip] = useState<PayrollSlip | null>(null);
@@ -150,15 +164,30 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     }
   };
 
+  // Load bonuses & deductions
+  const loadAdjustments = async () => {
+    setIsLoadingAdjustments(true);
+    try {
+      const list = await fetchPayrollAdjustments();
+      setAdjustmentsList(list);
+    } catch (err: any) {
+      console.warn('Adjustments load error:', err.message);
+    } finally {
+      setIsLoadingAdjustments(false);
+    }
+  };
+
   // Calculate for a single personnel (lightweight, on-demand)
-  const handleCalculateSingle = async (personnelId: string) => {
+  const handleCalculateSingle = async (personnelId: string, silent = false) => {
     const cfg = salaryConfigs.find((c) => String(c.personnel_id) === String(personnelId) && c.is_active !== false);
     if (!cfg) {
-      showToast('برای این همکار هنوز قرارداد حقوقی تعریف نشده است. ابتدا قرارداد را تعریف کنید.', 'info');
-      const p = personnelList.find((x) => x.id === personnelId);
-      if (p) {
-        setEditingPersonnel(p);
-        setIsConfigModalOpen(true);
+      if (!silent) {
+        showToast('برای این همکار هنوز قرارداد حقوقی تعریف نشده است. ابتدا قرارداد را تعریف کنید.', 'info');
+        const p = personnelList.find((x) => x.id === personnelId);
+        if (p) {
+          setEditingPersonnel(p);
+          setIsConfigModalOpen(true);
+        }
       }
       return;
     }
@@ -170,6 +199,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
         from_date: fromDate,
         to_date: toDate,
         personnel_id: personnelId,
+        target_year: selectedYear,
+        target_month: selectedMonth,
       });
 
       if (res.items && res.items.length > 0) {
@@ -178,10 +209,14 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
           ...prev,
           [personnelId]: item,
         }));
-        showToast(`محاسبه حقوق ${item.personnel_name} با موفقیت انجام شد`, 'success');
+        if (!silent) {
+          showToast(`محاسبه حقوق ${item.personnel_name} با موفقیت انجام شد`, 'success');
+        }
       }
     } catch (err: any) {
-      showToast(err.message || 'خطا در محاسبه حقوق همکار', 'error');
+      if (!silent) {
+        showToast(err.message || 'خطا در محاسبه حقوق همکار', 'error');
+      }
     } finally {
       setCalculatingPersonnelIds((prev) => {
         const next = new Set(prev);
@@ -199,6 +234,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       const res = await calculatePayrollSimulation({
         from_date: fromDate,
         to_date: toDate,
+        target_year: selectedYear,
+        target_month: selectedMonth,
       });
 
       const nextMap: Record<string, PayrollCalculateItem> = {};
@@ -219,6 +256,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     setCalculatedMap({});
     loadConfigs();
     loadSlips();
+    loadAdjustments();
   }, [selectedYear, selectedMonth]);
 
   // Helpers
@@ -236,6 +274,52 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     }
   };
 
+  // Build slip payload with adjustments + adjustment_ids for linking
+  const buildSlipPayload = (item: PayrollCalculateItem, fromDate: string, toDate: string) => ({
+    personnel_id: item.personnel_id,
+    personnel_name: item.personnel_name,
+    from_date: fromDate,
+    to_date: toDate,
+    base_salary_amount: item.base_salary_amount,
+    total_contracts_amount: item.total_contracts_amount,
+    contracts_count: item.contracts_count,
+    commission_amount: item.commission_amount,
+    advances_deducted: item.advances_deducted,
+    bonuses_amount: item.bonuses_amount,
+    deductions_amount: item.deductions_amount,
+    net_payable: item.net_payable,
+    calculation_breakdown: {
+      salary_config: item.salary_config,
+      commission_breakdown: item.commission_breakdown,
+      contracts: item.contracts_list,
+      advances: item.advances_list,
+      adjustments: item.adjustments_list || [],
+    },
+    adjustment_ids: (item.adjustments_list || []).map((a) => a.id),
+    status: 'approved' as const,
+  });
+
+  // Execute single slip creation
+  const executeIssueSlip = async (item: PayrollCalculateItem) => {
+    try {
+      const { fromDate, toDate } = getMonthDateRange(selectedYear, selectedMonth);
+      const payload = buildSlipPayload(item, fromDate, toDate);
+
+      const created = await createPayrollSlip(payload);
+      showToast(`فیش حقوقی برای ${item.personnel_name} با موفقیت صادر شد`, 'success');
+      await Promise.all([loadSlips(), loadAdjustments()]);
+      setCalculatedMap((prev) => {
+        const next = { ...prev };
+        delete next[item.personnel_id];
+        return next;
+      });
+      setViewingSlip(Array.isArray(created) ? created[0] : (created as PayrollSlip));
+      setIsSlipModalOpen(true);
+    } catch (err: any) {
+      showToast(err.message || 'خطا در صدور فیش حقوقی', 'error');
+    }
+  };
+
   // Finalize / Issue single slip
   const handleIssueSlip = async (item: PayrollCalculateItem) => {
     if (!item.has_config) {
@@ -243,37 +327,28 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       return;
     }
 
+    const pendingCount = Number(item.pending_adjustments_count || 0);
+    if (pendingCount > 0) {
+      setPendingIssueWarning({ mode: 'single', item, pendingCount });
+      return;
+    }
+
+    await executeIssueSlip(item);
+  };
+
+  // Execute bulk slips creation
+  const executeIssueCalculatedSlips = async (calculatedItems: PayrollCalculateItem[]) => {
     try {
       const { fromDate, toDate } = getMonthDateRange(selectedYear, selectedMonth);
-      const payload: Partial<PayrollSlip> = {
-        personnel_id: item.personnel_id,
-        personnel_name: item.personnel_name,
-        from_date: fromDate,
-        to_date: toDate,
-        base_salary_amount: item.base_salary_amount,
-        total_contracts_amount: item.total_contracts_amount,
-        contracts_count: item.contracts_count,
-        commission_amount: item.commission_amount,
-        advances_deducted: item.advances_deducted,
-        bonuses_amount: item.bonuses_amount,
-        deductions_amount: item.deductions_amount,
-        net_payable: item.net_payable,
-        calculation_breakdown: {
-          salary_config: item.salary_config,
-          commission_breakdown: item.commission_breakdown,
-          contracts: item.contracts_list,
-          advances: item.advances_list,
-        },
-        status: 'approved',
-      };
+      const batchPayload = calculatedItems.map((item) => buildSlipPayload(item, fromDate, toDate));
 
-      const created = await createPayrollSlip(payload);
-      showToast(`فیش حقوقی برای ${item.personnel_name} با موفقیت صادر شد`, 'success');
-      await loadSlips();
-      setViewingSlip(Array.isArray(created) ? created[0] : (created as PayrollSlip));
-      setIsSlipModalOpen(true);
+      await createPayrollSlip(batchPayload);
+      showToast(`فیش‌های حقوقی برای ${toPersianDigits(calculatedItems.length)} نفر صادر گردید`, 'success');
+      await Promise.all([loadSlips(), loadAdjustments()]);
+      setCalculatedMap({});
+      setActiveSubTab('slips');
     } catch (err: any) {
-      showToast(err.message || 'خطا در صدور فیش حقوقی', 'error');
+      showToast(err.message || 'خطا در صدور فیش‌ها', 'error');
     }
   };
 
@@ -285,40 +360,19 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       return;
     }
 
+    const totalPending = calculatedItems.reduce(
+      (sum, it) => sum + Number(it.pending_adjustments_count || 0),
+      0
+    );
+    if (totalPending > 0) {
+      setPendingIssueWarning({ mode: 'bulk', items: calculatedItems, pendingCount: totalPending });
+      return;
+    }
+
     const confirmMsg = `آیا از صدور قطعی فیش حقوقی برای ${toPersianDigits(calculatedItems.length)} نفر از پرسنل محاسبه‌شده در ماه ${JALALI_MONTH_NAMES[selectedMonth - 1]} اطمینان دارید؟`;
     if (!window.confirm(confirmMsg)) return;
 
-    try {
-      const { fromDate, toDate } = getMonthDateRange(selectedYear, selectedMonth);
-      const batchPayload: Partial<PayrollSlip>[] = calculatedItems.map((item) => ({
-        personnel_id: item.personnel_id,
-        personnel_name: item.personnel_name,
-        from_date: fromDate,
-        to_date: toDate,
-        base_salary_amount: item.base_salary_amount,
-        total_contracts_amount: item.total_contracts_amount,
-        contracts_count: item.contracts_count,
-        commission_amount: item.commission_amount,
-        advances_deducted: item.advances_deducted,
-        bonuses_amount: item.bonuses_amount,
-        deductions_amount: item.deductions_amount,
-        net_payable: item.net_payable,
-        calculation_breakdown: {
-          salary_config: item.salary_config,
-          commission_breakdown: item.commission_breakdown,
-          contracts: item.contracts_list,
-          advances: item.advances_list,
-        },
-        status: 'approved',
-      }));
-
-      await createPayrollSlip(batchPayload);
-      showToast(`فیش‌های حقوقی برای ${toPersianDigits(calculatedItems.length)} نفر صادر گردید`, 'success');
-      await loadSlips();
-      setActiveSubTab('slips');
-    } catch (err: any) {
-      showToast(err.message || 'خطا در صدور فیش‌ها', 'error');
-    }
+    await executeIssueCalculatedSlips(calculatedItems);
   };
 
   // Submit Mark Paid
@@ -369,6 +423,28 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
   const totalCalculatedContracts = calculatedItemsList.reduce((sum, item) => sum + item.contracts_count, 0);
   const totalCalculatedAdvances = calculatedItemsList.reduce((sum, item) => sum + item.advances_deducted, 0);
 
+  // Pending bonus requests count across all adjustments (for manager alert badge)
+  const totalPendingAdjustmentsCount = adjustmentsList.filter((a) => a.status === 'pending').length;
+
+  // Helper to get unlinked adjustments summary for an employee in selected Jalali period
+  const getUnlinkedAdjustmentsForMonth = (personnelId: string) => {
+    const relevant = adjustmentsList.filter(
+      (a) =>
+        String(a.personnel_id) === String(personnelId) &&
+        !a.payroll_slip_id &&
+        Number(a.target_year) === Number(selectedYear) &&
+        Number(a.target_month) === Number(selectedMonth)
+    );
+    const approvedBonus = relevant
+      .filter((a) => a.status === 'approved' && a.type === 'bonus')
+      .reduce((s, a) => s + (Number(a.approved_amount ?? a.amount) || 0), 0);
+    const approvedDeduction = relevant
+      .filter((a) => a.status === 'approved' && a.type === 'deduction')
+      .reduce((s, a) => s + (Number(a.approved_amount ?? a.amount) || 0), 0);
+    const pendingCount = relevant.filter((a) => a.status === 'pending').length;
+    return { approvedBonus, approvedDeduction, pendingCount };
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200 text-right">
       {/* 1. Header Banner - Fixed Light & Dark Contrast */}
@@ -405,6 +481,29 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             >
               <Calculator className="w-3.5 h-3.5" />
               <span>محاسبه ماهانه</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSubTab('adjustments')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                activeSubTab === 'adjustments'
+                  ? 'bg-emerald-600 text-white dark:bg-[#1DB954] dark:text-black shadow-md'
+                  : 'text-slate-600 dark:text-[#A7A7A7] hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Award className="w-3.5 h-3.5" />
+              <span>پاداش و کسری</span>
+              {totalPendingAdjustmentsCount > 0 && (
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    activeSubTab === 'adjustments'
+                      ? 'bg-black text-[#1DB954]'
+                      : 'bg-amber-500 text-black'
+                  }`}
+                >
+                  {toPersianDigits(totalPendingAdjustmentsCount)}
+                </span>
+              )}
             </button>
 
             <button
@@ -592,6 +691,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                     <th className="p-3.5">پورسانت</th>
                     <th className="p-3.5">حقوق پایه</th>
                     <th className="p-3.5">مساعده</th>
+                    <th className="p-3.5">پاداش / کسری</th>
                     <th className="p-3.5">خالص پرداختی</th>
                     <th className="p-3.5 text-center">پردازش و صدور</th>
                   </tr>
@@ -599,7 +699,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                 <tbody className="divide-y divide-slate-100 dark:divide-[#222]">
                   {filteredPersonnel.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-500">
+                      <td colSpan={9} className="p-8 text-center text-slate-500">
                         همکاری یافت نشد.
                       </td>
                     </tr>
@@ -733,6 +833,54 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                             )}
                           </td>
 
+                          {/* Bonuses & Deductions */}
+                          <td className="p-3.5">
+                            {(() => {
+                              const liveSummary = getUnlinkedAdjustmentsForMonth(p.id);
+                              const bonusVal = calculatedItem
+                                ? Number(calculatedItem.bonuses_amount || 0)
+                                : liveSummary.approvedBonus;
+                              const dedVal = calculatedItem
+                                ? Number(calculatedItem.deductions_amount || 0)
+                                : liveSummary.approvedDeduction;
+                              const pendCount = calculatedItem
+                                ? Number(calculatedItem.pending_adjustments_count || 0)
+                                : liveSummary.pendingCount;
+
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setAdjustingPersonnel(p)}
+                                  className="inline-flex flex-col items-start gap-0.5 text-right group cursor-pointer px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-[#242424] transition-colors"
+                                  title="مدیریت و ثبت پاداش یا کسری این همکار"
+                                >
+                                  {bonusVal > 0 && (
+                                    <span className="font-mono font-bold text-emerald-600 dark:text-[#1DB954] text-[11px]">
+                                      + {formatToman(bonusVal)} ت
+                                    </span>
+                                  )}
+                                  {dedVal > 0 && (
+                                    <span className="font-mono font-bold text-rose-600 dark:text-rose-400 text-[11px]">
+                                      - {formatToman(dedVal)} ت
+                                    </span>
+                                  )}
+                                  {pendCount > 0 && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[10px] font-bold">
+                                      <Clock className="w-2.5 h-2.5" />
+                                      <span>{toPersianDigits(pendCount)} در انتظار</span>
+                                    </span>
+                                  )}
+                                  {bonusVal === 0 && dedVal === 0 && pendCount === 0 && (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-[#1DB954]">
+                                      <Plus className="w-3 h-3" />
+                                      <span>ثبت پاداش / کسری</span>
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })()}
+                          </td>
+
                           {/* Net Payable */}
                           <td className="p-3.5">
                             {!hasConfig ? (
@@ -740,9 +888,21 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                             ) : !calculatedItem ? (
                               <span className="text-slate-400 text-xs italic">نیازمند پردازش</span>
                             ) : (
-                              <span className="font-mono font-black text-sm text-slate-900 dark:text-white">
-                                {formatToman(calculatedItem.net_payable)} تومان
-                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-mono font-black text-sm text-slate-900 dark:text-white">
+                                  {formatToman(calculatedItem.net_payable)} تومان
+                                </span>
+                                {calculatedItem.raw_net_payable !== undefined &&
+                                  calculatedItem.raw_net_payable < 0 && (
+                                    <span
+                                      className="inline-flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5"
+                                      title={`جمع کسورات بیشتر از دریافتی است (خالص واقعی: ${formatToman(calculatedItem.raw_net_payable)} تومان)`}
+                                    >
+                                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                                      <span>کسورات بیشتر از دریافتی</span>
+                                    </span>
+                                  )}
+                              </div>
                             )}
                           </td>
 
@@ -813,6 +973,24 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* TAB 1.5: Bonuses & Deductions Management (پاداش و کسری)       */}
+      {/* ------------------------------------------------------------- */}
+      {activeSubTab === 'adjustments' && (
+        <PayrollAdjustmentsTab
+          adjustments={adjustmentsList}
+          personnelList={personnelList}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+          isLoading={isLoadingAdjustments}
+          onRefresh={async () => {
+            await loadAdjustments();
+            setCalculatedMap({});
+          }}
+          showToast={showToast}
+        />
       )}
 
       {/* ------------------------------------------------------------- */}
@@ -1015,6 +1193,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                     <th className="p-3.5">حقوق پایه</th>
                     <th className="p-3.5">پورسانت</th>
                     <th className="p-3.5">مساعده</th>
+                    <th className="p-3.5">پاداش / کسری</th>
                     <th className="p-3.5">خالص پرداختی</th>
                     <th className="p-3.5">وضعیت</th>
                     <th className="p-3.5 text-center">عملیات</th>
@@ -1082,6 +1261,25 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
 
                           <td className="p-3.5 font-mono text-rose-500">
                             {Number(slip.advances_deducted) > 0 ? `- ${formatToman(slip.advances_deducted)} ت` : '-'}
+                          </td>
+
+                          <td className="p-3.5 font-mono">
+                            <div className="flex flex-col gap-0.5 text-[11px]">
+                              {Number(slip.bonuses_amount) > 0 && (
+                                <span className="text-emerald-600 dark:text-[#1DB954] font-bold">
+                                  + {formatToman(slip.bonuses_amount)} ت
+                                </span>
+                              )}
+                              {Number(slip.deductions_amount) > 0 && (
+                                <span className="text-rose-500 font-bold">
+                                  - {formatToman(slip.deductions_amount)} ت
+                                </span>
+                              )}
+                              {Number(slip.bonuses_amount || 0) === 0 &&
+                                Number(slip.deductions_amount || 0) === 0 && (
+                                  <span className="text-slate-400">-</span>
+                                )}
+                            </div>
                           </td>
 
                           <td className="p-3.5 font-mono font-black text-sm text-slate-900 dark:text-white">
@@ -1194,6 +1392,93 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
           slip={viewingSlip}
           personnel={personnelList.find((p) => String(p.id) === String(viewingSlip.personnel_id))}
         />
+      )}
+
+      {/* Per-Employee Bonuses & Deductions Modal */}
+      {adjustingPersonnel && (
+        <PayrollAdjustmentsModal
+          isOpen={Boolean(adjustingPersonnel)}
+          onClose={() => setAdjustingPersonnel(null)}
+          personnel={adjustingPersonnel}
+          targetYear={selectedYear}
+          targetMonth={selectedMonth}
+          baseSalary={calculatedMap[adjustingPersonnel.id]?.base_salary_amount}
+          commissionAmount={calculatedMap[adjustingPersonnel.id]?.commission_amount}
+          advancesDeducted={calculatedMap[adjustingPersonnel.id]?.advances_deducted}
+          onChanged={async () => {
+            await loadAdjustments();
+            const hasCfg = salaryConfigs.some(
+              (c) => String(c.personnel_id) === String(adjustingPersonnel.id) && c.is_active !== false
+            );
+            if (hasCfg) {
+              await handleCalculateSingle(adjustingPersonnel.id, true);
+            }
+          }}
+          showToast={showToast}
+        />
+      )}
+
+      {/* Pending Adjustments Warning Dialog before Issuing Slip(s) */}
+      {pendingIssueWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white dark:bg-[#181818] border border-amber-400/50 dark:border-amber-500/40 rounded-2xl p-6 space-y-4 text-right shadow-2xl">
+            <div className="flex items-center gap-2.5 text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                وجود درخواست پاداش در انتظار تایید
+              </h3>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-[#AAA] leading-relaxed">
+              برای {pendingIssueWarning.mode === 'single' ? pendingIssueWarning.item?.personnel_name : 'پرسنل محاسبه‌شده'} در ماه{' '}
+              <strong>{JALALI_MONTH_NAMES[selectedMonth - 1]}</strong> تعداد{' '}
+              <strong className="text-amber-600 dark:text-amber-400">
+                {toPersianDigits(pendingIssueWarning.pendingCount)} درخواست پاداش در انتظار بررسی
+              </strong>{' '}
+              وجود دارد که هنوز تایید یا رد نشده‌اند و در مبلغ فعلی محاسبه نشده‌اند. مایلید ابتدا آن‌ها را بررسی کنید یا فیش را بدون آن‌ها صادر نمایید؟
+            </p>
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setPendingIssueWarning(null)}
+                className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-[#333] text-xs font-bold text-slate-600 dark:text-[#AAA] cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetItem = pendingIssueWarning.item;
+                  const mode = pendingIssueWarning.mode;
+                  setPendingIssueWarning(null);
+                  if (mode === 'single' && targetItem) {
+                    const p = personnelList.find((x) => String(x.id) === String(targetItem.personnel_id));
+                    if (p) setAdjustingPersonnel(p);
+                  } else {
+                    setActiveSubTab('adjustments');
+                  }
+                }}
+                className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold cursor-pointer"
+              >
+                بررسی درخواست‌ها
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const warn = pendingIssueWarning;
+                  setPendingIssueWarning(null);
+                  if (warn.mode === 'single' && warn.item) {
+                    await executeIssueSlip(warn.item);
+                  } else if (warn.mode === 'bulk' && warn.items) {
+                    await executeIssueCalculatedSlips(warn.items);
+                  }
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-[#1DB954] dark:hover:bg-[#1ed760] text-white dark:text-black text-xs font-bold cursor-pointer"
+              >
+                صدور فیش بدون موارد در انتظار
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Mark Paid Prompt Dialog */}

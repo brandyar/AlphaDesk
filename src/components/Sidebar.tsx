@@ -25,6 +25,7 @@ import {
   Plus,
   Database,
   WalletCards,
+  Award,
 } from 'lucide-react';
 import { Personnel, AuthUser, TeamSubTab, Tenant } from '../types';
 import { getAvatarUrl, getUserAllowedTenants } from '../utils';
@@ -45,7 +46,7 @@ export type NavTab =
 
 interface SidebarProps {
   activeTab: NavTab;
-  portalSubTab?: 'profile' | 'leave' | 'advance' | 'logout';
+  portalSubTab?: 'profile' | 'leave' | 'advance' | 'bonuses' | 'logout';
   teamSubTab?: TeamSubTab;
   onSelectTab: (tab: NavTab, subTab?: string) => void;
   counts: {
@@ -199,6 +200,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Granular menu permission helper
   const isMenuAllowed = (menuId: string): boolean => {
     if (isAdmin && !currentPersonnel) return true; // Global system admin
+    if (menuId === 'payroll' && currentPersonnel?.permissions?.can_approve_bonuses) {
+      return true;
+    }
     if (currentPersonnel?.permissions?.allowed_menus && Array.isArray(currentPersonnel.permissions.allowed_menus)) {
       return currentPersonnel.permissions.allowed_menus.includes(menuId);
     }
@@ -765,6 +769,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="flex items-center gap-2.5">
                     <Wallet className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'advance' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
                     <span>درخواست مساعده</span>
+                  </div>
+                </button>
+
+                {/* 3.5. Bonuses & Deductions Sub-item */}
+                <button
+                  onClick={() => {
+                    onSelectTab('personal_portal', 'bonuses');
+                    onCloseMobile?.();
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    isPortalActive && portalSubTab === 'bonuses'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#B3B3B3] dark:hover:text-white dark:hover:bg-[#181818]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Award className={`w-3.5 h-3.5 ${isPortalActive && portalSubTab === 'bonuses' ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-400 dark:text-[#888]'}`} />
+                    <span>پاداش و کسورات</span>
                   </div>
                 </button>
 

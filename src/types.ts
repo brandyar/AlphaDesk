@@ -195,6 +195,8 @@ export interface PersonnelPermissions {
   can_manage_leads?: boolean;
   can_approve_leaves?: boolean;
   can_approve_advances?: boolean;
+  can_request_bonus?: boolean;
+  can_approve_bonuses?: boolean;
   can_manage_personnel?: boolean;
   can_manage_tenants?: boolean;
   report_view_scope?: 'all' | 'own_only' | 'specific_personnel';
@@ -510,6 +512,42 @@ export interface PayrollContractItem {
   customer_id?: string;
 }
 
+export type PayrollAdjustmentType = 'bonus' | 'deduction';
+export type PayrollAdjustmentCategory =
+  | 'sales_bonus'
+  | 'overtime'
+  | 'delay'
+  | 'insurance'
+  | 'penalty'
+  | 'other';
+export type PayrollAdjustmentStatus = 'pending' | 'approved' | 'rejected';
+export type PayrollAdjustmentSource = 'self_request' | 'manager_direct';
+
+export interface PayrollAdjustment {
+  id: number | string;
+  tenant_id?: string | number | null;
+  personnel_id: string;
+  personnel_name?: string;
+  type: PayrollAdjustmentType;
+  category?: PayrollAdjustmentCategory | string | null;
+  title: string;
+  amount: number;
+  approved_amount?: number | null;
+  target_year?: number | null;
+  target_month?: number | null;
+  effective_date?: string | null;
+  reason?: string | null;
+  status: PayrollAdjustmentStatus;
+  source?: PayrollAdjustmentSource | null;
+  created_by?: string | null;
+  manager_note?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  payroll_slip_id?: number | string | null;
+  date_created?: string;
+  date_updated?: string;
+}
+
 export interface PayrollCalculateItem {
   personnel_id: string;
   personnel_name: string;
@@ -527,6 +565,10 @@ export interface PayrollCalculateItem {
   advances_list: any[];
   bonuses_amount: number;
   deductions_amount: number;
+  adjustments_list?: PayrollAdjustment[];
+  pending_adjustments_count?: number;
+  pending_adjustments_list?: PayrollAdjustment[];
+  raw_net_payable?: number;
   net_payable: number;
 }
 
@@ -534,10 +576,14 @@ export interface PayrollCalculateItem {
 export interface PayrollCalculateResponse {
   from_date: string | null;
   to_date: string | null;
+  target_year?: number | null;
+  target_month?: number | null;
   total_payable: number;
   total_sales: number;
   total_contracts: number;
   total_advances: number;
+  total_bonuses?: number;
+  total_deductions?: number;
   items: PayrollCalculateItem[];
 }
 

@@ -7,12 +7,25 @@ import {
   advanceRequestsData,
   salaryConfigsData,
   payrollSlipsData,
+  payrollAdjustmentsData,
 } from '../config.ts';
 import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
 import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
-import { getSafeDirectusPersonnelForeignKey, resolvePersonnelId } from '../directus/sync.ts';
+import {
+  getSafeDirectusPersonnelForeignKey,
+  resolvePersonnelId,
+  resolveDirectusTenantId,
+} from '../directus/sync.ts';
 import { normalizePersianString } from '../services/phoneNormalizer.ts';
-import { PersonnelSalaryConfig, PayrollSlip, CustomerReport, SalaryAdvanceRequest, CommissionTier } from '../types.ts';
+import {
+  PersonnelSalaryConfig,
+  PayrollSlip,
+  CustomerReport,
+  SalaryAdvanceRequest,
+  CommissionTier,
+  PayrollAdjustment,
+} from '../types.ts';
+import { normalizePayrollAdjustment } from './payrollAdjustments.routes.ts';
 
 const router = Router();
 
@@ -277,12 +290,16 @@ router.post(['/api/payroll/configs', '/payroll/configs'], async (req: Request, r
     date_updated: nowIso,
   };
 
+  const { tenantId } = getRequestUser(req);
+  const resolvedTenantNum = resolveDirectusTenantId(payload.tenant_id || tenantId || 'default');
+
   if (directusUrl && directusAdminToken) {
     try {
       const safePId = await getSafeDirectusPersonnelForeignKey(targetPersonnelId);
       const directusPayload = {
         ...normalizedConfig,
         personnel_id: safePId,
+        tenant_id: resolvedTenantNum,
       };
 
       // Check if existing item exists
@@ -354,9 +371,12 @@ router.post(['/api/payroll/calculate', '/payroll/calculate'], async (req: Reques
     return res.status(403).json({ error: 'دسترسی غیرمجاز.' });
   }
 
-  const { from_date, to_date, personnel_id } = req.body;
+  const { from_date, to_date, personnel_id, target_year, target_month } = req.body;
+  const { tenantId } = getRequestUser(req);
   const fromIso = from_date ? new Date(from_date).toISOString() : null;
   const toIso = to_date ? new Date(to_date).toISOString() : null;
+  const targetYearNum = target_year ? Number(target_year) : null;
+  const targetMonthNum = target_month ? Number(target_month) : null;
 
   // 1. Fetch current reports
   let allReports: CustomerReport[] = [];
@@ -409,6 +429,30 @@ router.post(['/api/payroll/calculate', '/payroll/calculate'], async (req: Reques
     allConfigs = [...salaryConfigsData];
   }
 
+  // 3.5 Fetch payroll adjustments (bonuses & deductions)
+  let allAdjustments: PayrollAdjustment[] = [];
+  if (directusUrl && directusAdminToken) {
+    try {
+      const resp = await directusFetchAllPages('/items/payroll_adjustments?fields=*,personnel_id.*&sort=-date_created,-id');
+      if (resp?.data && Array.isArray(resp.data)) {
+        allAdjustments = resp.data.map(normalizePayrollAdjustment);
+      }
+    } catch {}
+  }
+  if (allAdjustments.length === 0 && payrollAdjustmentsData.length > 0) {
+    allAdjustments = payrollAdjustmentsData.map(normalizePayrollAdjustment);
+  }
+  if (tenantId && tenantId !== 'all') {
+    allAdjustments = allAdjustments.filter((a) => {
+      if (!a.tenant_id) return true;
+      return (
+        matchesTenant(String(a.tenant_id), tenantId) ||
+        matchesTenant(String(a.tenant_id), '1') ||
+        matchesTenant(String(a.tenant_id), 'default')
+      );
+    });
+  }
+
   // 4. Target personnel list
   let targetPersonnel = [...personnelData].filter((p) => p.status !== 'inactive' && p.active !== false);
   if (personnel_id && personnel_id !== 'all') {
@@ -418,16 +462,13 @@ router.post(['/api/payroll/calculate', '/payroll/calculate'], async (req: Reques
   const results = targetPersonnel.map((p) => {
     // A. Match qualifying contract reports within the time range
     const matchingContracts = allReports.filter((r) => {
-      // Must be marked as contract and have an amount
       const isContract = String(r.negotiation_status || '').trim() === 'قرارداد' || String(r.negotiation_status || '').includes('قرارداد');
       if (!isContract) return false;
       const amt = Number(r.contract_amount || 0);
       if (amt <= 0) return false;
 
-      // Match personnel
       if (!isReportByPersonnel(r, p)) return false;
 
-      // Match date range
       const reportDate = r.contract_date || r.date_created;
       if (!reportDate) return true;
       if (fromIso && new Date(reportDate) < new Date(fromIso)) return false;
@@ -450,7 +491,6 @@ router.post(['/api/payroll/calculate', '/payroll/calculate'], async (req: Reques
       const isMatch = aPId === p.id || cleanAPId === rawPId || (pNameNorm && aNameNorm && pNameNorm === aNameNorm);
       if (!isMatch) return false;
 
-      // If needed_date or date_created is in range
       const advDate = a.needed_date || a.date_created;
       if (advDate) {
         if (fromIso && new Date(advDate) < new Date(fromIso)) return false;
@@ -461,6 +501,48 @@ router.post(['/api/payroll/calculate', '/payroll/calculate'], async (req: Reques
     });
 
     const totalAdvancesDeducted = matchingAdvances.reduce((sum, a) => sum + (Number(a.approved_amount ?? a.amount) || 0), 0);
+
+    // B.5 Match unlinked payroll adjustments (bonuses & deductions) for this personnel and period
+    const rawPIdClean = String(p.id || '').trim().toLowerCase().replace(/^p-/, '');
+    const pNameNorm = normalizePersianString(p.name);
+    const matchingPeriodAdjustments = allAdjustments.filter((a) => {
+      // Skip items already settled/linked into another payroll slip
+      if (a.payroll_slip_id) return false;
+      if (a.status === 'rejected') return false;
+
+      const aPId = String(a.personnel_id || '').trim().toLowerCase();
+      const cleanAPId = aPId.replace(/^p-/, '');
+      const aNameNorm = normalizePersianString(a.personnel_name);
+      const isOwner =
+        aPId === String(p.id || '').trim().toLowerCase() ||
+        (rawPIdClean && cleanAPId === rawPIdClean) ||
+        (pNameNorm && aNameNorm && pNameNorm === aNameNorm);
+      if (!isOwner) return false;
+
+      // Prefer explicit Jalali target_year + target_month matching when both are present
+      if (targetYearNum && targetMonthNum && a.target_year && a.target_month) {
+        return Number(a.target_year) === targetYearNum && Number(a.target_month) === targetMonthNum;
+      }
+
+      // Fallback to effective_date / date_created within [fromIso, toIso]
+      const adjDate = a.effective_date || a.date_created;
+      if (adjDate) {
+        if (fromIso && new Date(adjDate) < new Date(fromIso)) return false;
+        if (toIso && new Date(adjDate) > new Date(toIso)) return false;
+      }
+      return true;
+    });
+
+    const approvedAdjustments = matchingPeriodAdjustments.filter((a) => a.status === 'approved');
+    const pendingAdjustments = matchingPeriodAdjustments.filter((a) => a.status === 'pending');
+
+    const bonusesAmount = approvedAdjustments
+      .filter((a) => a.type === 'bonus')
+      .reduce((sum, a) => sum + (Number(a.approved_amount ?? a.amount) || 0), 0);
+
+    const deductionsAmount = approvedAdjustments
+      .filter((a) => a.type === 'deduction')
+      .reduce((sum, a) => sum + (Number(a.approved_amount ?? a.amount) || 0), 0);
 
     // C. Find active salary configuration
     const config = allConfigs.find((c) => String(c.personnel_id) === String(p.id) && c.is_active !== false) || null;
@@ -488,8 +570,12 @@ router.post(['/api/payroll/calculate', '/payroll/calculate'], async (req: Reques
         commission_breakdown: { note: 'حکم حقوقی برای این همکار هنوز تعریف نشده است' },
         advances_deducted: totalAdvancesDeducted,
         advances_list: matchingAdvances,
-        bonuses_amount: 0,
-        deductions_amount: 0,
+        bonuses_amount: bonusesAmount,
+        deductions_amount: deductionsAmount,
+        adjustments_list: approvedAdjustments,
+        pending_adjustments_count: pendingAdjustments.length,
+        pending_adjustments_list: pendingAdjustments,
+        raw_net_payable: 0,
         net_payable: 0,
       };
     }
@@ -501,7 +587,8 @@ router.post(['/api/payroll/calculate', '/payroll/calculate'], async (req: Reques
     const { commission, breakdown } = calculateCommissionForSales(totalContractsAmount, config);
 
     // F. Final Net Payable
-    const netPayable = Math.max(0, baseSalary + commission - totalAdvancesDeducted);
+    const rawNetPayable = baseSalary + commission + bonusesAmount - totalAdvancesDeducted - deductionsAmount;
+    const netPayable = Math.max(0, rawNetPayable);
 
     return {
       personnel_id: p.id,
@@ -525,20 +612,27 @@ router.post(['/api/payroll/calculate', '/payroll/calculate'], async (req: Reques
       commission_breakdown: breakdown,
       advances_deducted: totalAdvancesDeducted,
       advances_list: matchingAdvances,
-      bonuses_amount: 0,
-      deductions_amount: 0,
+      bonuses_amount: bonusesAmount,
+      deductions_amount: deductionsAmount,
+      adjustments_list: approvedAdjustments,
+      pending_adjustments_count: pendingAdjustments.length,
+      pending_adjustments_list: pendingAdjustments,
+      raw_net_payable: rawNetPayable,
       net_payable: netPayable,
     };
   });
 
-
   res.json({
     from_date: fromIso,
     to_date: toIso,
+    target_year: targetYearNum,
+    target_month: targetMonthNum,
     total_payable: results.reduce((sum, r) => sum + r.net_payable, 0),
     total_sales: results.reduce((sum, r) => sum + r.total_contracts_amount, 0),
     total_contracts: results.reduce((sum, r) => sum + r.contracts_count, 0),
     total_advances: results.reduce((sum, r) => sum + r.advances_deducted, 0),
+    total_bonuses: results.reduce((sum, r) => sum + r.bonuses_amount, 0),
+    total_deductions: results.reduce((sum, r) => sum + r.deductions_amount, 0),
     items: results,
   });
 });
@@ -630,7 +724,7 @@ router.post(['/api/payroll/slips', '/payroll/slips'], async (req: Request, res: 
     return res.status(403).json({ error: 'دسترسی غیرمجاز.' });
   }
 
-  const { userName } = getRequestUser(req);
+  const { userName, tenantId } = getRequestUser(req);
   const body = req.body;
   const items = Array.isArray(body) ? body : [body];
   const createdSlips: PayrollSlip[] = [];
@@ -644,25 +738,41 @@ router.post(['/api/payroll/slips', '/payroll/slips'], async (req: Request, res: 
       pObj?.name ||
       'همکار گرامی';
 
+    const baseSalaryAmt = Math.max(0, Math.round(Number(item.base_salary_amount) || 0));
+    const commissionAmt = Math.max(0, Math.round(Number(item.commission_amount) || 0));
+    const advancesAmt = Math.max(0, Math.round(Number(item.advances_deducted) || 0));
+    const bonusesAmt = Math.max(0, Math.round(Number(item.bonuses_amount) || 0));
+    const deductionsAmt = Math.max(0, Math.round(Number(item.deductions_amount) || 0));
+
+    // Server-side authoritative net_payable recomputation
+    const computedNetPayable = Math.max(
+      0,
+      baseSalaryAmt + commissionAmt + bonusesAmt - advancesAmt - deductionsAmt
+    );
+
+    const targetTenantId = pObj?.tenant_id || item.tenant_id || tenantId || 'default';
+    const resolvedTenantNum = resolveDirectusTenantId(targetTenantId);
+
     const newSlip: PayrollSlip = {
       id: Date.now() + Math.floor(Math.random() * 1000),
       personnel_id: rawPId,
       personnel_name: targetName,
       from_date: item.from_date || null,
       to_date: item.to_date || null,
-      base_salary_amount: Number(item.base_salary_amount) || 0,
-      total_contracts_amount: Number(item.total_contracts_amount) || 0,
-      contracts_count: Number(item.contracts_count) || 0,
-      commission_amount: Number(item.commission_amount) || 0,
-      advances_deducted: Number(item.advances_deducted) || 0,
-      bonuses_amount: Number(item.bonuses_amount) || 0,
-      deductions_amount: Number(item.deductions_amount) || 0,
-      net_payable: Number(item.net_payable) || 0,
+      base_salary_amount: baseSalaryAmt,
+      total_contracts_amount: Math.max(0, Math.round(Number(item.total_contracts_amount) || 0)),
+      contracts_count: Math.max(0, Math.round(Number(item.contracts_count) || 0)),
+      commission_amount: commissionAmt,
+      advances_deducted: advancesAmt,
+      bonuses_amount: bonusesAmt,
+      deductions_amount: deductionsAmt,
+      net_payable: computedNetPayable,
       calculation_breakdown: item.calculation_breakdown || {},
       status: item.status || 'approved',
       payment_date: item.payment_date || null,
       payment_ref: item.payment_ref || null,
       created_by: userName || 'مدیر سیستم',
+      tenant_id: targetTenantId,
       date_created: nowIso,
     };
 
@@ -671,6 +781,7 @@ router.post(['/api/payroll/slips', '/payroll/slips'], async (req: Request, res: 
         const safePId = await getSafeDirectusPersonnelForeignKey(rawPId);
         const directusSlipPayload = {
           personnel_id: safePId,
+          tenant_id: resolvedTenantNum,
           from_date: newSlip.from_date,
           to_date: newSlip.to_date,
           base_salary_amount: newSlip.base_salary_amount,
@@ -698,6 +809,30 @@ router.post(['/api/payroll/slips', '/payroll/slips'], async (req: Request, res: 
         }
       } catch (err: any) {
         console.warn('Directus payroll_slips POST notice:', err.message);
+      }
+    }
+
+    // Link included payroll adjustments to this newly issued slip so they are not double-counted
+    const adjustmentIds: Array<string | number> = Array.isArray(item.adjustment_ids)
+      ? item.adjustment_ids
+      : Array.isArray(item.calculation_breakdown?.adjustments)
+      ? item.calculation_breakdown.adjustments.map((a: any) => a.id).filter(Boolean)
+      : [];
+
+    for (const adjId of adjustmentIds) {
+      const localAdj = payrollAdjustmentsData.find((a) => String(a.id) === String(adjId));
+      if (localAdj) {
+        localAdj.payroll_slip_id = newSlip.id;
+      }
+      if (directusUrl && directusAdminToken) {
+        try {
+          await directusFetch(`/items/payroll_adjustments/${encodeURIComponent(String(adjId))}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ payroll_slip_id: newSlip.id }),
+          });
+        } catch (linkErr: any) {
+          console.warn(`Could not link payroll_adjustment ${adjId} to slip ${newSlip.id}:`, linkErr.message);
+        }
       }
     }
 
@@ -756,9 +891,16 @@ router.delete(['/api/payroll/slips/:id', '/payroll/slips/:id'], async (req: Requ
 
   if (directusUrl && directusAdminToken) {
     try {
-      await directusFetch(`/items/payroll_slips/${id}`, { method: 'DELETE' });
+      await directusFetch(`/items/payroll_slips/${encodeURIComponent(id)}`, { method: 'DELETE' });
     } catch {}
   }
+
+  // Unlink any local adjustments tied to this deleted slip
+  payrollAdjustmentsData.forEach((adj) => {
+    if (String(adj.payroll_slip_id) === String(id)) {
+      adj.payroll_slip_id = null;
+    }
+  });
 
   const idx = payrollSlipsData.findIndex((s) => String(s.id) === String(id));
   if (idx >= 0) {

@@ -10,9 +10,12 @@ import {
   Wallet,
   CheckCircle2,
   AlertCircle,
+  Award,
+  AlertTriangle,
 } from 'lucide-react';
 import { PayrollCalculateItem } from '../../types';
 import { toPersianDigits, formatPersianDate } from '../../utils';
+import { ADJUSTMENT_CATEGORY_LABELS } from './PayrollAdjustmentsModal';
 
 interface ContractsBreakdownModalProps {
   isOpen: boolean;
@@ -67,7 +70,7 @@ export const ContractsBreakdownModal: React.FC<ContractsBreakdownModalProps> = (
         {/* Modal Body */}
         <div className="p-4 sm:p-6 space-y-6 max-h-[75vh] overflow-y-auto">
           {/* Quick Summary Strip */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#181818] border border-slate-200 dark:border-[#262626]">
               <span className="text-[10px] text-slate-400 block mb-1">تعداد قراردادها:</span>
               <span className="text-sm font-bold text-slate-900 dark:text-white">
@@ -86,13 +89,34 @@ export const ContractsBreakdownModal: React.FC<ContractsBreakdownModalProps> = (
                 {formatToman(item.commission_amount)} ت
               </span>
             </div>
+            <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-[#1DB954]/10 border border-emerald-200 dark:border-[#1DB954]/25">
+              <span className="text-[10px] text-emerald-700 dark:text-[#1DB954] block mb-1">پاداش‌ها:</span>
+              <span className="text-sm font-bold text-emerald-600 dark:text-[#1DB954] font-mono">
+                + {formatToman(item.bonuses_amount)} ت
+              </span>
+            </div>
+            <div className="p-3 rounded-xl bg-rose-50/60 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/25">
+              <span className="text-[10px] text-rose-600 dark:text-rose-400 block mb-1">کسورات:</span>
+              <span className="text-sm font-bold text-rose-600 dark:text-rose-400 font-mono">
+                - {formatToman(item.deductions_amount)} ت
+              </span>
+            </div>
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#181818] border border-slate-200 dark:border-[#262626]">
               <span className="text-[10px] text-slate-400 block mb-1">مساعده کسرشده:</span>
               <span className="text-sm font-bold text-rose-500 font-mono">
-                {formatToman(item.advances_deducted)} ت
+                - {formatToman(item.advances_deducted)} ت
               </span>
             </div>
           </div>
+
+          {Number(item.pending_adjustments_count || 0) > 0 && (
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 flex items-center gap-2.5 text-xs text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span>
+                <strong>{toPersianDigits(item.pending_adjustments_count || 0)}</strong> درخواست پاداش در انتظار بررسی برای این دوره وجود دارد که هنوز در خالص پرداختی لحاظ نشده است.
+              </span>
+            </div>
+          )}
 
           {/* Detailed Math Breakdown */}
           <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#161616] border border-slate-200 dark:border-[#282828] space-y-3">
@@ -243,6 +267,66 @@ export const ContractsBreakdownModal: React.FC<ContractsBreakdownModalProps> = (
                     </span>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Approved Bonuses & Deductions Section */}
+          {Array.isArray(item.adjustments_list) && item.adjustments_list.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <Award className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
+                <span>پاداش‌ها و کسورات تاییدشده این ماه ({toPersianDigits(item.adjustments_list.length)} مورد):</span>
+              </h3>
+              <div className="space-y-1.5">
+                {item.adjustments_list.map((adj, idx) => {
+                  const isBonus = adj.type === 'bonus';
+                  const effAmount = adj.approved_amount ?? adj.amount;
+                  return (
+                    <div
+                      key={adj.id || idx}
+                      className={`flex items-center justify-between p-2.5 rounded-xl border text-xs ${
+                        isBonus
+                          ? 'bg-emerald-500/5 border-emerald-500/20'
+                          : 'bg-rose-500/5 border-rose-500/20'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                              isBonus
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-[#1DB954]/20 dark:text-[#1DB954]'
+                                : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'
+                            }`}
+                          >
+                            {isBonus ? 'پاداش' : 'کسری'}
+                          </span>
+                          <span className="font-bold text-slate-800 dark:text-white">{adj.title}</span>
+                          {adj.category && ADJUSTMENT_CATEGORY_LABELS[adj.category] && (
+                            <span className="text-[10px] text-slate-400">
+                              ({ADJUSTMENT_CATEGORY_LABELS[adj.category]})
+                            </span>
+                          )}
+                        </div>
+                        {adj.reason && (
+                          <p className="text-[11px] text-slate-500 dark:text-[#888] mt-0.5 truncate">
+                            {adj.reason}
+                          </p>
+                        )}
+                      </div>
+                      <span
+                        className={`font-mono font-bold shrink-0 mr-2 ${
+                          isBonus
+                            ? 'text-emerald-600 dark:text-[#1DB954]'
+                            : 'text-rose-600 dark:text-rose-400'
+                        }`}
+                      >
+                        {isBonus ? '+' : '-'} {formatToman(effAmount)} تومان
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

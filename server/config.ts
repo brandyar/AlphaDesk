@@ -13,6 +13,7 @@ import {
   TenantSettingsState,
   PersonnelSalaryConfig,
   PayrollSlip,
+  PayrollAdjustment,
 } from './types.ts';
 
 
@@ -224,6 +225,7 @@ export const initialAdvanceRequests: SalaryAdvanceRequest[] = [];
 export const initialSalaryConfigs: PersonnelSalaryConfig[] = [];
 
 export const initialPayrollSlips: PayrollSlip[] = [];
+export const initialPayrollAdjustments: PayrollAdjustment[] = [];
 
 
 // Mutable state arrays
@@ -237,6 +239,7 @@ export let leaveRequestsData: LeaveRequest[] = [];
 export let advanceRequestsData: SalaryAdvanceRequest[] = [];
 export let salaryConfigsData: PersonnelSalaryConfig[] = [...initialSalaryConfigs];
 export let payrollSlipsData: PayrollSlip[] = [...initialPayrollSlips];
+export let payrollAdjustmentsData: PayrollAdjustment[] = [...initialPayrollAdjustments];
 
 export function setPersonnelData(data: Personnel[]) {
   personnelData = data;
@@ -276,6 +279,10 @@ export function setSalaryConfigsData(data: PersonnelSalaryConfig[]) {
 
 export function setPayrollSlipsData(data: PayrollSlip[]) {
   payrollSlipsData = data;
+}
+
+export function setPayrollAdjustmentsData(data: PayrollAdjustment[]) {
+  payrollAdjustmentsData = data;
 }
 
 

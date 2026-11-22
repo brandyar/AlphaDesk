@@ -35,10 +35,12 @@ import {
   Upload,
   Camera,
   ImageIcon,
+  Award,
 } from 'lucide-react';
 import {
   LeaveRequest,
   SalaryAdvanceRequest,
+  PayrollAdjustment,
   Personnel,
   AuthUser,
   LeaveType,
@@ -58,13 +60,14 @@ import {
   compressImage,
 } from '../utils';
 import { PersianDatePicker } from './PersianDatePicker';
-import { uploadAvatar, fetchLeaveRequests, fetchAdvanceRequests } from '../api';
+import { uploadAvatar, fetchLeaveRequests, fetchAdvanceRequests, fetchPayrollAdjustments } from '../api';
 import { ProfileTab } from './personal-portal/ProfileTab';
 import { PasswordTab } from './personal-portal/PasswordTab';
 import { LeaveRequestsTab } from './personal-portal/LeaveRequestsTab';
 import { AdvanceRequestsTab } from './personal-portal/AdvanceRequestsTab';
+import { BonusRequestsTab } from './personal-portal/BonusRequestsTab';
 
-export type PortalTab = 'profile' | 'advance' | 'leave' | 'logout';
+export type PortalTab = 'profile' | 'advance' | 'leave' | 'bonuses' | 'logout';
 
 interface PersonalPortalViewProps {
   currentPersonnel: Personnel | null;
@@ -107,20 +110,23 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<PortalTab>(initialTab);
 
-  // Dedicated on-demand state for leave & advance requests
+  // Dedicated on-demand state for leave, advance & payroll adjustments
   const [localLeaveRequests, setLocalLeaveRequests] = useState<LeaveRequest[]>(leaveRequests);
   const [localAdvanceRequests, setLocalAdvanceRequests] = useState<SalaryAdvanceRequest[]>(advanceRequests);
+  const [localAdjustments, setLocalAdjustments] = useState<PayrollAdjustment[]>([]);
   const [isLoadingRequests, setIsLoadingRequests] = useState<boolean>(false);
 
   const reloadRequests = async () => {
     setIsLoadingRequests(true);
     try {
-      const [lData, aData] = await Promise.all([
+      const [lData, aData, adjData] = await Promise.all([
         fetchLeaveRequests().catch(() => []),
         fetchAdvanceRequests().catch(() => []),
+        fetchPayrollAdjustments({ scope: 'mine' }).catch(() => []),
       ]);
       setLocalLeaveRequests(lData);
       setLocalAdvanceRequests(aData);
+      setLocalAdjustments(adjData);
     } catch (err) {
       console.warn('Failed to load portal requests:', err);
     } finally {
@@ -526,6 +532,7 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
 
   const pendingLeavesCount = localLeaveRequests.filter((r) => r.status === 'pending').length;
   const pendingAdvancesCount = localAdvanceRequests.filter((r) => r.status === 'pending').length;
+  const pendingAdjustmentsCount = localAdjustments.filter((r) => r.status === 'pending').length;
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-200">
@@ -633,6 +640,29 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
                 }`}
               >
                 {toPersianDigits(pendingAdvancesCount)}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('bonuses')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap relative ${
+              activeTab === 'bonuses'
+                ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-lg shadow-emerald-600/20 dark:shadow-[#1DB954]/25 scale-[1.02]'
+                : 'bg-slate-100 dark:bg-[#181818] hover:bg-slate-200 dark:hover:bg-[#222] text-slate-700 dark:text-[#B3B3B3] hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-[#282828]'
+            }`}
+          >
+            <Award className="w-4 h-4" />
+            <span>پاداش و کسورات</span>
+            {pendingAdjustmentsCount > 0 && (
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                  activeTab === 'bonuses'
+                    ? 'bg-black text-[#1DB954]'
+                    : 'bg-amber-500 text-black'
+                }`}
+              >
+                {toPersianDigits(pendingAdjustmentsCount)}
               </span>
             )}
           </button>
@@ -753,6 +783,20 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
           setReviewApprovedAmount={setReviewApprovedAmount}
           setReviewManagerNote={setReviewManagerNote}
           onDeleteAdvanceRequest={onDeleteAdvanceRequest}
+        />
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* 4.5. TAB 4: BONUSES & DEDUCTIONS (پاداش و کسورات)              */}
+      {/* ------------------------------------------------------------- */}
+      {activeTab === 'bonuses' && (
+        <BonusRequestsTab
+          currentPersonnel={currentPersonnel}
+          isAdmin={isAdmin}
+          adjustments={localAdjustments}
+          isLoading={isLoadingRequests}
+          onRefresh={reloadRequests}
+          showToast={showToast}
         />
       )}
 
