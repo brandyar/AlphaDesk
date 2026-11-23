@@ -147,17 +147,18 @@ export const CustomerCoverageTab: React.FC<CustomerCoverageTabProps> = ({
           </div>
         </div>
 
-        <div className="pt-4 pb-2">
-          <div className="grid grid-cols-7 sm:grid-cols-14 gap-2 items-end h-52 px-2">
-            {dailyCustomerStats.daysList.map((day) => {
+        <div className="pt-4 pb-2 overflow-x-auto">
+          <div className={`flex items-end gap-1 sm:gap-1.5 h-52 px-2 ${dailyCustomerStats.daysList.length > 16 ? 'min-w-[680px]' : ''}`}>
+            {dailyCustomerStats.daysList.map((day, idx) => {
               const heightPercent = maxDailyCustomers > 0 ? (day.uniqueCount / maxDailyCustomers) * 100 : 0;
               const isSelected = selectedDayDetail === day.dateIso;
+              const isCompact = dailyCustomerStats.daysList.length > 16;
 
               return (
                 <div
                   key={day.dateIso}
                   onClick={() => setSelectedDayDetail(isSelected ? null : day.dateIso)}
-                  className="group flex flex-col items-center justify-end h-full cursor-pointer relative"
+                  className="group flex-1 min-w-0 flex flex-col items-center justify-end h-full cursor-pointer relative"
                 >
                   {/* Tooltip */}
                   <div className="opacity-0 group-hover:opacity-100 pointer-events-none absolute -top-12 z-30 transition-all bg-slate-900 dark:bg-[#0d0d0d] border border-slate-700 dark:border-[#333] px-2.5 py-1 rounded-xl shadow-2xl text-[11px] text-white whitespace-nowrap">
@@ -167,7 +168,7 @@ export const CustomerCoverageTab: React.FC<CustomerCoverageTabProps> = ({
 
                   {/* Top Count */}
                   <div
-                    className={`text-[10px] font-mono font-bold mb-1 ${
+                    className={`${isCompact ? 'text-[9px]' : 'text-[10px]'} font-mono font-bold mb-1 ${
                       day.uniqueCount > 0 ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-[#444]'
                     }`}
                   >
@@ -189,9 +190,11 @@ export const CustomerCoverageTab: React.FC<CustomerCoverageTabProps> = ({
                   </div>
 
                   {/* Date */}
-                  <div className="mt-2 text-center">
-                    <div className="text-[10px] text-slate-500 dark:text-[#777] font-mono truncate">
-                      {toPersianDigits(day.dateJalali.split('/').slice(1).join('/'))}
+                  <div className="mt-2 text-center w-full overflow-hidden">
+                    <div className={`${isCompact ? 'text-[9px]' : 'text-[10px]'} text-slate-500 dark:text-[#777] font-mono truncate`}>
+                      {isCompact && idx % 2 !== 0 && !isSelected
+                        ? toPersianDigits(day.dateJalali.split('/').slice(2).join(''))
+                        : toPersianDigits(day.dateJalali.split('/').slice(1).join('/'))}
                     </div>
                   </div>
                 </div>

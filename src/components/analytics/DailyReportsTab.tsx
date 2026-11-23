@@ -181,18 +181,19 @@ export const DailyReportsTab: React.FC<DailyReportsTabProps> = ({
         </div>
 
         {/* Custom Interactive SVG / HTML Bar Chart */}
-        <div className="pt-4 pb-2">
-          <div className="grid grid-cols-7 sm:grid-cols-14 gap-2 items-end h-56 px-2">
-            {dailyReportStats.daysList.map((day) => {
+        <div className="pt-4 pb-2 overflow-x-auto">
+          <div className={`flex items-end gap-1 sm:gap-1.5 h-56 px-2 ${dailyReportStats.daysList.length > 16 ? 'min-w-[680px]' : ''}`}>
+            {dailyReportStats.daysList.map((day, idx) => {
               const heightPercent = maxDailyReports > 0 ? (day.reportsCount / maxDailyReports) * 100 : 0;
               const isSelected = selectedDayDetail === day.dateIso;
               const hasContract = day.contractsCount > 0;
+              const isCompact = dailyReportStats.daysList.length > 16;
 
               return (
                 <div
                   key={day.dateIso}
                   onClick={() => setSelectedDayDetail(isSelected ? null : day.dateIso)}
-                  className="group flex flex-col items-center justify-end h-full cursor-pointer relative"
+                  className="group flex-1 min-w-0 flex flex-col items-center justify-end h-full cursor-pointer relative"
                 >
                   {/* Tooltip on Hover */}
                   <div className="opacity-0 group-hover:opacity-100 pointer-events-none absolute -top-14 z-30 transition-all bg-slate-900 dark:bg-[#0d0d0d] border border-slate-700 dark:border-[#333] px-2.5 py-1.5 rounded-xl shadow-2xl text-[11px] text-white whitespace-nowrap">
@@ -207,7 +208,7 @@ export const DailyReportsTab: React.FC<DailyReportsTabProps> = ({
 
                   {/* Number on top of bar */}
                   <div
-                    className={`text-[10px] font-mono font-bold mb-1 transition-colors ${
+                    className={`${isCompact ? 'text-[9px]' : 'text-[10px]'} font-mono font-bold mb-1 transition-colors ${
                       day.reportsCount > 0 ? (isSelected ? 'text-emerald-600 dark:text-[#1DB954]' : 'text-slate-900 dark:text-white') : 'text-slate-400 dark:text-[#444]'
                     }`}
                   >
@@ -231,11 +232,15 @@ export const DailyReportsTab: React.FC<DailyReportsTabProps> = ({
                   </div>
 
                   {/* X-axis date label */}
-                  <div className="mt-2 text-center">
-                    <div className="text-[10px] text-slate-500 dark:text-[#777] font-mono group-hover:text-slate-900 dark:group-hover:text-white transition-colors truncate">
-                      {toPersianDigits(day.dateJalali.split('/').slice(1).join('/'))}
+                  <div className="mt-2 text-center w-full overflow-hidden">
+                    <div className={`${isCompact ? 'text-[9px]' : 'text-[10px]'} text-slate-500 dark:text-[#777] font-mono group-hover:text-slate-900 dark:group-hover:text-white transition-colors truncate`}>
+                      {isCompact && idx % 2 !== 0 && !hasContract && !isSelected
+                        ? toPersianDigits(day.dateJalali.split('/').slice(2).join(''))
+                        : toPersianDigits(day.dateJalali.split('/').slice(1).join('/'))}
                     </div>
-                    <div className="text-[9px] text-slate-400 dark:text-[#555]">{day.dayName}</div>
+                    {!isCompact && (
+                      <div className="text-[9px] text-slate-400 dark:text-[#555]">{day.dayName}</div>
+                    )}
                   </div>
                 </div>
               );

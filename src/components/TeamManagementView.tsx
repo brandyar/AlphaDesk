@@ -1990,18 +1990,18 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-[#222] border border-emerald-500 dark:border-[#1DB954] overflow-hidden flex items-center justify-center flex-shrink-0 text-slate-800 dark:text-white font-bold text-sm relative">
+                              <span>{(p.name || 'U').trim().charAt(0).toUpperCase()}</span>
                               {getAvatarUrl(p.profile_image || p.avatar, p.name) ? (
                                 <img
                                   key={getAvatarUrl(p.profile_image || p.avatar, p.name)}
                                   src={getAvatarUrl(p.profile_image || p.avatar, p.name)}
                                   alt={p.name}
-                                  className="w-full h-full object-cover"
+                                  className="absolute inset-0 w-full h-full object-cover z-10 block"
                                   onError={(e) => {
                                     e.currentTarget.style.display = 'none';
                                   }}
                                 />
                               ) : null}
-                              <span>{(p.name || 'U').trim().charAt(0).toUpperCase()}</span>
                             </div>
                             <div className="truncate">
                               <div className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -2119,8 +2119,12 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                             <button
                               onClick={async () => {
                                 if (confirm(`آیا از حذف همکار «${p.name}» اطمینان دارید؟`)) {
-                                  await onDeletePersonnel(p.id);
-                                  showToast(`همکار «${p.name}» با موفقیت حذف شد.`);
+                                  try {
+                                    await onDeletePersonnel(p.id);
+                                    showToast(`همکار «${p.name}» با موفقیت حذف شد.`);
+                                  } catch (err: any) {
+                                    showToast(err?.message || 'خطا در حذف همکار از پایگاه داده', 'error');
+                                  }
                                 }
                               }}
                               className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
@@ -2183,18 +2187,18 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-[#222] border-2 border-emerald-500 dark:border-[#1DB954] overflow-hidden flex items-center justify-center flex-shrink-0 shadow-md text-slate-800 dark:text-white font-bold text-base relative">
+                          <span>{(p.name || 'U').trim().charAt(0).toUpperCase()}</span>
                           {getAvatarUrl(p.profile_image || p.avatar, p.name) ? (
                             <img
                               key={getAvatarUrl(p.profile_image || p.avatar, p.name)}
                               src={getAvatarUrl(p.profile_image || p.avatar, p.name)}
                               alt={p.name}
-                              className="w-full h-full object-cover"
+                              className="absolute inset-0 w-full h-full object-cover z-10 block"
                               onError={(e) => {
                                 e.currentTarget.style.display = 'none';
                               }}
                             />
                           ) : null}
-                          <span>{(p.name || 'U').trim().charAt(0).toUpperCase()}</span>
                         </div>
                         <div className="truncate">
                           <div className="font-bold text-sm text-slate-900 dark:text-white truncate flex items-center gap-1.5">

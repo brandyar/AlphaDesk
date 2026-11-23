@@ -149,9 +149,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         })
         .slice(0, 5);
 
-  // Status breakdown for progress bars
+  // Status breakdown for progress bars (customer pipeline)
   const statusStats = [
-    { label: 'قرارداد / فاکتور', count: contractsWonCount, color: 'bg-[#1DB954]', text: 'text-emerald-600 dark:text-[#1DB954]' },
+    {
+      label: 'مشتریان دارای قرارداد',
+      count: contractsWonCount,
+      subBadge: contractsReportsCount > 0 ? `${toPersianDigits(contractsReportsCount)} فاکتور` : undefined,
+      color: 'bg-[#1DB954]',
+      text: 'text-emerald-600 dark:text-[#1DB954]',
+    },
     { label: 'در حال پیگیری و مذاکره', count: inNegotiationCount, color: 'bg-blue-500', text: 'text-blue-600 dark:text-blue-400' },
     { label: 'مهلت‌های منقضی‌شده', count: expiredCustomersCount, color: 'bg-rose-500', text: 'text-rose-600 dark:text-rose-400' },
     {
@@ -340,7 +346,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-xs text-slate-400 dark:text-[#888] font-normal">از ۱۰</span>
           </div>
           <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] mt-2">
-            بر اساس {toPersianDigits(summary?.total_reports_count ?? reports.length)} گزارش مذاکره و تماس
+            بر اساس {toPersianDigits(totalReportsCount)} گزارش مذاکره و تماس
           </div>
         </div>
       </div>
@@ -396,8 +402,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         <span className={`w-2 h-2 rounded-full ${st.color}`} />
                         <span className="truncate">{st.label}</span>
                       </div>
-                      <div className="mt-1 flex items-baseline justify-between font-mono">
-                        <span className={`text-sm font-bold ${st.text}`}>{toPersianDigits(st.count)}</span>
+                      <div className="mt-1 flex items-baseline justify-between font-mono gap-1">
+                        <span className={`text-sm font-bold ${st.text}`}>
+                          {toPersianDigits(st.count)}
+                          {'subBadge' in st && st.subBadge ? (
+                            <span className="text-[10px] font-normal text-slate-500 dark:text-[#A7A7A7] mr-1">
+                              ({st.subBadge})
+                            </span>
+                          ) : null}
+                        </span>
                         <span className="text-[10px] text-slate-400 dark:text-[#777]">({toPersianDigits(pct)}٪)</span>
                       </div>
                     </div>
@@ -473,7 +486,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 onClick={() => onNavigateToTab('reports')}
                 className="text-xs text-emerald-600 dark:text-[#1DB954] hover:underline"
               >
-                مشاهده همه ({toPersianDigits(summary?.total_reports_count ?? reports.length)})
+                مشاهده همه ({toPersianDigits(totalReportsCount)})
               </button>
             </div>
 

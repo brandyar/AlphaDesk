@@ -8,6 +8,7 @@ import {
   DIRECTUS_STAFF_ROLE_ID,
 } from '../config.ts';
 import { directusFetch, isDirectusCircuitOpen } from '../directus/client.ts';
+import { invalidateCustomersCache } from '../directus/cache.ts';
 import { resolveDirectusTenantId } from '../directus/sync.ts';
 import {
   getRequestTenantId,
@@ -15,6 +16,8 @@ import {
   formatAvatarUrl,
   extractFileId,
 } from '../middlewares/auth.middleware.ts';
+import { invalidateDashboardSummaryCache } from './system.routes.ts';
+import { invalidateAnalyticsCache } from './analytics.routes.ts';
 import { Personnel } from '../types.ts';
 
 const router = Router();
@@ -350,6 +353,130 @@ router.patch('/:id', async (req: Request, res: Response) => {
   res.json(personnelData[idx]);
 });
 
+async function deletePersonnelFromDirectus(id: string): Promise<{ deleted: boolean; error?: string }> {
+  const localRecord = personnelData.find((p) => String(p.id) === String(id));
+  let targetUserId: string | null = localRecord?.user_id ? String(localRecord.user_id) : null;
+  let targetEmail: string | null = localRecord?.email ? String(localRecord.email).trim().toLowerCase() : null;
+
+  if (!directusUrl || !directusAdminToken) {
+    return { deleted: true };
+  }
+
+  // 1. Fetch authoritative personnel record from Directus (for user_id / email)
+  try {
+    const pRes = await directusFetch(
+      `/items/personnel/${encodeURIComponent(id)}?fields=id,user_id,email,name`
+    );
+    if (pRes?.data) {
+      if (pRes.data.user_id) targetUserId = String(pRes.data.user_id);
+      if (pRes.data.email) targetEmail = String(pRes.data.email).trim().toLowerCase();
+    }
+  } catch (e: any) {
+    const msg = String(e?.message || '');
+    if (msg.includes('404') || msg.includes('FORBIDDEN') || msg.includes('not found')) {
+      // Already missing from personnel; still attempt linked directus_users cleanup if known
+    }
+  }
+
+  // 2. Clean up child records with NOT NULL / FK constraints that block DELETE on personnel
+  // administrative_reports.personnel_id is NOT NULL with ON DELETE SET DEFAULT (null), which causes PostgreSQL FK failure!
+  try {
+    const adminRepsRes = await directusFetch(
+      `/items/administrative_reports?filter[personnel_id][_eq]=${encodeURIComponent(id)}&fields=id&limit=-1`
+    ).catch(() => null);
+    if (adminRepsRes?.data && Array.isArray(adminRepsRes.data) && adminRepsRes.data.length > 0) {
+      for (const rep of adminRepsRes.data) {
+        if (rep?.id) {
+          await directusFetch(`/items/administrative_reports/${encodeURIComponent(rep.id)}`, {
+            method: 'DELETE',
+          }).catch(() => {});
+        }
+      }
+    }
+  } catch {}
+
+  // Proactively unlink nullable FK references so deletion never fails even if DB constraint is NO ACTION
+  const nullableFkTables: Array<{ collection: string; field: string }> = [
+    { collection: 'customers', field: 'assigned_marketer_id' },
+    { collection: 'cold_leads', field: 'assigned_to' },
+    { collection: 'leave_requests', field: 'personnel_id' },
+    { collection: 'advance_requests', field: 'personnel_id' },
+    { collection: 'payroll_adjustments', field: 'personnel_id' },
+    { collection: 'payroll_slips', field: 'personnel_id' },
+    { collection: 'personnel_salary_configs', field: 'personnel_id' },
+  ];
+
+  await Promise.all(
+    nullableFkTables.map(async ({ collection, field }) => {
+      try {
+        const res = await directusFetch(
+          `/items/${collection}?filter[${field}][_eq]=${encodeURIComponent(id)}&fields=id&limit=-1`
+        ).catch(() => null);
+        if (res?.data && Array.isArray(res.data) && res.data.length > 0) {
+          for (const row of res.data) {
+            if (row?.id) {
+              await directusFetch(`/items/${collection}/${encodeURIComponent(row.id)}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ [field]: null }),
+              }).catch(() => {});
+            }
+          }
+        }
+      } catch {}
+    })
+  );
+
+  // 3. Delete the personnel row from Directus
+  let personnelDeleted = false;
+  let lastError = '';
+  try {
+    await directusFetch(`/items/personnel/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    personnelDeleted = true;
+  } catch (e: any) {
+    const msg = String(e?.message || '');
+    if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
+      personnelDeleted = true;
+    } else {
+      console.warn(`Directus personnel delete error for ${id}:`, msg);
+      lastError = msg;
+    }
+  }
+
+  // 4. Delete the linked Directus user (directus_users) ONLY after personnel row is deleted (to avoid orphaned personnel!)
+  if (personnelDeleted) {
+    let directusUserIdToDelete = targetUserId;
+    if (!directusUserIdToDelete && targetEmail) {
+      try {
+        const uRes = await directusFetch(
+          `/users?filter[email][_ieq]=${encodeURIComponent(targetEmail)}&fields=id,email&limit=1`
+        ).catch(() => null);
+        if (uRes?.data?.[0]?.id) {
+          directusUserIdToDelete = String(uRes.data[0].id);
+        }
+      } catch {}
+    }
+
+    if (
+      directusUserIdToDelete &&
+      !directusUserIdToDelete.startsWith('p-') &&
+      targetEmail !== 'kiani@company.ir'
+    ) {
+      try {
+        await directusFetch(`/users/${encodeURIComponent(directusUserIdToDelete)}`, {
+          method: 'DELETE',
+        });
+      } catch (ue: any) {
+        const uMsg = String(ue?.message || '');
+        if (!uMsg.includes('404') && !uMsg.toLowerCase().includes('not found')) {
+          console.warn(`Directus user delete warning for ${directusUserIdToDelete}:`, uMsg);
+        }
+      }
+    }
+  }
+
+  return personnelDeleted ? { deleted: true } : { deleted: false, error: lastError };
+}
+
 router.delete('/:id', async (req: Request, res: Response) => {
   const { isAdmin } = getRequestUser(req);
   if (!isAdmin) {
@@ -359,15 +486,18 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 
   const { id } = req.params;
-  setPersonnelData(personnelData.filter((p) => String(p.id) !== String(id)));
-
-  if (directusUrl && directusAdminToken) {
-    try {
-      await directusFetch(`/items/personnel/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    } catch (e: any) {
-      console.warn('Directus personnel delete error:', e.message);
-    }
+  const result = await deletePersonnelFromDirectus(id);
+  if (!result.deleted) {
+    return res.status(500).json({
+      error: 'DELETE_FAILED',
+      message: `حذف همکار از پایگاه داده با خطا مواجه شد: ${result.error || 'خطای نامشخص'}`,
+    });
   }
+
+  setPersonnelData(personnelData.filter((p) => String(p.id) !== String(id)));
+  invalidateCustomersCache();
+  invalidateDashboardSummaryCache();
+  invalidateAnalyticsCache();
 
   res.json({ success: true });
 });
@@ -420,18 +550,34 @@ router.post('/batch-delete', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'شناسه‌های همکاران الزامی است.' });
   }
 
-  const idSet = new Set(personnel_ids.map(String));
-  setPersonnelData(personnelData.filter((p) => !idSet.has(String(p.id))));
+  const deletedIds = new Set<string>();
+  const failedIds: Array<{ id: string; error?: string }> = [];
 
-  if (directusUrl && directusAdminToken) {
-    for (const pid of personnel_ids) {
-      try {
-        await directusFetch(`/items/personnel/${encodeURIComponent(pid)}`, { method: 'DELETE' });
-      } catch {}
+  for (const pid of personnel_ids) {
+    const resDel = await deletePersonnelFromDirectus(String(pid));
+    if (resDel.deleted) {
+      deletedIds.add(String(pid));
+    } else {
+      failedIds.push({ id: String(pid), error: resDel.error });
     }
   }
 
-  res.json({ success: true, deletedCount: personnel_ids.length });
+  if (deletedIds.size > 0) {
+    setPersonnelData(personnelData.filter((p) => !deletedIds.has(String(p.id))));
+    invalidateCustomersCache();
+    invalidateDashboardSummaryCache();
+    invalidateAnalyticsCache();
+  }
+
+  if (failedIds.length > 0 && deletedIds.size === 0) {
+    return res.status(500).json({
+      error: 'BATCH_DELETE_FAILED',
+      message: `حذف همکاران از پایگاه داده ناموفق بود: ${failedIds[0].error || 'خطای نامشخص'}`,
+      failedIds,
+    });
+  }
+
+  res.json({ success: true, deletedCount: deletedIds.size, failedCount: failedIds.length });
 });
 
 router.post('/me/profile', async (req: Request, res: Response) => {

@@ -156,22 +156,11 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
           let orIdx = 0;
           if (resolvedUserName) {
             out += `&filter[_and][${idx}][_or][${orIdx++}][negotiator_name][_icontains]=${encodeURIComponent(resolvedUserName)}`;
-            out += `&filter[_and][${idx}][_or][${orIdx++}][customer_id][assigned_marketer_name][_icontains]=${encodeURIComponent(resolvedUserName)}`;
             if (normPersianName && normPersianName !== resolvedUserName) {
               out += `&filter[_and][${idx}][_or][${orIdx++}][negotiator_name][_icontains]=${encodeURIComponent(normPersianName)}`;
-              out += `&filter[_and][${idx}][_or][${orIdx++}][customer_id][assigned_marketer_name][_icontains]=${encodeURIComponent(normPersianName)}`;
             }
-          }
-          if (cleanPId) {
+          } else if (cleanPId) {
             out += `&filter[_and][${idx}][_or][${orIdx++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`;
-            if (rawUid && rawUid !== cleanPId) {
-              out += `&filter[_and][${idx}][_or][${orIdx++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(rawUid)}`;
-            } else if (rawUid) {
-              out += `&filter[_and][${idx}][_or][${orIdx++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent('p-' + rawUid)}`;
-            }
-          }
-          if (cleanUId && cleanUId !== cleanPId) {
-            out += `&filter[_and][${idx}][_or][${orIdx++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(cleanUId)}`;
           }
           if (orIdx > 0) idx++;
         }
@@ -320,7 +309,7 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
     : reportsData.filter((r) => {
         const rNeg = normalizePersianString(r.negotiator_name);
         if (normMe && rNeg && (rNeg === normMe || rNeg.includes(normMe))) return true;
-        if (r.customer_id && scopedCustIds.has(String(r.customer_id))) return true;
+        if (!normMe && r.customer_id && scopedCustIds.has(String(r.customer_id))) return true;
         return false;
       });
 

@@ -71,8 +71,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [selectedPersonnelId, setSelectedPersonnelId] = useState<string>('all');
   const [personnelSearch, setPersonnelSearch] = useState('');
 
-  // Daily views range (e.g. last 7, 14, 30 days)
-  const [dailyDaysCount, setDailyDaysCount] = useState<number>(14);
+  // Daily views range (e.g. last 7, 14, 30 days) - default to 30 days to match monthly reporting
+  const [dailyDaysCount, setDailyDaysCount] = useState<number>(30);
 
   // Periodic preset state
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('last_30_days');
@@ -254,25 +254,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     if (!userIsAdmin) {
       const myNameNorm = normalizePersianText(currentPersonnel?.name || currentUser?.name || '');
       const myId = String(currentPersonnel?.id || currentUser?.id || '').trim().toLowerCase();
-      const myRawId = myId.replace(/^p-/, '');
-      const myCustomerIds = new Set(
-        customers
-          .filter((c) => {
-            const mId = String(c.assigned_marketer_id || '').trim().toLowerCase();
-            const rawMId = mId.replace(/^p-/, '');
-            if (myId && (mId === myId || (myRawId && rawMId === myRawId))) return true;
-            const mName = normalizePersianText(c.assigned_marketer_name);
-            return Boolean(myNameNorm && mName && (mName === myNameNorm || mName.includes(myNameNorm)));
-          })
-          .map((c) => String(c.id))
-      );
       return sourceReports.filter((r) => {
         const negNorm = normalizePersianText(r.negotiator_name);
         if (myNameNorm && negNorm && (negNorm === myNameNorm || negNorm.includes(myNameNorm) || myNameNorm.includes(negNorm))) {
           return true;
         }
         if (myId && String(r.created_by || '').trim().toLowerCase() === myId) return true;
-        if (r.customer_id && myCustomerIds.has(String(r.customer_id))) return true;
         return false;
       });
     }

@@ -254,18 +254,18 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'bg-emerald-100 text-emerald-800 dark:bg-[#282828] dark:text-[#1DB954] border border-emerald-200 dark:border-[#3e3e3e]'
                 }`}
               >
+                <span>{initial}</span>
                 {getAvatarUrl(currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, displayName) ? (
                   <img
                     key={getAvatarUrl(currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, displayName)}
                     src={getAvatarUrl(currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, displayName)}
                     alt={displayName}
-                    className="w-full h-full object-cover"
+                    className="absolute inset-0 w-full h-full object-cover z-10 block"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
                     }}
                   />
                 ) : null}
-                <span>{initial}</span>
               </div>
 
               <div className="hidden md:flex flex-col text-right leading-tight pr-0.5">

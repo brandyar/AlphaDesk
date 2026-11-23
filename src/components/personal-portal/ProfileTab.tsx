@@ -133,18 +133,18 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           {/* Avatar Preview */}
           <div className="relative flex-shrink-0">
             <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-[#222] border-2 border-emerald-500 dark:border-[#1DB954] overflow-hidden flex items-center justify-center text-slate-900 dark:text-[#1DB954] font-black text-xl shadow-lg shadow-black/10 dark:shadow-black/40 relative">
+              <span>{(profileName || currentPersonnel?.name || currentUser?.name || 'U').trim().charAt(0).toUpperCase()}</span>
               {getAvatarUrl(profileAvatar || currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, profileName) ? (
                 <img
                   key={getAvatarUrl(profileAvatar || currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, profileName)}
                   src={getAvatarUrl(profileAvatar || currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, profileName)}
                   alt="avatar preview"
-                  className="w-full h-full object-cover"
+                  className="absolute inset-0 w-full h-full object-cover z-10 block"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                   }}
                 />
               ) : null}
-              <span>{(profileName || currentPersonnel?.name || currentUser?.name || 'U').trim().charAt(0).toUpperCase()}</span>
             </div>
             {isUploadingAvatar && (
               <div className="absolute inset-0 bg-slate-900/70 dark:bg-black/70 rounded-2xl flex items-center justify-center">

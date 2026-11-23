@@ -96,24 +96,13 @@ function buildAnalyticsReportFilter(params: {
     let repOr = 0;
     if (resolvedName) {
       filterParams += `&filter[_and][${andIdx}][_or][${repOr++}][negotiator_name][_icontains]=${encodeURIComponent(resolvedName)}`;
-      filterParams += `&filter[_and][${andIdx}][_or][${repOr++}][customer_id][assigned_marketer_name][_icontains]=${encodeURIComponent(resolvedName)}`;
       if (normName && normName !== resolvedName) {
         filterParams += `&filter[_and][${andIdx}][_or][${repOr++}][negotiator_name][_icontains]=${encodeURIComponent(normName)}`;
-        filterParams += `&filter[_and][${andIdx}][_or][${repOr++}][customer_id][assigned_marketer_name][_icontains]=${encodeURIComponent(normName)}`;
       }
-    }
-    if (params.personnelId) {
+    } else if (params.personnelId) {
+      // Fallback if name could not be resolved
       const pIdStr = String(params.personnelId).trim();
       filterParams += `&filter[_and][${andIdx}][_or][${repOr++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(pIdStr)}`;
-      const rawP = pIdStr.replace(/^p-/i, '');
-      if (rawP && rawP !== pIdStr) {
-        filterParams += `&filter[_and][${andIdx}][_or][${repOr++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(rawP)}`;
-      } else if (rawP) {
-        filterParams += `&filter[_and][${andIdx}][_or][${repOr++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent('p-' + rawP)}`;
-      }
-    }
-    if (params.userId && String(params.userId) !== String(params.personnelId || '')) {
-      filterParams += `&filter[_and][${andIdx}][_or][${repOr++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(String(params.userId))}`;
     }
     if (repOr > 0) {
       andIdx++;
@@ -153,18 +142,12 @@ function matchesStaffReportLocal(
     }
     if (opts.personnelId && String(r.created_by || '') === String(opts.personnelId)) return true;
     if (opts.userId && String(r.created_by || '') === String(opts.userId)) return true;
-    if (cust) {
+    if (!normMe && cust) {
       const custMarketerId = String(cust.assigned_marketer_id || '').trim().toLowerCase();
       const rawCustId = custMarketerId.replace(/^p-/, '');
       const cleanPId = String(opts.personnelId || '').trim().toLowerCase();
       const rawPId = cleanPId.replace(/^p-/, '');
-      const cleanUId = String(opts.userId || '').trim().toLowerCase();
       if (cleanPId && (custMarketerId === cleanPId || (rawPId && rawCustId === rawPId))) return true;
-      if (cleanUId && (custMarketerId === cleanUId || rawCustId === cleanUId)) return true;
-      const normCustMarketerName = normalizePersianString(cust.assigned_marketer_name);
-      if (normMe && normCustMarketerName && (normCustMarketerName === normMe || normCustMarketerName.includes(normMe))) {
-        return true;
-      }
     }
     return false;
   }

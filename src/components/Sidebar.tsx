@@ -818,18 +818,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="relative w-8 h-8 rounded-full overflow-hidden bg-slate-200 dark:bg-zinc-800 shrink-0 flex items-center justify-center font-bold text-xs text-slate-700 dark:text-[#1DB954] border border-slate-300 dark:border-[#333]">
+              <span>{(currentPersonnel?.name || currentUser?.name || 'U').trim().charAt(0).toUpperCase()}</span>
               {getAvatarUrl(currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, currentPersonnel?.name || currentUser?.name || 'U') ? (
                 <img
                   key={getAvatarUrl(currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, currentPersonnel?.name || currentUser?.name || 'U')}
                   src={getAvatarUrl(currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, currentPersonnel?.name || currentUser?.name || 'U')}
                   alt="avatar"
-                  className="w-full h-full object-cover"
+                  className="absolute inset-0 w-full h-full object-cover z-10 block"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                   }}
                 />
               ) : null}
-              <span>{(currentPersonnel?.name || currentUser?.name || 'U').trim().charAt(0).toUpperCase()}</span>
             </div>
             <div className="truncate">
               <div className="text-xs font-bold text-slate-900 dark:text-white truncate flex items-center gap-1">

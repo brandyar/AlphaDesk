@@ -544,18 +544,18 @@ export const PersonalPortalView: React.FC<PersonalPortalViewProps> = ({
           <div className="flex items-center gap-3">
             <div className="relative">
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 dark:from-[#1DB954] dark:to-[#14833b] text-white dark:text-black font-black text-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 dark:shadow-[#1DB954]/20 overflow-hidden border-2 border-emerald-500 dark:border-[#1DB954] relative">
+                <span>{(profileName || currentPersonnel?.name || currentUser?.name || 'U').trim().charAt(0).toUpperCase()}</span>
                 {getAvatarUrl(profileAvatar || currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, profileName) ? (
                   <img
                     key={getAvatarUrl(profileAvatar || currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, profileName)}
                     src={getAvatarUrl(profileAvatar || currentPersonnel?.profile_image || currentPersonnel?.avatar || currentUser?.avatar, profileName)}
                     alt={profileName}
-                    className="w-full h-full object-cover"
+                    className="absolute inset-0 w-full h-full object-cover z-10 block"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
                     }}
                   />
                 ) : null}
-                <span>{(profileName || currentPersonnel?.name || currentUser?.name || 'U').trim().charAt(0).toUpperCase()}</span>
               </div>
               <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 dark:bg-[#1DB954] rounded-full border-2 border-white dark:border-[#121212]" />
             </div>
