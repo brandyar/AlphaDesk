@@ -48,6 +48,7 @@ import {
   formatDisplayDateOnly,
   toPersianDigits,
   NEGOTIATION_STATUS_OPTIONS,
+  isPersonnelActive,
 } from '../utils';
 import { fetchDeepSearch } from '../api';
 import { NavTab } from './Sidebar';
@@ -83,7 +84,10 @@ interface GlobalSearchProps {
   isAdmin: boolean;
   canViewAllCustomers: boolean;
   onSelectCustomer: (customer: Customer) => void;
-  onOpenAddReport: (customerId?: string) => void;
+  onOpenAddReport: (
+    customerId?: string,
+    options?: { customer?: Customer; lockCustomer?: boolean; initialPhone?: string }
+  ) => void;
   onOpenQuickAddWithPhone: (initialPhone?: string) => void;
   onNavigateToTab: (tab: NavTab, subTab?: string) => void;
   onApplyToCustomersList?: (query: string, status?: string) => void;
@@ -182,6 +186,10 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
   const [marketerFilter, setMarketerFilter] = useState<string>('all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number>(-1);
+  const activePersonnelList = useMemo(
+    () => personnelList.filter((p) => isPersonnelActive(p)),
+    [personnelList]
+  );
 
   // Deep server search results (Phase 2 unified GET /api/search)
   const [remoteCustomers, setRemoteCustomers] = useState<DeepSearchCustomerItem[]>([]);
@@ -965,7 +973,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
                   className="w-full h-8 px-2 bg-white dark:bg-[#222] border border-slate-200 dark:border-[#333] rounded-lg text-xs text-slate-800 dark:text-white focus:outline-none focus:border-[#1DB954]"
                 >
                   <option value="all">همه همکاران</option>
-                  {personnelList.map((p) => (
+                  {activePersonnelList.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>
@@ -1146,7 +1154,15 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
                           onClick={() => {
                             recordRecentSearch(localInput);
                             closeAll();
-                            onOpenAddReport(String(c.id));
+                            const searchedPhone =
+                              isPhoneLikeQuery && normalizedPhoneDigits.length >= 4
+                                ? normalizedPhoneDigits
+                                : undefined;
+                            onOpenAddReport(String(c.id), {
+                              customer: c,
+                              lockCustomer: true,
+                              initialPhone: searchedPhone,
+                            });
                           }}
                           className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-emerald-100 text-slate-600 hover:text-emerald-700 dark:bg-[#262626] dark:hover:bg-[#1DB954]/20 dark:text-[#bbb] dark:hover:text-[#1DB954] flex items-center justify-center transition-colors cursor-pointer"
                           title="ثبت گزارش مذاکره"

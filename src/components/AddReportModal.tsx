@@ -1,8 +1,15 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { X, MessageSquareText, Building, User, Calendar, Phone, FileCheck2, Hash, DollarSign, PackageCheck, AlertCircle } from 'lucide-react';
-import { Customer, CustomerReport, Personnel, NegotiationStatus, AuthUser } from '../types';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { X, MessageSquareText, Building, User, Calendar, Phone, FileCheck2, Hash, DollarSign, PackageCheck, AlertCircle, Lock, Loader2, MapPin } from 'lucide-react';
+import { Customer, CustomerReport, Personnel, NegotiationStatus, AuthUser, ReportCommissionType } from '../types';
 import { PersianDatePicker } from './PersianDatePicker';
-import { formatToman, getCustomerPhoneOptions } from '../utils';
+import { formatToman, getCustomerPhoneOptions, isPersonnelActive } from '../utils';
+import { fetchCustomerById } from '../api';
+import {
+  ContractCommissionSection,
+  UnitItemDraft,
+  createEmptyUnitItemDraft,
+  parseUnitDraftsToPayload,
+} from './ContractCommissionSection';
 
 interface AddReportModalProps {
   isOpen: boolean;
@@ -14,10 +21,29 @@ interface AddReportModalProps {
   isAdmin?: boolean;
   onSaveReport: (report: Partial<CustomerReport>) => Promise<void>;
   preselectedCustomerId?: string;
+  preselectedCustomer?: Customer | null;
+  lockCustomer?: boolean;
+  initialPhone?: string;
+  enableUnitSalesCommission?: boolean;
+  tenantUnitSalesMap?: Record<string, boolean>;
 }
 
-export const AddReportModal: React.FC<AddReportModalProps> = ({
-  isOpen,
+const normalizeDigitsForMatch = (val?: string | null): string => {
+  if (!val) return '';
+  let d = String(val).replace(/[^\d]/g, '');
+  if (d.startsWith('0098') && d.length > 4) d = '0' + d.slice(4);
+  else if (d.startsWith('98') && d.length >= 11) d = '0' + d.slice(2);
+  else if (d.length === 10 && d.startsWith('9')) d = '0' + d;
+  return d;
+};
+
+export const AddReportModal: React.FC<AddReportModalProps> = (props) => {
+  if (!props.isOpen) return null;
+  const modalKey = `${props.preselectedCustomer?.id || props.preselectedCustomerId || 'new'}-${props.lockCustomer ? 'locked' : 'open'}-${props.initialPhone || ''}`;
+  return <AddReportModalContent key={modalKey} {...props} />;
+};
+
+const AddReportModalContent: React.FC<AddReportModalProps> = ({
   onClose,
   customers,
   personnelList,
@@ -26,9 +52,12 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
   isAdmin,
   onSaveReport,
   preselectedCustomerId,
+  preselectedCustomer,
+  lockCustomer = false,
+  initialPhone,
+  enableUnitSalesCommission = false,
+  tenantUnitSalesMap,
 }) => {
-  if (!isOpen) return null;
-
   const userIsAdmin = Boolean(
     isAdmin ||
     currentUser?.is_admin ||
@@ -38,21 +67,81 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
     currentPersonnel?.role === 'sales_manager'
   );
 
-  const [customerId, setCustomerId] = useState(preselectedCustomerId || customers[0]?.id || '');
-  const selectedCustomer = useMemo(() => customers.find((c) => c.id === customerId), [customers, customerId]);
+  const activePersonnelList = useMemo(
+    () => personnelList.filter((p) => isPersonnelActive(p)),
+    [personnelList]
+  );
+
+  const initialCustomerId = preselectedCustomer?.id
+    ? String(preselectedCustomer.id)
+    : preselectedCustomerId
+    ? String(preselectedCustomerId)
+    : customers[0]?.id || '';
+
+  const [customerId, setCustomerId] = useState<string>(initialCustomerId);
+  const [fetchedCustomer, setFetchedCustomer] = useState<Customer | null>(null);
+  const [loadingCustomerDetails, setLoadingCustomerDetails] = useState<boolean>(false);
+
+  const baseCustomer = useMemo(() => {
+    const fromList = customers.find((c) => String(c.id) === String(customerId));
+    const fromPre =
+      preselectedCustomer && String(preselectedCustomer.id) === String(customerId)
+        ? preselectedCustomer
+        : null;
+    const fromFetched =
+      fetchedCustomer && String(fetchedCustomer.id) === String(customerId)
+        ? fetchedCustomer
+        : null;
+
+    if (fromFetched) {
+      return {
+        ...(fromPre || {}),
+        ...(fromList || {}),
+        ...fromFetched,
+      } as Customer;
+    }
+    return fromList || fromPre || undefined;
+  }, [customers, customerId, preselectedCustomer, fetchedCustomer]);
+
+  const selectedCustomer = baseCustomer;
+
+  // Fetch full customer details (including all contacts & phone numbers) whenever customerId changes
+  useEffect(() => {
+    if (!customerId) {
+      setFetchedCustomer(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingCustomerDetails(true);
+    fetchCustomerById(customerId)
+      .then((full) => {
+        if (!cancelled && full && full.id) {
+          setFetchedCustomer(full);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoadingCustomerDetails(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
+
   const customerPhoneOptions = useMemo(() => getCustomerPhoneOptions(selectedCustomer), [selectedCustomer]);
 
   // Negotiator name for organization
   const [negotiatorName, setNegotiatorName] = useState(
-    currentPersonnel?.name || currentUser?.name || 'کارشناس پیگیری'
+    currentPersonnel?.name || currentUser?.name || activePersonnelList[0]?.name || 'کارشناس پیگیری'
   );
 
   // Negotiator on customer side (must be initially EMPTY as requested)
   const [customerNegotiatorName, setCustomerNegotiatorName] = useState('');
 
   // Customer phone selection
-  const [negotiationPhone, setNegotiationPhone] = useState(customerPhoneOptions[0]?.number || '');
-  const [isCustomPhone, setIsCustomPhone] = useState(customerPhoneOptions.length === 0);
+  const [negotiationPhone, setNegotiationPhone] = useState(() => customerPhoneOptions[0]?.number || '');
+  const [isCustomPhone, setIsCustomPhone] = useState(false);
+  const userToggledCustomPhoneRef = useRef(false);
 
   const [reportText, setReportText] = useState('');
   const [negotiationScore, setNegotiationScore] = useState<number>(7);
@@ -70,19 +159,63 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
   const [contractDate, setContractDate] = useState(new Date().toISOString().split('T')[0]);
   const [contractItems, setContractItems] = useState('');
   const [contractAmount, setContractAmount] = useState<string>('');
+  const [commissionType, setCommissionType] = useState<ReportCommissionType>('percentage');
+  const [unitItems, setUnitItems] = useState<UnitItemDraft[]>([createEmptyUnitItemDraft()]);
 
   const [saving, setSaving] = useState(false);
 
-  // When customer selection changes, update default phone
+  // Resolve whether unit sales commission is enabled for the selected customer's tenant
+  const unitSalesEnabledForCustomer = useMemo(() => {
+    const custTenant = selectedCustomer?.tenant_id ? String(selectedCustomer.tenant_id) : '';
+    if (custTenant && tenantUnitSalesMap && tenantUnitSalesMap[custTenant] !== undefined) {
+      return Boolean(tenantUnitSalesMap[custTenant]);
+    }
+    return Boolean(enableUnitSalesCommission);
+  }, [selectedCustomer?.tenant_id, tenantUnitSalesMap, enableUnitSalesCommission]);
+
   useEffect(() => {
+    if (!unitSalesEnabledForCustomer && commissionType === 'unit') {
+      setCommissionType('percentage');
+    }
+  }, [unitSalesEnabledForCustomer, commissionType]);
+
+  // Reset custom phone toggle when customer changes
+  useEffect(() => {
+    userToggledCustomPhoneRef.current = false;
+  }, [customerId]);
+
+  // When customer phone options load/update, automatically pick matching initialPhone or first available customer phone
+  useEffect(() => {
+    if (userToggledCustomPhoneRef.current) return;
+
     if (customerPhoneOptions.length > 0) {
-      setNegotiationPhone(customerPhoneOptions[0].number);
+      const targetInitDigits = normalizeDigitsForMatch(initialPhone);
+      if (targetInitDigits.length >= 4) {
+        const matched = customerPhoneOptions.find((opt) => {
+          const optDigits = normalizeDigitsForMatch(opt.number);
+          return (
+            optDigits === targetInitDigits ||
+            optDigits.endsWith(targetInitDigits) ||
+            targetInitDigits.endsWith(optDigits)
+          );
+        });
+        if (matched) {
+          setNegotiationPhone(matched.number);
+          setIsCustomPhone(false);
+          return;
+        }
+      }
+
+      const currentExists = customerPhoneOptions.some((opt) => opt.number === negotiationPhone);
+      if (!currentExists) {
+        setNegotiationPhone(customerPhoneOptions[0].number);
+      }
       setIsCustomPhone(false);
-    } else {
+    } else if (!loadingCustomerDetails) {
       setNegotiationPhone('');
       setIsCustomPhone(true);
     }
-  }, [customerId, customerPhoneOptions]);
+  }, [customerId, customerPhoneOptions, initialPhone, loadingCustomerDetails]);
 
   const isContractStatus = negotiationStatus === 'قرارداد / فاکتور' || negotiationStatus === 'قرارداد';
 
@@ -116,6 +249,19 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
       }
     }
 
+    const effectiveCommType: ReportCommissionType =
+      isContractStatus && unitSalesEnabledForCustomer ? commissionType : 'percentage';
+
+    const parsedUnitItems =
+      isContractStatus && effectiveCommType === 'unit'
+        ? parseUnitDraftsToPayload(unitItems)
+        : [];
+
+    if (isContractStatus && effectiveCommType === 'unit' && parsedUnitItems.length === 0) {
+      setFormError('برای فروش تعدادی، وارد کردن حداقل یک ردیف محصول با نام، تعداد (بیشتر از ۰) و مبلغ پورسانت الزامی است.');
+      return;
+    }
+
     setSaving(true);
     try {
       const finalNegotiator = userIsAdmin
@@ -137,6 +283,8 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
         contract_date: isContractStatus && contractDate ? contractDate : undefined,
         contract_items: isContractStatus && contractItems ? contractItems.trim() : undefined,
         contract_amount: isContractStatus && !isNaN(numericAmount as number) ? numericAmount : undefined,
+        commission_type: isContractStatus ? effectiveCommType : undefined,
+        unit_commission_items: isContractStatus && effectiveCommType === 'unit' ? parsedUnitItems : undefined,
       });
       onClose();
     } catch (err: any) {
@@ -199,25 +347,74 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
             </div>
           )}
 
-          {/* Customer Selection */}
+          {/* Customer Selection (Locked when opened for a specific customer from search) */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
-              انتخاب مشتری <span className="text-red-500 dark:text-[#E22134]">*</span>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5 flex items-center justify-between">
+              <span>
+                {lockCustomer ? 'مشتری انتخاب‌شده' : 'انتخاب مشتری'}{' '}
+                <span className="text-red-500 dark:text-[#E22134]">*</span>
+              </span>
+              {lockCustomer && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-[#1DB954] bg-emerald-50 dark:bg-[#1DB954]/15 border border-emerald-200 dark:border-[#1DB954]/30 px-2 py-0.5 rounded-full">
+                  <Lock className="w-3 h-3" />
+                  <span>قفل‌شده روی این پرونده</span>
+                </span>
+              )}
             </label>
-            <select
-              value={customerId}
-              onChange={(e) => {
-                setCustomerId(e.target.value);
-                setFormError(null);
-              }}
-              className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-lg sm:rounded-md text-xs text-slate-900 dark:text-white focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
-            >
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.company_name} ({c.city}) - بازاریاب: {c.assigned_marketer_name || 'بدون بازاریاب'}
-                </option>
-              ))}
-            </select>
+            {lockCustomer ? (
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#222] border border-emerald-300/70 dark:border-[#1DB954]/35 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-[#1DB954]/15 text-emerald-700 dark:text-[#1DB954] flex items-center justify-center shrink-0">
+                    <Building className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {selectedCustomer?.company_name || selectedCustomer?.manager_name || 'در حال بارگذاری اطلاعات مشتری...'}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                      {selectedCustomer?.manager_name && (
+                        <span className="inline-flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          <span>{selectedCustomer.manager_name}</span>
+                        </span>
+                      )}
+                      {selectedCustomer?.city && (
+                        <span className="inline-flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          <span>{selectedCustomer.city}</span>
+                        </span>
+                      )}
+                      <span>
+                        بازاریاب: {selectedCustomer?.assigned_marketer_name || 'بدون بازاریاب'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {loadingCustomerDetails && (
+                  <Loader2 className="w-4 h-4 text-emerald-600 dark:text-[#1DB954] animate-spin shrink-0" />
+                )}
+              </div>
+            ) : (
+              <select
+                value={customerId}
+                onChange={(e) => {
+                  setCustomerId(e.target.value);
+                  setFormError(null);
+                }}
+                className="w-full h-10 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-lg sm:rounded-md text-xs text-slate-900 dark:text-white focus:border-emerald-500 dark:focus:border-[#1DB954] focus:outline-none"
+              >
+                {selectedCustomer && !customers.some((c) => String(c.id) === String(selectedCustomer.id)) && (
+                  <option value={selectedCustomer.id}>
+                    {selectedCustomer.company_name} ({selectedCustomer.city || '-'}) - بازاریاب: {selectedCustomer.assigned_marketer_name || 'بدون بازاریاب'}
+                  </option>
+                )}
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.company_name} ({c.city}) - بازاریاب: {c.assigned_marketer_name || 'بدون بازاریاب'}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -266,16 +463,23 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3] mb-1.5">
                 شماره تماس مذاکره
               </label>
-              {customerPhoneOptions.length > 0 ? (
+              {loadingCustomerDetails && customerPhoneOptions.length === 0 ? (
+                <div className="w-full h-10 px-3 bg-slate-50 dark:bg-[#282828] border border-slate-200 dark:border-[#333] rounded-lg sm:rounded-md text-xs text-slate-500 dark:text-[#A7A7A7] flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600 dark:text-[#1DB954]" />
+                  <span>در حال دریافت شماره‌های تماس مشتری...</span>
+                </div>
+              ) : customerPhoneOptions.length > 0 ? (
                 <div className="space-y-1.5">
                   <select
                     value={isCustomPhone ? '__custom__' : negotiationPhone}
                     onChange={(e) => {
                       setFormError(null);
                       if (e.target.value === '__custom__') {
+                        userToggledCustomPhoneRef.current = true;
                         setIsCustomPhone(true);
                         setNegotiationPhone('');
                       } else {
+                        userToggledCustomPhoneRef.current = false;
                         setIsCustomPhone(false);
                         setNegotiationPhone(e.target.value);
                       }
@@ -297,6 +501,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                         key={opt.number}
                         type="button"
                         onClick={() => {
+                          userToggledCustomPhoneRef.current = false;
                           setNegotiationPhone(opt.number);
                           setIsCustomPhone(false);
                           setFormError(null);
@@ -353,7 +558,7 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                 onChange={(e) => setNegotiatorName(e.target.value)}
                 className="w-full h-9 px-3 bg-white dark:bg-[#282828] border border-slate-300 dark:border-[#444] rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
               >
-                {personnelList.map((p) => (
+                {activePersonnelList.map((p) => (
                   <option key={p.id} value={p.name}>
                     {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
                   </option>
@@ -490,6 +695,21 @@ export const AddReportModal: React.FC<AddReportModalProps> = ({
                   />
                 </div>
               </div>
+
+              {unitSalesEnabledForCustomer && (
+                <ContractCommissionSection
+                  commissionType={commissionType}
+                  onCommissionTypeChange={(t) => {
+                    setCommissionType(t);
+                    setFormError(null);
+                  }}
+                  unitItems={unitItems}
+                  onUnitItemsChange={(next) => {
+                    setUnitItems(next);
+                    setFormError(null);
+                  }}
+                />
+              )}
             </div>
           )}
 

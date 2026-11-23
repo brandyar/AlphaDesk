@@ -24,7 +24,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Customer, CustomerReport, AdministrativeReport, Personnel, BffStatus } from '../types';
-import { formatTimeRemaining, formatPersianDate, formatFollowupDateTime, formatToman, getStatusTheme, toPersianDigits } from '../utils';
+import { formatTimeRemaining, formatPersianDate, formatFollowupDateTime, formatToman, getStatusTheme, toPersianDigits, isPersonnelActive } from '../utils';
 import { DashboardSummary, fetchDashboardSummary } from '../api';
 
 interface DashboardViewProps {
@@ -76,11 +76,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     (c) => c.status === 'پیش نویس قرارداد' || c.status === 'پیگیری قرارداد'
   );
 
+  const contractsReportsFallbackCount = reports.filter((r) => {
+    const st = String(r.negotiation_status || '').trim();
+    return (
+      st === 'قرارداد' ||
+      st === 'قرارداد / فاکتور' ||
+      st === 'قرارداد/فاکتور' ||
+      Boolean(r.contract_number && String(r.contract_number).trim()) ||
+      Boolean(r.contract_amount && Number(r.contract_amount) > 0)
+    );
+  }).length;
+
   // Accurate Summary Totals
   const totalCustomersCount = activeSummary?.total_customers ?? (customers.length > 0 ? customers.length : 0);
   const contractsWonCount = activeSummary?.contracts_won_count ?? contractsWon.length;
+  const contractsReportsCount =
+    activeSummary?.contracts_reports_count ??
+    (contractsReportsFallbackCount > 0 ? contractsReportsFallbackCount : contractsWonCount);
   const inNegotiationCount = activeSummary?.in_negotiation_count ?? inNegotiation.length;
   const expiredCustomersCount = activeSummary?.expired_customers_count ?? expiredCustomers.length;
+  const activePersonnelCount = personnelList.filter((p) => isPersonnelActive(p)).length;
+  const totalReportsCount = activeSummary?.total_reports_count ?? reports.length;
 
   // Financial contract totals
   const totalContractRevenue = activeSummary?.total_contract_revenue ?? reports.reduce(
@@ -259,7 +275,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] mt-2 flex items-center justify-between">
             <span>مجموع فاکتورهای موفق</span>
-            <span className="text-slate-900 dark:text-white font-bold">{toPersianDigits(contractsWonCount)} فقره</span>
+            <span className="text-slate-900 dark:text-white font-bold">{toPersianDigits(contractsReportsCount)} فقره</span>
           </div>
         </div>
 
@@ -576,7 +592,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#222] text-[11px] text-slate-500 dark:text-[#888] space-y-1">
               <div className="flex justify-between">
                 <span>تعداد کارشناسان فعال:</span>
-                <span className="text-slate-900 dark:text-white font-bold">{toPersianDigits(personnelList.length)} نفر</span>
+                <span className="text-slate-900 dark:text-white font-bold">{toPersianDigits(activePersonnelCount)} نفر</span>
               </div>
               <div className="flex justify-between">
                 <span>کل پرونده‌های مشتریان:</span>
@@ -584,7 +600,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <div className="flex justify-between">
                 <span>کل گزارشات ثبت‌شده:</span>
-                <span className="text-emerald-600 dark:text-[#1DB954] font-bold">{toPersianDigits(reports.length)} گزارش</span>
+                <span className="text-emerald-600 dark:text-[#1DB954] font-bold">{toPersianDigits(totalReportsCount)} گزارش</span>
               </div>
             </div>
           </div>

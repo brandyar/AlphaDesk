@@ -16,8 +16,140 @@ import {
 import { getSafeDirectusPersonnelForeignKey, resolveDirectusTenantId } from '../directus/sync.ts';
 import { cleanCustomerPayloadForDirectus, normalizePersianString } from '../services/phoneNormalizer.ts';
 import { getRequestUser, getRequestTenantId, matchesTenant } from '../middlewares/auth.middleware.ts';
-import { CustomerReport } from '../types.ts';
+import {
+  CustomerReport,
+  ReportCommissionType,
+  ManualCommissionStatus,
+  UnitCommissionItem,
+} from '../types.ts';
 import { invalidateDashboardSummaryCache } from './system.routes.ts';
+import { invalidateAnalyticsCache } from './analytics.routes.ts';
+
+export function normalizeCommissionType(raw: any): ReportCommissionType {
+  if (!raw) return 'percentage';
+  if (Array.isArray(raw)) {
+    const first = raw.find((v) => typeof v === 'string' && v.trim());
+    if (first && String(first).trim().toLowerCase() === 'unit') return 'unit';
+    return 'percentage';
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return normalizeCommissionType(parsed);
+      } catch {}
+    }
+    const clean = trimmed.replace(/^"+|"+$/g, '').toLowerCase();
+    if (clean === 'unit') return 'unit';
+  }
+  return 'percentage';
+}
+
+export function parseUnitCommissionItems(raw: any): UnitCommissionItem[] {
+  if (!raw) return [];
+  let arr: any = raw;
+  if (typeof raw === 'string') {
+    try {
+      arr = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .filter((item) => item && typeof item === 'object')
+    .map((item, idx) => {
+      const qty = Number(item.quantity);
+      const safeQty = Number.isFinite(qty) && qty > 0 ? Math.round(qty) : 1;
+      const unitComm = Number(item.unit_commission);
+      const safeUnitComm = Number.isFinite(unitComm) && unitComm >= 0 ? Math.round(unitComm) : 0;
+      const totalComm = Math.round(safeQty * safeUnitComm);
+
+      const rawStatus = String(item.status || 'pending');
+      const status: 'pending' | 'approved' | 'rejected' =
+        rawStatus === 'approved' || rawStatus === 'rejected' ? rawStatus : 'pending';
+
+      const appQtyRaw = item.approved_quantity !== undefined && item.approved_quantity !== null ? Number(item.approved_quantity) : null;
+      const approved_quantity = appQtyRaw !== null && Number.isFinite(appQtyRaw) && appQtyRaw >= 0 ? Math.round(appQtyRaw) : null;
+
+      const appUnitRaw = item.approved_unit_commission !== undefined && item.approved_unit_commission !== null ? Number(item.approved_unit_commission) : null;
+      const approved_unit_commission = appUnitRaw !== null && Number.isFinite(appUnitRaw) && appUnitRaw >= 0 ? Math.round(appUnitRaw) : null;
+
+      let approved_total_commission: number | null = null;
+      if (status === 'approved') {
+        const finalQty = approved_quantity !== null ? approved_quantity : safeQty;
+        const finalUnit = approved_unit_commission !== null ? approved_unit_commission : safeUnitComm;
+        approved_total_commission = Math.round(finalQty * finalUnit);
+      } else if (status === 'rejected') {
+        approved_total_commission = 0;
+      }
+
+      return {
+        id: String(item.id || `item-${idx + 1}`),
+        product_name: String(item.product_name || '').trim().slice(0, 200),
+        quantity: safeQty,
+        unit_commission: safeUnitComm,
+        total_commission: totalComm,
+        status,
+        approved_quantity,
+        approved_unit_commission,
+        approved_total_commission,
+        manager_note: item.manager_note ? String(item.manager_note).trim().slice(0, 500) : null,
+      };
+    })
+    .filter((it) => it.product_name.length > 0);
+}
+
+export function sanitizeNewUnitCommissionItems(rawItems: any): UnitCommissionItem[] {
+  if (!Array.isArray(rawItems)) return [];
+  const limited = rawItems.slice(0, 50);
+  const sanitized: UnitCommissionItem[] = [];
+  for (let i = 0; i < limited.length; i++) {
+    const raw = limited[i];
+    if (!raw || typeof raw !== 'object') continue;
+    const product_name = String(raw.product_name || '').trim().slice(0, 200);
+    const qty = Number(raw.quantity);
+    const unitComm = Number(raw.unit_commission);
+    if (!product_name) continue;
+    if (!Number.isFinite(qty) || qty <= 0 || qty > 1000000) continue;
+    if (!Number.isFinite(unitComm) || unitComm < 0 || unitComm > 100000000000) continue;
+    const safeQty = Math.round(qty);
+    const safeUnitComm = Math.round(unitComm);
+    sanitized.push({
+      id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim().slice(0, 64) : crypto.randomUUID(),
+      product_name,
+      quantity: safeQty,
+      unit_commission: safeUnitComm,
+      total_commission: Math.round(safeQty * safeUnitComm),
+      status: 'pending',
+      approved_quantity: null,
+      approved_unit_commission: null,
+      approved_total_commission: null,
+      manager_note: null,
+    });
+  }
+  return sanitized;
+}
+
+export function normalizeReportRecord(r: any): any {
+  if (!r || typeof r !== 'object') return r;
+  const normalizedType = r.commission_type !== undefined && r.commission_type !== null
+    ? normalizeCommissionType(r.commission_type)
+    : undefined;
+  const parsedItems = r.unit_commission_items ? parseUnitCommissionItems(r.unit_commission_items) : null;
+  return {
+    ...r,
+    ...(normalizedType !== undefined ? { commission_type: normalizedType } : {}),
+    ...(r.unit_commission_items !== undefined ? { unit_commission_items: parsedItems } : {}),
+    ...(r.manual_commission_amount !== undefined && r.manual_commission_amount !== null
+      ? { manual_commission_amount: Number(r.manual_commission_amount) || 0 }
+      : {}),
+    ...(r.approved_commission_amount !== undefined && r.approved_commission_amount !== null
+      ? { approved_commission_amount: Number(r.approved_commission_amount) || 0 }
+      : {}),
+  };
+}
 
 export function normalizeToIsoDateTime(dateVal?: any): string | null {
   if (dateVal === undefined || dateVal === null || dateVal === '') return null;
@@ -374,7 +506,7 @@ router.get('/', async (req: Request, res: Response) => {
         res.setHeader('X-Limit', String(reqLimit));
 
         return res.json({
-          data: items,
+          data: items.map(normalizeReportRecord),
           meta: {
             filter_count: totalCount,
             total_count: totalCount,
@@ -711,12 +843,14 @@ router.get('/', async (req: Request, res: Response) => {
   res.setHeader('X-Page', String(reqPage));
   res.setHeader('X-Limit', String(reqLimit));
 
+  const normalizedPage = paginatedList.map(normalizeReportRecord);
+
   if (isUnlimited) {
-    return res.json(paginatedList);
+    return res.json(normalizedPage);
   }
 
   res.json({
-    data: paginatedList,
+    data: normalizedPage,
     meta: {
       filter_count: totalCount,
       total_count: totalCount,
@@ -777,6 +911,34 @@ router.post('/', async (req: Request, res: Response) => {
 
 
 
+  const statusStr = String(payload.negotiation_status || 'تماس برقرار نشده').trim();
+  const isContractStatus =
+    statusStr === 'قرارداد' ||
+    statusStr === 'قرارداد / فاکتور' ||
+    statusStr === 'قرارداد/فاکتور';
+
+  const effectiveCommissionType: ReportCommissionType | null = isContractStatus
+    ? normalizeCommissionType(payload.commission_type)
+    : null;
+
+  let sanitizedUnitItems: UnitCommissionItem[] | null = null;
+  let manualCommissionAmount: number | null = null;
+  let manualCommissionStatus: ManualCommissionStatus | null = null;
+
+  if (isContractStatus && effectiveCommissionType === 'unit') {
+    sanitizedUnitItems = sanitizeNewUnitCommissionItems(payload.unit_commission_items);
+    if (sanitizedUnitItems.length === 0) {
+      return res.status(400).json({
+        error: 'برای فروش تعدادی، ثبت حداقل یک ردیف محصول با تعداد و مبلغ پورسانت معتبر الزامی است.',
+      });
+    }
+    manualCommissionAmount = sanitizedUnitItems.reduce((sum, item) => sum + item.total_commission, 0);
+    manualCommissionStatus = 'pending';
+  } else if (isContractStatus) {
+    manualCommissionAmount = 0;
+    manualCommissionStatus = null;
+  }
+
   const newReport: CustomerReport = {
     id: newReportId,
     customer_id: payload.customer_id,
@@ -786,13 +948,21 @@ router.post('/', async (req: Request, res: Response) => {
     report_text: (payload.report_text || '').trim(),
     negotiation_score: Number(payload.negotiation_score) || 5,
     next_followup_date: nextFollowupIso,
-    negotiation_status: payload.negotiation_status || 'تماس برقرار نشده',
+    negotiation_status: statusStr,
     created_by: safeCreatedByFk || undefined,
     date_created: (payload.date_created ? normalizeToIsoDateTime(payload.date_created) : null) || nowIso,
     contract_number: payload.contract_number ? String(payload.contract_number).trim() : null,
     contract_date: contractDateIso,
     contract_items: payload.contract_items ? String(payload.contract_items).trim() : null,
     contract_amount: payload.contract_amount ? Number(payload.contract_amount) : null,
+    commission_type: effectiveCommissionType,
+    unit_commission_items: sanitizedUnitItems,
+    manual_commission_amount: manualCommissionAmount,
+    approved_commission_amount: null,
+    manual_commission_status: manualCommissionStatus,
+    commission_review_note: null,
+    commission_reviewed_by: null,
+    commission_reviewed_at: null,
   };
 
 
@@ -803,6 +973,8 @@ router.post('/', async (req: Request, res: Response) => {
       const directusReportPayload: Record<string, any> = {
         ...newReport,
         tenant_id: tenantNum,
+        // Directus schema defines commission_type as JSON (select-multiple-dropdown)
+        commission_type: effectiveCommissionType ? [effectiveCommissionType] : null,
       };
       delete directusReportPayload.created_by;
 
@@ -844,8 +1016,9 @@ router.post('/', async (req: Request, res: Response) => {
       invalidateCustomersCache();
       invalidateReportsCache();
       invalidateDashboardSummaryCache();
+      invalidateAnalyticsCache();
 
-      return res.status(201).json(created.data || newReport);
+      return res.status(201).json(normalizeReportRecord(created.data || newReport));
     } catch (err: any) {
       if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
         console.warn('Customer report create Directus notice, falling back to local store:', err.message);
@@ -866,8 +1039,9 @@ router.post('/', async (req: Request, res: Response) => {
   invalidateCustomersCache();
   invalidateReportsCache();
   invalidateDashboardSummaryCache();
+  invalidateAnalyticsCache();
 
-  res.status(201).json(newReport);
+  res.status(201).json(normalizeReportRecord(newReport));
 });
 
 router.delete('/:id', async (req: Request, res: Response) => {
@@ -897,6 +1071,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
       invalidateReportsCache();
       invalidateDashboardSummaryCache();
+      invalidateAnalyticsCache();
       return res.status(204).send();
     } catch (err: any) {
       return res.status(500).json({
@@ -915,6 +1090,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
   invalidateReportsCache();
   invalidateDashboardSummaryCache();
+  invalidateAnalyticsCache();
   res.status(204).send();
 });
 
@@ -1308,6 +1484,8 @@ router.post('/repair-negotiators', async (req: Request, res: Response) => {
 
   repairReportsCache = null;
   invalidateReportsCache();
+  invalidateDashboardSummaryCache();
+  invalidateAnalyticsCache();
 
   return res.json({
     dry_run: false,

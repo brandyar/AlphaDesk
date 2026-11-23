@@ -49,6 +49,23 @@ export interface Customer {
   date_updated: string;
 }
 
+export type ReportCommissionType = 'percentage' | 'unit';
+export type ManualCommissionStatus = 'pending' | 'approved' | 'partially_approved' | 'rejected';
+export type UnitItemReviewStatus = 'pending' | 'approved' | 'rejected';
+
+export interface UnitCommissionItem {
+  id: string;
+  product_name: string;
+  quantity: number;
+  unit_commission: number;
+  total_commission: number;
+  status: UnitItemReviewStatus;
+  approved_quantity?: number | null;
+  approved_unit_commission?: number | null;
+  approved_total_commission?: number | null;
+  manager_note?: string | null;
+}
+
 export interface CustomerReport {
   id: string;
   customer_id: string;
@@ -66,6 +83,14 @@ export interface CustomerReport {
   contract_date?: string | null;
   contract_items?: string | null;
   contract_amount?: number | null;
+  commission_type?: ReportCommissionType | string[] | null;
+  unit_commission_items?: UnitCommissionItem[] | string | null;
+  manual_commission_amount?: number | null;
+  approved_commission_amount?: number | null;
+  manual_commission_status?: ManualCommissionStatus | null;
+  commission_review_note?: string | null;
+  commission_reviewed_by?: string | null;
+  commission_reviewed_at?: string | null;
 }
 
 export interface ColdLead {
@@ -238,6 +263,8 @@ export interface TenantSettingsState {
   id?: string | number;
   tenant_id: string;
   sms_phones?: string[];
+  enable_unit_sales_commission?: boolean;
+  unit_commission_catalog?: any[];
   date_created?: string;
   date_updated?: string;
 }
@@ -267,6 +294,16 @@ export interface CommissionTier {
   rate_percent: number;
 }
 
+export type BaseSalaryMinSalesBasis =
+  | 'percentage_sales_amount'
+  | 'total_sales_amount'
+  | 'unit_sales_count'
+  | 'contracts_count'
+  | 'either_amount_or_units'
+  | 'both_amount_and_units';
+
+export type BaseSalaryBelowTargetMode = 'zero' | 'prorata';
+
 export interface PersonnelSalaryConfig {
   id?: number | string;
   personnel_id: string;
@@ -277,6 +314,11 @@ export interface PersonnelSalaryConfig {
   tiered_calculation_mode?: 'marginal' | 'retroactive';
   commission_tiers?: CommissionTier[];
   min_sales_target?: number;
+  require_min_sales_for_base_salary?: boolean;
+  base_salary_min_sales_basis?: BaseSalaryMinSalesBasis;
+  base_salary_min_sales_amount?: number;
+  base_salary_min_units_count?: number;
+  base_salary_below_target_mode?: BaseSalaryBelowTargetMode;
   is_active: boolean;
   effective_from?: string | null;
   tenant_id?: string;
@@ -294,6 +336,8 @@ export interface PayrollSlip {
   total_contracts_amount: number;
   contracts_count: number;
   commission_amount: number;
+  percentage_commission_amount?: number;
+  unit_commission_amount?: number;
   advances_deducted: number;
   bonuses_amount: number;
   deductions_amount: number;

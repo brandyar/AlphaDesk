@@ -50,7 +50,10 @@ interface HeaderProps {
   reports?: CustomerReport[];
   canViewAllCustomers?: boolean;
   onSelectCustomer?: (customer: Customer) => void;
-  onOpenAddReport?: (customerId?: string) => void;
+  onOpenAddReport?: (
+    customerId?: string,
+    options?: { customer?: Customer; lockCustomer?: boolean; initialPhone?: string }
+  ) => void;
   onOpenQuickAddWithPhone?: (initialPhone?: string) => void;
   onNavigateToTab?: (tab: NavTab, subTab?: string) => void;
   onApplyToCustomersList?: (query: string, status?: string) => void;
@@ -186,7 +189,7 @@ export const Header: React.FC<HeaderProps> = ({
             isAdmin={isAdmin}
             canViewAllCustomers={canViewAllCustomers}
             onSelectCustomer={(c) => onSelectCustomer?.(c)}
-            onOpenAddReport={(cid) => onOpenAddReport?.(cid)}
+            onOpenAddReport={(cid, opts) => onOpenAddReport?.(cid, opts)}
             onOpenQuickAddWithPhone={(phone) =>
               onOpenQuickAddWithPhone ? onOpenQuickAddWithPhone(phone) : onOpenQuickAddCustomer()
             }

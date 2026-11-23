@@ -31,6 +31,7 @@ import {
   formatToman,
   formatStatusLabel,
   NEGOTIATION_STATUS_OPTIONS,
+  isPersonnelActive,
 } from '../utils';
 import { PaginationControl } from './PaginationControl';
 import { fetchCustomerReportsPaginated } from '../api';
@@ -719,7 +720,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 className="h-9 px-3 rounded-xl bg-slate-50 dark:bg-[#282828] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#3e3e3e] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
               >
                 <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه کارشناسان</option>
-                {personnelList.map((p) => (
+                {personnelList.filter((p) => isPersonnelActive(p)).map((p) => (
                   <option key={p.id} value={p.name} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                     {p.name}
                   </option>

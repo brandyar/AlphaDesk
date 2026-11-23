@@ -30,11 +30,29 @@ export function setLatestAccessToken(token?: string) {
 }
 
 function resolvePort(): number {
-  const portArgIndex = process.argv.indexOf('--port');
-  if (portArgIndex !== -1 && process.argv[portArgIndex + 1]) {
-    const val = parseInt(process.argv[portArgIndex + 1], 10);
-    if (!isNaN(val) && val > 0) return val;
+  for (let i = 0; i < process.argv.length; i++) {
+    const arg = process.argv[i];
+    if (arg === '--port' && process.argv[i + 1]) {
+      const val = parseInt(process.argv[i + 1], 10);
+      if (!isNaN(val) && val > 0) return val;
+    }
+    if (arg.startsWith('--port=')) {
+      const val = parseInt(arg.slice('--port='.length), 10);
+      if (!isNaN(val) && val > 0) return val;
+    }
   }
+
+  if (process.env.NODE_ENV !== 'production') {
+    const defaultAppPort = process.env.DEFAULT_APP_PORT
+      ? parseInt(process.env.DEFAULT_APP_PORT.trim(), 10)
+      : 3000;
+    const envPort = process.env.PORT ? process.env.PORT.trim() : '';
+    const nginxPort = process.env.NGINX_PORT ? process.env.NGINX_PORT.trim() : '';
+    if (!envPort || (nginxPort && envPort === nginxPort)) {
+      return !isNaN(defaultAppPort) && defaultAppPort > 0 ? defaultAppPort : 3000;
+    }
+  }
+
   const parsedPort = process.env.PORT ? parseInt(process.env.PORT.trim(), 10) : 3000;
   return !isNaN(parsedPort) && parsedPort > 0 ? parsedPort : 3000;
 }

@@ -96,6 +96,7 @@ import {
   uploadAvatar,
   changeUserPassword,
   fetchTenants,
+  fetchTenantSettings,
   getActiveTenantId,
   setActiveTenantId,
   fetchDashboardSummary,
@@ -169,10 +170,58 @@ export default function App() {
   const [isQuickAddModalOpen, setIsQuickAddModalOpen] = useState(false);
   const [quickAddInitialPhone, setQuickAddInitialPhone] = useState<string | undefined>(undefined);
   const [reportPreselectedCustomerId, setReportPreselectedCustomerId] = useState<string | undefined>(undefined);
+  const [reportPreselectedCustomer, setReportPreselectedCustomer] = useState<Customer | null>(null);
+  const [reportLockCustomer, setReportLockCustomer] = useState<boolean>(false);
+  const [reportInitialPhone, setReportInitialPhone] = useState<string | undefined>(undefined);
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
   const [mergeInitialCustomerIds, setMergeInitialCustomerIds] = useState<string[]>([]);
 
   const [loading, setLoading] = useState<boolean>(() => !initialSession.user);
+  const [tenantUnitSalesMap, setTenantUnitSalesMap] = useState<Record<string, boolean>>({});
+
+  // Load and refresh per-tenant unit sales commission settings
+  const loadTenantUnitSalesSettings = React.useCallback(async () => {
+    try {
+      const res = await fetchTenantSettings('all');
+      const map: Record<string, boolean> = {};
+      if (Array.isArray(res?.items)) {
+        for (const item of res.items) {
+          const tKey = String(item.tenant_id || 'default');
+          const enabled = Boolean(item.enable_unit_sales_commission);
+          map[tKey] = enabled;
+          if (tKey === '1') map['default'] = enabled;
+          if (tKey === 'default') map['1'] = enabled;
+        }
+      } else if (res?.tenant_id) {
+        const tKey = String(res.tenant_id);
+        const enabled = Boolean(res.enable_unit_sales_commission);
+        map[tKey] = enabled;
+        if (tKey === '1') map['default'] = enabled;
+        if (tKey === 'default') map['1'] = enabled;
+      }
+      setTenantUnitSalesMap(map);
+    } catch {
+      // ignore non-fatal tenant setting fetch errors
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTenantUnitSalesSettings();
+    const onSettingsUpdated = () => {
+      loadTenantUnitSalesSettings();
+    };
+    window.addEventListener('crm_tenant_settings_updated', onSettingsUpdated);
+    return () => {
+      window.removeEventListener('crm_tenant_settings_updated', onSettingsUpdated);
+    };
+  }, [loadTenantUnitSalesSettings, activeTenantId, currentUser?.id]);
+
+  const activeTenantUnitSalesEnabled = React.useMemo(() => {
+    if (activeTenantId === 'all') {
+      return Object.values(tenantUnitSalesMap).some(Boolean);
+    }
+    return Boolean(tenantUnitSalesMap[String(activeTenantId)]);
+  }, [activeTenantId, tenantUnitSalesMap]);
 
   // Load and refresh tenants
   const loadTenants = async () => {
@@ -1302,8 +1351,11 @@ export default function App() {
           reports={userScopedReports}
           canViewAllCustomers={canViewAllCustomers}
           onSelectCustomer={openCustomerDetail}
-          onOpenAddReport={(customerId) => {
+          onOpenAddReport={(customerId, options) => {
             setReportPreselectedCustomerId(customerId);
+            setReportPreselectedCustomer(options?.customer || null);
+            setReportLockCustomer(Boolean(options?.lockCustomer));
+            setReportInitialPhone(options?.initialPhone);
             setIsAddReportModalOpen(true);
           }}
           onOpenQuickAddWithPhone={(initialPhone) => {
@@ -1359,6 +1411,9 @@ export default function App() {
                     onOpenQuickAddCustomer={() => setIsQuickAddModalOpen(true)}
                     onOpenAddReport={() => {
                       setReportPreselectedCustomerId(undefined);
+                      setReportPreselectedCustomer(null);
+                      setReportLockCustomer(false);
+                      setReportInitialPhone(undefined);
                       setIsAddReportModalOpen(true);
                     }}
                     onNavigateToTab={(tab, sub) => {
@@ -1421,6 +1476,9 @@ export default function App() {
                     activeTenantId={activeTenantId}
                     onOpenAddReportModal={(customerId?: string) => {
                       setReportPreselectedCustomerId(customerId);
+                      setReportPreselectedCustomer(null);
+                      setReportLockCustomer(false);
+                      setReportInitialPhone(undefined);
                       setIsAddReportModalOpen(true);
                     }}
                     onSelectCustomer={openCustomerDetail}
@@ -1557,6 +1615,8 @@ export default function App() {
                         currentPersonnel={currentPersonnel}
                         currentUser={currentUser}
                         isAdmin={isCurrentUserAdmin}
+                        enableUnitSalesCommission={activeTenantUnitSalesEnabled}
+                        tenantUnitSalesMap={tenantUnitSalesMap}
                       />
                     ) : (
                       <div className="flex flex-col items-center justify-center h-64 space-y-3">
@@ -1699,6 +1759,8 @@ export default function App() {
             currentPersonnel={currentPersonnel}
             currentUser={currentUser}
             isAdmin={isCurrentUserAdmin}
+            enableUnitSalesCommission={activeTenantUnitSalesEnabled}
+            tenantUnitSalesMap={tenantUnitSalesMap}
           />
         );
       })()}
@@ -1787,6 +1849,9 @@ export default function App() {
         onClose={() => {
           setIsAddReportModalOpen(false);
           setReportPreselectedCustomerId(undefined);
+          setReportPreselectedCustomer(null);
+          setReportLockCustomer(false);
+          setReportInitialPhone(undefined);
         }}
         customers={customers}
         personnelList={personnelList}
@@ -1799,6 +1864,11 @@ export default function App() {
         )}
         onSaveReport={handleAddCustomerReport}
         preselectedCustomerId={reportPreselectedCustomerId}
+        preselectedCustomer={reportPreselectedCustomer}
+        lockCustomer={reportLockCustomer}
+        initialPhone={reportInitialPhone}
+        enableUnitSalesCommission={activeTenantUnitSalesEnabled}
+        tenantUnitSalesMap={tenantUnitSalesMap}
       />
 
       {/* Admin Customer Merge Modal */}

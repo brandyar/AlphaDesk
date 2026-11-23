@@ -174,9 +174,91 @@ export function getJalaliDaysInMonth(jy: number, jm: number): number {
   return isJalaliLeapYear(jy) ? 30 : 29;
 }
 
+export const TEHRAN_TIMEZONE = 'Asia/Tehran';
+
+const NAIVE_ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$/;
+const DATE_ONLY_ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Safely parses date strings coming from Directus / APIs.
+ * - Naive ISO datetimes without timezone (e.g. "2026-11-22T05:40:00") are treated as UTC (`Z`)
+ *   because PostgreSQL `timestamp without time zone` strips the trailing `Z` from UTC timestamps.
+ * - Date-only strings ("YYYY-MM-DD") are anchored to midnight Asia/Tehran (`+03:30`) so calendar
+ *   dates never shift by a day or show a spurious 03:30 time.
+ */
+export function parseServerDate(input?: string | Date | number | null): Date | null {
+  if (input === undefined || input === null || input === '') return null;
+  if (input instanceof Date) {
+    return isNaN(input.getTime()) ? null : input;
+  }
+  if (typeof input === 'number') {
+    const d = new Date(input);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const raw = String(input).trim();
+  if (!raw) return null;
+
+  if (DATE_ONLY_ISO_RE.test(raw)) {
+    const d = new Date(`${raw}T00:00:00+03:30`);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  if (NAIVE_ISO_DATETIME_RE.test(raw)) {
+    const normalized = raw.replace(' ', 'T');
+    const withSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)
+      ? `${normalized}:00`
+      : normalized;
+    const d = new Date(`${withSeconds}Z`);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  let d = new Date(raw);
+  if (isNaN(d.getTime()) && raw.includes(' ')) {
+    d = new Date(raw.replace(' ', 'T'));
+  }
+  return isNaN(d.getTime()) ? null : d;
+}
+
+const cachedTehranPartsFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: TEHRAN_TIMEZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+});
+
+export function getTehranDateParts(date: Date): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+} {
+  const parts = cachedTehranPartsFormatter.formatToParts(date);
+  const map: Record<string, string> = {};
+  for (const p of parts) {
+    if (p.type !== 'literal') {
+      map[p.type] = p.value;
+    }
+  }
+  const rawHour = parseInt(map.hour || '0', 10);
+  return {
+    year: parseInt(map.year || String(date.getUTCFullYear()), 10),
+    month: parseInt(map.month || String(date.getUTCMonth() + 1), 10),
+    day: parseInt(map.day || String(date.getUTCDate()), 10),
+    hour: isNaN(rawHour) ? 0 : rawHour % 24,
+    minute: parseInt(map.minute || '0', 10) || 0,
+    second: parseInt(map.second || '0', 10) || 0,
+  };
+}
+
 export function getTodayJalali(): { jy: number; jm: number; jd: number; str: string } {
-  const now = new Date();
-  const j = gregorianToJalali(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  const parts = getTehranDateParts(new Date());
+  const j = gregorianToJalali(parts.year, parts.month, parts.day);
   const mm = String(j.jm).padStart(2, '0');
   const dd = String(j.jd).padStart(2, '0');
   return {
@@ -190,9 +272,10 @@ export function getTodayJalali(): { jy: number; jm: number; jd: number; str: str
 export function gregorianIsoToJalali(isoString?: string | null): string {
   if (!isoString) return '';
   try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return '';
-    const j = gregorianToJalali(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    const d = parseServerDate(isoString);
+    if (!d) return '';
+    const parts = getTehranDateParts(d);
+    const j = gregorianToJalali(parts.year, parts.month, parts.day);
     const mm = String(j.jm).padStart(2, '0');
     const dd = String(j.jd).padStart(2, '0');
     return `${j.jy}/${mm}/${dd}`;
@@ -218,7 +301,8 @@ export function jalaliToGregorianIso(jalaliStr?: string | null): string {
 }
 
 /**
- * Converts Jalali date string (YYYY/MM/DD) and hour/minute into a valid ISO 8601 string in local time.
+ * Converts Jalali date string (YYYY/MM/DD) and hour/minute in Asia/Tehran (+03:30)
+ * into a standard UTC ISO 8601 string.
  */
 export function jalaliAndTimeToIso(jalaliStr: string, hour = 10, minute = 0): string {
   if (!jalaliStr) return '';
@@ -230,7 +314,12 @@ export function jalaliAndTimeToIso(jalaliStr: string, hour = 10, minute = 0): st
     const g = jalaliToGregorian(parts[0], parts[1], parts[2]);
     const clampedHour = Math.min(23, Math.max(0, hour));
     const clampedMinute = Math.min(59, Math.max(0, minute));
-    const d = new Date(g.gy, g.gm - 1, g.gd, clampedHour, clampedMinute, 0, 0);
+    const mm = String(g.gm).padStart(2, '0');
+    const dd = String(g.gd).padStart(2, '0');
+    const hh = String(clampedHour).padStart(2, '0');
+    const mi = String(clampedMinute).padStart(2, '0');
+    const d = new Date(`${g.gy}-${mm}-${dd}T${hh}:${mi}:00+03:30`);
+    if (isNaN(d.getTime())) return '';
     return d.toISOString();
   } catch {
     return '';
@@ -238,7 +327,7 @@ export function jalaliAndTimeToIso(jalaliStr: string, hour = 10, minute = 0): st
 }
 
 /**
- * Parses an ISO string or date into Jalali date string and separate hour/minute.
+ * Parses an ISO string or date into Jalali date string and separate hour/minute in Asia/Tehran.
  */
 export function parseIsoToJalaliAndTime(isoString?: string | null): {
   jalaliDate: string;
@@ -249,8 +338,8 @@ export function parseIsoToJalaliAndTime(isoString?: string | null): {
 } {
   const today = getTodayJalali();
   if (!isoString) {
-    const now = new Date();
-    const h = (now.getHours() + 2) % 24;
+    const nowParts = getTehranDateParts(new Date());
+    const h = (nowParts.hour + 2) % 24;
     const m = 0;
     const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     return {
@@ -263,8 +352,8 @@ export function parseIsoToJalaliAndTime(isoString?: string | null): {
   }
 
   try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) {
+    const d = parseServerDate(isoString);
+    if (!d) {
       return {
         jalaliDate: today.str,
         hour: 10,
@@ -273,12 +362,13 @@ export function parseIsoToJalaliAndTime(isoString?: string | null): {
         displayStr: toPersianDigits(today.str),
       };
     }
-    const j = gregorianToJalali(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    const parts = getTehranDateParts(d);
+    const j = gregorianToJalali(parts.year, parts.month, parts.day);
     const mm = String(j.jm).padStart(2, '0');
     const dd = String(j.jd).padStart(2, '0');
     const jalaliDate = `${j.jy}/${mm}/${dd}`;
-    const hour = d.getHours();
-    const minute = d.getMinutes();
+    const hour = parts.hour;
+    const minute = parts.minute;
     const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
     const displayStr = `${toPersianDigits(jalaliDate)} - ساعت ${toPersianDigits(timeStr)}`;
     return { jalaliDate, hour, minute, timeStr, displayStr };
@@ -295,38 +385,43 @@ export function parseIsoToJalaliAndTime(isoString?: string | null): {
 
 // Module-level cached formatters to avoid repeated synchronous ICU table initialization in loops / mobile devices
 const cachedPersianFollowupDateFormatter = new Intl.DateTimeFormat('fa-IR', {
+  timeZone: TEHRAN_TIMEZONE,
   year: 'numeric',
   month: 'short',
   day: 'numeric',
 });
 
 const cachedPersianDateFormatter = new Intl.DateTimeFormat('fa-IR', {
+  timeZone: TEHRAN_TIMEZONE,
   year: 'numeric',
   month: 'long',
   day: 'numeric',
 });
 
 const cachedPersianDateTimeFormatter = new Intl.DateTimeFormat('fa-IR', {
+  timeZone: TEHRAN_TIMEZONE,
   year: 'numeric',
   month: 'short',
   day: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
+  hour12: false,
 });
 
 /**
- * Returns a human-friendly Persian string for follow-up date and time.
+ * Returns a human-friendly Persian string for follow-up date and time in Asia/Tehran.
  */
 export function formatFollowupDateTime(isoString?: string | null): string {
   if (!isoString) return 'تنظیم نشده';
   try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return String(isoString);
-    const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+    const d = parseServerDate(isoString);
+    if (!d) return String(isoString);
+    const parts = getTehranDateParts(d);
+    const hasTime = parts.hour !== 0 || parts.minute !== 0;
     if (hasTime) {
       const datePart = cachedPersianFollowupDateFormatter.format(d);
-      const hour = String(d.getHours()).padStart(2, '0');
-      const minute = String(d.getMinutes()).padStart(2, '0');
+      const hour = String(parts.hour).padStart(2, '0');
+      const minute = String(parts.minute).padStart(2, '0');
       return `${datePart} - ساعت ${toPersianDigits(`${hour}:${minute}`)}`;
     }
     return formatPersianDate(isoString);
@@ -417,8 +512,12 @@ export function formatTimeRemaining(deadlineIso?: string | null): {
     return { text: 'بدون مهلت', isExpired: false, hoursLeft: 9999, badgeClass: 'text-slate-500 bg-slate-100 border border-slate-200 dark:text-[#A7A7A7] dark:bg-[#282828] dark:border-transparent' };
   }
 
-  const now = new Date().getTime();
-  const deadline = new Date(deadlineIso).getTime();
+  const now = Date.now();
+  const parsedDeadline = parseServerDate(deadlineIso);
+  if (!parsedDeadline) {
+    return { text: 'بدون مهلت', isExpired: false, hoursLeft: 9999, badgeClass: 'text-slate-500 bg-slate-100 border border-slate-200 dark:text-[#A7A7A7] dark:bg-[#282828] dark:border-transparent' };
+  }
+  const deadline = parsedDeadline.getTime();
   const diff = deadline - now;
 
   if (diff <= 0) {
@@ -476,8 +575,8 @@ export function formatFollowupRelativeBadge(followupIso?: string | null): {
     };
   }
 
-  const d = new Date(followupIso);
-  if (isNaN(d.getTime())) {
+  const d = parseServerDate(followupIso);
+  if (!d) {
     return {
       text: 'نامعتبر',
       badgeClass: 'text-slate-500 bg-slate-100 border border-slate-200 dark:text-[#A7A7A7] dark:bg-[#282828] dark:border-[#383838]',
@@ -489,7 +588,10 @@ export function formatFollowupRelativeBadge(followupIso?: string | null): {
   }
 
   const now = new Date();
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const nowParts = getTehranDateParts(now);
+  const startToday = new Date(
+    `${nowParts.year}-${String(nowParts.month).padStart(2, '0')}-${String(nowParts.day).padStart(2, '0')}T00:00:00+03:30`
+  ).getTime();
   const endToday = startToday + 86400000 - 1;
   const targetTime = d.getTime();
 
@@ -567,8 +669,8 @@ export function formatFollowupRelativeBadge(followupIso?: string | null): {
 export function formatPersianDate(isoString?: string | null): string {
   if (!isoString) return '-';
   try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
+    const d = parseServerDate(isoString);
+    if (!d) return isoString;
     return cachedPersianDateFormatter.format(d);
   } catch (e) {
     return isoString;
@@ -578,8 +680,8 @@ export function formatPersianDate(isoString?: string | null): string {
 export function formatPersianDateTime(isoString: string): string {
   if (!isoString) return '-';
   try {
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
+    const d = parseServerDate(isoString);
+    if (!d) return isoString;
     return cachedPersianDateTimeFormatter.format(d);
   } catch (e) {
     return isoString;
@@ -1162,12 +1264,8 @@ export function formatDisplayDate(dateVal?: any): string {
   }
 
   // 3. ISO or standard JS Date string
-  let d = new Date(str);
-  if (isNaN(d.getTime())) {
-    d = new Date(str.replace(' ', 'T'));
-  }
-
-  if (!isNaN(d.getTime())) {
+  const d = parseServerDate(str);
+  if (d) {
     return formatPersianDateTime(d.toISOString());
   }
 
@@ -1200,12 +1298,8 @@ export function formatDisplayDateOnly(dateVal?: any): string {
     return toPersianDigits(dateOnlyPart);
   }
 
-  let d = new Date(str);
-  if (isNaN(d.getTime())) {
-    d = new Date(str.replace(' ', 'T'));
-  }
-
-  if (!isNaN(d.getTime())) {
+  const d = parseServerDate(str);
+  if (d) {
     const j = gregorianIsoToJalali(d.toISOString());
     return j ? toPersianDigits(j) : formatPersianDate(d.toISOString());
   }
@@ -1237,23 +1331,20 @@ export function normalizeToIsoDateTime(dateVal?: any): string | null {
     try {
       const parts = str.split(/\s+/);
       const datePart = parts[0];
-      const timePart = parts[1] || '00:00:00';
+      const rawTimePart = parts[1] || '00:00:00';
+      const timePart = /^\d{1,2}:\d{2}$/.test(rawTimePart) ? `${rawTimePart}:00` : rawTimePart;
       const [jy, jm, jd] = datePart.split(/[\/\-]/).map((p) => parseInt(p, 10));
       if (!isNaN(jy) && !isNaN(jm) && !isNaN(jd)) {
         const g = jalaliToGregorian(jy, jm, jd);
-        const isoStr = `${g.gy}-${String(g.gm).padStart(2, '0')}-${String(g.gd).padStart(2, '0')}T${timePart}`;
+        const isoStr = `${g.gy}-${String(g.gm).padStart(2, '0')}-${String(g.gd).padStart(2, '0')}T${timePart}+03:30`;
         const d = new Date(isoStr);
         if (!isNaN(d.getTime())) return d.toISOString();
       }
     } catch {}
   }
 
-  let d = new Date(str);
-  if (isNaN(d.getTime())) {
-    d = new Date(str.replace(' ', 'T'));
-  }
-
-  if (!isNaN(d.getTime())) {
+  const d = parseServerDate(str);
+  if (d) {
     return d.toISOString();
   }
 

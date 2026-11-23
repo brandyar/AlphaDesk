@@ -42,6 +42,7 @@ import {
 } from '../middlewares/auth.middleware.ts';
 import { CustomerContact, Customer } from '../types.ts';
 import { invalidateDashboardSummaryCache } from './system.routes.ts';
+import { invalidateAnalyticsCache } from './analytics.routes.ts';
 
 const router = Router();
 
@@ -1298,6 +1299,7 @@ router.post('/', async (req: Request, res: Response) => {
 
         upsertCustomerInCache(fullCustomer);
         invalidateDashboardSummaryCache();
+        invalidateAnalyticsCache();
 
         recentCustomerCreations.push({
           id: newId,
@@ -1332,6 +1334,7 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     invalidateDashboardSummaryCache();
+    invalidateAnalyticsCache();
     res.status(201).json(newCustomer);
   } finally {
     activeCustomerCreationLocks.delete(phoneLockKey);
@@ -1511,6 +1514,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
       upsertCustomerInCache(updatedCust);
       invalidateDashboardSummaryCache();
+      invalidateAnalyticsCache();
 
       // Keep local fallback store aligned if record exists there
       const memIdx = customersData.findIndex((c) => String(c.id) === String(id));
@@ -1548,6 +1552,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
   customersData[index] = updatedCustomer;
   invalidateCustomersCache();
   invalidateDashboardSummaryCache();
+  invalidateAnalyticsCache();
 
   res.json(updatedCustomer);
 });
@@ -1612,6 +1617,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       removeCustomerFromCache(id);
       invalidateReportsCache();
       invalidateDashboardSummaryCache();
+      invalidateAnalyticsCache();
       return res.status(204).send();
     } catch (err: any) {
       if (err.message !== 'DIRECTUS_UNREACHABLE_FALLBACK' && err.message !== 'DIRECTUS_URL_NOT_CONFIGURED') {
@@ -1626,6 +1632,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   removeCustomerFromCache(id);
   invalidateReportsCache();
   invalidateDashboardSummaryCache();
+  invalidateAnalyticsCache();
   res.status(204).send();
 });
 
@@ -1770,6 +1777,8 @@ router.post('/:id/claim-free', async (req: Request, res: Response) => {
 
       invalidateCustomersCache();
       invalidateReportsCache();
+      invalidateDashboardSummaryCache();
+      invalidateAnalyticsCache();
 
       const finalCust = computeCustomerExpiration({
         ...(patchedRes.data || { ...targetCustomer, ...patchData }),
@@ -1806,6 +1815,8 @@ router.post('/:id/claim-free', async (req: Request, res: Response) => {
 
   invalidateCustomersCache();
   invalidateReportsCache();
+  invalidateDashboardSummaryCache();
+  invalidateAnalyticsCache();
   res.json({
     success: true,
     message: `پرونده «${customersData[idx]?.company_name || targetCustomer.company_name}» با مهلت ${days} روز به شما اختصاص داده شد.`,
@@ -1965,6 +1976,8 @@ router.post('/merge', async (req: Request, res: Response) => {
 
       invalidateCustomersCache();
       invalidateReportsCache();
+      invalidateDashboardSummaryCache();
+      invalidateAnalyticsCache();
 
       const finalCustomer = computeCustomerExpiration(updatedPrimaryRes.data || primaryCust);
       return res.json({
@@ -2015,6 +2028,8 @@ router.post('/merge', async (req: Request, res: Response) => {
 
   invalidateCustomersCache();
   invalidateReportsCache();
+  invalidateDashboardSummaryCache();
+  invalidateAnalyticsCache();
   return res.json({
     success: true,
     message: 'ادغام مشتریان با موفقیت انجام شد.',

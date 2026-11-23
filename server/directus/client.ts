@@ -22,6 +22,36 @@ export async function probeDirectusConnection(timeoutMs = 2000): Promise<boolean
   return true;
 }
 
+const NAIVE_ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$/;
+
+/**
+ * Directus stores UTC timestamps in PostgreSQL `timestamp without time zone` columns
+ * and returns them without a trailing `Z` (e.g. "2026-11-22T05:40:00").
+ * Append `Z` so both server and browser JS Date parsers treat them as UTC rather than local time.
+ */
+export function normalizeDirectusTimestamps<T>(value: T): T {
+  if (typeof value === 'string') {
+    if (NAIVE_ISO_DATETIME_RE.test(value)) {
+      return `${value.replace(' ', 'T')}Z` as unknown as T;
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      value[i] = normalizeDirectusTimestamps(value[i]);
+    }
+    return value;
+  }
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, any>;
+    for (const key of Object.keys(obj)) {
+      obj[key] = normalizeDirectusTimestamps(obj[key]);
+    }
+    return value;
+  }
+  return value;
+}
+
 // Directus API Request Forwarder - Always Online
 export async function directusFetch(
   path: string,
@@ -99,7 +129,8 @@ export async function directusFetch(
 
       const contentType = res.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
-        return await res.json();
+        const json = await res.json();
+        return normalizeDirectusTimestamps(json);
       }
 
       const text = await res.text();

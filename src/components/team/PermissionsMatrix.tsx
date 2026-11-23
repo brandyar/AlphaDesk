@@ -1,7 +1,7 @@
 import React from 'react';
 import { Personnel } from '../../types';
 import { SYSTEM_MENUS, SYSTEM_ACTIONS } from '../TeamManagementView';
-import { toPersianDigits } from '../../utils';
+import { toPersianDigits, isPersonnelActive } from '../../utils';
 
 export interface PermissionsMatrixProps {
   allowedMenus: string[];
@@ -190,7 +190,7 @@ export const PermissionsMatrix: React.FC<PermissionsMatrixProps> = ({
               تیک بزنید گزارش کار کدام یک از همکاران برای این فرد قابل رویت باشد:
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
-              {personnelList.map((pers) => {
+              {personnelList.filter((pers) => isPersonnelActive(pers)).map((pers) => {
                 const isSelected = visibleReportPersonnelIds.includes(pers.id);
                 return (
                   <label

@@ -53,23 +53,139 @@ export function resolveDirectusTenantId(rawTenant: any): number | null {
   return validIds[0] || 1;
 }
 
+const TENANT_META_MARKER_RE = /\n?<!--alphadesk_meta:(\{[\s\S]*?\})-->$/;
+
+export function sanitizeTenantSlug(rawSlug: any, fallback: string): string {
+  const cleaned = String(rawSlug ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9\u0600-\u06FF_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return cleaned || fallback;
+}
+
+export function decodeTenantMeta(rawDescription?: string | null): {
+  description: string;
+  phone: string;
+  address: string;
+} {
+  const raw = String(rawDescription || '');
+  const match = raw.match(TENANT_META_MARKER_RE);
+  if (!match) {
+    return { description: raw.trim(), phone: '', address: '' };
+  }
+  let phone = '';
+  let address = '';
+  try {
+    const parsed = JSON.parse(match[1]);
+    if (parsed && typeof parsed === 'object') {
+      if (typeof parsed.phone === 'string') phone = parsed.phone.trim();
+      if (typeof parsed.address === 'string') address = parsed.address.trim();
+    }
+  } catch {}
+  const cleanDescription = raw.replace(TENANT_META_MARKER_RE, '').trim();
+  return { description: cleanDescription, phone, address };
+}
+
+export function encodeTenantMeta(description: string, phone: string, address: string): string {
+  const cleanDesc = String(description || '').replace(TENANT_META_MARKER_RE, '').trim();
+  const cleanPhone = String(phone || '').trim();
+  const cleanAddress = String(address || '').trim();
+  if (!cleanPhone && !cleanAddress) {
+    return cleanDesc;
+  }
+  const metaJson = JSON.stringify({ phone: cleanPhone, address: cleanAddress });
+  return cleanDesc ? `${cleanDesc}\n<!--alphadesk_meta:${metaJson}-->` : `<!--alphadesk_meta:${metaJson}-->`;
+}
+
+export function mapDirectusTenant(t: any): Tenant {
+  const decoded = decodeTenantMeta(t?.description);
+  const nativePhone = typeof t?.phone === 'string' ? t.phone.trim() : '';
+  const nativeAddress = typeof t?.address === 'string' ? t.address.trim() : '';
+  return {
+    id: String(t?.id ?? 'default'),
+    name: t?.name || 'سازمان ' + (t?.id ?? ''),
+    slug: t?.slug || 'org-' + (t?.id ?? ''),
+    logo: t?.logo || '',
+    description: decoded.description,
+    phone: nativePhone || decoded.phone || '',
+    address: nativeAddress || decoded.address || '',
+    status: t?.status === 'inactive' ? 'inactive' : 'active',
+    date_created: t?.date_created || new Date().toISOString(),
+  };
+}
+
+let tenantContactFieldsChecked = false;
+let hasNativeTenantContactFields = false;
+
+export async function ensureDirectusTenantContactFields(): Promise<boolean> {
+  if (!directusUrl || !directusAdminToken) return false;
+  if (tenantContactFieldsChecked) return hasNativeTenantContactFields;
+  tenantContactFieldsChecked = true;
+
+  try {
+    const fieldsRes = await directusFetch('/fields/tenants', {}, 1, 3500).catch(() => null);
+    const existingFields = new Set<string>(
+      Array.isArray(fieldsRes?.data) ? fieldsRes.data.map((f: any) => String(f?.field || '')) : []
+    );
+
+    let hasPhone = existingFields.has('phone');
+    let hasAddress = existingFields.has('address');
+
+    if (!hasPhone) {
+      const createdPhone = await directusFetch(
+        '/fields/tenants',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            field: 'phone',
+            type: 'string',
+            meta: { interface: 'input', special: null },
+            schema: { max_length: 100, is_nullable: true },
+          }),
+        },
+        0,
+        3500
+      ).catch(() => null);
+      if (createdPhone?.data?.field === 'phone') hasPhone = true;
+    }
+
+    if (!hasAddress) {
+      const createdAddress = await directusFetch(
+        '/fields/tenants',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            field: 'address',
+            type: 'text',
+            meta: { interface: 'input-multiline', special: null },
+            schema: { is_nullable: true },
+          }),
+        },
+        0,
+        3500
+      ).catch(() => null);
+      if (createdAddress?.data?.field === 'address') hasAddress = true;
+    }
+
+    hasNativeTenantContactFields = hasPhone && hasAddress;
+  } catch {
+    hasNativeTenantContactFields = false;
+  }
+
+  return hasNativeTenantContactFields;
+}
+
 // Ensure at least one default tenant exists in Directus so foreign keys are valid
 export async function ensureDirectusTenants() {
   if (!directusUrl || !directusAdminToken) return;
   try {
+    await ensureDirectusTenantContactFields().catch(() => false);
     const res = await directusFetch('/items/tenants?limit=100&sort=id');
     if (res && Array.isArray(res.data) && res.data.length > 0) {
-      const mappedTenants: Tenant[] = res.data.map((t: any) => ({
-        id: String(t.id),
-        name: t.name || 'سازمان ' + t.id,
-        slug: t.slug || 'org-' + t.id,
-        logo: t.logo || '',
-        description: t.description || '',
-        phone: t.phone || '',
-        address: t.address || '',
-        status: t.status === 'inactive' ? 'inactive' : 'active',
-        date_created: t.date_created || new Date().toISOString(),
-      }));
+      const mappedTenants: Tenant[] = res.data.map((t: any) => mapDirectusTenant(t));
       setTenantsData(mappedTenants);
       console.log(`Directus tenants synchronized (${mappedTenants.length} tenants).`);
     } else {
@@ -84,15 +200,7 @@ export async function ensureDirectusTenants() {
         }),
       });
       if (created?.data) {
-        const defaultTenant: Tenant = {
-          id: String(created.data.id),
-          name: created.data.name,
-          slug: created.data.slug,
-          logo: created.data.logo || '',
-          description: created.data.description || '',
-          status: 'active',
-          date_created: created.data.date_created || new Date().toISOString(),
-        };
+        const defaultTenant: Tenant = mapDirectusTenant(created.data);
         setTenantsData([defaultTenant]);
         console.log('Directus default tenant created with ID:', created.data.id);
       }
@@ -721,6 +829,8 @@ export async function syncDirectusTenantSettings(): Promise<void> {
           id: item.id !== undefined ? String(item.id) : `ts-${tId}`,
           tenant_id: tId,
           sms_phones: phones,
+          enable_unit_sales_commission: Boolean(item.enable_unit_sales_commission),
+          unit_commission_catalog: Array.isArray(item.unit_commission_catalog) ? item.unit_commission_catalog : [],
         });
       }
       console.log(`Directus tenant_settings synchronized (${res.data.length} records).`);

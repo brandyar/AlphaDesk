@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Building2,
   Plus,
@@ -11,14 +11,21 @@ import {
   Layers,
   Sparkles,
   ArrowRight,
-  TrendingUp,
   Users,
   Briefcase,
-  AlertCircle,
-  ExternalLink,
+  PackagePlus,
 } from 'lucide-react';
 import { Tenant, Customer, Personnel } from '../types';
-import { createTenant, updateTenant, deleteTenant } from '../api';
+import {
+  createTenant,
+  updateTenant,
+  deleteTenant,
+  fetchTenantSettings,
+  updateTenantSettings,
+  fetchTenantsStats,
+  TenantsStatsResponse,
+} from '../api';
+import { toPersianDigits } from '../utils';
 
 interface TenantsManagementViewProps {
   tenants: Tenant[];
@@ -46,6 +53,84 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
   const [isAdding, setIsAdding] = useState(initialCreateOpen);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const formSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // Real system-wide & per-tenant statistics
+  const [stats, setStats] = useState<TenantsStatsResponse | null>(null);
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  // Per-tenant unit sales commission setting map
+  const [unitSalesEnabledMap, setUnitSalesEnabledMap] = useState<Record<string, boolean>>({});
+  const [togglingTenantId, setTogglingTenantId] = useState<string | null>(null);
+
+  const loadStats = useCallback(async () => {
+    setLoadingStats(true);
+    try {
+      const data = await fetchTenantsStats();
+      setStats(data);
+    } catch {
+      // keep previous stats if transient error
+    } finally {
+      setLoadingStats(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats, tenants.length, activeTenantId]);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchTenantSettings('all')
+      .then((res) => {
+        if (!mounted) return;
+        const map: Record<string, boolean> = {};
+        if (Array.isArray(res.items)) {
+          for (const item of res.items) {
+            const tKey = String(item.tenant_id || 'default');
+            map[tKey] = Boolean(item.enable_unit_sales_commission);
+            if (tKey === '1') map['default'] = Boolean(item.enable_unit_sales_commission);
+            if (tKey === 'default') map['1'] = Boolean(item.enable_unit_sales_commission);
+          }
+        }
+        setUnitSalesEnabledMap(map);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [tenants.length]);
+
+  const handleToggleUnitSales = async (t: Tenant) => {
+    if (!isAdmin) return;
+    const tId = String(t.id);
+    const currentVal = Boolean(unitSalesEnabledMap[tId]);
+    const nextVal = !currentVal;
+    setTogglingTenantId(tId);
+    try {
+      await updateTenantSettings(tId, { enable_unit_sales_commission: nextVal });
+      setUnitSalesEnabledMap((prev) => {
+        const next = { ...prev, [tId]: nextVal };
+        if (tId === '1' || tId === 'default') {
+          next['1'] = nextVal;
+          next['default'] = nextVal;
+        }
+        return next;
+      });
+      window.dispatchEvent(new CustomEvent('crm_tenant_settings_updated'));
+      showToast(
+        nextVal
+          ? `فروش تعدادی / چندآیتمی برای «${t.name}» فعال شد.`
+          : `فروش تعدادی / چندآیتمی برای «${t.name}» غیرفعال شد.`,
+        'success'
+      );
+    } catch (err: any) {
+      showToast(err.message || 'خطا در تغییر تنظیم فروش تعدادی', 'error');
+    } finally {
+      setTogglingTenantId(null);
+    }
+  };
 
   // Form State
   const [formData, setFormData] = useState({
@@ -56,8 +141,15 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
     status: 'active' as 'active' | 'inactive',
   });
 
+  const scrollFormIntoView = () => {
+    setTimeout(() => {
+      formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
   const handleOpenAdd = () => {
     setEditingTenant(null);
+    setConfirmDeleteId(null);
     setFormData({
       name: '',
       slug: '',
@@ -66,10 +158,12 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
       status: 'active',
     });
     setIsAdding(true);
+    scrollFormIntoView();
   };
 
   const handleOpenEdit = (t: Tenant) => {
     setEditingTenant(t);
+    setConfirmDeleteId(null);
     setFormData({
       name: t.name,
       slug: t.slug || '',
@@ -78,6 +172,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
       status: t.status || 'active',
     });
     setIsAdding(true);
+    scrollFormIntoView();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -90,7 +185,13 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
     try {
       setIsSubmitting(true);
       if (editingTenant) {
-        await updateTenant(editingTenant.id, formData);
+        await updateTenant(editingTenant.id, {
+          name: formData.name.trim(),
+          slug: formData.slug.trim(),
+          phone: formData.phone.trim(),
+          address: formData.address.trim(),
+          status: formData.status,
+        });
         showToast('اطلاعات سازمان با موفقیت به‌روزرسانی شد.', 'success');
       } else {
         const newSlug =
@@ -100,14 +201,18 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
             .toLowerCase()
             .replace(/\s+/g, '-');
         await createTenant({
-          ...formData,
+          name: formData.name.trim(),
           slug: newSlug,
+          phone: formData.phone.trim(),
+          address: formData.address.trim(),
+          status: formData.status,
         });
         showToast('سازمان / شعبه جدید با موفقیت ایجاد شد.', 'success');
       }
       setIsAdding(false);
       setEditingTenant(null);
       await onRefreshTenants();
+      await loadStats();
     } catch (err: any) {
       showToast(err.message || 'خطا در ذخیره سازمان', 'error');
     } finally {
@@ -120,17 +225,16 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
       showToast('سازمان مرکزی و پیش‌فرض سامانه قابل حذف نیست.', 'error');
       return;
     }
-    if (!window.confirm(`آیا از حذف سازمان «${t.name}» اطمینان دارید؟ تمامی ارجاعات ممکن است تحت تاثیر قرار گیرند.`)) {
-      return;
-    }
 
     try {
       await deleteTenant(t.id);
+      setConfirmDeleteId(null);
       showToast('سازمان با موفقیت حذف شد.', 'success');
       if (activeTenantId === t.id) {
         onSelectTenant('default');
       }
       await onRefreshTenants();
+      await loadStats();
     } catch (err: any) {
       showToast(err.message || 'خطا در حذف سازمان', 'error');
     }
@@ -141,6 +245,10 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
     activeTenantId === 'all'
       ? 'همه سازمان‌ها (تجمیعی)'
       : activeTenant?.name || 'سازمان مرکزی آلفادسک';
+
+  const totalTenantsCount = stats?.total_tenants ?? tenants.length;
+  const totalCustomersCount = stats ? stats.total_customers : null;
+  const totalPersonnelCount = stats ? stats.total_personnel : null;
 
   return (
     <div className="space-y-6">
@@ -204,7 +312,8 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
               <span>تعداد کل سازمان‌ها</span>
             </div>
             <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
-              {tenants.length} <span className="text-xs font-normal text-slate-500 dark:text-[#888]">شرکت</span>
+              {toPersianDigits(totalTenantsCount)}{' '}
+              <span className="text-xs font-normal text-slate-500 dark:text-[#888]">شرکت</span>
             </div>
           </div>
 
@@ -221,20 +330,30 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
           <div className="bg-white/90 dark:bg-[#121212]/70 border border-slate-200 dark:border-[#242424] rounded-xl p-3.5 shadow-xs dark:shadow-none">
             <div className="text-[11px] text-slate-500 dark:text-[#888] font-medium flex items-center gap-1.5 mb-1">
               <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              <span>مشتریان در سامانه</span>
+              <span>کل مشتریان سامانه</span>
             </div>
             <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
-              {customers.length} <span className="text-xs font-normal text-slate-500 dark:text-[#888]">پرونده</span>
+              {loadingStats && totalCustomersCount === null ? (
+                <span className="text-sm text-slate-400 dark:text-[#666]">...</span>
+              ) : (
+                toPersianDigits((totalCustomersCount ?? customers.length).toLocaleString('en-US'))
+              )}{' '}
+              <span className="text-xs font-normal text-slate-500 dark:text-[#888]">پرونده</span>
             </div>
           </div>
 
           <div className="bg-white/90 dark:bg-[#121212]/70 border border-slate-200 dark:border-[#242424] rounded-xl p-3.5 shadow-xs dark:shadow-none">
             <div className="text-[11px] text-slate-500 dark:text-[#888] font-medium flex items-center gap-1.5 mb-1">
               <Briefcase className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-              <span>پرسنل ثبت‌شده</span>
+              <span>کل پرسنل ثبت‌شده</span>
             </div>
             <div className="text-xl font-black text-slate-900 dark:text-white font-mono">
-              {personnelList.length} <span className="text-xs font-normal text-slate-500 dark:text-[#888]">نفر</span>
+              {loadingStats && totalPersonnelCount === null ? (
+                <span className="text-sm text-slate-400 dark:text-[#666]">...</span>
+              ) : (
+                toPersianDigits((totalPersonnelCount ?? personnelList.length).toLocaleString('en-US'))
+              )}{' '}
+              <span className="text-xs font-normal text-slate-500 dark:text-[#888]">نفر</span>
             </div>
           </div>
         </div>
@@ -242,7 +361,10 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
 
       {/* Add / Edit Form Modal or Card */}
       {isAdding && (
-        <div className="bg-white dark:bg-[#161616] border-2 border-emerald-500/40 dark:border-[#1DB954]/40 rounded-2xl p-5 sm:p-6 shadow-xl dark:shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+        <div
+          ref={formSectionRef}
+          className="bg-white dark:bg-[#161616] border-2 border-emerald-500/40 dark:border-[#1DB954]/40 rounded-2xl p-5 sm:p-6 shadow-xl dark:shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-[#252525] pb-4 mb-5">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-emerald-500/15 dark:bg-[#1DB954]/15 flex items-center justify-center text-emerald-600 dark:text-[#1DB954]">
@@ -382,7 +504,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
           <div className="flex items-center gap-2">
             <Building2 className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              لیست شرکت‌ها و شعب ثبت‌شده ({tenants.length} سازمان)
+              لیست شرکت‌ها و شعب ثبت‌شده ({toPersianDigits(tenants.length)} سازمان)
             </h3>
           </div>
           <span className="text-xs text-slate-500 dark:text-[#888]">
@@ -405,6 +527,9 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                 activeTenantId === String(t.id) ||
                 (activeTenantId === 'default' && (t.id === 'default' || t.id === '1'));
               const isDefaultOrg = t.id === 'default' || t.id === '1' || t.slug === 'alphadesk-hq';
+              const tenantMetrics =
+                stats?.per_tenant?.[String(t.id)] ||
+                (isDefaultOrg ? stats?.per_tenant?.['default'] || stats?.per_tenant?.['1'] : undefined);
 
               return (
                 <div
@@ -453,6 +578,20 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                       </span>
                     </div>
 
+                    {/* Per-organization accurate counts */}
+                    {tenantMetrics && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/40 text-[11px] font-semibold text-blue-700 dark:text-blue-300">
+                          <Users className="w-3 h-3" />
+                          <span>{toPersianDigits(tenantMetrics.customers_count.toLocaleString('en-US'))} مشتری</span>
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/40 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                          <Briefcase className="w-3 h-3" />
+                          <span>{toPersianDigits(tenantMetrics.personnel_count.toLocaleString('en-US'))} پرسنل</span>
+                        </span>
+                      </div>
+                    )}
+
                     <div className="space-y-1.5 text-xs text-slate-600 dark:text-[#A7A7A7] pt-2 border-t border-slate-200 dark:border-[#252525]">
                       {t.phone ? (
                         <div className="flex items-center gap-2">
@@ -466,7 +605,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                       {t.address ? (
                         <div className="flex items-center gap-2">
                           <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                          <span className="line-clamp-1 text-[11px]">{t.address}</span>
+                          <span className="line-clamp-2 text-[11px]">{t.address}</span>
                         </div>
                       ) : null}
 
@@ -476,9 +615,49 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                         </div>
                       ) : null}
                     </div>
+
+                    {/* Per-Tenant Feature Toggle: Unit / Itemized Sales Commission */}
+                    {isAdmin && (
+                      <div className="pt-2.5 border-t border-slate-200 dark:border-[#252525] flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+                            <PackagePlus className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-bold text-slate-800 dark:text-white truncate">
+                              فروش تعدادی / چندآیتمی
+                            </div>
+                            <div className="text-[10px] text-slate-500 dark:text-[#888] truncate">
+                              امکان ثبت پورسانت تعدادی جدا از فروش درصدی
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={Boolean(unitSalesEnabledMap[String(t.id)])}
+                          disabled={togglingTenantId === String(t.id)}
+                          onClick={() => handleToggleUnitSales(t)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer disabled:opacity-50 ${
+                            unitSalesEnabledMap[String(t.id)]
+                              ? 'bg-emerald-600 dark:bg-[#1DB954]'
+                              : 'bg-slate-300 dark:bg-[#333333]'
+                          }`}
+                          title="فعال یا غیرفعال کردن فروش تعدادی برای این سازمان"
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                              unitSalesEnabledMap[String(t.id)]
+                                ? '-translate-x-6'
+                                : '-translate-x-1'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-[#252525] mt-1">
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-[#252525] mt-1 gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
                       {isSelected ? (
                         <span className="px-3 py-1.5 rounded-xl bg-emerald-500/15 dark:bg-[#1DB954]/20 border border-emerald-500/40 dark:border-[#1DB954]/40 text-emerald-700 dark:text-[#1DB954] text-xs font-black flex items-center gap-1.5">
@@ -502,23 +681,47 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
 
                     {isAdmin && (
                       <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(t)}
-                          className="p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white bg-slate-100 hover:bg-slate-200 dark:bg-[#202020] dark:hover:bg-[#282828] border border-slate-200 dark:border-[#2e2e2e] transition-colors cursor-pointer"
-                          title="ویرایش مشخصات"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        {!isDefaultOrg && (
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(t)}
-                            className="p-2 rounded-xl text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors cursor-pointer"
-                            title="حذف سازمان"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        {confirmDeleteId === String(t.id) ? (
+                          <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800/60 px-2 py-1 rounded-xl">
+                            <span className="text-[10px] font-bold text-rose-700 dark:text-rose-300">
+                              حذف شود؟
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(t)}
+                              className="px-2 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold cursor-pointer"
+                            >
+                              بله
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-2 py-0.5 rounded-lg bg-slate-200 dark:bg-[#2a2a2a] text-slate-700 dark:text-white text-[10px] font-semibold cursor-pointer"
+                            >
+                              خیر
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(t)}
+                              className="p-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-[#888] dark:hover:text-white bg-slate-100 hover:bg-slate-200 dark:bg-[#202020] dark:hover:bg-[#282828] border border-slate-200 dark:border-[#2e2e2e] transition-colors cursor-pointer"
+                              title="ویرایش مشخصات"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            {!isDefaultOrg && (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(String(t.id))}
+                                className="p-2 rounded-xl text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-colors cursor-pointer"
+                                title="حذف سازمان"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     )}

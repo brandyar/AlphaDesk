@@ -33,7 +33,7 @@ import {
   Maximize2,
   Minimize2,
 } from 'lucide-react';
-import { Customer, CustomerReport, Personnel, NegotiationStatus, ChannelType, CustomerContact, AuthUser, CustomerPhoneOption, DuplicateCheckResult } from '../types';
+import { Customer, CustomerReport, Personnel, NegotiationStatus, ChannelType, CustomerContact, AuthUser, CustomerPhoneOption, DuplicateCheckResult, ReportCommissionType } from '../types';
 import { checkDuplicateContact } from '../api';
 import {
   formatTimeRemaining,
@@ -46,9 +46,17 @@ import {
   formatDisplayDateOnly,
   getCustomerPhoneOptions,
   formatFollowupDateTime,
+  toPersianDigits,
+  isPersonnelActive,
 } from '../utils';
 import { PersianDatePicker } from './PersianDatePicker';
 import { FreePoolDuplicateAlert } from './FreePoolDuplicateAlert';
+import {
+  ContractCommissionSection,
+  UnitItemDraft,
+  createEmptyUnitItemDraft,
+  parseUnitDraftsToPayload,
+} from './ContractCommissionSection';
 
 interface CustomerDetailModalProps {
   customer: Customer | null;
@@ -69,6 +77,8 @@ interface CustomerDetailModalProps {
   isMinimized?: boolean;
   onToggleMinimize?: () => void;
   isPopup?: boolean;
+  enableUnitSalesCommission?: boolean;
+  tenantUnitSalesMap?: Record<string, boolean>;
 }
 
 export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
@@ -90,6 +100,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   isMinimized = false,
   onToggleMinimize,
   isPopup = true,
+  enableUnitSalesCommission = false,
+  tenantUnitSalesMap,
 }) => {
   if (!isOpen || !customer) return null;
 
@@ -150,7 +162,23 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const [contractDate, setContractDate] = useState(new Date().toISOString().split('T')[0]);
   const [contractItems, setContractItems] = useState('');
   const [contractAmount, setContractAmount] = useState<string>('');
+  const [commissionType, setCommissionType] = useState<ReportCommissionType>('percentage');
+  const [unitItems, setUnitItems] = useState<UnitItemDraft[]>([createEmptyUnitItemDraft()]);
   const [submittingReport, setSubmittingReport] = useState(false);
+
+  const unitSalesEnabledForCustomer = React.useMemo(() => {
+    const custTenant = customer?.tenant_id ? String(customer.tenant_id) : '';
+    if (custTenant && tenantUnitSalesMap && tenantUnitSalesMap[custTenant] !== undefined) {
+      return Boolean(tenantUnitSalesMap[custTenant]);
+    }
+    return Boolean(enableUnitSalesCommission);
+  }, [customer?.tenant_id, tenantUnitSalesMap, enableUnitSalesCommission]);
+
+  React.useEffect(() => {
+    if (!unitSalesEnabledForCustomer && commissionType === 'unit') {
+      setCommissionType('percentage');
+    }
+  }, [unitSalesEnabledForCustomer, commissionType]);
 
   // Quick Add Contact form state
   const [showAddContact, setShowAddContact] = useState(false);
@@ -235,8 +263,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   };
 
   // Reassignment state
+  const activePersonnelList = personnelList.filter((p) => isPersonnelActive(p));
   const [showReassignBox, setShowReassignBox] = useState(false);
-  const [selectedMarketerId, setSelectedMarketerId] = useState(personnelList[0]?.id || '');
+  const [selectedMarketerId, setSelectedMarketerId] = useState(activePersonnelList[0]?.id || '');
   const [reassignDays, setReassignDays] = useState(7);
   const [reassigning, setReassigning] = useState(false);
   const [copiedVal, setCopiedVal] = useState<string | null>(null);
@@ -277,13 +306,25 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
       }
     }
 
+    const isContract = negotiationStatus === 'قرارداد / فاکتور' || negotiationStatus === 'قرارداد';
+    const effectiveCommType: ReportCommissionType =
+      isContract && unitSalesEnabledForCustomer ? commissionType : 'percentage';
+    const parsedUnitItems =
+      isContract && effectiveCommType === 'unit'
+        ? parseUnitDraftsToPayload(unitItems)
+        : [];
+
+    if (isContract && effectiveCommType === 'unit' && parsedUnitItems.length === 0) {
+      setReportError('برای فروش تعدادی، وارد کردن حداقل یک ردیف محصول با نام، تعداد (بیشتر از ۰) و مبلغ پورسانت الزامی است.');
+      return;
+    }
+
     setSubmittingReport(true);
     try {
       const finalNegotiator = userIsAdmin
         ? (staffNegotiatorName || currentPersonnel?.name || currentUser?.name || 'مدیر')
         : (currentPersonnel?.name || currentUser?.name || customer.assigned_marketer_name || 'کارشناس پیگیری');
 
-      const isContract = negotiationStatus === 'قرارداد / فاکتور' || negotiationStatus === 'قرارداد';
       const numericAmount = contractAmount ? parseFloat(contractAmount.replace(/,/g, '')) : undefined;
 
       await onAddReport({
@@ -299,6 +340,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
         contract_date: isContract && contractDate ? contractDate : undefined,
         contract_items: isContract && contractItems ? contractItems.trim() : undefined,
         contract_amount: isContract && !isNaN(numericAmount as number) ? numericAmount : undefined,
+        commission_type: isContract ? effectiveCommType : undefined,
+        unit_commission_items: isContract && effectiveCommType === 'unit' ? parsedUnitItems : undefined,
       });
 
       setCustomerNegotiatorName('');
@@ -306,6 +349,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
       setContractNumber('');
       setContractItems('');
       setContractAmount('');
+      setCommissionType('percentage');
+      setUnitItems([createEmptyUnitItemDraft()]);
       setReportError(null);
       setShowAddReport(false);
     } catch (err: any) {
@@ -583,7 +628,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                     onChange={(e) => setSelectedMarketerId(e.target.value)}
                     className="w-full h-9 px-2.5 bg-white dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   >
-                    {personnelList.map((p) => (
+                    {activePersonnelList.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.role === 'marketer' ? 'بازاریاب' : 'پرسنل'})
                       </option>
@@ -1341,7 +1386,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       onChange={(e) => setStaffNegotiatorName(e.target.value)}
                       className="w-full sm:w-auto h-8 px-2.5 bg-white dark:bg-[#2a2a2a] border border-slate-300 dark:border-[#444] rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-medium"
                     >
-                      {personnelList.map((p) => (
+                      {activePersonnelList.map((p) => (
                         <option key={p.id} value={p.name}>
                           {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
                         </option>
@@ -1404,6 +1449,22 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                         />
                       </div>
                     </div>
+
+                    {unitSalesEnabledForCustomer && (
+                      <ContractCommissionSection
+                        commissionType={commissionType}
+                        onCommissionTypeChange={(t) => {
+                          setCommissionType(t);
+                          setReportError(null);
+                        }}
+                        unitItems={unitItems}
+                        onUnitItemsChange={(next) => {
+                          setUnitItems(next);
+                          setReportError(null);
+                        }}
+                        compact
+                      />
+                    )}
                   </div>
                 )}
 
@@ -1516,41 +1577,100 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       </div>
 
                       {/* Contract / Invoice Details Card */}
-                      {(rep.contract_number || rep.contract_amount || rep.contract_items || rep.contract_date) && (
-                        <div className="p-3 rounded-xl bg-emerald-50 dark:bg-[#1DB954]/10 border border-emerald-200 dark:border-[#1DB954]/25 space-y-2 text-xs">
-                          <div className="flex items-center justify-between font-bold text-emerald-800 dark:text-[#1DB954] border-b border-emerald-200 dark:border-[#1DB954]/20 pb-1.5">
-                            <span className="flex items-center gap-1.5">
-                              <FileCheck2 className="w-4 h-4" />
-                              <span>اطلاعات سند قرارداد / فاکتور</span>
-                            </span>
-                            {rep.contract_number && (
-                              <span className="font-mono bg-white dark:bg-[#181818] px-2 py-0.5 rounded border border-emerald-300 dark:border-[#1DB954]/30 text-slate-900 dark:text-white">
-                                شماره: {rep.contract_number}
+                      {(() => {
+                        const isUnitSale =
+                          rep.commission_type === 'unit' ||
+                          (Array.isArray(rep.commission_type) && rep.commission_type.includes('unit'));
+                        const unitList = Array.isArray(rep.unit_commission_items) ? rep.unit_commission_items : [];
+                        const hasContractBox = Boolean(
+                          rep.contract_number || rep.contract_amount || rep.contract_items || rep.contract_date || isUnitSale
+                        );
+                        if (!hasContractBox) return null;
+
+                        const reviewStatusMeta =
+                          rep.manual_commission_status === 'approved'
+                            ? { label: 'تایید شده', cls: 'bg-emerald-500/15 text-emerald-700 dark:text-[#1DB954] border-emerald-500/30' }
+                            : rep.manual_commission_status === 'partially_approved'
+                            ? { label: 'تایید جزئی', cls: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30' }
+                            : rep.manual_commission_status === 'rejected'
+                            ? { label: 'رد شده', cls: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30' }
+                            : { label: 'در انتظار تایید مدیریت', cls: 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30' };
+
+                        return (
+                          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-[#1DB954]/10 border border-emerald-200 dark:border-[#1DB954]/25 space-y-2 text-xs">
+                            <div className="flex items-center justify-between flex-wrap gap-2 font-bold text-emerald-800 dark:text-[#1DB954] border-b border-emerald-200 dark:border-[#1DB954]/20 pb-1.5">
+                              <span className="flex items-center gap-1.5 flex-wrap">
+                                <FileCheck2 className="w-4 h-4" />
+                                <span>اطلاعات سند قرارداد / فاکتور</span>
+                                {isUnitSale ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30">
+                                    فروش تعدادی
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-[#1DB954] border border-emerald-500/25">
+                                    فروش درصدی
+                                  </span>
+                                )}
+                                {isUnitSale && (
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${reviewStatusMeta.cls}`}>
+                                    {reviewStatusMeta.label}
+                                  </span>
+                                )}
                               </span>
-                            )}
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                            {rep.contract_date && (
-                              <div>
-                                <span className="text-slate-500 dark:text-[#888]">تاریخ قرارداد: </span>
-                                <span className="font-mono text-slate-900 dark:text-white font-semibold">{formatPersianDate(rep.contract_date)}</span>
-                              </div>
-                            )}
-                            {rep.contract_amount && (
-                              <div>
-                                <span className="text-slate-500 dark:text-[#888]">مبلغ نهایی: </span>
-                                <span className="font-bold text-emerald-700 dark:text-[#1DB954] font-mono">{formatToman(rep.contract_amount)}</span>
-                              </div>
-                            )}
-                          </div>
-                          {rep.contract_items && (
-                            <div className="text-[11px] bg-white dark:bg-[#121212] p-2 rounded-lg border border-slate-200 dark:border-[#222]">
-                              <span className="text-slate-500 dark:text-[#888]">اقلام و خدمات: </span>
-                              <span className="text-slate-800 dark:text-white">{rep.contract_items}</span>
+                              {rep.contract_number && (
+                                <span className="font-mono bg-white dark:bg-[#181818] px-2 py-0.5 rounded border border-emerald-300 dark:border-[#1DB954]/30 text-slate-900 dark:text-white">
+                                  شماره: {rep.contract_number}
+                                </span>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      )}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                              {rep.contract_date && (
+                                <div>
+                                  <span className="text-slate-500 dark:text-[#888]">تاریخ قرارداد: </span>
+                                  <span className="font-mono text-slate-900 dark:text-white font-semibold">{formatPersianDate(rep.contract_date)}</span>
+                                </div>
+                              )}
+                              {rep.contract_amount ? (
+                                <div>
+                                  <span className="text-slate-500 dark:text-[#888]">مبلغ نهایی: </span>
+                                  <span className="font-bold text-emerald-700 dark:text-[#1DB954] font-mono">{formatToman(rep.contract_amount)}</span>
+                                </div>
+                              ) : null}
+                            </div>
+                            {rep.contract_items && (
+                              <div className="text-[11px] bg-white dark:bg-[#121212] p-2 rounded-lg border border-slate-200 dark:border-[#222]">
+                                <span className="text-slate-500 dark:text-[#888]">اقلام و خدمات: </span>
+                                <span className="text-slate-800 dark:text-white">{rep.contract_items}</span>
+                              </div>
+                            )}
+                            {isUnitSale && unitList.length > 0 && (
+                              <div className="bg-white dark:bg-[#121212] p-2.5 rounded-lg border border-amber-500/25 space-y-1.5 text-[11px]">
+                                <div className="flex items-center justify-between text-[10px] font-bold text-amber-800 dark:text-amber-300">
+                                  <span>ریز اقلام فروش تعدادی</span>
+                                  <span className="font-mono">
+                                    پیشنهادی: {formatToman(rep.manual_commission_amount || 0)}
+                                    {rep.approved_commission_amount !== null && rep.approved_commission_amount !== undefined && (
+                                      <> • تاییدشده: {formatToman(rep.approved_commission_amount)}</>
+                                    )}
+                                  </span>
+                                </div>
+                                <div className="space-y-1">
+                                  {unitList.map((u, idx) => (
+                                    <div key={u.id || idx} className="flex items-center justify-between gap-2 text-[10px] py-1 border-t border-slate-100 dark:border-[#222]">
+                                      <span className="text-slate-800 dark:text-zinc-200 font-semibold truncate">
+                                        {u.product_name} ({toPersianDigits(u.quantity)} عدد × {formatToman(u.unit_commission)})
+                                      </span>
+                                      <span className="font-mono font-bold text-emerald-700 dark:text-[#1DB954] shrink-0">
+                                        {formatToman(u.status === 'approved' && u.approved_total_commission != null ? u.approved_total_commission : u.total_commission)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {rep.next_followup_date && (
                         <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] pt-1">

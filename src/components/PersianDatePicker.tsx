@@ -153,26 +153,22 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
     }
   };
 
-  // Quick preset for days
+  // Quick preset for days (anchored to Asia/Tehran calendar day)
   const handleQuickSelectDays = (daysToAdd: number) => {
-    const target = new Date();
-    target.setDate(target.getDate() + daysToAdd);
-    if (showTime) {
-      target.setHours(selectedHour, selectedMinute, 0, 0);
-    }
-    const j = gregorianToJalali(target.getFullYear(), target.getMonth() + 1, target.getDate());
+    const todayG = jalaliToGregorian(today.jy, today.jm, today.jd);
+    const targetUtc = new Date(Date.UTC(todayG.gy, todayG.gm - 1, todayG.gd + daysToAdd, 12, 0, 0));
+    const j = gregorianToJalali(
+      targetUtc.getUTCFullYear(),
+      targetUtc.getUTCMonth() + 1,
+      targetUtc.getUTCDate()
+    );
     const mm = String(j.jm).padStart(2, '0');
     const dd = String(j.jd).padStart(2, '0');
     const jStr = `${j.jy}/${mm}/${dd}`;
 
-    let isoStr = '';
-    if (showTime) {
-      isoStr = target.toISOString();
-    } else {
-      const gmm = String(target.getMonth() + 1).padStart(2, '0');
-      const gdd = String(target.getDate()).padStart(2, '0');
-      isoStr = `${target.getFullYear()}-${gmm}-${gdd}`;
-    }
+    const isoStr = showTime
+      ? jalaliAndTimeToIso(jStr, selectedHour, selectedMinute)
+      : jalaliToGregorianIso(jStr);
 
     setInputValue(jStr);
     setViewYear(j.jy);
@@ -182,42 +178,39 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
     setIsOpen(false);
   };
 
-  // Quick preset for hours (e.g. 2 hours from now, 4 hours from now)
+  // Quick preset for hours (e.g. 2 hours from now, 4 hours from now) in Asia/Tehran
   const handleQuickAddHours = (hoursToAdd: number) => {
-    const target = new Date(Date.now() + hoursToAdd * 60 * 60 * 1000);
-    // Round minutes to closest 5 minutes
-    const roundedMinutes = Math.round(target.getMinutes() / 5) * 5;
-    target.setMinutes(roundedMinutes, 0, 0);
+    const rawMs = Date.now() + hoursToAdd * 60 * 60 * 1000;
+    const roundedMs = Math.round(rawMs / (5 * 60 * 1000)) * (5 * 60 * 1000);
+    const isoStr = new Date(roundedMs).toISOString();
+    const parsed = parseIsoToJalaliAndTime(isoStr);
+    const parts = parsed.jalaliDate.split('/').map((n) => parseInt(n, 10));
 
-    const j = gregorianToJalali(target.getFullYear(), target.getMonth() + 1, target.getDate());
-    const mm = String(j.jm).padStart(2, '0');
-    const dd = String(j.jd).padStart(2, '0');
-    const jStr = `${j.jy}/${mm}/${dd}`;
-    const h = target.getHours();
-    const m = target.getMinutes();
-    const isoStr = target.toISOString();
-
-    setInputValue(jStr);
-    setViewYear(j.jy);
-    setViewMonth(j.jm);
-    setSelectedDay(j.jd);
-    setSelectedHour(h);
-    setSelectedMinute(m);
-    onChange(isoStr, jStr);
+    setInputValue(parsed.jalaliDate);
+    if (parts.length === 3) {
+      setViewYear(parts[0]);
+      setViewMonth(parts[1]);
+      setSelectedDay(parts[2]);
+    }
+    setSelectedHour(parsed.hour);
+    setSelectedMinute(parsed.minute);
+    onChange(isoStr, parsed.jalaliDate);
     setIsOpen(false);
   };
 
-  // Quick preset for specific tomorrow time
+  // Quick preset for specific tomorrow time in Asia/Tehran
   const handleTomorrowTime = (hour: number, minute = 0) => {
-    const target = new Date();
-    target.setDate(target.getDate() + 1);
-    target.setHours(hour, minute, 0, 0);
-
-    const j = gregorianToJalali(target.getFullYear(), target.getMonth() + 1, target.getDate());
+    const todayG = jalaliToGregorian(today.jy, today.jm, today.jd);
+    const tomorrowUtc = new Date(Date.UTC(todayG.gy, todayG.gm - 1, todayG.gd + 1, 12, 0, 0));
+    const j = gregorianToJalali(
+      tomorrowUtc.getUTCFullYear(),
+      tomorrowUtc.getUTCMonth() + 1,
+      tomorrowUtc.getUTCDate()
+    );
     const mm = String(j.jm).padStart(2, '0');
     const dd = String(j.jd).padStart(2, '0');
     const jStr = `${j.jy}/${mm}/${dd}`;
-    const isoStr = target.toISOString();
+    const isoStr = jalaliAndTimeToIso(jStr, hour, minute);
 
     setInputValue(jStr);
     setViewYear(j.jy);
@@ -237,10 +230,9 @@ export const PersianDatePicker: React.FC<PersianDatePickerProps> = ({
 
   // Generate days in current Jalali month
   const totalDays = getJalaliDaysInMonth(viewYear, viewMonth);
-  // Calculate day of week for 1st day of this Jalali month
+  // Calculate day of week for 1st day of this Jalali month (UTC-based, timezone-safe)
   const firstG = jalaliToGregorian(viewYear, viewMonth, 1);
-  const firstGDate = new Date(firstG.gy, firstG.gm - 1, firstG.gd);
-  const gDay = firstGDate.getDay();
+  const gDay = new Date(Date.UTC(firstG.gy, firstG.gm - 1, firstG.gd)).getUTCDay();
   const jalaliFirstDayOffset = (gDay + 1) % 7;
 
   const currentSelectedParts = inputValue ? inputValue.split('/').map((n) => parseInt(n, 10)) : [];

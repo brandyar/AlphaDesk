@@ -125,7 +125,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     mode: 'single' | 'bulk';
     item?: PayrollCalculateItem;
     items?: PayrollCalculateItem[];
-    pendingCount: number;
+    pendingAdjustmentsCount: number;
+    pendingUnitCount: number;
   } | null>(null);
 
   // Mark Paid Dialog State
@@ -210,6 +211,9 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
           ...prev,
           [personnelId]: item,
         }));
+        setSelectedBreakdownItem((prev) =>
+          prev && String(prev.personnel_id) === String(personnelId) ? item : prev
+        );
         if (!silent) {
           showToast(`محاسبه حقوق ${item.personnel_name} با موفقیت انجام شد`, 'success');
         }
@@ -275,7 +279,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     }
   };
 
-  // Build slip payload with adjustments + adjustment_ids for linking
+  // Build slip payload with adjustments + adjustment_ids + split commission & threshold breakdown
   const buildSlipPayload = (item: PayrollCalculateItem, fromDate: string, toDate: string) => ({
     personnel_id: item.personnel_id,
     personnel_name: item.personnel_name,
@@ -285,6 +289,8 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     total_contracts_amount: item.total_contracts_amount,
     contracts_count: item.contracts_count,
     commission_amount: item.commission_amount,
+    percentage_commission_amount: item.percentage_commission_amount ?? item.commission_amount,
+    unit_commission_amount: item.unit_commission_amount ?? 0,
     advances_deducted: item.advances_deducted,
     bonuses_amount: item.bonuses_amount,
     deductions_amount: item.deductions_amount,
@@ -292,6 +298,10 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
     calculation_breakdown: {
       salary_config: item.salary_config,
       commission_breakdown: item.commission_breakdown,
+      base_salary_threshold_breakdown: item.base_salary_threshold_breakdown || null,
+      percentage_sales_amount: item.percentage_sales_amount ?? item.total_contracts_amount,
+      unit_sales_amount: item.unit_sales_amount ?? 0,
+      approved_unit_items_count: item.approved_unit_items_count ?? 0,
       contracts: item.contracts_list,
       advances: item.advances_list,
       adjustments: item.adjustments_list || [],
@@ -328,9 +338,15 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       return;
     }
 
-    const pendingCount = Number(item.pending_adjustments_count || 0);
-    if (pendingCount > 0) {
-      setPendingIssueWarning({ mode: 'single', item, pendingCount });
+    const pendingAdjustmentsCount = Number(item.pending_adjustments_count || 0);
+    const pendingUnitCount = Number(item.pending_unit_commissions_count || 0);
+    if (pendingAdjustmentsCount > 0 || pendingUnitCount > 0) {
+      setPendingIssueWarning({
+        mode: 'single',
+        item,
+        pendingAdjustmentsCount,
+        pendingUnitCount,
+      });
       return;
     }
 
@@ -361,12 +377,21 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
       return;
     }
 
-    const totalPending = calculatedItems.reduce(
+    const totalPendingAdj = calculatedItems.reduce(
       (sum, it) => sum + Number(it.pending_adjustments_count || 0),
       0
     );
-    if (totalPending > 0) {
-      setPendingIssueWarning({ mode: 'bulk', items: calculatedItems, pendingCount: totalPending });
+    const totalPendingUnit = calculatedItems.reduce(
+      (sum, it) => sum + Number(it.pending_unit_commissions_count || 0),
+      0
+    );
+    if (totalPendingAdj > 0 || totalPendingUnit > 0) {
+      setPendingIssueWarning({
+        mode: 'bulk',
+        items: calculatedItems,
+        pendingAdjustmentsCount: totalPendingAdj,
+        pendingUnitCount: totalPendingUnit,
+      });
       return;
     }
 
@@ -786,7 +811,7 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                                   setIsBreakdownModalOpen(true);
                                 }}
                                 className="inline-flex flex-col text-right group cursor-pointer transition-transform hover:scale-105"
-                                title="مشاهده ریز قراردادها"
+                                title="مشاهده ریز قراردادها و بررسی فروش‌های تعدادی"
                               >
                                 <span className="font-mono font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-[#1DB954] flex items-center gap-1">
                                   <span>{formatToman(calculatedItem.total_contracts_amount)} ت</span>
@@ -795,6 +820,12 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                                 <span className="text-[10px] text-slate-400">
                                   {toPersianDigits(calculatedItem.contracts_count)} قرارداد
                                 </span>
+                                {Number(calculatedItem.pending_unit_commissions_count || 0) > 0 && (
+                                  <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[10px] font-bold">
+                                    <Clock className="w-2.5 h-2.5" />
+                                    <span>{toPersianDigits(calculatedItem.pending_unit_commissions_count || 0)} تعدادی در انتظار تایید</span>
+                                  </span>
+                                )}
                               </button>
                             )}
                           </td>
@@ -804,9 +835,18 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                             {!hasConfig || !calculatedItem ? (
                               <span className="text-slate-400 text-xs">-</span>
                             ) : (
-                              <span className="font-mono font-bold text-emerald-600 dark:text-[#1DB954]">
-                                {formatToman(calculatedItem.commission_amount)} ت
-                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-mono font-bold text-emerald-600 dark:text-[#1DB954]">
+                                  {formatToman(calculatedItem.commission_amount)} ت
+                                </span>
+                                {(Number(calculatedItem.unit_commission_amount || 0) > 0 ||
+                                  Number(calculatedItem.unit_contracts_count || 0) > 0) && (
+                                  <span className="text-[10px] font-mono text-slate-500 dark:text-[#888] mt-0.5">
+                                    درصدی: {formatToman(calculatedItem.percentage_commission_amount ?? 0)} | تعدادی:{' '}
+                                    {formatToman(calculatedItem.unit_commission_amount ?? 0)}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </td>
 
@@ -815,9 +855,31 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                             {!hasConfig || !calculatedItem ? (
                               <span className="text-slate-400 text-xs">-</span>
                             ) : (
-                              <span className="font-mono text-slate-700 dark:text-[#CCC]">
-                                {formatToman(calculatedItem.base_salary_amount)} ت
-                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-mono text-slate-700 dark:text-[#CCC] font-bold">
+                                  {formatToman(calculatedItem.base_salary_amount)} ت
+                                </span>
+                                {calculatedItem.base_salary_threshold_breakdown?.threshold_active &&
+                                  !calculatedItem.base_salary_threshold_breakdown.target_met && (
+                                    <div className="flex flex-col gap-0.5 mt-0.5">
+                                      <span className="text-[10px] font-mono line-through text-slate-400">
+                                        {formatToman(calculatedItem.base_salary_threshold_breakdown.configured_base_salary)} ت
+                                      </span>
+                                      <span
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[10px] font-bold w-fit"
+                                        title={calculatedItem.base_salary_threshold_breakdown.note}
+                                      >
+                                        {calculatedItem.base_salary_threshold_breakdown.below_target_mode === 'prorata'
+                                          ? `${toPersianDigits(
+                                              Math.round(
+                                                (calculatedItem.base_salary_threshold_breakdown.fulfillment_ratio || 0) * 100
+                                              )
+                                            )}٪ نسبی`
+                                          : 'کف فروش محقق نشد'}
+                                      </span>
+                                    </div>
+                                  )}
+                              </div>
                             )}
                           </td>
 
@@ -1093,10 +1155,19 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                         <td className="p-3.5 font-mono text-slate-600 dark:text-[#AAA]">
                           {!cfg ? (
                             <span className="text-slate-400">-</span>
-                          ) : cfg.min_sales_target && cfg.min_sales_target > 0 ? (
-                            `${formatToman(cfg.min_sales_target)} ت`
                           ) : (
-                            'از ریال اول'
+                            <div className="flex flex-col gap-1">
+                              <span>
+                                {cfg.min_sales_target && cfg.min_sales_target > 0
+                                  ? `${formatToman(cfg.min_sales_target)} ت`
+                                  : 'از ریال اول'}
+                              </span>
+                              {cfg.require_min_sales_for_base_salary && cfg.salary_type !== 'commission' && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[10px] font-sans font-bold w-fit">
+                                  کف حقوق ثابت فعال
+                                </span>
+                              )}
+                            </div>
                           )}
                         </td>
 
@@ -1257,7 +1328,15 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
                           </td>
 
                           <td className="p-3.5 font-mono text-emerald-600 dark:text-[#1DB954] font-bold">
-                            {formatToman(slip.commission_amount)} ت
+                            <div className="flex flex-col">
+                              <span>{formatToman(slip.commission_amount)} ت</span>
+                              {Number(slip.unit_commission_amount || 0) > 0 && (
+                                <span className="text-[10px] font-normal text-slate-500 dark:text-[#888]">
+                                  درصدی {formatToman(slip.percentage_commission_amount ?? Math.max(0, Number(slip.commission_amount || 0) - Number(slip.unit_commission_amount || 0)))} + تعدادی{' '}
+                                  {formatToman(slip.unit_commission_amount)}
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           <td className="p-3.5 font-mono text-rose-500">
@@ -1379,6 +1458,10 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
             setSelectedBreakdownItem(null);
           }}
           item={selectedBreakdownItem}
+          onReviewed={async () => {
+            await handleCalculateSingle(selectedBreakdownItem.personnel_id, true);
+          }}
+          showToast={showToast}
         />
       )}
 
@@ -1419,24 +1502,35 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
         />
       )}
 
-      {/* Pending Adjustments Warning Dialog before Issuing Slip(s) */}
+      {/* Pending Adjustments / Unit Commissions Warning Dialog before Issuing Slip(s) */}
       {pendingIssueWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
           <div className="w-full max-w-md bg-white dark:bg-[#181818] border border-amber-400/50 dark:border-amber-500/40 rounded-2xl p-6 space-y-4 text-right shadow-2xl">
             <div className="flex items-center gap-2.5 text-amber-600 dark:text-amber-400">
               <AlertTriangle className="w-5 h-5 shrink-0" />
               <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                وجود درخواست پاداش در انتظار تایید
+                وجود موارد در انتظار بررسی و تایید
               </h3>
             </div>
-            <p className="text-xs text-slate-600 dark:text-[#AAA] leading-relaxed">
-              برای {pendingIssueWarning.mode === 'single' ? pendingIssueWarning.item?.personnel_name : 'پرسنل محاسبه‌شده'} در ماه{' '}
-              <strong>{JALALI_MONTH_NAMES[selectedMonth - 1]}</strong> تعداد{' '}
-              <strong className="text-amber-600 dark:text-amber-400">
-                {toPersianDigits(pendingIssueWarning.pendingCount)} درخواست پاداش در انتظار بررسی
-              </strong>{' '}
-              وجود دارد که هنوز تایید یا رد نشده‌اند و در مبلغ فعلی محاسبه نشده‌اند. مایلید ابتدا آن‌ها را بررسی کنید یا فیش را بدون آن‌ها صادر نمایید؟
-            </p>
+            <div className="text-xs text-slate-600 dark:text-[#AAA] leading-relaxed space-y-2">
+              <p>
+                برای {pendingIssueWarning.mode === 'single' ? pendingIssueWarning.item?.personnel_name : 'پرسنل محاسبه‌شده'} در ماه{' '}
+                <strong>{JALALI_MONTH_NAMES[selectedMonth - 1]}</strong> موارد زیر هنوز تایید یا رد نشده‌اند و در مبلغ فعلی فیش لحاظ نشده‌اند:
+              </p>
+              <ul className="list-disc pr-4 space-y-1">
+                {pendingIssueWarning.pendingUnitCount > 0 && (
+                  <li className="text-amber-700 dark:text-amber-300 font-bold">
+                    {toPersianDigits(pendingIssueWarning.pendingUnitCount)} قرارداد فروش تعدادی در انتظار تایید پورسانت
+                  </li>
+                )}
+                {pendingIssueWarning.pendingAdjustmentsCount > 0 && (
+                  <li className="text-amber-700 dark:text-amber-300 font-bold">
+                    {toPersianDigits(pendingIssueWarning.pendingAdjustmentsCount)} درخواست پاداش در انتظار بررسی
+                  </li>
+                )}
+              </ul>
+              <p>مایلید ابتدا آن‌ها را بررسی کنید یا فیش را بدون این موارد صادر نمایید؟</p>
+            </div>
             <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
               <button
                 type="button"
@@ -1445,23 +1539,44 @@ export const PayrollView: React.FC<PayrollViewProps> = ({
               >
                 انصراف
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const targetItem = pendingIssueWarning.item;
-                  const mode = pendingIssueWarning.mode;
-                  setPendingIssueWarning(null);
-                  if (mode === 'single' && targetItem) {
-                    const p = personnelList.find((x) => String(x.id) === String(targetItem.personnel_id));
-                    if (p) setAdjustingPersonnel(p);
-                  } else {
-                    setActiveSubTab('adjustments');
-                  }
-                }}
-                className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold cursor-pointer"
-              >
-                بررسی درخواست‌ها
-              </button>
+              {pendingIssueWarning.pendingUnitCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetItem =
+                      pendingIssueWarning.mode === 'single'
+                        ? pendingIssueWarning.item
+                        : pendingIssueWarning.items?.find((it) => Number(it.pending_unit_commissions_count || 0) > 0);
+                    setPendingIssueWarning(null);
+                    if (targetItem) {
+                      setSelectedBreakdownItem(targetItem);
+                      setIsBreakdownModalOpen(true);
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-700 dark:text-blue-300 border border-blue-500/30 text-xs font-bold cursor-pointer"
+                >
+                  بررسی فروش‌های تعدادی
+                </button>
+              )}
+              {pendingIssueWarning.pendingAdjustmentsCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetItem = pendingIssueWarning.item;
+                    const mode = pendingIssueWarning.mode;
+                    setPendingIssueWarning(null);
+                    if (mode === 'single' && targetItem) {
+                      const p = personnelList.find((x) => String(x.id) === String(targetItem.personnel_id));
+                      if (p) setAdjustingPersonnel(p);
+                    } else {
+                      setActiveSubTab('adjustments');
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold cursor-pointer"
+                >
+                  بررسی پاداش‌ها
+                </button>
+              )}
               <button
                 type="button"
                 onClick={async () => {

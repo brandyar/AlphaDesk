@@ -28,7 +28,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { Customer, Personnel, NegotiationStatus, AuthUser } from '../types';
-import { formatTimeRemaining, formatPersianDate, formatDisplayDate, formatDisplayDateOnly, formatFollowupDateTime, formatFollowupRelativeBadge, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS, toPersianDigits } from '../utils';
+import { formatTimeRemaining, formatPersianDate, formatDisplayDate, formatDisplayDateOnly, formatFollowupDateTime, formatFollowupRelativeBadge, getStatusTheme, formatStatusLabel, NEGOTIATION_STATUS_OPTIONS, toPersianDigits, isPersonnelActive } from '../utils';
 import { fetchCustomersPaginated } from '../api';
 import { PaginationControl } from './PaginationControl';
 
@@ -600,7 +600,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   className="h-9 px-3 rounded-xl bg-white dark:bg-[#242424] text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#383838] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer w-full sm:w-auto"
                 >
                   <option value="همه" className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">همه بازاریاب‌ها</option>
-                  {personnelList.map((p) => (
+                  {personnelList.filter((p) => isPersonnelActive(p)).map((p) => (
                     <option key={p.id} value={p.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
                       {p.name}
                     </option>

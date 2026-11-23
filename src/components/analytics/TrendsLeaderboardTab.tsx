@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { PeriodPreset, PeriodicStats } from './types';
 import {
+  formatStatusLabel,
   formatToman,
   getStatusTheme,
   toPersianDigits,
@@ -53,6 +54,7 @@ export const TrendsLeaderboardTab: React.FC<TrendsLeaderboardTabProps> = ({
               { id: 'last_30_days' as PeriodPreset, label: '۳۰ روز گذشته' },
               { id: 'last_90_days' as PeriodPreset, label: '۳ ماه گذشته' },
               { id: 'this_year' as PeriodPreset, label: 'امسال' },
+              { id: 'all_time' as PeriodPreset, label: 'همه زمان‌ها' },
               { id: 'custom' as PeriodPreset, label: 'بازه دلخواه' },
             ].map((item) => (
               <button
@@ -156,7 +158,7 @@ export const TrendsLeaderboardTab: React.FC<TrendsLeaderboardTabProps> = ({
                       <div className="flex items-center justify-between text-xs">
                         <span className="flex items-center gap-2 font-medium text-slate-900 dark:text-white">
                           <span className={`w-2.5 h-2.5 rounded-full ${theme.dot}`} />
-                          <span>{statusName}</span>
+                          <span>{formatStatusLabel(statusName)}</span>
                         </span>
                         <span className="font-mono text-slate-500 dark:text-[#A7A7A7]">
                           {toPersianDigits(count)} ({toPersianDigits(percent)}%)

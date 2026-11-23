@@ -22,7 +22,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { AdministrativeReport, Personnel, AuthUser, HourlyWorkLog } from '../types';
-import { formatPersianDate, formatPersianDateTime, toPersianDigits } from '../utils';
+import { formatPersianDate, formatPersianDateTime, toPersianDigits, isPersonnelActive } from '../utils';
 import { PersianDatePicker } from './PersianDatePicker';
 import { fetchAdminReportsPaginated } from '../api';
 import { PaginationControl } from './PaginationControl';
@@ -62,7 +62,8 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
   const [editingReport, setEditingReport] = useState<AdministrativeReport | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
 
-  const [personnelId, setPersonnelId] = useState(currentPersonnel?.id || personnelList[0]?.id || '');
+  const activePersonnelList = personnelList.filter((p) => isPersonnelActive(p));
+  const [personnelId, setPersonnelId] = useState(currentPersonnel?.id || activePersonnelList[0]?.id || '');
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
   const [callsCount, setCallsCount] = useState<number>(15);
   const [successfulContacts, setSuccessfulContacts] = useState<number>(8);
@@ -190,7 +191,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
 
   const handleOpenAddModal = () => {
     setEditingReport(null);
-    setPersonnelId(currentPersonnel?.id || personnelList[0]?.id || '');
+    setPersonnelId(currentPersonnel?.id || activePersonnelList[0]?.id || '');
     setReportDate(new Date().toISOString().split('T')[0]);
     setCallsCount(15);
     setSuccessfulContacts(8);
@@ -707,7 +708,7 @@ export const AdminReportsView: React.FC<AdminReportsViewProps> = ({
                       onChange={(e) => setPersonnelId(e.target.value)}
                       className="w-full h-10 px-3 bg-slate-50 dark:bg-[#282828] border border-slate-300 dark:border-transparent rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-600 dark:focus:border-[#1DB954]"
                     >
-                      {personnelList.map((p) => (
+                      {activePersonnelList.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس'})
                         </option>

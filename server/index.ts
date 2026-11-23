@@ -137,7 +137,7 @@ export async function startServer() {
     const viteInitPromise = import('vite')
       .then(({ createServer: createViteServer }) =>
         createViteServer({
-          server: { middlewareMode: true },
+          server: { middlewareMode: true, allowedHosts: true },
           appType: 'spa',
         })
       )

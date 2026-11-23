@@ -27,7 +27,7 @@ import { checkDuplicateContact } from '../api';
 import { PersianDatePicker } from './PersianDatePicker';
 import { FreePoolDuplicateAlert } from './FreePoolDuplicateAlert';
 import { IRAN_PROVINCES } from '../data/iranProvincesCities';
-import { toPersianDigits } from '../utils';
+import { toPersianDigits, isPersonnelActive } from '../utils';
 
 const isPlaceholderContactName = (name?: string | null): boolean => {
   if (!name) return false;
@@ -254,12 +254,17 @@ const CustomerModalContent: React.FC<CustomerModalProps> = ({
   );
   const [nextFollowupTouched, setNextFollowupTouched] = useState(false);
 
+  const activePersonnelList = useMemo(
+    () => personnelList.filter((p) => isPersonnelActive(p)),
+    [personnelList]
+  );
+
   // Marketer Assignment & Duration
   const [assignedMarketerId, setAssignedMarketerId] = useState(() => {
     if (editingCustomer?.assigned_marketer_id) return editingCustomer.assigned_marketer_id;
     if (currentPersonnel?.id) return currentPersonnel.id;
     if (currentUser?.id) return currentUser.id;
-    return personnelList[0]?.id || '';
+    return activePersonnelList[0]?.id || '';
   });
   const [assignmentDurationDays, setAssignmentDurationDays] = useState<number>(
     editingCustomer?.assignment_duration_days || 7
@@ -882,7 +887,7 @@ const CustomerModalContent: React.FC<CustomerModalProps> = ({
                       className="w-full h-10 px-3 bg-white dark:bg-[#282828] disabled:bg-slate-100 dark:disabled:bg-[#202020] disabled:text-slate-400 dark:disabled:text-[#777] disabled:border-slate-200 dark:disabled:border-[#333] disabled:cursor-not-allowed rounded-md text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954] border border-slate-300 dark:border-transparent transition-colors"
                     >
                       <option value="none">تخصیص نیافته (عمومی)</option>
-                      {personnelList.map((p) => (
+                      {activePersonnelList.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name} ({p.role === 'marketer' ? 'بازاریاب' : p.role === 'admin' ? 'مدیر سیستم' : 'پرسنل'})
                         </option>

@@ -93,50 +93,105 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
     try {
-      let tenantFilterStr = '';
-      if (tenantId && tenantId !== 'all') {
-        const tenantNum = resolveDirectusTenantId(tenantId);
-        if (tenantNum && tenantNum > 1) {
-          tenantFilterStr = `&filter[tenant_id][_eq]=${tenantNum}`;
-        }
-      }
+      const tenantNum = tenantId && tenantId !== 'all' ? resolveDirectusTenantId(tenantId) : null;
+      const hasSecondaryTenant = Boolean(tenantNum && tenantNum > 1);
+      const tenantFilterStr = hasSecondaryTenant ? `&filter[tenant_id][_eq]=${tenantNum}` : '';
 
       const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
       const rawUid = cleanPId.replace(/^p-/, '');
       const cleanUId = userId ? String(userId).trim().toLowerCase() : '';
-      const normUserName = userName ? userName.trim() : '';
-
-      let marketerCustFilter = '';
-      let marketerRepFilter = '';
-      let marketerLeadFilter = '';
-
-      if (!canViewAll) {
-        if (cleanPId) {
-          marketerCustFilter = `&filter[_or][0][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`;
-          if (rawUid && rawUid !== cleanPId) {
-            marketerCustFilter += `&filter[_or][1][assigned_marketer_id][_eq]=${encodeURIComponent(rawUid)}`;
-            marketerCustFilter += `&filter[_or][2][assigned_marketer_id][_eq]=${encodeURIComponent('p-' + rawUid)}`;
-          }
-          if (normUserName) {
-            marketerCustFilter += `&filter[_or][3][assigned_marketer_name][_icontains]=${encodeURIComponent(normUserName)}`;
-          }
-        } else if (normUserName) {
-          marketerCustFilter = `&filter[assigned_marketer_name][_icontains]=${encodeURIComponent(normUserName)}`;
-        }
-
-        if (normUserName) {
-          marketerRepFilter = `&filter[negotiator_name][_icontains]=${encodeURIComponent(normUserName)}`;
-        } else if (cleanPId) {
-          const matchedP = personnelData.find((p) => p.id === cleanPId || p.user_id === cleanPId);
-          if (matchedP?.name) {
-            marketerRepFilter = `&filter[negotiator_name][_icontains]=${encodeURIComponent(matchedP.name.trim())}`;
-          }
-        }
-
-        if (cleanPId) {
-          marketerLeadFilter = `&filter[assigned_to][_eq]=${encodeURIComponent(cleanPId)}`;
-        }
+      let resolvedUserName = userName ? userName.trim() : '';
+      if (!resolvedUserName && cleanPId) {
+        const matchedP = personnelData.find(
+          (p) => String(p.id).toLowerCase() === cleanPId || String(p.user_id || '').toLowerCase() === cleanPId
+        );
+        if (matchedP?.name) resolvedUserName = matchedP.name.trim();
       }
+      const normPersianName = resolvedUserName ? normalizePersianString(resolvedUserName) : '';
+
+      const contractStatusIn =
+        '%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%20%2F%20%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1,%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF%2F%D9%81%D8%A7%DA%A9%D8%AA%D9%88%D8%B1';
+
+      // Build properly nested filter[_and] clauses for customers
+      const buildCustFilter = (extraClauses: string[] = []): string => {
+        let idx = 0;
+        let out = '';
+        if (hasSecondaryTenant) {
+          out += `&filter[_and][${idx++}][tenant_id][_eq]=${tenantNum}`;
+        }
+        if (!canViewAll) {
+          let orIdx = 0;
+          if (cleanPId) {
+            out += `&filter[_and][${idx}][_or][${orIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`;
+            if (rawUid && rawUid !== cleanPId) {
+              out += `&filter[_and][${idx}][_or][${orIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(rawUid)}`;
+              out += `&filter[_and][${idx}][_or][${orIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent('p-' + rawUid)}`;
+            }
+          }
+          if (cleanUId && cleanUId !== cleanPId) {
+            out += `&filter[_and][${idx}][_or][${orIdx++}][assigned_marketer_id][_eq]=${encodeURIComponent(cleanUId)}`;
+          }
+          if (resolvedUserName) {
+            out += `&filter[_and][${idx}][_or][${orIdx++}][assigned_marketer_name][_icontains]=${encodeURIComponent(resolvedUserName)}`;
+            if (normPersianName && normPersianName !== resolvedUserName) {
+              out += `&filter[_and][${idx}][_or][${orIdx++}][assigned_marketer_name][_icontains]=${encodeURIComponent(normPersianName)}`;
+            }
+          }
+          if (orIdx > 0) idx++;
+        }
+        for (const clause of extraClauses) {
+          out += clause.replace(/__IDX__/g, String(idx++));
+        }
+        return out;
+      };
+
+      // Build properly nested filter[_and] clauses for customer_reports (aligned with reports.routes.ts & analytics.routes.ts)
+      const buildRepFilter = (includeContractClause = false): string => {
+        let idx = 0;
+        let out = '';
+        if (hasSecondaryTenant) {
+          out += `&filter[_and][${idx++}][tenant_id][_eq]=${tenantNum}`;
+        }
+        if (!canViewAll) {
+          let orIdx = 0;
+          if (resolvedUserName) {
+            out += `&filter[_and][${idx}][_or][${orIdx++}][negotiator_name][_icontains]=${encodeURIComponent(resolvedUserName)}`;
+            out += `&filter[_and][${idx}][_or][${orIdx++}][customer_id][assigned_marketer_name][_icontains]=${encodeURIComponent(resolvedUserName)}`;
+            if (normPersianName && normPersianName !== resolvedUserName) {
+              out += `&filter[_and][${idx}][_or][${orIdx++}][negotiator_name][_icontains]=${encodeURIComponent(normPersianName)}`;
+              out += `&filter[_and][${idx}][_or][${orIdx++}][customer_id][assigned_marketer_name][_icontains]=${encodeURIComponent(normPersianName)}`;
+            }
+          }
+          if (cleanPId) {
+            out += `&filter[_and][${idx}][_or][${orIdx++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(cleanPId)}`;
+            if (rawUid && rawUid !== cleanPId) {
+              out += `&filter[_and][${idx}][_or][${orIdx++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(rawUid)}`;
+            } else if (rawUid) {
+              out += `&filter[_and][${idx}][_or][${orIdx++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent('p-' + rawUid)}`;
+            }
+          }
+          if (cleanUId && cleanUId !== cleanPId) {
+            out += `&filter[_and][${idx}][_or][${orIdx++}][customer_id][assigned_marketer_id][_eq]=${encodeURIComponent(cleanUId)}`;
+          }
+          if (orIdx > 0) idx++;
+        }
+        if (includeContractClause) {
+          out +=
+            `&filter[_and][${idx}][_or][0][negotiation_status][_in]=${contractStatusIn}` +
+            `&filter[_and][${idx}][_or][1][contract_amount][_gt]=0` +
+            `&filter[_and][${idx}][_or][2][contract_number][_nempty]=true`;
+          idx++;
+        }
+        return out;
+      };
+
+      const marketerLeadFilter = !canViewAll && cleanPId ? `&filter[assigned_to][_eq]=${encodeURIComponent(cleanPId)}` : '';
+
+      const baseCustFilter = buildCustFilter();
+      const expiredCustFilter = buildCustFilter([`&filter[_and][__IDX__][is_expired][_eq]=true`]);
+      const contractCustFilter = buildCustFilter([`&filter[_and][__IDX__][status][_in]=${contractStatusIn}`]);
+      const baseRepFilter = buildRepFilter(false);
+      const contractRepFilter = buildRepFilter(true);
 
       // Fast, lightweight parallel queries
       const [
@@ -145,21 +200,35 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
         expiredCustomersRes,
         contractsWonCustomersRes,
         reportsAggregateRes,
+        contractReportsAggregateRes,
         totalColdLeadsRes,
         adminReportsRes,
         pendingLeavesRes,
         pendingAdvancesRes,
       ] = await Promise.all([
-        directusFetch(`/items/customers?limit=1&meta=filter_count${tenantFilterStr}${marketerCustFilter}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count${baseCustFilter}`).catch(() => null),
         directusFetch(`/items/customers?limit=1&meta=filter_count&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[is_expired][_eq]=true${tenantFilterStr}${marketerCustFilter}`).catch(() => null),
-        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[status][_eq]=%D9%82%D8%B1%D8%A7%D8%B1%D8%AF%D8%A7%D8%AF${tenantFilterStr}${marketerCustFilter}`).catch(() => null),
-        directusFetch(`/items/customer_reports?aggregate[count]=*&aggregate[sum]=contract_amount&aggregate[avg]=negotiation_score${tenantFilterStr}${marketerRepFilter}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count${expiredCustFilter}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count${contractCustFilter}`).catch(() => null),
+        directusFetch(`/items/customer_reports?aggregate[count]=*&aggregate[sum]=contract_amount&aggregate[avg]=negotiation_score${baseRepFilter}`).catch((e) => {
+          console.warn('[Dashboard Summary] reportsAggregateRes error:', e?.message);
+          return null;
+        }),
+        directusFetch(`/items/customer_reports?aggregate[count]=*&aggregate[sum]=contract_amount${contractRepFilter}`).catch((e) => {
+          console.warn('[Dashboard Summary] contractReportsAggregateRes error:', e?.message);
+          return null;
+        }),
         directusFetch(`/items/cold_leads?limit=1&meta=filter_count${tenantFilterStr}${marketerLeadFilter}`).catch(() => null),
         directusFetch(`/items/administrative_reports?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/leave_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
         directusFetch(`/items/advance_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
       ]);
+
+      const extractCount = (v: any): number => {
+        if (v === null || v === undefined) return 0;
+        if (typeof v === 'object') return Number(v['*'] ?? Object.values(v)[0] ?? 0) || 0;
+        return Number(v || 0) || 0;
+      };
 
       const totalCustomers = totalCustomersRes?.meta?.filter_count ?? totalCustomersRes?.meta?.total_count ?? 0;
       const freeCustomers = freeCustomersRes?.meta?.filter_count ?? 0;
@@ -172,11 +241,25 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
 
       if (reportsAggregateRes?.data && Array.isArray(reportsAggregateRes.data) && reportsAggregateRes.data.length > 0) {
         const repItem = reportsAggregateRes.data[0];
-        totalReports = Number(repItem.count || 0);
+        totalReports = extractCount(repItem.count);
         totalRevenue = Number(repItem.sum?.contract_amount || 0);
         const rawAvg = Number(repItem.avg?.negotiation_score);
         if (!isNaN(rawAvg) && rawAvg > 0) {
           avgScore = Math.round(rawAvg * 10) / 10;
+        }
+      }
+
+      let contractsReportsCount = contractsWon;
+      if (
+        contractReportsAggregateRes?.data &&
+        Array.isArray(contractReportsAggregateRes.data) &&
+        contractReportsAggregateRes.data.length > 0
+      ) {
+        const cItem = contractReportsAggregateRes.data[0];
+        contractsReportsCount = extractCount(cItem.count);
+        const cRev = Number(cItem.sum?.contract_amount || 0);
+        if (cRev > totalRevenue) {
+          totalRevenue = cRev;
         }
       }
 
@@ -192,6 +275,7 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
       const resultPayload = {
         total_customers: totalCustomers,
         contracts_won_count: contractsWon,
+        contracts_reports_count: contractsReportsCount,
         in_negotiation_count: inNegotiationCount,
         expired_customers_count: expiredCustomers,
         free_customers_count: freeCustomers,
@@ -213,8 +297,54 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
     }
   }
 
+  const normMe = normalizePersianString(userName);
+  const cleanPIdLocal = personnelId ? String(personnelId).trim().toLowerCase() : '';
+  const rawPIdLocal = cleanPIdLocal.replace(/^p-/, '');
+  const cleanUIdLocal = userId ? String(userId).trim().toLowerCase() : '';
+
+  const scopedCustomersLocal = canViewAll
+    ? customersData
+    : customersData.filter((c) => {
+        const mId = String(c.assigned_marketer_id || '').trim().toLowerCase();
+        const rawMId = mId.replace(/^p-/, '');
+        if (cleanPIdLocal && (mId === cleanPIdLocal || (rawPIdLocal && rawMId === rawPIdLocal))) return true;
+        if (cleanUIdLocal && (mId === cleanUIdLocal || rawMId === cleanUIdLocal)) return true;
+        const mName = normalizePersianString(c.assigned_marketer_name);
+        if (normMe && mName && (mName === normMe || mName.includes(normMe))) return true;
+        return false;
+      });
+
+  const scopedCustIds = new Set(scopedCustomersLocal.map((c) => String(c.id)));
+  const scopedReportsLocal = canViewAll
+    ? reportsData
+    : reportsData.filter((r) => {
+        const rNeg = normalizePersianString(r.negotiator_name);
+        if (normMe && rNeg && (rNeg === normMe || rNeg.includes(normMe))) return true;
+        if (r.customer_id && scopedCustIds.has(String(r.customer_id))) return true;
+        return false;
+      });
+
+  const isContractReportLocal = (r: any) => {
+    const st = String(r.negotiation_status || '').trim();
+    return (
+      st === 'قرارداد' ||
+      st === 'قرارداد / فاکتور' ||
+      st === 'قرارداد/فاکتور' ||
+      Boolean(r.contract_number && String(r.contract_number).trim()) ||
+      (r.contract_amount && Number(r.contract_amount) > 0)
+    );
+  };
+
+  const contractReportsLocal = scopedReportsLocal.filter(isContractReportLocal);
+  const totalRevenueLocal = contractReportsLocal.reduce((acc, r) => acc + (Number(r.contract_amount) || 0), 0);
+  const scoredLocal = scopedReportsLocal.filter((r) => r.negotiation_score && Number(r.negotiation_score) > 0);
+  const avgScoreLocal =
+    scoredLocal.length > 0
+      ? Math.round((scoredLocal.reduce((acc, r) => acc + Number(r.negotiation_score || 0), 0) / scoredLocal.length) * 10) / 10
+      : 8.5;
+
   const startOfTodayMs = new Date().setHours(0, 0, 0, 0);
-  const sortedUpcomingFollowups = customersData
+  const sortedUpcomingFollowups = scopedCustomersLocal
     .filter((c) => Boolean(c.next_followup_date) && !isNaN(new Date(c.next_followup_date!).getTime()))
     .sort((a, b) => {
       const aTime = new Date(a.next_followup_date!).getTime();
@@ -228,7 +358,7 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
     })
     .slice(0, 5);
 
-  const urgentExpiring = customersData
+  const urgentExpiring = scopedCustomersLocal
     .filter((c) => {
       if (!c.assignment_deadline || c.is_expired || c.status === 'قرارداد' || c.status === 'لیست سیاه') return false;
       const days = Math.ceil((new Date(c.assignment_deadline).getTime() - Date.now()) / 86400000);
@@ -236,19 +366,24 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
     })
     .slice(0, 5);
 
+  const contractsWonCustLocal = scopedCustomersLocal.filter(
+    (c) => c.status === 'قرارداد' || c.status === 'قرارداد / فاکتور'
+  ).length;
+
   res.json({
-    total_customers: customersData.length,
-    contracts_won_count: customersData.filter(c => c.status === 'قرارداد').length,
-    in_negotiation_count: customersData.filter(c => c.status !== 'قرارداد').length,
-    expired_customers_count: customersData.filter(c => c.is_expired).length,
-    free_customers_count: customersData.filter(c => !c.assigned_marketer_id || c.is_expired).length,
-    total_reports_count: reportsData.length,
+    total_customers: scopedCustomersLocal.length,
+    contracts_won_count: contractsWonCustLocal,
+    contracts_reports_count: contractReportsLocal.length,
+    in_negotiation_count: Math.max(0, scopedCustomersLocal.length - contractsWonCustLocal),
+    expired_customers_count: scopedCustomersLocal.filter((c) => c.is_expired).length,
+    free_customers_count: customersData.filter((c) => !c.assigned_marketer_id || c.is_expired).length,
+    total_reports_count: scopedReportsLocal.length,
     total_cold_leads_count: 0,
     admin_reports_count: 0,
     pending_leave_count: 0,
     pending_advance_count: 0,
-    total_contract_revenue: 0,
-    avg_negotiation_score: 8.5,
+    total_contract_revenue: totalRevenueLocal,
+    avg_negotiation_score: avgScoreLocal,
     upcoming_followups: sortedUpcomingFollowups,
     urgent_expiring_customers: urgentExpiring,
   });
@@ -325,7 +460,7 @@ router.post('/api/project-settings/test-sms', async (req: Request, res: Response
   }
 });
 
-// GET /api/tenant-settings (fetch manager notification SMS phones from Directus tenant_settings)
+// GET /api/tenant-settings (fetch per-tenant settings including SMS phones & unit sales commission toggle)
 const handleGetTenantSettings = async (req: Request, res: Response) => {
   const rawTenantId =
     (typeof req.query.tenant_id === 'string' && req.query.tenant_id.trim()) ||
@@ -335,7 +470,12 @@ const handleGetTenantSettings = async (req: Request, res: Response) => {
   const resolvedNum = rawTenantId !== 'all' ? resolveDirectusTenantId(rawTenantId) : null;
   const targetKey = resolvedNum ? String(resolvedNum) : rawTenantId;
 
-  const allItems: Array<{ id: string | number; tenant_id: string; sms_phones: string[] }> = [];
+  const allItems: Array<{
+    id: string | number;
+    tenant_id: string;
+    sms_phones: string[];
+    enable_unit_sales_commission: boolean;
+  }> = [];
 
   if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
     try {
@@ -346,16 +486,19 @@ const handleGetTenantSettings = async (req: Request, res: Response) => {
           const tId = extractDirectusTenantIdString(item?.tenant_id);
           if (!tId) continue;
           const phones = parseSmsPhones(item?.sms_phones);
+          const enableUnit = Boolean(item?.enable_unit_sales_commission);
           const entry = {
             id: item.id !== undefined ? String(item.id) : `ts-${tId}`,
             tenant_id: tId,
             sms_phones: phones,
+            enable_unit_sales_commission: enableUnit,
           };
           tenantSettingsMap.set(tId, entry);
           allItems.push({
             id: item.id,
             tenant_id: tId,
             sms_phones: phones,
+            enable_unit_sales_commission: enableUnit,
           });
         }
 
@@ -370,6 +513,7 @@ const handleGetTenantSettings = async (req: Request, res: Response) => {
           id: matched?.id ?? null,
           tenant_id: targetKey,
           sms_phones: matched ? matched.sms_phones : [],
+          enable_unit_sales_commission: matched ? matched.enable_unit_sales_commission : false,
           items: allItems,
         });
       }
@@ -383,6 +527,7 @@ const handleGetTenantSettings = async (req: Request, res: Response) => {
       id: v.id ?? `ts-${v.tenant_id}`,
       tenant_id: String(v.tenant_id),
       sms_phones: parseSmsPhones(v.sms_phones),
+      enable_unit_sales_commission: Boolean(v.enable_unit_sales_commission),
     });
   }
 
@@ -395,6 +540,7 @@ const handleGetTenantSettings = async (req: Request, res: Response) => {
     id: localMatched?.id ?? null,
     tenant_id: targetKey,
     sms_phones: localMatched ? parseSmsPhones(localMatched.sms_phones) : [],
+    enable_unit_sales_commission: Boolean(localMatched?.enable_unit_sales_commission),
     items: allItems,
   });
 };
@@ -408,7 +554,7 @@ const handleSaveTenantSettings = async (req: Request, res: Response) => {
   if (!isAuthenticated || (!isAdmin && userRole !== 'admin')) {
     return res.status(403).json({
       error: 'FORBIDDEN',
-      message: 'تنها مدیر سیستم مجاز به ویرایش شماره‌های پیامک اطلاع‌رسانی سازمان است.',
+      message: 'تنها مدیر سیستم مجاز به ویرایش تنظیمات سازمان است.',
     });
   }
 
@@ -422,16 +568,29 @@ const handleSaveTenantSettings = async (req: Request, res: Response) => {
   if (!rawTenantId || rawTenantId === 'all') {
     return res.status(400).json({
       error: 'INVALID_TENANT',
-      message: 'لطفاً یک سازمان مشخص را برای ذخیره شماره‌های مدیریت انتخاب کنید.',
+      message: 'لطفاً یک سازمان مشخص را برای ذخیره تنظیمات انتخاب کنید.',
     });
   }
 
   const resolvedNum = resolveDirectusTenantId(rawTenantId);
   const effectiveTenantId = resolvedNum ? String(resolvedNum) : rawTenantId;
-  const phonesArr = parseSmsPhones(req.body?.sms_phones);
-  const phonesStr = phonesArr.join(', ');
 
-  let savedId: string | number = `ts-${effectiveTenantId}`;
+  const hasSmsField = req.body?.sms_phones !== undefined;
+  const hasUnitSalesField = req.body?.enable_unit_sales_commission !== undefined;
+
+  const existingLocal =
+    tenantSettingsMap.get(effectiveTenantId) ||
+    tenantSettingsMap.get(rawTenantId) ||
+    undefined;
+
+  let phonesArr = hasSmsField
+    ? parseSmsPhones(req.body.sms_phones)
+    : parseSmsPhones(existingLocal?.sms_phones);
+  let enableUnitSales = hasUnitSalesField
+    ? Boolean(req.body.enable_unit_sales_commission)
+    : Boolean(existingLocal?.enable_unit_sales_commission);
+
+  let savedId: string | number = existingLocal?.id ?? `ts-${effectiveTenantId}`;
 
   if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
     try {
@@ -446,9 +605,19 @@ const handleSaveTenantSettings = async (req: Request, res: Response) => {
           : null;
 
       if (existingItem?.id) {
+        if (!hasSmsField) {
+          phonesArr = parseSmsPhones(existingItem.sms_phones);
+        }
+        if (!hasUnitSalesField) {
+          enableUnitSales = Boolean(existingItem.enable_unit_sales_commission);
+        }
+        const patchBody: Record<string, any> = {};
+        if (hasSmsField) patchBody.sms_phones = phonesArr.join(', ');
+        if (hasUnitSalesField) patchBody.enable_unit_sales_commission = enableUnitSales;
+
         const patched = await directusFetch(`/items/tenant_settings/${existingItem.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ sms_phones: phonesStr }),
+          body: JSON.stringify(patchBody),
         });
         savedId = patched?.data?.id ?? existingItem.id;
       } else {
@@ -456,7 +625,8 @@ const handleSaveTenantSettings = async (req: Request, res: Response) => {
           method: 'POST',
           body: JSON.stringify({
             tenant_id: resolvedNum || rawTenantId,
-            sms_phones: phonesStr,
+            sms_phones: phonesArr.join(', '),
+            enable_unit_sales_commission: enableUnitSales,
           }),
         });
         if (created?.data?.id) {
@@ -467,7 +637,7 @@ const handleSaveTenantSettings = async (req: Request, res: Response) => {
       console.warn('Directus tenant_settings save error:', err.message);
       return res.status(500).json({
         error: 'DIRECTUS_ERROR',
-        message: 'خطا در ذخیره شماره‌های مدیریت در پایگاه داده: ' + err.message,
+        message: 'خطا در ذخیره تنظیمات سازمان در پایگاه داده: ' + err.message,
       });
     }
   }
@@ -476,6 +646,7 @@ const handleSaveTenantSettings = async (req: Request, res: Response) => {
     id: String(savedId),
     tenant_id: effectiveTenantId,
     sms_phones: phonesArr,
+    enable_unit_sales_commission: enableUnitSales,
   });
   invalidateTenantAdminPhonesCache(effectiveTenantId);
   invalidateTenantAdminPhonesCache(rawTenantId);
@@ -485,6 +656,7 @@ const handleSaveTenantSettings = async (req: Request, res: Response) => {
     id: savedId,
     tenant_id: effectiveTenantId,
     sms_phones: phonesArr,
+    enable_unit_sales_commission: enableUnitSales,
   });
 };
 

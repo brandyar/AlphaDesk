@@ -1,20 +1,18 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   GitMerge,
   X,
   Search,
   CheckCircle2,
-  Building,
   User,
-  Phone,
-  Calendar,
   AlertTriangle,
   ArrowLeft,
   Check,
-  ShieldAlert,
+  Loader2,
 } from 'lucide-react';
 import { Customer, Personnel, CustomerReport } from '../types';
-import { toPersianDigits, formatPersianDate } from '../utils';
+import { toPersianDigits, formatPersianDate, matchesCustomerSearch, isPersonnelActive } from '../utils';
+import { fetchCustomersPaginated, fetchCustomerById } from '../api';
 
 interface MergeCustomersModalProps {
   isOpen: boolean;
@@ -48,22 +46,153 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [merging, setMerging] = useState<boolean>(false);
   const [step, setStep] = useState<'select' | 'confirm'>('select');
+  const [actionError, setActionError] = useState<string | null>(null);
 
+  // Full cache of known customers (from props, server search, and detail fetches)
+  const [customerMap, setCustomerMap] = useState<Record<string, Customer>>({});
+  const [serverResults, setServerResults] = useState<Customer[]>([]);
+  const [serverTotal, setServerTotal] = useState<number>(0);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const fetchedDetailsRef = useRef<Set<string>>(new Set());
+
+  // Seed customerMap whenever customers prop updates
   useEffect(() => {
+    if (!customers || customers.length === 0) return;
+    setCustomerMap((prev) => {
+      const next = { ...prev };
+      for (const c of customers) {
+        if (!c?.id) continue;
+        const existing = next[c.id];
+        next[c.id] = existing
+          ? {
+              ...c,
+              reports: existing.reports && existing.reports.length > 0 ? existing.reports : c.reports,
+              contacts: existing.contacts && existing.contacts.length > 0 ? existing.contacts : c.contacts,
+            }
+          : c;
+      }
+      return next;
+    });
+  }, [customers]);
+
+  // Reset modal state on open
+  useEffect(() => {
+    if (!isOpen) return;
+    setStep('select');
+    setSearchQuery('');
+    setActionError(null);
+    setSearchError(null);
+    setNotes('');
+    fetchedDetailsRef.current.clear();
+
     if (initialSelectedCustomerIds.length > 0) {
       setSelectedIds(initialSelectedCustomerIds);
       setPrimaryId(initialSelectedCustomerIds[0]);
-      const primaryCust = customers.find((c) => c.id === initialSelectedCustomerIds[0]);
-      if (primaryCust?.assigned_marketer_id) {
-        setSelectedMarketerId(primaryCust.assigned_marketer_id);
-      }
+      const primaryCust =
+        customers.find((c) => c.id === initialSelectedCustomerIds[0]) ||
+        customerMap[initialSelectedCustomerIds[0]];
+      setSelectedMarketerId(primaryCust?.assigned_marketer_id || '');
+    } else {
+      setSelectedIds([]);
+      setPrimaryId('');
+      setSelectedMarketerId('');
     }
-  }, [initialSelectedCustomerIds, customers]);
+  }, [isOpen, initialSelectedCustomerIds]);
 
-  // Selected customer objects
+  // Fetch full details (reports + contacts) for any selected customer not yet loaded
+  useEffect(() => {
+    if (!isOpen || selectedIds.length === 0) return;
+    let cancelled = false;
+
+    const idsToFetch = selectedIds.filter((id) => !fetchedDetailsRef.current.has(id));
+    if (idsToFetch.length === 0) return;
+
+    idsToFetch.forEach((id) => fetchedDetailsRef.current.add(id));
+
+    Promise.all(
+      idsToFetch.map((id) =>
+        fetchCustomerById(id).catch(() => null)
+      )
+    ).then((loaded) => {
+      if (cancelled) return;
+      const valid = loaded.filter((c): c is Customer => Boolean(c && c.id));
+      if (valid.length === 0) return;
+      setCustomerMap((prev) => {
+        const next = { ...prev };
+        for (const c of valid) {
+          next[c.id] = c;
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, selectedIds]);
+
+  // Live debounced server-side search across the entire customer database
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const trimmed = searchQuery.trim();
+
+    setIsSearching(true);
+    setSearchError(null);
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetchCustomersPaginated({
+          search: trimmed || undefined,
+          page: 1,
+          limit: 50,
+        });
+        if (cancelled) return;
+        const rows = Array.isArray(res.data) ? res.data : [];
+        setServerResults(rows);
+        setServerTotal(res.filteredTotal ?? res.total ?? rows.length);
+
+        if (rows.length > 0) {
+          setCustomerMap((prev) => {
+            const next = { ...prev };
+            for (const c of rows) {
+              if (!c?.id) continue;
+              const existing = next[c.id];
+              next[c.id] = existing
+                ? {
+                    ...c,
+                    reports: existing.reports && existing.reports.length > 0 ? existing.reports : c.reports,
+                    contacts: existing.contacts && existing.contacts.length > 0 ? existing.contacts : c.contacts,
+                  }
+                : c;
+            }
+            return next;
+          });
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setSearchError(err?.message || 'خطا در جستجوی مشتریان از سرور');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsSearching(false);
+        }
+      }
+    }, trimmed ? 250 : 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isOpen, searchQuery]);
+
+  // Selected customer objects (resolved from full customerMap so server-searched records work)
   const selectedCustomers = useMemo(() => {
-    return customers.filter((c) => selectedIds.includes(c.id));
-  }, [customers, selectedIds]);
+    return selectedIds
+      .map((id) => customerMap[id] || customers.find((c) => c.id === id))
+      .filter((c): c is Customer => Boolean(c));
+  }, [selectedIds, customerMap, customers]);
 
   // Primary customer object
   const primaryCustomer = useMemo(() => {
@@ -75,30 +204,53 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
     if (primaryCustomer && !selectedMarketerId) {
       setSelectedMarketerId(primaryCustomer.assigned_marketer_id || '');
     }
-  }, [primaryCustomer]);
+  }, [primaryCustomer, selectedMarketerId]);
 
-  // Available customers filtered for selection
+  // Combined displayed list: server results + instant local matches while typing
   const filteredCustomers = useMemo(() => {
-    if (!searchQuery.trim()) return customers.slice(0, 100);
-    const q = searchQuery.toLowerCase();
-    return customers.filter((c) => {
-      const matchName = c.company_name?.toLowerCase().includes(q);
-      const matchManager = c.manager_name?.toLowerCase().includes(q);
-      const matchMarketer = c.assigned_marketer_name?.toLowerCase().includes(q);
-      const matchPhone =
-        c.mobile_numbers?.some((p) => p.includes(q)) ||
-        c.landline_numbers?.some((p) => p.includes(q)) ||
-        c.manager_phones?.some((p) => p.includes(q));
-      return Boolean(matchName || matchManager || matchMarketer || matchPhone);
-    });
-  }, [customers, searchQuery]);
+    const trimmed = searchQuery.trim();
+    const seen = new Set<string>();
+    const combined: Customer[] = [];
 
-  const toggleSelectCustomer = (id: string) => {
+    const addUnique = (list: Customer[]) => {
+      for (const c of list) {
+        if (c?.id && !seen.has(c.id)) {
+          seen.add(c.id);
+          combined.push(c);
+        }
+      }
+    };
+
+    if (!trimmed) {
+      addUnique(serverResults);
+      addUnique(customers);
+      return combined.slice(0, 100);
+    }
+
+    // Server results match the query authoritatively
+    addUnique(serverResults);
+
+    // Also include local matches from already-loaded customers using Persian/phone-normalized matching
+    const allKnown = Object.values(customerMap);
+    const localMatches = allKnown.filter((c) => matchesCustomerSearch(c, trimmed));
+    addUnique(localMatches);
+
+    return combined;
+  }, [serverResults, customers, customerMap, searchQuery]);
+
+  const toggleSelectCustomer = (cust: Customer) => {
+    setActionError(null);
+    const id = cust.id;
+    setCustomerMap((prev) => ({
+      ...prev,
+      [id]: prev[id] || cust,
+    }));
+
     setSelectedIds((prev) => {
       if (prev.includes(id)) {
         const next = prev.filter((item) => item !== id);
-        if (primaryId === id && next.length > 0) {
-          setPrimaryId(next[0]);
+        if (primaryId === id) {
+          setPrimaryId(next[0] || '');
         }
         return next;
       } else {
@@ -107,6 +259,26 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
         return next;
       }
     });
+  };
+
+  const getCustomerReports = (cust: Customer): CustomerReport[] => {
+    const seen = new Set<string>();
+    const list: CustomerReport[] = [];
+    const addRep = (r: CustomerReport) => {
+      if (!r) return;
+      const key = String(r.id || `${r.customer_id}-${r.date_created}-${r.report_text?.slice(0, 20)}`);
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push(r);
+      }
+    };
+    if (Array.isArray(cust.reports)) {
+      cust.reports.forEach(addRep);
+    }
+    reports
+      .filter((r) => String(r.customer_id) === String(cust.id))
+      .forEach(addRep);
+    return list;
   };
 
   // Preview combined metrics
@@ -119,9 +291,15 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
       (cust.mobile_numbers || []).forEach((m) => m && allMobiles.add(m));
       (cust.manager_phones || []).forEach((m) => m && allMobiles.add(m));
       (cust.negotiator_phones || []).forEach((m) => m && allMobiles.add(m));
+      if (cust.telegram_phone) allMobiles.add(cust.telegram_phone);
       (cust.landline_numbers || []).forEach((l) => l && allLandlines.add(l));
+      (cust.contacts || []).forEach((ct) => {
+        if (!ct?.value) return;
+        if (ct.channel_type === 'landline') allLandlines.add(ct.value);
+        else if (['mobile', 'whatsapp', 'telegram'].includes(ct.channel_type)) allMobiles.add(ct.value);
+      });
 
-      const custReports = reports.filter((r) => r.customer_id === cust.id);
+      const custReports = getCustomerReports(cust);
       custReports.forEach((r) => {
         allReports.push({
           report: r,
@@ -140,12 +318,13 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
   }, [selectedCustomers, reports]);
 
   const handleExecuteMerge = async () => {
+    setActionError(null);
     if (selectedCustomers.length < 2) {
-      alert('حداقل ۲ پرونده مشتری باید برای ادغام انتخاب شوند.');
+      setActionError('حداقل ۲ پرونده مشتری باید برای ادغام انتخاب شوند.');
       return;
     }
     if (!primaryCustomer) {
-      alert('لطفاً پرونده مشتری اصلی (مقصد) را مشخص کنید.');
+      setActionError('لطفاً پرونده مشتری اصلی (مقصد) را مشخص کنید.');
       return;
     }
 
@@ -166,7 +345,7 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
       );
       onClose();
     } catch (err: any) {
-      alert('خطا در ادغام پرونده‌ها: ' + err.message);
+      setActionError('خطا در ادغام پرونده‌ها: ' + (err?.message || 'خطای نامشخص'));
     } finally {
       setMerging(false);
     }
@@ -203,7 +382,10 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
               <button
                 type="button"
                 disabled={selectedCustomers.length < 2 || !primaryCustomer}
-                onClick={() => setStep('confirm')}
+                onClick={() => {
+                  setActionError(null);
+                  setStep('confirm');
+                }}
                 className="h-9 px-4 rounded-full bg-[#1DB954] hover:bg-[#1ED760] disabled:opacity-50 disabled:pointer-events-none text-black font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
               >
                 <span>مرحله بعد: پیش‌نمایش و تأیید</span>
@@ -222,12 +404,29 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
             )}
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#242424] dark:hover:bg-[#333] dark:text-[#A7A7A7] dark:hover:text-white transition-colors flex items-center justify-center"
+              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 dark:bg-[#242424] dark:hover:bg-[#333] dark:text-[#A7A7A7] dark:hover:text-white transition-colors flex items-center justify-center cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
+
+        {/* Inline Error Alert */}
+        {actionError && (
+          <div className="mx-4 sm:mx-6 mt-4 p-3 rounded-2xl bg-rose-50 dark:bg-[#E22134]/15 border border-rose-200 dark:border-[#E22134]/40 text-xs text-rose-700 dark:text-rose-300 font-semibold flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              className="p-1 rounded-full hover:bg-rose-200/50 dark:hover:bg-rose-900/40 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {step === 'select' ? (
           <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
@@ -258,7 +457,7 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {selectedCustomers.map((cust) => {
                     const isPrimary = primaryId === cust.id;
-                    const custReportsCount = reports.filter((r) => r.customer_id === cust.id).length;
+                    const custReportsCount = getCustomerReports(cust).length;
 
                     return (
                       <div
@@ -273,7 +472,7 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                           <button
                             type="button"
                             onClick={() => setPrimaryId(cust.id)}
-                            className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all shrink-0 ${
+                            className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all shrink-0 cursor-pointer ${
                               isPrimary
                                 ? 'bg-[#1DB954] border-[#1DB954] text-black'
                                 : 'border-slate-400 dark:border-[#666] hover:border-slate-800 dark:hover:border-white'
@@ -300,15 +499,15 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                                 <span>{cust.assigned_marketer_name || 'بدون بازاریاب'}</span>
                               </span>
                               <span>· {toPersianDigits(custReportsCount)} گزارش</span>
-                              <span>· {cust.city}</span>
+                              {cust.city && <span>· {cust.city}</span>}
                             </div>
                           </div>
                         </div>
 
                         <button
                           type="button"
-                          onClick={() => toggleSelectCustomer(cust.id)}
-                          className="w-7 h-7 rounded-full bg-slate-200 hover:bg-red-100 hover:text-red-600 dark:bg-[#282828] dark:hover:bg-[#E22134]/20 dark:hover:text-[#E22134] text-slate-500 dark:text-[#888] flex items-center justify-center transition-colors shrink-0"
+                          onClick={() => toggleSelectCustomer(cust)}
+                          className="w-7 h-7 rounded-full bg-slate-200 hover:bg-red-100 hover:text-red-600 dark:bg-[#282828] dark:hover:bg-[#E22134]/20 dark:hover:text-[#E22134] text-slate-500 dark:text-[#888] flex items-center justify-center transition-colors shrink-0 cursor-pointer"
                           title="حذف از لیست ادغام"
                         >
                           <X className="w-3.5 h-3.5" />
@@ -322,59 +521,115 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
 
             {/* Search & Add more customers */}
             <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-[#282828]">
-              <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3]">
-                جستجو و انتخاب پرونده‌های مشتریان دیگر برای ادغام:
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-[#B3B3B3]">
+                  جستجو و انتخاب پرونده‌های مشتریان دیگر برای ادغام:
+                </label>
+                {searchQuery.trim() && !isSearching && (
+                  <span className="text-[10px] text-slate-500 dark:text-[#888] font-mono">
+                    {toPersianDigits(filteredCustomers.length)} نتیجه
+                    {serverTotal > filteredCustomers.length
+                      ? ` از ${toPersianDigits(serverTotal)}`
+                      : ''}
+                  </span>
+                )}
+              </div>
+
               <div className="relative">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="جستجوی نام شرکت، نام مدیر، نام بازاریاب یا شماره تماس..."
-                  className="w-full h-10 bg-white dark:bg-[#121212] rounded-xl pl-3 pr-9 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#777] border border-slate-300 dark:border-[#2a2a2a] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954]"
+                  placeholder="جستجوی نام شرکت، نام مدیر، نام بازاریاب یا شماره تماس در کل سامانه..."
+                  className="w-full h-10 bg-white dark:bg-[#121212] rounded-xl pl-9 pr-9 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#777] border border-slate-300 dark:border-[#2a2a2a] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954]"
                 />
-                <Search className="w-4 h-4 text-slate-400 dark:text-[#777] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                {isSearching ? (
+                  <Loader2 className="w-4 h-4 text-emerald-600 dark:text-[#1DB954] absolute right-3 top-1/2 -translate-y-1/2 animate-spin pointer-events-none" />
+                ) : (
+                  <Search className="w-4 h-4 text-slate-400 dark:text-[#777] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                )}
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#282828] cursor-pointer"
+                    title="پاک کردن جستجو"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
+              {searchError && (
+                <div className="text-[11px] text-rose-600 dark:text-rose-400 px-1">
+                  {searchError}
+                </div>
+              )}
+
               {/* Customer Selector Cards */}
-              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                {filteredCustomers.map((c) => {
-                  const isChecked = selectedIds.includes(c.id);
-                  const phone = c.manager_phones?.[0] || c.mobile_numbers?.[0] || '-';
+              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                {filteredCustomers.length === 0 ? (
+                  <div className="p-5 text-center rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] text-xs text-slate-500 dark:text-[#888]">
+                    {isSearching
+                      ? 'در حال جستجو در کل پرونده‌های مشتریان...'
+                      : 'مشتری‌ای با این مشخصات یافت نشد.'}
+                  </div>
+                ) : (
+                  filteredCustomers.map((c) => {
+                    const isChecked = selectedIds.includes(c.id);
+                    const phone =
+                      c.manager_phones?.[0] ||
+                      c.mobile_numbers?.[0] ||
+                      c.negotiator_phones?.[0] ||
+                      c.landline_numbers?.[0] ||
+                      c.contacts?.[0]?.value ||
+                      '-';
 
-                  return (
-                    <div
-                      key={c.id}
-                      onClick={() => toggleSelectCustomer(c.id)}
-                      className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 cursor-pointer select-none ${
-                        isChecked
-                          ? 'bg-emerald-50 dark:bg-[#1a2e1e] border-emerald-300 dark:border-[#1DB954]/50'
-                          : 'bg-white dark:bg-[#181818] border-slate-200 dark:border-[#282828] hover:bg-slate-50 dark:hover:bg-[#202020]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {}}
-                          className="w-4 h-4 rounded accent-emerald-600 dark:accent-[#1DB954] cursor-pointer shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <span className="font-bold text-xs text-slate-900 dark:text-white truncate block">
-                            {c.company_name}
-                          </span>
-                          <span className="text-[10px] text-slate-500 dark:text-[#888]">
-                            بازاریاب: {c.assigned_marketer_name || 'نامشخص'} · {phone}
-                          </span>
+                    return (
+                      <div
+                        key={c.id}
+                        onClick={() => toggleSelectCustomer(c)}
+                        className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 cursor-pointer select-none ${
+                          isChecked
+                            ? 'bg-emerald-50 dark:bg-[#1a2e1e] border-emerald-300 dark:border-[#1DB954]/50'
+                            : 'bg-white dark:bg-[#181818] border-slate-200 dark:border-[#282828] hover:bg-slate-50 dark:hover:bg-[#202020]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            className="w-4 h-4 rounded accent-emerald-600 dark:accent-[#1DB954] cursor-pointer shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <span className="font-bold text-xs text-slate-900 dark:text-white truncate block">
+                              {c.company_name}
+                              {c.manager_name ? (
+                                <span className="font-normal text-slate-500 dark:text-[#999]">
+                                  {' '}
+                                  ({c.manager_name})
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="text-[10px] text-slate-500 dark:text-[#888]">
+                              بازاریاب: {c.assigned_marketer_name || 'نامشخص'} ·{' '}
+                              <span dir="ltr" className="font-mono">
+                                {phone}
+                              </span>
+                            </span>
+                          </div>
                         </div>
-                      </div>
 
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-[#242424] text-slate-600 dark:text-[#aaa] shrink-0 font-mono">
-                        {c.city}
-                      </span>
-                    </div>
-                  );
-                })}
+                        {c.city && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-[#242424] text-slate-600 dark:text-[#aaa] shrink-0 font-mono">
+                            {c.city}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -389,7 +644,7 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                 onChange={(e) => setSelectedMarketerId(e.target.value)}
                 className="w-full h-10 px-3 bg-white dark:bg-[#242424] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-300 dark:border-[#383838] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954]"
               >
-                {personnelList.map((p) => (
+                {personnelList.filter((p) => isPersonnelActive(p)).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.role === 'admin' ? 'مدیر' : 'کارشناس بازاریابی'})
                   </option>
@@ -460,12 +715,13 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                 <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                   {combinedStats.reportsList.map((item, idx) => (
                     <div
-                      key={idx}
+                      key={item.report.id || idx}
                       className="p-2.5 rounded-xl bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#2c2c2c] text-xs flex items-center justify-between gap-2 shadow-sm"
                     >
                       <div className="min-w-0">
                         <span className="font-semibold text-slate-900 dark:text-white block truncate">
-                          {item.report.report_text.slice(0, 70)}...
+                          {(item.report.report_text || '').slice(0, 70)}
+                          {(item.report.report_text || '').length > 70 ? '...' : ''}
                         </span>
                         <span className="text-[10px] text-slate-500 dark:text-[#888]">
                           ثبت‌شده توسط: <strong className="text-emerald-600 dark:text-[#1DB954]">{item.marketerName}</strong> ({item.customerName})
@@ -489,15 +745,18 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="h-10 px-5 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#444] text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white transition-colors"
+                className="h-10 px-5 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#444] text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white transition-colors cursor-pointer"
               >
                 انصراف
               </button>
               <button
                 type="button"
                 disabled={selectedCustomers.length < 2 || !primaryCustomer}
-                onClick={() => setStep('confirm')}
-                className="h-10 px-6 rounded-full bg-[#1DB954] hover:bg-[#1ED760] disabled:opacity-50 disabled:pointer-events-none text-black font-bold text-xs transition-all flex items-center gap-1.5 shadow-md shadow-[#1DB954]/20"
+                onClick={() => {
+                  setActionError(null);
+                  setStep('confirm');
+                }}
+                className="h-10 px-6 rounded-full bg-[#1DB954] hover:bg-[#1ED760] disabled:opacity-50 disabled:pointer-events-none text-black font-bold text-xs transition-all flex items-center gap-1.5 shadow-md shadow-[#1DB954]/20 cursor-pointer"
               >
                 <span>مرحله بعد: پیش‌نمایش و تأیید</span>
                 <ArrowLeft className="w-4 h-4" />
@@ -507,8 +766,11 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
             <>
               <button
                 type="button"
-                onClick={() => setStep('select')}
-                className="h-10 px-5 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#444] text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white transition-colors"
+                onClick={() => {
+                  setActionError(null);
+                  setStep('select');
+                }}
+                className="h-10 px-5 rounded-full border border-slate-300 hover:border-slate-400 dark:border-[#444] text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white transition-colors cursor-pointer"
               >
                 بازگشت به انتخاب
               </button>
@@ -516,7 +778,7 @@ export const MergeCustomersModal: React.FC<MergeCustomersModalProps> = ({
                 type="button"
                 disabled={merging}
                 onClick={handleExecuteMerge}
-                className="h-10 px-7 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex items-center gap-2"
+                className="h-10 px-7 rounded-full bg-[#1DB954] hover:bg-[#1ED760] text-black font-bold text-xs transition-all hover:scale-105 shadow-md shadow-[#1DB954]/20 flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 <GitMerge className="w-4 h-4 stroke-[3]" />
                 <span>{merging ? 'در حال ادغام پرونده‌ها...' : 'تأیید و ادغام نهایی'}</span>

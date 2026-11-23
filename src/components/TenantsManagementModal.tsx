@@ -40,6 +40,7 @@ export const TenantsManagementModal: React.FC<TenantsManagementModalProps> = ({
   const [isAdding, setIsAdding] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -54,6 +55,7 @@ export const TenantsManagementModal: React.FC<TenantsManagementModalProps> = ({
 
   const handleOpenAdd = () => {
     setEditingTenant(null);
+    setConfirmDeleteId(null);
     setFormData({
       name: '',
       slug: '',
@@ -66,6 +68,7 @@ export const TenantsManagementModal: React.FC<TenantsManagementModalProps> = ({
 
   const handleOpenEdit = (t: Tenant) => {
     setEditingTenant(t);
+    setConfirmDeleteId(null);
     setFormData({
       name: t.name,
       slug: t.slug || '',
@@ -86,7 +89,13 @@ export const TenantsManagementModal: React.FC<TenantsManagementModalProps> = ({
     try {
       setIsSubmitting(true);
       if (editingTenant) {
-        await updateTenant(editingTenant.id, formData);
+        await updateTenant(editingTenant.id, {
+          name: formData.name.trim(),
+          slug: formData.slug.trim(),
+          phone: formData.phone.trim(),
+          address: formData.address.trim(),
+          status: formData.status,
+        });
         showToast('اطلاعات سازمان با موفقیت به‌روزرسانی شد.', 'success');
       } else {
         const newSlug =
@@ -96,8 +105,11 @@ export const TenantsManagementModal: React.FC<TenantsManagementModalProps> = ({
             .toLowerCase()
             .replace(/\s+/g, '-');
         await createTenant({
-          ...formData,
+          name: formData.name.trim(),
           slug: newSlug,
+          phone: formData.phone.trim(),
+          address: formData.address.trim(),
+          status: formData.status,
         });
         showToast('سازمان / شعبه جدید با موفقیت ایجاد شد.', 'success');
       }
@@ -112,16 +124,14 @@ export const TenantsManagementModal: React.FC<TenantsManagementModalProps> = ({
   };
 
   const handleDelete = async (t: Tenant) => {
-    if (t.id === 'default') {
+    if (t.id === 'default' || t.id === '1') {
       showToast('سازمان مرکزی و پیش‌فرض سیستم قابل حذف نیست.', 'error');
-      return;
-    }
-    if (!window.confirm(`آیا از حذف سازمان «${t.name}» اطمینان دارید؟`)) {
       return;
     }
 
     try {
       await deleteTenant(t.id);
+      setConfirmDeleteId(null);
       showToast('سازمان با موفقیت حذف شد.', 'success');
       if (activeTenantId === t.id) {
         onSelectTenant('default');
@@ -324,7 +334,10 @@ export const TenantsManagementModal: React.FC<TenantsManagementModalProps> = ({
 
             <div className="grid grid-cols-1 gap-3">
               {tenants.map((t) => {
-                const isActive = activeTenantId === t.id;
+                const isActive =
+                  activeTenantId === String(t.id) ||
+                  (activeTenantId === 'default' && (t.id === 'default' || t.id === '1'));
+                const isDefaultOrg = t.id === 'default' || t.id === '1' || t.slug === 'alphadesk-hq';
                 return (
                   <div
                     key={t.id}
@@ -348,7 +361,7 @@ export const TenantsManagementModal: React.FC<TenantsManagementModalProps> = ({
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="text-sm font-bold text-slate-900 dark:text-white">{t.name}</h4>
-                          {t.id === 'default' && (
+                          {isDefaultOrg && (
                             <span className="px-2 py-0.5 rounded-full bg-amber-500/15 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 dark:border-amber-500/20 text-[10px]">
                               پیش‌فرض
                             </span>
@@ -408,23 +421,44 @@ export const TenantsManagementModal: React.FC<TenantsManagementModalProps> = ({
 
                       {isAdmin && (
                         <div className="flex items-center gap-1 border-r border-slate-200 dark:border-[#2c2c2c] pr-2 mr-1">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(t)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-200 dark:text-[#888] dark:hover:text-white dark:hover:bg-[#282828] transition-colors"
-                            title="ویرایش مشخصات"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          {t.id !== 'default' && (
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(t)}
-                              className="p-1.5 rounded-lg text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
-                              title="حذف سازمان"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                          {confirmDeleteId === String(t.id) ? (
+                            <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800/60 px-2 py-0.5 rounded-lg">
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(t)}
+                                className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-bold cursor-pointer"
+                              >
+                                حذف
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-[#2a2a2a] text-slate-700 dark:text-white text-[10px] cursor-pointer"
+                              >
+                                لغو
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(t)}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-200 dark:text-[#888] dark:hover:text-white dark:hover:bg-[#282828] transition-colors cursor-pointer"
+                                title="ویرایش مشخصات"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              {!isDefaultOrg && (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteId(String(t.id))}
+                                  className="p-1.5 rounded-lg text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                  title="حذف سازمان"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
                       )}

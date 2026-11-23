@@ -174,21 +174,71 @@ export const PayrollSlipModal: React.FC<PayrollSlipModalProps> = ({
                 <span className="text-[10px] text-slate-500 dark:text-[#888]">(تومان)</span>
               </div>
               <div className="p-3 space-y-2 text-xs">
-                <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-[#222]">
-                  <span className="text-slate-600 dark:text-[#A7A7A7]">حقوق پایه ثابت ماه:</span>
-                  <span className="font-mono font-bold">{formatToman(slip.base_salary_amount)}</span>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-[#222]">
-                  <div>
-                    <span className="text-slate-600 dark:text-[#A7A7A7]">پورسانت حاصل از قراردادها:</span>
-                    <span className="text-[10px] text-slate-400 block">
-                      ({toPersianDigits(slip.contracts_count)} قرارداد به ارزش {formatToman(slip.total_contracts_amount)} ت)
-                    </span>
-                  </div>
-                  <span className="font-mono font-bold text-emerald-600 dark:text-[#1DB954]">
-                    {formatToman(slip.commission_amount)}
-                  </span>
-                </div>
+                {(() => {
+                  const thresholdInfo = slip.calculation_breakdown?.base_salary_threshold_breakdown;
+                  const unitComm = Number(slip.unit_commission_amount || 0);
+                  const pctComm =
+                    slip.percentage_commission_amount !== undefined && slip.percentage_commission_amount !== null
+                      ? Number(slip.percentage_commission_amount || 0)
+                      : Math.max(0, Number(slip.commission_amount || 0) - unitComm);
+
+                  return (
+                    <>
+                      <div className="flex justify-between items-start py-1 border-b border-slate-100 dark:border-[#222] gap-2">
+                        <div>
+                          <span className="text-slate-600 dark:text-[#A7A7A7] block">حقوق پایه ثابت ماه:</span>
+                          {thresholdInfo?.threshold_active && !thresholdInfo.target_met && (
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 block mt-0.5">
+                              ({thresholdInfo.note})
+                            </span>
+                          )}
+                        </div>
+                        <span className="font-mono font-bold shrink-0">{formatToman(slip.base_salary_amount)}</span>
+                      </div>
+
+                      {unitComm > 0 ? (
+                        <>
+                          <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-[#222]">
+                            <div>
+                              <span className="text-slate-600 dark:text-[#A7A7A7]">پورسانت فروش درصدی:</span>
+                              <span className="text-[10px] text-slate-400 block">
+                                ({toPersianDigits(slip.contracts_count)} قرارداد کل به ارزش {formatToman(slip.total_contracts_amount)} ت)
+                              </span>
+                            </div>
+                            <span className="font-mono font-bold text-emerald-600 dark:text-[#1DB954]">
+                              {formatToman(pctComm)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-[#222]">
+                            <div>
+                              <span className="text-slate-600 dark:text-[#A7A7A7]">پورسانت فروش تعدادی (تاییدشده):</span>
+                              {Number(slip.calculation_breakdown?.approved_unit_items_count || 0) > 0 && (
+                                <span className="text-[10px] text-slate-400 block">
+                                  ({toPersianDigits(slip.calculation_breakdown.approved_unit_items_count)} قلم تاییدشده)
+                                </span>
+                              )}
+                            </div>
+                            <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                              {formatToman(unitComm)}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-[#222]">
+                          <div>
+                            <span className="text-slate-600 dark:text-[#A7A7A7]">پورسانت حاصل از قراردادها:</span>
+                            <span className="text-[10px] text-slate-400 block">
+                              ({toPersianDigits(slip.contracts_count)} قرارداد به ارزش {formatToman(slip.total_contracts_amount)} ت)
+                            </span>
+                          </div>
+                          <span className="font-mono font-bold text-emerald-600 dark:text-[#1DB954]">
+                            {formatToman(slip.commission_amount)}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 {bonusItems.length > 0 ? (
                   bonusItems.map((b, idx) => (
                     <div

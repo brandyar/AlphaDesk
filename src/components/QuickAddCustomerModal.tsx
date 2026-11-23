@@ -27,7 +27,7 @@ import {
 import { checkDuplicateContact } from '../api';
 import { PersianDatePicker } from './PersianDatePicker';
 import { FreePoolDuplicateAlert } from './FreePoolDuplicateAlert';
-import { toPersianDigits } from '../utils';
+import { toPersianDigits, isPersonnelActive } from '../utils';
 
 interface QuickPhoneRow {
   channel_type: 'mobile' | 'landline';
@@ -115,8 +115,9 @@ export const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
       setNextFollowupDate(getTomorrowDefaultIso());
       setNotes('');
       setSubmitError(null);
+      const firstActive = personnelList.find((p) => isPersonnelActive(p));
       setAssignedMarketerId(
-        currentPersonnel?.id || currentUser?.id || personnelList[0]?.id || ''
+        currentPersonnel?.id || currentUser?.id || firstActive?.id || ''
       );
 
       if (normalizedInitPhone.length >= 4) {
@@ -739,7 +740,7 @@ export const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
                 onChange={(e) => setAssignedMarketerId(e.target.value)}
                 className="w-full h-10 px-3 bg-white dark:bg-[#242424] border border-slate-300 dark:border-[#333] rounded-lg text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:focus:ring-[#1DB954]"
               >
-                {personnelList.map((p) => (
+                {personnelList.filter((p) => isPersonnelActive(p)).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>

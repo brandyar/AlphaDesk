@@ -13,6 +13,8 @@ import {
   HelpCircle,
   Layers,
   ArrowRight,
+  ShieldCheck,
+  Package,
 } from 'lucide-react';
 import {
   Personnel,
@@ -21,6 +23,8 @@ import {
   CommissionModel,
   TieredCalculationMode,
   CommissionTier,
+  BaseSalaryMinSalesBasis,
+  BaseSalaryBelowTargetMode,
 } from '../../types';
 import { toPersianDigits } from '../../utils';
 
@@ -52,11 +56,18 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
     { from_amount: 150000001, to_amount: null, rate_percent: 8 },
   ]);
   const [minSalesTarget, setMinSalesTarget] = useState<string>('0');
+  const [requireMinSalesForBaseSalary, setRequireMinSalesForBaseSalary] = useState<boolean>(false);
+  const [baseSalaryMinSalesBasis, setBaseSalaryMinSalesBasis] = useState<BaseSalaryMinSalesBasis>('percentage_sales_amount');
+  const [baseSalaryMinSalesAmount, setBaseSalaryMinSalesAmount] = useState<string>('0');
+  const [baseSalaryMinUnitsCount, setBaseSalaryMinUnitsCount] = useState<string>('0');
+  const [baseSalaryBelowTargetMode, setBaseSalaryBelowTargetMode] = useState<BaseSalaryBelowTargetMode>('zero');
   const [isActive, setIsActive] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState(false);
 
   // Live test simulation calculator state
   const [testSalesAmount, setTestSalesAmount] = useState<string>('120000000');
+  const [testUnitItemsCount, setTestUnitItemsCount] = useState<string>('0');
+  const [testUnitCommissionAmount, setTestUnitCommissionAmount] = useState<string>('0');
 
   useEffect(() => {
     if (currentConfig) {
@@ -69,6 +80,11 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
         setTiers(currentConfig.commission_tiers);
       }
       setMinSalesTarget(String(currentConfig.min_sales_target || 0));
+      setRequireMinSalesForBaseSalary(Boolean(currentConfig.require_min_sales_for_base_salary));
+      setBaseSalaryMinSalesBasis(currentConfig.base_salary_min_sales_basis || 'percentage_sales_amount');
+      setBaseSalaryMinSalesAmount(String(currentConfig.base_salary_min_sales_amount || 0));
+      setBaseSalaryMinUnitsCount(String(currentConfig.base_salary_min_units_count || 0));
+      setBaseSalaryBelowTargetMode(currentConfig.base_salary_below_target_mode || 'zero');
       setIsActive(currentConfig.is_active !== false);
     } else if (personnel) {
       // New blank config - do not fabricate preset salary numbers
@@ -83,6 +99,11 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
         { from_amount: 150000001, to_amount: null, rate_percent: 8 },
       ]);
       setMinSalesTarget('0');
+      setRequireMinSalesForBaseSalary(false);
+      setBaseSalaryMinSalesBasis('percentage_sales_amount');
+      setBaseSalaryMinSalesAmount('0');
+      setBaseSalaryMinUnitsCount('0');
+      setBaseSalaryBelowTargetMode('zero');
       setIsActive(true);
     }
   }, [currentConfig, personnel]);
@@ -134,22 +155,76 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
     setTiers(tiers.filter((_, i) => i !== index));
   };
 
-  // Test simulation calculation
+  // Test simulation calculation (mirrors backend calculateBaseSalaryWithThreshold)
   const testSalesNum = Number(testSalesAmount.replace(/[^0-9]/g, '')) || 0;
-  const testBaseNum = salaryType === 'commission' ? 0 : Number(baseSalary) || 0;
-  let testCommissionNum = 0;
+  const testUnitsNum = Number(testUnitItemsCount.replace(/[^0-9]/g, '')) || 0;
+  const testUnitCommNum = salaryType === 'fixed' ? 0 : Number(testUnitCommissionAmount.replace(/[^0-9]/g, '')) || 0;
+  const configuredBaseNum = salaryType === 'commission' ? 0 : Number(baseSalary) || 0;
+
+  // Base salary threshold simulation
+  let testBaseNum = configuredBaseNum;
+  let testBaseNote = '';
+  let testBaseTargetMet = true;
+  if (salaryType !== 'commission' && requireMinSalesForBaseSalary && configuredBaseNum > 0) {
+    const minAmt = Number(baseSalaryMinSalesAmount.replace(/[^0-9]/g, '')) || 0;
+    const minUnits = Number(baseSalaryMinUnitsCount.replace(/[^0-9]/g, '')) || 0;
+    let ratio = 1;
+    let met = true;
+
+    if (baseSalaryMinSalesBasis === 'percentage_sales_amount' || baseSalaryMinSalesBasis === 'total_sales_amount') {
+      met = minAmt <= 0 || testSalesNum >= minAmt;
+      ratio = minAmt > 0 ? Math.min(1, Math.max(0, testSalesNum / minAmt)) : 1;
+    } else if (baseSalaryMinSalesBasis === 'unit_sales_count' || baseSalaryMinSalesBasis === 'contracts_count') {
+      met = minUnits <= 0 || testUnitsNum >= minUnits;
+      ratio = minUnits > 0 ? Math.min(1, Math.max(0, testUnitsNum / minUnits)) : 1;
+    } else if (baseSalaryMinSalesBasis === 'either_amount_or_units') {
+      if (minAmt <= 0 && minUnits <= 0) {
+        met = true;
+        ratio = 1;
+      } else {
+        const amtMet = minAmt > 0 && testSalesNum >= minAmt;
+        const unitMet = minUnits > 0 && testUnitsNum >= minUnits;
+        met = amtMet || unitMet;
+        const amtR = minAmt > 0 ? Math.min(1, Math.max(0, testSalesNum / minAmt)) : 0;
+        const unitR = minUnits > 0 ? Math.min(1, Math.max(0, testUnitsNum / minUnits)) : 0;
+        ratio = met ? 1 : Math.max(amtR, unitR);
+      }
+    } else if (baseSalaryMinSalesBasis === 'both_amount_and_units') {
+      const amtMet = minAmt <= 0 || testSalesNum >= minAmt;
+      const unitMet = minUnits <= 0 || testUnitsNum >= minUnits;
+      met = amtMet && unitMet;
+      const amtR = minAmt > 0 ? Math.min(1, Math.max(0, testSalesNum / minAmt)) : 1;
+      const unitR = minUnits > 0 ? Math.min(1, Math.max(0, testUnitsNum / minUnits)) : 1;
+      ratio = met ? 1 : minAmt > 0 && minUnits > 0 ? (amtR + unitR) / 2 : Math.min(amtR, unitR);
+    }
+
+    testBaseTargetMet = met;
+    if (!met) {
+      if (baseSalaryBelowTargetMode === 'prorata') {
+        testBaseNum = Math.round(configuredBaseNum * ratio);
+        testBaseNote = `کف حقوق ثابت محقق نشد (${toPersianDigits(Math.round(ratio * 100))}٪ پرداخت نسبی)`;
+      } else {
+        testBaseNum = 0;
+        testBaseNote = 'کف حقوق ثابت محقق نشد (حقوق ثابت صفر شد)';
+      }
+    } else {
+      testBaseNote = 'کف فروش جهت دریافت کامل حقوق ثابت محقق شد';
+    }
+  }
+
+  let testPercentageCommissionNum = 0;
   let testExplanation = '';
 
   if (salaryType === 'fixed') {
-    testCommissionNum = 0;
+    testPercentageCommissionNum = 0;
     testExplanation = 'حقوق ثابت (فاقد پورسانت فروش)';
   } else if (Number(minSalesTarget) > 0 && testSalesNum < Number(minSalesTarget)) {
-    testCommissionNum = 0;
-    testExplanation = `فروش به کف تعیین‌شده (${formatToman(minSalesTarget)} تومان) نرسیده است؛ پورسانت صفر می‌باشد.`;
+    testPercentageCommissionNum = 0;
+    testExplanation = `فروش درصدی به کف تعیین‌شده (${formatToman(minSalesTarget)} تومان) نرسیده است؛ پورسانت درصدی صفر می‌باشد.`;
   } else if (commissionModel === 'flat') {
     const r = Number(flatRatePercent) || 0;
-    testCommissionNum = Math.round(testSalesNum * (r / 100));
-    testExplanation = `${toPersianDigits(r)}٪ از کل حجم فروش (${formatToman(testSalesNum)} تومان) = ${formatToman(testCommissionNum)} تومان`;
+    testPercentageCommissionNum = Math.round(testSalesNum * (r / 100));
+    testExplanation = `${toPersianDigits(r)}٪ از حجم فروش درصدی (${formatToman(testSalesNum)} تومان) = ${formatToman(testPercentageCommissionNum)} تومان`;
   } else {
     // Tiered
     const sortedTiers = [...tiers].sort((a, b) => a.from_amount - b.from_amount);
@@ -160,11 +235,11 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
       }
       if (matchedTier) {
         const r = Number(matchedTier.rate_percent) || 0;
-        testCommissionNum = Math.round(testSalesNum * (r / 100));
-        testExplanation = `عطف‌به‌ماسبق: فروش در پله (${toPersianDigits(matchedTier.rate_percent)}٪) قرار گرفته و کل فروش با این درصد محاسبه شد.`;
+        testPercentageCommissionNum = Math.round(testSalesNum * (r / 100));
+        testExplanation = `عطف‌به‌ماسبق: فروش درصدی در پله (${toPersianDigits(matchedTier.rate_percent)}٪) قرار گرفته و کل فروش درصدی با این درصد محاسبه شد.`;
       } else {
-        testCommissionNum = 0;
-        testExplanation = 'فروش کمتر از پله اول است.';
+        testPercentageCommissionNum = 0;
+        testExplanation = 'فروش درصدی کمتر از پله اول است.';
       }
     } else {
       // Marginal
@@ -180,12 +255,25 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
           parts.push(`${formatToman(slice)} ت × ${toPersianDigits(t.rate_percent)}٪ = ${formatToman(earned)} ت`);
         }
       }
-      testCommissionNum = total;
-      testExplanation = parts.length > 0 ? parts.join(' + ') : 'بدون پورسانت';
+      testPercentageCommissionNum = total;
+      testExplanation = parts.length > 0 ? parts.join(' + ') : 'بدون پورسانت درصدی';
     }
   }
 
-  const testTotalPayable = testBaseNum + testCommissionNum;
+  const testTotalCommissionNum = testPercentageCommissionNum + testUnitCommNum;
+  const testTotalPayable = testBaseNum + testTotalCommissionNum;
+
+  const basisUsesAmount =
+    baseSalaryMinSalesBasis === 'percentage_sales_amount' ||
+    baseSalaryMinSalesBasis === 'total_sales_amount' ||
+    baseSalaryMinSalesBasis === 'either_amount_or_units' ||
+    baseSalaryMinSalesBasis === 'both_amount_and_units';
+
+  const basisUsesCount =
+    baseSalaryMinSalesBasis === 'unit_sales_count' ||
+    baseSalaryMinSalesBasis === 'contracts_count' ||
+    baseSalaryMinSalesBasis === 'either_amount_or_units' ||
+    baseSalaryMinSalesBasis === 'both_amount_and_units';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,6 +289,11 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
         tiered_calculation_mode: tieredMode,
         commission_tiers: tiers,
         min_sales_target: Number(minSalesTarget) || 0,
+        require_min_sales_for_base_salary: salaryType === 'commission' ? false : requireMinSalesForBaseSalary,
+        base_salary_min_sales_basis: baseSalaryMinSalesBasis,
+        base_salary_min_sales_amount: Number(baseSalaryMinSalesAmount.replace(/[^0-9]/g, '')) || 0,
+        base_salary_min_units_count: Number(baseSalaryMinUnitsCount.replace(/[^0-9]/g, '')) || 0,
+        base_salary_below_target_mode: baseSalaryBelowTargetMode,
         is_active: isActive,
       };
 
@@ -313,24 +406,166 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
 
           {/* 2. Base Salary (if not commission-only) */}
           {salaryType !== 'commission' && (
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#161616] border border-slate-200 dark:border-[#262626] space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
-                  <DollarSign className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
-                  <span>مبلغ حقوق ثابت ماهانه (پایه):</span>
-                </label>
-                <span className="text-xs font-mono font-bold text-emerald-600 dark:text-[#1DB954]">
-                  {formatToman(baseSalary)} تومان
-                </span>
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#161616] border border-slate-200 dark:border-[#262626] space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
+                    <DollarSign className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
+                    <span>مبلغ حقوق ثابت ماهانه (پایه):</span>
+                  </label>
+                  <span className="text-xs font-mono font-bold text-emerald-600 dark:text-[#1DB954]">
+                    {formatToman(baseSalary)} تومان
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={baseSalary ? Number(baseSalary).toLocaleString('en-US') : ''}
+                    onChange={handleBaseSalaryChange}
+                    placeholder="مثلاً: 15,000,000"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-[#1c1c1c] border border-slate-300 dark:border-[#333] text-slate-900 dark:text-white font-mono text-sm focus:outline-hidden focus:border-emerald-500 dark:focus:border-[#1DB954] text-left ltr"
+                  />
+                </div>
               </div>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={baseSalary ? Number(baseSalary).toLocaleString('en-US') : ''}
-                  onChange={handleBaseSalaryChange}
-                  placeholder="مثلاً: 15,000,000"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-[#1c1c1c] border border-slate-300 dark:border-[#333] text-slate-900 dark:text-white font-mono text-sm focus:outline-hidden focus:border-emerald-500 dark:focus:border-[#1DB954] text-left ltr"
-                />
+
+              {/* Base Salary Minimum Sales Threshold */}
+              <div className="pt-3 border-t border-slate-200 dark:border-[#262626] space-y-3">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={requireMinSalesForBaseSalary}
+                    onChange={(e) => setRequireMinSalesForBaseSalary(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded accent-emerald-600 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
+                      <span>شرط کف فروش برای دریافت حقوق ثابت</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-[#888] block mt-0.5">
+                      در صورت فعال بودن، پرداخت حقوق پایه مشروط به رسیدن به حداقل فروش درصدی، تعدادی یا ترکیبی در همان ماه خواهد بود.
+                    </span>
+                  </div>
+                </label>
+
+                {requireMinSalesForBaseSalary && (
+                  <div className="p-3.5 rounded-xl bg-white dark:bg-[#1c1c1c] border border-emerald-500/25 dark:border-[#1DB954]/25 space-y-3.5 animate-in fade-in duration-150">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-[#CCC] block">
+                        مبنای سنجش کف فروش حقوق ثابت:
+                      </label>
+                      <select
+                        value={baseSalaryMinSalesBasis}
+                        onChange={(e) => setBaseSalaryMinSalesBasis(e.target.value as BaseSalaryMinSalesBasis)}
+                        className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#141414] border border-slate-300 dark:border-[#333] text-xs font-bold text-slate-900 dark:text-white focus:outline-hidden focus:border-emerald-500 cursor-pointer"
+                      >
+                        <option value="percentage_sales_amount">بر اساس مبلغ فروش‌های درصدی</option>
+                        <option value="total_sales_amount">بر اساس مبلغ کل فروش‌ها (درصدی + تعدادی)</option>
+                        <option value="unit_sales_count">بر اساس تعداد کل اقلام فروش تعدادی (تاییدشده)</option>
+                        <option value="contracts_count">بر اساس تعداد کل قراردادهای موفق</option>
+                        <option value="either_amount_or_units">ترکیبی «یا» (تحقق کف مبلغ درصدی یا کف تعداد تعدادی)</option>
+                        <option value="both_amount_and_units">ترکیبی «و» (تحقق هم‌زمان کف مبلغ درصدی و تعداد تعدادی)</option>
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {basisUsesAmount && (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-semibold text-slate-700 dark:text-[#CCC]">
+                              {baseSalaryMinSalesBasis === 'total_sales_amount'
+                                ? 'حداقل مبلغ کل فروش (تومان):'
+                                : 'حداقل مبلغ فروش درصدی (تومان):'}
+                            </label>
+                            <span className="text-[10px] font-mono text-emerald-600 dark:text-[#1DB954] font-bold">
+                              {formatToman(baseSalaryMinSalesAmount)} ت
+                            </span>
+                          </div>
+                          <input
+                            type="text"
+                            value={baseSalaryMinSalesAmount ? Number(baseSalaryMinSalesAmount).toLocaleString('en-US') : ''}
+                            onChange={(e) => setBaseSalaryMinSalesAmount(e.target.value.replace(/[^0-9]/g, ''))}
+                            placeholder="مثلاً: 50,000,000"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#141414] border border-slate-300 dark:border-[#333] text-xs font-mono text-left ltr text-slate-900 dark:text-white focus:outline-hidden focus:border-emerald-500"
+                          />
+                        </div>
+                      )}
+
+                      {basisUsesCount && (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-semibold text-slate-700 dark:text-[#CCC]">
+                              {baseSalaryMinSalesBasis === 'contracts_count'
+                                ? 'حداقل تعداد قرارداد موفق:'
+                                : 'حداقل تعداد اقلام تعدادی (تاییدشده):'}
+                            </label>
+                            <span className="text-[10px] font-mono text-emerald-600 dark:text-[#1DB954] font-bold">
+                              {toPersianDigits(Number(baseSalaryMinUnitsCount) || 0)} عدد
+                            </span>
+                          </div>
+                          <input
+                            type="text"
+                            value={baseSalaryMinUnitsCount}
+                            onChange={(e) => setBaseSalaryMinUnitsCount(e.target.value.replace(/[^0-9]/g, ''))}
+                            placeholder="مثلاً: 10"
+                            className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#141414] border border-slate-300 dark:border-[#333] text-xs font-mono text-left ltr text-slate-900 dark:text-white focus:outline-hidden focus:border-emerald-500"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-semibold text-slate-700 dark:text-[#CCC] block">
+                        رفتار سیستم در صورت عدم تحقق کف فروش:
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <label
+                          className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
+                            baseSalaryBelowTargetMode === 'zero'
+                              ? 'bg-amber-50 border-amber-500 dark:bg-amber-500/10 dark:border-amber-400 text-slate-900 dark:text-white'
+                              : 'bg-slate-50 dark:bg-[#141414] border-slate-200 dark:border-[#2a2a2a] text-slate-600 dark:text-[#999]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 text-xs font-bold mb-0.5">
+                            <input
+                              type="radio"
+                              name="base_below_mode"
+                              checked={baseSalaryBelowTargetMode === 'zero'}
+                              onChange={() => setBaseSalaryBelowTargetMode('zero')}
+                              className="accent-emerald-600"
+                            />
+                            <span>صفر شدن حقوق ثابت</span>
+                          </div>
+                          <p className="text-[10px] opacity-80 leading-relaxed">
+                            اگر کف فروش محقق نشود، حقوق ثابت در فیش صفر لحاظ می‌شود.
+                          </p>
+                        </label>
+
+                        <label
+                          className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
+                            baseSalaryBelowTargetMode === 'prorata'
+                              ? 'bg-emerald-50 border-emerald-500 dark:bg-[#1a2e20] dark:border-[#1DB954] text-slate-900 dark:text-white'
+                              : 'bg-slate-50 dark:bg-[#141414] border-slate-200 dark:border-[#2a2a2a] text-slate-600 dark:text-[#999]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 text-xs font-bold mb-0.5">
+                            <input
+                              type="radio"
+                              name="base_below_mode"
+                              checked={baseSalaryBelowTargetMode === 'prorata'}
+                              onChange={() => setBaseSalaryBelowTargetMode('prorata')}
+                              className="accent-emerald-600"
+                            />
+                            <span>پرداخت نسبی (متناسب با درصد تحقق)</span>
+                          </div>
+                          <p className="text-[10px] opacity-80 leading-relaxed">
+                            حقوق ثابت به نسبت درصد تحقق کف فروش محاسبه و پرداخت می‌شود.
+                          </p>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -571,13 +806,13 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
                 </div>
               )}
 
-              {/* Minimum Sales Target */}
+              {/* Minimum Sales Target for Percentage Commission */}
               <div className="p-3.5 rounded-xl bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#303030] space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <label className="text-xs font-semibold text-slate-800 dark:text-white flex items-center gap-1.5">
-                    <span>کف فروش (حداقل فروش برای فعال شدن پورسانت):</span>
+                    <span>کف فروش درصدی (حداقل فروش درصدی برای فعال شدن پورسانت درصدی):</span>
                   </label>
-                  <span className="text-xs font-mono font-bold text-slate-500 dark:text-[#888]">
+                  <span className="text-xs font-mono font-bold text-slate-500 dark:text-[#888] shrink-0">
                     {Number(minSalesTarget) > 0 ? `${formatToman(minSalesTarget)} تومان` : 'بدون کف (از ریال اول)'}
                   </span>
                 </div>
@@ -585,52 +820,103 @@ export const SalaryConfigModal: React.FC<SalaryConfigModalProps> = ({
                   type="text"
                   value={minSalesTarget ? Number(minSalesTarget).toLocaleString('en-US') : ''}
                   onChange={handleMinTargetChange}
-                  placeholder="صفر به معنی فعال بودن پورسانت از ریال اول است"
+                  placeholder="صفر به معنی فعال بودن پورسانت درصدی از ریال اول است"
                   className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#141414] border border-slate-300 dark:border-[#333] text-slate-900 dark:text-white font-mono text-xs text-left ltr"
                 />
+                <p className="text-[10px] text-slate-500 dark:text-[#888]">
+                  فروش‌های تعدادی در حجم فروش درصدی محاسبه نمی‌شوند و پورسانت تاییدشده آن‌ها جداگانه به فیش اضافه می‌شود.
+                </p>
               </div>
             </div>
           )}
 
           {/* 4. Live Test Sandbox Simulator */}
           <div className="p-4 rounded-2xl bg-emerald-500/5 dark:bg-[#122416] border border-emerald-500/20 dark:border-[#1DB954]/25 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-1">
               <span className="text-xs font-bold text-emerald-800 dark:text-[#1DB954] flex items-center gap-1.5">
                 <Calculator className="w-4 h-4" />
-                <span>شبیه‌ساز و تست زنده فرمول پورسانت:</span>
+                <span>شبیه‌ساز و تست زنده فرمول حقوق و پورسانت:</span>
               </span>
-              <span className="text-[11px] text-slate-500 dark:text-[#888]">یک مبلغ فرضی برای فروش این ماه وارد کنید</span>
+              <span className="text-[11px] text-slate-500 dark:text-[#888]">مقادیر فرضی ماه را وارد و خروجی را مشاهده کنید</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <div>
-                <span className="text-[11px] text-slate-600 dark:text-[#aaa] block mb-1">حجم فروش آزمایشی (تومان):</span>
+                <span className="text-[11px] text-slate-600 dark:text-[#aaa] block mb-1">فروش درصدی آزمایشی (تومان):</span>
                 <input
                   type="text"
                   value={testSalesAmount ? Number(testSalesAmount).toLocaleString('en-US') : ''}
                   onChange={(e) => setTestSalesAmount(e.target.value.replace(/[^0-9]/g, ''))}
-                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#181818] border border-emerald-500/40 text-slate-900 dark:text-white font-mono text-sm text-left ltr"
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#181818] border border-emerald-500/40 text-slate-900 dark:text-white font-mono text-xs text-left ltr"
                 />
               </div>
 
-              <div className="p-3 rounded-xl bg-white/70 dark:bg-[#181818]/70 border border-emerald-500/20 space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500 dark:text-[#888]">حقوق ثابت:</span>
-                  <span className="font-mono font-bold text-slate-800 dark:text-white">{formatToman(testBaseNum)} ت</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-500 dark:text-[#888]">پورسانت محاسبه‌شده:</span>
-                  <span className="font-mono font-bold text-emerald-600 dark:text-[#1DB954]">{formatToman(testCommissionNum)} ت</span>
-                </div>
-                <div className="border-t border-slate-200 dark:border-[#282828] pt-1 flex justify-between text-xs font-bold">
-                  <span className="text-slate-900 dark:text-white">جمع کل پرداختی:</span>
-                  <span className="font-mono text-emerald-700 dark:text-[#1DB954]">{formatToman(testTotalPayable)} تومان</span>
-                </div>
+              <div>
+                <span className="text-[11px] text-slate-600 dark:text-[#aaa] block mb-1">
+                  {baseSalaryMinSalesBasis === 'contracts_count' && requireMinSalesForBaseSalary
+                    ? 'تعداد قرارداد موفق آزمایشی:'
+                    : 'تعداد اقلام تعدادی تاییدشده:'}
+                </span>
+                <input
+                  type="text"
+                  value={testUnitItemsCount}
+                  onChange={(e) => setTestUnitItemsCount(e.target.value.replace(/[^0-9]/g, ''))}
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#181818] border border-slate-300 dark:border-[#333] text-slate-900 dark:text-white font-mono text-xs text-left ltr"
+                />
+              </div>
+
+              <div>
+                <span className="text-[11px] text-slate-600 dark:text-[#aaa] block mb-1">پورسانت تعدادی تاییدشده (تومان):</span>
+                <input
+                  type="text"
+                  disabled={salaryType === 'fixed'}
+                  value={testUnitCommissionAmount ? Number(testUnitCommissionAmount).toLocaleString('en-US') : '0'}
+                  onChange={(e) => setTestUnitCommissionAmount(e.target.value.replace(/[^0-9]/g, ''))}
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#181818] border border-slate-300 dark:border-[#333] text-slate-900 dark:text-white font-mono text-xs text-left ltr disabled:opacity-50"
+                />
               </div>
             </div>
 
-            <div className="text-[11px] text-slate-600 dark:text-[#999] bg-white/50 dark:bg-black/20 p-2 rounded-lg border border-slate-200/50 dark:border-white/5 leading-relaxed">
-              <strong>فرمول اعمال‌شده:</strong> {testExplanation}
+            <div className="p-3 rounded-xl bg-white/75 dark:bg-[#181818]/80 border border-emerald-500/20 space-y-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500 dark:text-[#888]">حقوق ثابت اعمالی:</span>
+                <div className="flex items-center gap-2 font-mono">
+                  {!testBaseTargetMet && configuredBaseNum > 0 && (
+                    <span className="line-through text-[11px] text-slate-400">{formatToman(configuredBaseNum)}</span>
+                  )}
+                  <span className={`font-bold ${!testBaseTargetMet ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-white'}`}>
+                    {formatToman(testBaseNum)} ت
+                  </span>
+                </div>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 dark:text-[#888]">پورسانت فروش درصدی:</span>
+                <span className="font-mono font-bold text-emerald-600 dark:text-[#1DB954]">{formatToman(testPercentageCommissionNum)} ت</span>
+              </div>
+              {testUnitCommNum > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500 dark:text-[#888] flex items-center gap-1">
+                    <Package className="w-3 h-3 text-blue-500" />
+                    <span>پورسانت فروش تعدادی:</span>
+                  </span>
+                  <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{formatToman(testUnitCommNum)} ت</span>
+                </div>
+              )}
+              <div className="border-t border-slate-200 dark:border-[#282828] pt-1.5 flex justify-between text-xs font-bold">
+                <span className="text-slate-900 dark:text-white">جمع کل پرداختی:</span>
+                <span className="font-mono text-emerald-700 dark:text-[#1DB954]">{formatToman(testTotalPayable)} تومان</span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-600 dark:text-[#999] bg-white/50 dark:bg-black/20 p-2.5 rounded-lg border border-slate-200/50 dark:border-white/5 leading-relaxed space-y-1">
+              {testBaseNote && (
+                <div className={!testBaseTargetMet ? 'text-amber-700 dark:text-amber-400 font-semibold' : 'text-emerald-700 dark:text-[#1DB954]'}>
+                  <strong>وضعیت کف حقوق ثابت:</strong> {testBaseNote}
+                </div>
+              )}
+              <div>
+                <strong>فرمول پورسانت درصدی:</strong> {testExplanation}
+              </div>
             </div>
           </div>
 

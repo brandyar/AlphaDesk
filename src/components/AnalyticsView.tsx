@@ -12,6 +12,8 @@ import { Customer, CustomerReport, Personnel, AuthUser } from '../types';
 import {
   formatStatusLabel,
   gregorianIsoToJalali,
+  isPersonnelActive,
+  normalizePersianText,
 } from '../utils';
 import {
   fetchCustomerReports,
@@ -92,6 +94,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [, setIsLoadingAnalytics] = useState<boolean>(false);
   const [serverPeriodicStats, setServerPeriodicStats] = useState<AnalyticsStatsResponse | null>(null);
   const [serverDailyStats, setServerDailyStats] = useState<DailyAnalyticsResponse | null>(null);
+  const [refreshTick, setRefreshTick] = useState<number>(0);
+
+  // Refresh analytics immediately when a new report/invoice is saved
+  React.useEffect(() => {
+    const onReportSaved = () => setRefreshTick((t) => t + 1);
+    window.addEventListener('crm_report_saved', onReportSaved);
+    return () => window.removeEventListener('crm_report_saved', onReportSaved);
+  }, []);
 
   // Calculate Date Boundaries for Periodic View
   const periodDateRange = useMemo(() => {
@@ -116,6 +126,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       case 'this_year':
         start = new Date(now.getFullYear(), 0, 1);
         break;
+      case 'all_time':
+        start = new Date(2000, 0, 1);
+        end = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        break;
       case 'custom':
         if (customStartDate) start = new Date(customStartDate);
         if (customEndDate) {
@@ -131,18 +145,20 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   // Reactive, lightweight, date-scoped query bounds
   const queryStartDate = useMemo(() => {
     if (activeTab === 'periodic') {
+      if (periodPreset === 'all_time') return undefined;
       return periodDateRange.start.toISOString();
     }
     // Daily views: bounded to requested days window (7, 14, 30 days)
     return new Date(Date.now() - (dailyDaysCount + 1) * 24 * 60 * 60 * 1000).toISOString();
-  }, [activeTab, periodDateRange, dailyDaysCount]);
+  }, [activeTab, periodPreset, periodDateRange, dailyDaysCount]);
 
   const queryEndDate = useMemo(() => {
     if (activeTab === 'periodic') {
+      if (periodPreset === 'all_time') return undefined;
       return periodDateRange.end.toISOString();
     }
     return undefined;
-  }, [activeTab, periodDateRange]);
+  }, [activeTab, periodPreset, periodDateRange]);
 
   // Primary fast server aggregates loader
   React.useEffect(() => {
@@ -187,7 +203,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [activeTab, queryStartDate, queryEndDate, dailyDaysCount, selectedPersonnelId, personnelList, activeTenantId]);
+  }, [activeTab, queryStartDate, queryEndDate, dailyDaysCount, selectedPersonnelId, personnelList, activeTenantId, refreshTick]);
 
   // On-demand fetch for single day report details when clicked by user
   React.useEffect(() => {
@@ -224,25 +240,41 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     };
   }, [selectedDayDetail, selectedPersonnelId, personnelList]);
 
-  // Filtered personnel list for search
+  // Filtered active personnel list for admin selector & search
   const filteredPersonnelOptions = useMemo(() => {
-    if (!personnelSearch.trim()) return personnelList;
+    const activeOnly = personnelList.filter((p) => isPersonnelActive(p));
+    if (!personnelSearch.trim()) return activeOnly;
     const q = personnelSearch.toLowerCase();
-    return personnelList.filter((p) => p.name.toLowerCase().includes(q) || (p.email && p.email.toLowerCase().includes(q)));
+    return activeOnly.filter((p) => p.name.toLowerCase().includes(q) || (p.email && p.email.toLowerCase().includes(q)));
   }, [personnelList, personnelSearch]);
 
   // Base filtered dataset matching user role and personnel selection
   const scopedReports = useMemo(() => {
     const sourceReports = allReportsData.length > 0 ? allReportsData : reports;
     if (!userIsAdmin) {
-      const myName = currentPersonnel?.name || currentUser?.name || '';
-      const myId = currentPersonnel?.id || currentUser?.id || '';
-      return sourceReports.filter(
-        (r) =>
-          r.negotiator_name === myName ||
-          r.created_by === myName ||
-          (myId && r.created_by === myId)
+      const myNameNorm = normalizePersianText(currentPersonnel?.name || currentUser?.name || '');
+      const myId = String(currentPersonnel?.id || currentUser?.id || '').trim().toLowerCase();
+      const myRawId = myId.replace(/^p-/, '');
+      const myCustomerIds = new Set(
+        customers
+          .filter((c) => {
+            const mId = String(c.assigned_marketer_id || '').trim().toLowerCase();
+            const rawMId = mId.replace(/^p-/, '');
+            if (myId && (mId === myId || (myRawId && rawMId === myRawId))) return true;
+            const mName = normalizePersianText(c.assigned_marketer_name);
+            return Boolean(myNameNorm && mName && (mName === myNameNorm || mName.includes(myNameNorm)));
+          })
+          .map((c) => String(c.id))
       );
+      return sourceReports.filter((r) => {
+        const negNorm = normalizePersianText(r.negotiator_name);
+        if (myNameNorm && negNorm && (negNorm === myNameNorm || negNorm.includes(myNameNorm) || myNameNorm.includes(negNorm))) {
+          return true;
+        }
+        if (myId && String(r.created_by || '').trim().toLowerCase() === myId) return true;
+        if (r.customer_id && myCustomerIds.has(String(r.customer_id))) return true;
+        return false;
+      });
     }
 
     if (selectedPersonnelId === 'all') {
@@ -251,14 +283,17 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
     const p = personnelList.find((item) => item.id === selectedPersonnelId);
     if (!p) return sourceReports;
+    const pNameNorm = normalizePersianText(p.name);
 
-    return sourceReports.filter(
-      (r) =>
-        r.negotiator_name === p.name ||
+    return sourceReports.filter((r) => {
+      const negNorm = normalizePersianText(r.negotiator_name);
+      return (
+        (pNameNorm && negNorm && (negNorm === pNameNorm || negNorm.includes(pNameNorm))) ||
         r.created_by === p.name ||
         r.created_by === p.id
-    );
-  }, [allReportsData, reports, userIsAdmin, currentPersonnel, currentUser, selectedPersonnelId, personnelList]);
+      );
+    });
+  }, [allReportsData, reports, customers, userIsAdmin, currentPersonnel, currentUser, selectedPersonnelId, personnelList]);
 
   const scopedCustomers = useMemo(() => {
     const sourceCustomers = allCustomersData.length > 0 ? allCustomersData : customers;
@@ -634,32 +669,36 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       }))
       .sort((a, b) => b.contractsCount - a.contractsCount || b.reportsCount - a.reportsCount);
 
-    if (serverPeriodicStats && serverPeriodicStats.totalReports > 0) {
-      const uCust = serverPeriodicStats.totalUniqueCustomers || totalUniqueCustomers || serverPeriodicStats.totalReports;
+    if (serverPeriodicStats) {
+      const normalizedServerBreakdown: Record<string, number> = {};
+      if (serverPeriodicStats.statusBreakdown) {
+        Object.entries(serverPeriodicStats.statusBreakdown).forEach(([rawKey, val]) => {
+          const label = formatStatusLabel(rawKey) || rawKey || 'سایر';
+          normalizedServerBreakdown[label] = (normalizedServerBreakdown[label] || 0) + Number(val || 0);
+        });
+      }
+      const uCust =
+        serverPeriodicStats.totalReports > 0
+          ? serverPeriodicStats.totalUniqueCustomers || serverPeriodicStats.totalReports
+          : 0;
       return {
         totalReports: serverPeriodicStats.totalReports,
         totalUniqueCustomers: uCust,
         totalContracts: serverPeriodicStats.totalContracts,
         totalContractAmount: serverPeriodicStats.totalContractAmount,
-        avgScore: serverPeriodicStats.avgScore || avgScore,
+        avgScore: serverPeriodicStats.avgScore || '0',
         conversionRate:
           uCust > 0
             ? ((serverPeriodicStats.totalContracts / uCust) * 100).toFixed(1)
             : '0',
-        statusBreakdown:
-          serverPeriodicStats.statusBreakdown && Object.keys(serverPeriodicStats.statusBreakdown).length > 0
-            ? serverPeriodicStats.statusBreakdown
-            : statusBreakdown,
-        personnelRanking:
-          serverPeriodicStats.personnelRanking && serverPeriodicStats.personnelRanking.length > 0
-            ? serverPeriodicStats.personnelRanking.map((p) => ({
-                ...p,
-                uniqueCustomers: new Set<string>(),
-                uniqueCustomersCount: p.uniqueCustomersCount || p.reportsCount,
-                scoresSum: 0,
-                scoresCount: 0,
-              }))
-            : personnelRanking,
+        statusBreakdown: normalizedServerBreakdown,
+        personnelRanking: (serverPeriodicStats.personnelRanking || []).map((p) => ({
+          ...p,
+          uniqueCustomers: new Set<string>(),
+          uniqueCustomersCount: p.uniqueCustomersCount || p.reportsCount,
+          scoresSum: 0,
+          scoresCount: 0,
+        })),
       };
     }
 

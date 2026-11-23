@@ -108,6 +108,23 @@ export interface CustomerPhoneOption {
   type: string;
 }
 
+export type ReportCommissionType = 'percentage' | 'unit';
+export type ManualCommissionStatus = 'pending' | 'approved' | 'partially_approved' | 'rejected';
+export type UnitItemReviewStatus = 'pending' | 'approved' | 'rejected';
+
+export interface UnitCommissionItem {
+  id: string;
+  product_name: string;
+  quantity: number;
+  unit_commission: number;
+  total_commission: number;
+  status: UnitItemReviewStatus;
+  approved_quantity?: number | null;
+  approved_unit_commission?: number | null;
+  approved_total_commission?: number | null;
+  manager_note?: string | null;
+}
+
 export interface CustomerReport {
   id: string;
   customer_id: string;
@@ -126,6 +143,14 @@ export interface CustomerReport {
   contract_date?: string | null;
   contract_items?: string | null;
   contract_amount?: number | null;
+  commission_type?: ReportCommissionType | string[] | null;
+  unit_commission_items?: UnitCommissionItem[] | null;
+  manual_commission_amount?: number | null;
+  approved_commission_amount?: number | null;
+  manual_commission_status?: ManualCommissionStatus | null;
+  commission_review_note?: string | null;
+  commission_reviewed_by?: string | null;
+  commission_reviewed_at?: string | null;
 }
 
 export interface ColdLead {
@@ -449,6 +474,8 @@ export interface TenantSettings {
   id?: string | number;
   tenant_id: string;
   sms_phones?: string | string[];
+  enable_unit_sales_commission?: boolean;
+  unit_commission_catalog?: any[];
   date_created?: string;
   date_updated?: string;
 }
@@ -462,6 +489,14 @@ export interface CommissionTier {
 export type SalaryType = 'fixed' | 'commission' | 'fixed_plus_commission';
 export type CommissionModel = 'flat' | 'tiered';
 export type TieredCalculationMode = 'marginal' | 'retroactive';
+export type BaseSalaryMinSalesBasis =
+  | 'percentage_sales_amount'
+  | 'total_sales_amount'
+  | 'unit_sales_count'
+  | 'contracts_count'
+  | 'either_amount_or_units'
+  | 'both_amount_and_units';
+export type BaseSalaryBelowTargetMode = 'zero' | 'prorata';
 
 export interface PersonnelSalaryConfig {
   id?: number | string;
@@ -473,6 +508,11 @@ export interface PersonnelSalaryConfig {
   tiered_calculation_mode?: TieredCalculationMode;
   commission_tiers?: CommissionTier[];
   min_sales_target?: number;
+  require_min_sales_for_base_salary?: boolean;
+  base_salary_min_sales_basis?: BaseSalaryMinSalesBasis;
+  base_salary_min_sales_amount?: number;
+  base_salary_min_units_count?: number;
+  base_salary_below_target_mode?: BaseSalaryBelowTargetMode;
   is_active: boolean;
   effective_from?: string | null;
   tenant_id?: string;
@@ -490,6 +530,8 @@ export interface PayrollSlip {
   total_contracts_amount: number;
   contracts_count: number;
   commission_amount: number;
+  percentage_commission_amount?: number;
+  unit_commission_amount?: number;
   advances_deducted: number;
   bonuses_amount: number;
   deductions_amount: number;
@@ -510,6 +552,31 @@ export interface PayrollContractItem {
   contract_amount?: number | null;
   contract_items?: string | null;
   customer_id?: string;
+  commission_type?: ReportCommissionType;
+  unit_commission_items?: UnitCommissionItem[];
+  manual_commission_amount?: number;
+  approved_commission_amount?: number | null;
+  manual_commission_status?: ManualCommissionStatus | null;
+  commission_review_note?: string | null;
+  commission_reviewed_by?: string | null;
+  commission_reviewed_at?: string | null;
+  approved_units_count?: number;
+  effective_unit_commission?: number;
+}
+
+export interface BaseSalaryThresholdBreakdown {
+  threshold_active: boolean;
+  configured_base_salary: number;
+  applied_base_salary: number;
+  target_met: boolean;
+  basis?: BaseSalaryMinSalesBasis;
+  below_target_mode?: BaseSalaryBelowTargetMode;
+  min_sales_amount?: number;
+  min_units_count?: number;
+  actual_sales_amount?: number;
+  actual_units_count?: number;
+  fulfillment_ratio: number;
+  note: string;
 }
 
 export type PayrollAdjustmentType = 'bonus' | 'deduction';
@@ -556,10 +623,20 @@ export interface PayrollCalculateItem {
   has_config: boolean;
   salary_config: PersonnelSalaryConfig | null;
   contracts_count: number;
+  percentage_contracts_count?: number;
+  unit_contracts_count?: number;
   total_contracts_amount: number;
+  percentage_sales_amount?: number;
+  unit_sales_amount?: number;
+  approved_unit_items_count?: number;
   contracts_list: PayrollContractItem[];
+  configured_base_salary?: number;
   base_salary_amount: number;
+  base_salary_threshold_breakdown?: BaseSalaryThresholdBreakdown | null;
   commission_amount: number;
+  percentage_commission_amount?: number;
+  unit_commission_amount?: number;
+  pending_unit_commissions_count?: number;
   commission_breakdown?: any;
   advances_deducted: number;
   advances_list: any[];
@@ -584,6 +661,9 @@ export interface PayrollCalculateResponse {
   total_advances: number;
   total_bonuses?: number;
   total_deductions?: number;
+  total_percentage_commission?: number;
+  total_unit_commission?: number;
+  total_pending_unit_commissions?: number;
   items: PayrollCalculateItem[];
 }
 

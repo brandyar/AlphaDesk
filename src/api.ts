@@ -364,12 +364,23 @@ export function getClientDeviceAndLocalTime(): {
   }
 
   const userNow = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const client_time = `${pad(userNow.getHours())}:${pad(userNow.getMinutes())}`;
+  let client_time = '';
+  try {
+    client_time = userNow.toLocaleTimeString('en-GB', {
+      timeZone: 'Asia/Tehran',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  } catch {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    client_time = `${pad(userNow.getHours())}:${pad(userNow.getMinutes())}`;
+  }
   let client_date = '';
   try {
-    client_date = userNow.toLocaleDateString('fa-IR');
+    client_date = userNow.toLocaleDateString('fa-IR', { timeZone: 'Asia/Tehran' });
   } catch {
+    const pad = (n: number) => String(n).padStart(2, '0');
     client_date = `${userNow.getFullYear()}/${pad(userNow.getMonth() + 1)}/${pad(userNow.getDate())}`;
   }
 
@@ -604,6 +615,7 @@ export function normalizePaginatedResponse<T>(resData: any, reqPage = 1, reqLimi
 export interface DashboardSummary {
   total_customers: number;
   contracts_won_count: number;
+  contracts_reports_count?: number;
   in_negotiation_count: number;
   expired_customers_count: number;
   total_reports_count: number;
@@ -1377,33 +1389,54 @@ export async function fetchTenantSettings(tenantId?: string): Promise<{
   id: string | number | null;
   tenant_id: string;
   sms_phones: string[];
-  items?: Array<{ id: string | number; tenant_id: string; sms_phones: string[] }>;
+  enable_unit_sales_commission?: boolean;
+  items?: Array<{
+    id: string | number;
+    tenant_id: string;
+    sms_phones: string[];
+    enable_unit_sales_commission?: boolean;
+  }>;
 }> {
   const query = tenantId ? `?tenant_id=${encodeURIComponent(tenantId)}` : '';
   const res = await fetch(`${BASE_URL}/tenant-settings${query}`, {
     headers: getBffHeaders(),
   });
-  return handleResponse(res, 'خطا در دریافت تنظیمات پیامک سازمان');
+  return handleResponse(res, 'خطا در دریافت تنظیمات سازمان');
 }
 
 export async function updateTenantSettings(
   tenantId: string,
-  smsPhones: string[] | string
+  smsPhonesOrPayload:
+    | string[]
+    | string
+    | {
+        sms_phones?: string[] | string;
+        enable_unit_sales_commission?: boolean;
+      }
 ): Promise<{
   success: boolean;
   id?: string | number;
   tenant_id: string;
   sms_phones: string[];
+  enable_unit_sales_commission?: boolean;
 }> {
+  const bodyPayload: Record<string, any> = { tenant_id: tenantId };
+  if (typeof smsPhonesOrPayload === 'string' || Array.isArray(smsPhonesOrPayload)) {
+    bodyPayload.sms_phones = smsPhonesOrPayload;
+  } else if (smsPhonesOrPayload && typeof smsPhonesOrPayload === 'object') {
+    if (smsPhonesOrPayload.sms_phones !== undefined) {
+      bodyPayload.sms_phones = smsPhonesOrPayload.sms_phones;
+    }
+    if (smsPhonesOrPayload.enable_unit_sales_commission !== undefined) {
+      bodyPayload.enable_unit_sales_commission = smsPhonesOrPayload.enable_unit_sales_commission;
+    }
+  }
   const res = await fetch(`${BASE_URL}/tenant-settings`, {
     method: 'PATCH',
     headers: getBffHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({
-      tenant_id: tenantId,
-      sms_phones: smsPhones,
-    }),
+    body: JSON.stringify(bodyPayload),
   });
-  return handleResponse(res, 'خطا در ذخیره شماره‌های پیامک سازمان');
+  return handleResponse(res, 'خطا در ذخیره تنظیمات سازمان');
 }
 
 export async function sendTestSms(payload: {
@@ -1423,11 +1456,26 @@ export async function sendTestSms(payload: {
 
 // ----------------- Tenants / Multi-Tenancy APIs ----------------- //
 
+export interface TenantsStatsResponse {
+  total_tenants: number;
+  active_tenants: number;
+  total_customers: number;
+  total_personnel: number;
+  per_tenant: Record<string, { customers_count: number; personnel_count: number }>;
+}
+
 export async function fetchTenants(): Promise<Tenant[]> {
   const res = await fetch(`${BASE_URL}/tenants`, {
     headers: getBffHeaders(),
   });
   return handleResponse(res, 'خطا در دریافت لیست سازمان‌ها و شعب');
+}
+
+export async function fetchTenantsStats(): Promise<TenantsStatsResponse> {
+  const res = await fetch(`${BASE_URL}/tenants/stats`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse<TenantsStatsResponse>(res, 'خطا در دریافت آمار سازمان‌ها');
 }
 
 export async function createTenant(payload: Partial<Tenant>): Promise<Tenant> {
@@ -1440,7 +1488,7 @@ export async function createTenant(payload: Partial<Tenant>): Promise<Tenant> {
 }
 
 export async function updateTenant(id: string, payload: Partial<Tenant>): Promise<Tenant> {
-  const res = await fetch(`${BASE_URL}/tenants/${id}`, {
+  const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: getBffHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(payload),
@@ -1449,13 +1497,11 @@ export async function updateTenant(id: string, payload: Partial<Tenant>): Promis
 }
 
 export async function deleteTenant(id: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/tenants/${id}`, {
+  const res = await fetch(`${BASE_URL}/tenants/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: getBffHeaders(),
   });
-  if (!res.ok) {
-    throw new Error('خطا در حذف سازمان');
-  }
+  await handleResponse(res, 'خطا در حذف سازمان');
 }
 
 export async function importLegacyMigrationData(payload: {
@@ -1595,6 +1641,32 @@ export async function calculatePayrollSimulation(payload: {
     body: JSON.stringify(payload),
   });
   return handleResponse<PayrollCalculateResponse>(res, 'خطا در محاسبه آنلاین حقوق و پورسانت');
+}
+
+export async function reviewReportCommission(
+  reportId: string,
+  payload: {
+    commission_type?: 'percentage' | 'unit';
+    action?: 'approve_all' | 'reject_all';
+    items?: Array<{
+      id?: string;
+      product_name: string;
+      quantity?: number;
+      unit_commission?: number;
+      status: 'pending' | 'approved' | 'rejected';
+      approved_quantity?: number | null;
+      approved_unit_commission?: number | null;
+      manager_note?: string | null;
+    }>;
+    commission_review_note?: string | null;
+  }
+): Promise<{ success: boolean; report: CustomerReport }> {
+  const res = await fetch(`${BASE_URL}/payroll/reports/${encodeURIComponent(reportId)}/commission-review`, {
+    method: 'PATCH',
+    headers: getBffHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  return handleResponse(res, 'خطا در ثبت بررسی پورسانت تعدادی');
 }
 
 export async function fetchPayrollSlips(params?: {

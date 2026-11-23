@@ -2482,7 +2482,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                       className="w-full h-9 px-3 bg-white dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-emerald-500/50 dark:border-[#1DB954]/50 focus:outline-none"
                     >
                       <option value="">-- انتخاب بازاریاب مسئول --</option>
-                      {personnelList.map((p) => (
+                      {personnelList.filter((p) => isPersonnelActive(p)).map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
                         </option>
@@ -2601,7 +2601,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 className="h-8 px-2.5 bg-white dark:bg-[#181818] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c]"
               >
                 <option value="all">همه بازاریابان</option>
-                {personnelList.map((p) => (
+                {personnelList.filter((p) => isPersonnelActive(p)).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -2718,7 +2718,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 className="h-9 px-3 bg-slate-50 dark:bg-[#121212] rounded-xl text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#333] focus:border-blue-500"
               >
                 <option value="">-- انتخاب همکار مقصد --</option>
-                {personnelList.map((p) => (
+                {personnelList.filter((p) => isPersonnelActive(p)).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.role === 'admin' ? 'مدیر' : 'بازاریاب'})
                   </option>
@@ -2771,7 +2771,7 @@ export const TeamManagementView: React.FC<TeamManagementViewProps> = ({
                 className="h-8 px-2.5 bg-white dark:bg-[#181818] rounded-lg text-xs text-slate-900 dark:text-white border border-slate-200 dark:border-[#2c2c2c]"
               >
                 <option value="all">همه بازاریابان مبدا</option>
-                {personnelList.map((p) => (
+                {personnelList.filter((p) => isPersonnelActive(p)).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
