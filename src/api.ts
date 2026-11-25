@@ -956,6 +956,28 @@ export async function fetchAnalyticsDaily(params: {
   return handleResponse<DailyAnalyticsResponse>(res, 'خطا در دریافت آمار روزانه تحلیلی');
 }
 
+export interface AnalyticsDayReportsResponse {
+  data: CustomerReport[];
+  total: number;
+  date: string;
+}
+
+export async function fetchAnalyticsDayReports(params: {
+  date: string;
+  negotiator?: string;
+}): Promise<AnalyticsDayReportsResponse> {
+  const qParams = new URLSearchParams();
+  qParams.append('date', params.date);
+  if (params.negotiator && params.negotiator !== 'all' && params.negotiator !== 'همه') {
+    qParams.append('negotiator', params.negotiator);
+  }
+
+  const res = await fetch(`${BASE_URL}/analytics/day-reports?${qParams.toString()}`, {
+    headers: getBffHeaders(),
+  });
+  return handleResponse<AnalyticsDayReportsResponse>(res, 'خطا در دریافت ریز گزارش‌های روز');
+}
+
 export async function fetchCustomerReports(
   customerIdOrOptions?:
     | string

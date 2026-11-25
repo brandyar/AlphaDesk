@@ -139,6 +139,8 @@ export interface CustomerReport {
   created_by?: string;
   date_created: string;
   customer_name?: string;
+  customer?: Partial<Customer> | null;
+  customer_phone?: string | null;
   contract_number?: string | null;
   contract_date?: string | null;
   contract_items?: string | null;

@@ -6,7 +6,7 @@ import {
   customersData,
   personnelData,
 } from '../config.ts';
-import { directusFetch } from '../directus/client.ts';
+import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
 import { ensureReportsCache, ensureCustomersCache } from '../directus/cache.ts';
 import { resolveDirectusTenantId } from '../directus/sync.ts';
 import { getRequestUser } from '../middlewares/auth.middleware.ts';
@@ -425,6 +425,155 @@ router.get(['/stats', '/api/analytics/stats'], async (req: Request, res: Respons
   });
 });
 
+const TEHRAN_TIMEZONE = 'Asia/Tehran';
+const NAIVE_ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?$/;
+const DATE_ONLY_ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const tehranIsoDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: TEHRAN_TIMEZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+const tehranWeekdayFormatter = new Intl.DateTimeFormat('fa-IR', {
+  timeZone: TEHRAN_TIMEZONE,
+  weekday: 'short',
+});
+
+function parseReportTimestamp(input?: string | Date | number | null): Date | null {
+  if (input === undefined || input === null || input === '') return null;
+  if (input instanceof Date) return isNaN(input.getTime()) ? null : input;
+  if (typeof input === 'number') {
+    const d = new Date(input);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const raw = String(input).trim();
+  if (!raw) return null;
+  if (DATE_ONLY_ISO_RE.test(raw)) {
+    const d = new Date(`${raw}T12:00:00+03:30`);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  if (NAIVE_ISO_DATETIME_RE.test(raw)) {
+    const normalized = raw.replace(' ', 'T');
+    const withSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)
+      ? `${normalized}:00`
+      : normalized;
+    const d = new Date(`${withSeconds}Z`);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  let d = new Date(raw);
+  if (isNaN(d.getTime()) && raw.includes(' ')) {
+    d = new Date(raw.replace(' ', 'T'));
+  }
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function getTehranIsoDateKey(input?: string | Date | number | null): string {
+  const d = parseReportTimestamp(input);
+  if (!d) return '';
+  try {
+    return tehranIsoDateFormatter.format(d);
+  } catch {
+    const shifted = new Date(d.getTime() + 3.5 * 60 * 60 * 1000);
+    return shifted.toISOString().split('T')[0];
+  }
+}
+
+function shiftCalendarIsoDate(dateIso: string, deltaDays: number): string {
+  const [y, m, d] = dateIso.split('-').map((n) => parseInt(n, 10));
+  const utc = new Date(Date.UTC(y, m - 1, d + deltaDays));
+  const yy = utc.getUTCFullYear();
+  const mm = String(utc.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(utc.getUTCDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+function getTehranWeekdayName(dateIso: string): string {
+  const d = new Date(`${dateIso}T12:00:00+03:30`);
+  if (isNaN(d.getTime())) return '-';
+  try {
+    return tehranWeekdayFormatter.format(d);
+  } catch {
+    return '-';
+  }
+}
+
+function getTehranQueryWindowUtc(startDateIso: string, endDateIso: string): {
+  queryStartIso: string;
+  queryEndIso: string;
+} {
+  return {
+    queryStartIso: `${shiftCalendarIsoDate(startDateIso, -1)}T00:00:00.000Z`,
+    queryEndIso: `${shiftCalendarIsoDate(endDateIso, 1)}T23:59:59.999Z`,
+  };
+}
+
+function buildCalendarDateRange(startDateIso: string, endDateIso: string, maxDays = 90): string[] {
+  const result: string[] = [];
+  if (!DATE_ONLY_ISO_RE.test(startDateIso) || !DATE_ONLY_ISO_RE.test(endDateIso)) {
+    return result;
+  }
+  let curr = startDateIso;
+  let guard = 0;
+  while (curr <= endDateIso && guard < maxDays) {
+    result.push(curr);
+    curr = shiftCalendarIsoDate(curr, 1);
+    guard++;
+  }
+  return result;
+}
+
+function extractPhoneFromField(val: any): string {
+  if (!val) return '';
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        return extractPhoneFromField(JSON.parse(trimmed));
+      } catch {}
+    }
+    return trimmed;
+  }
+  if (Array.isArray(val)) {
+    for (const item of val) {
+      if (typeof item === 'string' && item.trim()) return item.trim();
+      if (item && typeof item === 'object' && typeof item.value === 'string' && item.value.trim()) {
+        return item.value.trim();
+      }
+    }
+  }
+  return '';
+}
+
+function resolveCustomerPrimaryPhone(
+  cust: any,
+  negotiationPhone?: string | null,
+  fallbackContactPhone?: string
+): string {
+  if (negotiationPhone && String(negotiationPhone).trim()) {
+    return String(negotiationPhone).trim();
+  }
+  if (cust && typeof cust === 'object') {
+    const candidate =
+      extractPhoneFromField(cust.mobile_numbers) ||
+      extractPhoneFromField(cust.manager_phones) ||
+      extractPhoneFromField(cust.negotiator_phones) ||
+      extractPhoneFromField(cust.landline_numbers) ||
+      (typeof cust.telegram_phone === 'string' ? cust.telegram_phone.trim() : '');
+    if (candidate) return candidate;
+    if (Array.isArray(cust.contacts)) {
+      const phoneContact = cust.contacts.find(
+        (ct: any) =>
+          ct?.value &&
+          ['mobile', 'landline', 'whatsapp', 'telegram'].includes(String(ct.channel_type || ''))
+      );
+      if (phoneContact?.value) return String(phoneContact.value).trim();
+    }
+  }
+  return fallbackContactPhone || '';
+}
+
 function gregorianToJalali(gy: number, gm: number, gd: number): { jy: number; jm: number; jd: number } {
   const g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
   let jy: number;
@@ -472,6 +621,112 @@ function gregorianIsoToJalali(isoString?: string | null): string {
   }
 }
 
+function aggregateDailyReportsPayload(
+  reportsList: any[],
+  dateKeys: string[],
+  totalAssignedCustomers: number
+) {
+  const daysMap = new Map<
+    string,
+    {
+      dateIso: string;
+      dateJalali: string;
+      dayName: string;
+      reportsCount: number;
+      scoresSum: number;
+      scoresCount: number;
+      contractsCount: number;
+      contractsAmount: number;
+      avgScore: string;
+      statusCounts: Record<string, number>;
+      uniqueCustIds: Set<string>;
+    }
+  >();
+
+  for (const isoKey of dateKeys) {
+    daysMap.set(isoKey, {
+      dateIso: isoKey,
+      dateJalali: gregorianIsoToJalali(isoKey),
+      dayName: getTehranWeekdayName(isoKey),
+      reportsCount: 0,
+      scoresSum: 0,
+      scoresCount: 0,
+      contractsCount: 0,
+      contractsAmount: 0,
+      avgScore: '0',
+      statusCounts: {},
+      uniqueCustIds: new Set<string>(),
+    });
+  }
+
+  const allUniqueTouched = new Set<string>();
+  for (const r of reportsList) {
+    if (!r?.date_created) continue;
+    const isoKey = getTehranIsoDateKey(r.date_created);
+    if (!isoKey) continue;
+    const entry = daysMap.get(isoKey);
+    if (!entry) continue;
+
+    entry.reportsCount += 1;
+    const rawCustId =
+      typeof r.customer_id === 'object' && r.customer_id !== null
+        ? String(r.customer_id.id || '')
+        : String(r.customer_id || '');
+    if (rawCustId) {
+      entry.uniqueCustIds.add(rawCustId);
+      allUniqueTouched.add(rawCustId);
+    }
+
+    const scoreNum = Number(r.negotiation_score);
+    if (!isNaN(scoreNum) && scoreNum > 0) {
+      entry.scoresSum += scoreNum;
+      entry.scoresCount += 1;
+    }
+
+    if (isContractReportRecord(r)) {
+      entry.contractsCount += 1;
+      const amt = Number(r.contract_amount);
+      if (!isNaN(amt) && amt > 0) {
+        entry.contractsAmount += amt;
+      }
+    }
+
+    const st = String(r.negotiation_status || 'سایر');
+    entry.statusCounts[st] = (entry.statusCounts[st] || 0) + 1;
+  }
+
+  const daysList = Array.from(daysMap.values())
+    .sort((a, b) => a.dateIso.localeCompare(b.dateIso))
+    .map(({ uniqueCustIds, ...rest }) => ({
+      ...rest,
+      avgScore: rest.scoresCount > 0 ? (rest.scoresSum / rest.scoresCount).toFixed(1) : '0',
+      uniqueCount: uniqueCustIds.size,
+    }));
+
+  const totalReports = daysList.reduce((acc, d) => acc + d.reportsCount, 0);
+  const totalContracts = daysList.reduce((acc, d) => acc + d.contractsCount, 0);
+  const totalAmount = daysList.reduce((acc, d) => acc + d.contractsAmount, 0);
+  const totalScoresSum = daysList.reduce((acc, d) => acc + d.scoresSum, 0);
+  const totalScoresCount = daysList.reduce((acc, d) => acc + d.scoresCount, 0);
+  const avgScore = totalScoresCount > 0 ? (totalScoresSum / totalScoresCount).toFixed(1) : '0';
+  const activeDaysCount = daysList.filter((d) => d.reportsCount > 0).length;
+  const avgPerActiveDay = activeDaysCount > 0 ? (totalReports / activeDaysCount).toFixed(1) : '0';
+  const peakDay = [...daysList].sort((a, b) => b.reportsCount - a.reportsCount)[0];
+
+  return {
+    daysList,
+    totalReports,
+    totalContracts,
+    totalAmount,
+    avgScore,
+    activeDaysCount,
+    avgPerActiveDay,
+    peakDay,
+    totalAssignedCustomers,
+    totalUniqueCustomersTouched: allUniqueTouched.size || totalReports,
+  };
+}
+
 // GET /api/analytics/daily
 router.get(['/daily', '/api/analytics/daily'], async (req: Request, res: Response) => {
   const { days, start_date, end_date, negotiator } = req.query;
@@ -486,25 +741,23 @@ router.get(['/daily', '/api/analytics/daily'], async (req: Request, res: Respons
     ? String(negotiator)
     : '';
 
-  const now = new Date();
-  let rangeStart = new Date(now.getTime() - (daysCount - 1) * 24 * 60 * 60 * 1000);
-  rangeStart.setHours(0, 0, 0, 0);
-  let rangeEnd = new Date();
-  rangeEnd.setHours(23, 59, 59, 999);
+  const todayTehranIso = getTehranIsoDateKey(new Date());
+  let endDateIso = end_date ? getTehranIsoDateKey(String(end_date)) || todayTehranIso : todayTehranIso;
+  let startDateIso = start_date
+    ? getTehranIsoDateKey(String(start_date)) || shiftCalendarIsoDate(endDateIso, -(daysCount - 1))
+    : shiftCalendarIsoDate(endDateIso, -(daysCount - 1));
+  if (startDateIso > endDateIso) {
+    startDateIso = shiftCalendarIsoDate(endDateIso, -(daysCount - 1));
+  }
 
-  if (start_date) {
-    rangeStart = new Date(String(start_date));
-  }
-  if (end_date) {
-    rangeEnd = new Date(String(end_date));
-    rangeEnd.setHours(23, 59, 59, 999);
-  }
+  const dateKeys = buildCalendarDateRange(startDateIso, endDateIso, 90);
+  const { queryStartIso, queryEndIso } = getTehranQueryWindowUtc(startDateIso, endDateIso);
 
   const scopeIdentity = canViewAllAnalytics
     ? `admin_${targetNegotiator || 'all'}`
     : `staff_${personnelId || userId || userName || 'unknown'}`;
 
-  const cacheKey = `daily_${tenantId || 'all'}_${daysCount}_${start_date || ''}_${end_date || ''}_${scopeIdentity}`;
+  const cacheKey = `daily_${tenantId || 'all'}_${startDateIso}_${endDateIso}_${scopeIdentity}`;
   const cacheNow = Date.now();
   const cached = analyticsCache.get(cacheKey);
   if (cached && cacheNow - cached.timestamp < ANALYTICS_CACHE_TTL) {
@@ -513,18 +766,16 @@ router.get(['/daily', '/api/analytics/daily'], async (req: Request, res: Respons
 
   if (directusUrl && directusAdminToken) {
     try {
-      const { filterParams, nextAndIdx } = buildAnalyticsReportFilter({
+      const { filterParams } = buildAnalyticsReportFilter({
         tenantId,
-        startDate: rangeStart.toISOString(),
-        endDate: rangeEnd.toISOString(),
+        startDate: queryStartIso,
+        endDate: queryEndIso,
         canViewAllAnalytics,
         targetNegotiator,
         userName,
         personnelId,
         userId,
       });
-
-      const contractClause = buildContractAndClause(nextAndIdx);
 
       // Build customer assignment count filter with proper tenantNum > 1 and staff ownership matching
       let custFilterParams = '';
@@ -558,17 +809,16 @@ router.get(['/daily', '/api/analytics/daily'], async (req: Request, res: Respons
         custFilterParams += `&filter[_and][${custAndIdx++}][assigned_marketer_name][_icontains]=${encodeURIComponent(targetNegotiator.trim())}`;
       }
 
-      const [allDaysRes, contractDaysRes, totalAssignedRes, uniqueCustDaysRes, totalUniqueTouchedRes] = await Promise.all([
-        directusFetch(
-          `/items/customer_reports?groupBy[]=year(date_created)&groupBy[]=month(date_created)&groupBy[]=day(date_created)&aggregate[count]=*&aggregate[avg]=negotiation_score&aggregate[sum]=contract_amount&limit=-1${filterParams}`
+      const minimalFields =
+        'id,customer_id,negotiation_score,negotiation_status,contract_amount,contract_number,date_created';
+
+      const [reportsRes, totalAssignedRes] = await Promise.all([
+        directusFetchAllPages(
+          `/items/customer_reports?fields=${minimalFields}&sort=-date_created${filterParams}`,
+          {},
+          50000
         ).catch((e) => {
-          console.warn('[Analytics /daily] allDaysRes error:', e?.message);
-          return null;
-        }),
-        directusFetch(
-          `/items/customer_reports?groupBy[]=year(date_created)&groupBy[]=month(date_created)&groupBy[]=day(date_created)&aggregate[count]=*&aggregate[sum]=contract_amount&limit=-1${filterParams}${contractClause}`
-        ).catch((e) => {
-          console.warn('[Analytics /daily] contractDaysRes error:', e?.message);
+          console.warn('[Analytics /daily] reportsRes error:', e?.message);
           return null;
         }),
         directusFetch(
@@ -577,143 +827,21 @@ router.get(['/daily', '/api/analytics/daily'], async (req: Request, res: Respons
           console.warn('[Analytics /daily] totalAssignedRes error:', e?.message);
           return null;
         }),
-        directusFetch(
-          `/items/customer_reports?groupBy[]=year(date_created)&groupBy[]=month(date_created)&groupBy[]=day(date_created)&aggregate[countDistinct]=customer_id&limit=-1${filterParams}`
-        ).catch((e) => {
-          console.warn('[Analytics /daily] uniqueCustDaysRes error:', e?.message);
-          return null;
-        }),
-        directusFetch(
-          `/items/customer_reports?aggregate[countDistinct]=customer_id${filterParams}`
-        ).catch((e) => {
-          console.warn('[Analytics /daily] totalUniqueTouchedRes error:', e?.message);
-          return null;
-        }),
       ]);
 
-      const daysMap = new Map<string, {
-        dateIso: string;
-        dateJalali: string;
-        dayName: string;
-        reportsCount: number;
-        scoresSum: number;
-        scoresCount: number;
-        contractsCount: number;
-        contractsAmount: number;
-        avgScore: string;
-        statusCounts: Record<string, number>;
-        uniqueCount: number;
-      }>();
-
-      const ensureDayEntry = (isoKey: string) => {
-        let entry = daysMap.get(isoKey);
-        if (!entry) {
-          const d = new Date(isoKey);
-          entry = {
-            dateIso: isoKey,
-            dateJalali: gregorianIsoToJalali(isoKey),
-            dayName: !isNaN(d.getTime()) ? new Intl.DateTimeFormat('fa-IR', { weekday: 'short' }).format(d) : '-',
-            reportsCount: 0,
-            scoresSum: 0,
-            scoresCount: 0,
-            contractsCount: 0,
-            contractsAmount: 0,
-            avgScore: '0',
-            statusCounts: {},
-            uniqueCount: 0,
-          };
-          daysMap.set(isoKey, entry);
-        }
-        return entry;
-      };
-
-      const dayDiff = Math.max(1, Math.min(Math.round((rangeEnd.getTime() - rangeStart.getTime()) / (24 * 60 * 60 * 1000)), 90));
-      for (let i = dayDiff - 1; i >= 0; i--) {
-        const d = new Date(rangeEnd.getTime() - i * 24 * 60 * 60 * 1000);
-        const isoKey = d.toISOString().split('T')[0];
-        ensureDayEntry(isoKey);
+      if (reportsRes && reportsRes.meta !== undefined && Array.isArray(reportsRes.data)) {
+        const totalAssignedCustomers =
+          totalAssignedRes?.meta?.filter_count ?? totalAssignedRes?.meta?.total_count ?? 0;
+        const dailyPayload = aggregateDailyReportsPayload(
+          reportsRes.data,
+          dateKeys,
+          totalAssignedCustomers
+        );
+        analyticsCache.set(cacheKey, { timestamp: cacheNow, data: dailyPayload });
+        return res.json(dailyPayload);
       }
-
-      if (allDaysRes?.data && Array.isArray(allDaysRes.data)) {
-        for (const row of allDaysRes.data) {
-          if (!row.date_created_year || !row.date_created_month || !row.date_created_day) continue;
-          const isoKey = `${row.date_created_year}-${String(row.date_created_month).padStart(2, '0')}-${String(row.date_created_day).padStart(2, '0')}`;
-          const count = extractAggregateCount(row.count);
-          const rawAvg = Number(row.avg?.negotiation_score || 0);
-          const sumAmt = Number(row.sum?.contract_amount || 0);
-          const entry = ensureDayEntry(isoKey);
-          entry.reportsCount = count;
-          entry.scoresSum = rawAvg * count;
-          entry.scoresCount = count;
-          entry.contractsAmount = sumAmt;
-          entry.avgScore = rawAvg > 0 ? (Math.round(rawAvg * 10) / 10).toFixed(1) : '0';
-          entry.uniqueCount = count > 0 ? 1 : 0;
-        }
-      }
-
-      if (uniqueCustDaysRes?.data && Array.isArray(uniqueCustDaysRes.data)) {
-        for (const row of uniqueCustDaysRes.data) {
-          if (!row.date_created_year || !row.date_created_month || !row.date_created_day) continue;
-          const isoKey = `${row.date_created_year}-${String(row.date_created_month).padStart(2, '0')}-${String(row.date_created_day).padStart(2, '0')}`;
-          const uCount = Number(row.countDistinct?.customer_id || 0);
-          const entry = ensureDayEntry(isoKey);
-          if (uCount > 0) {
-            entry.uniqueCount = uCount;
-          }
-        }
-      }
-
-      if (contractDaysRes?.data && Array.isArray(contractDaysRes.data)) {
-        for (const row of contractDaysRes.data) {
-          if (!row.date_created_year || !row.date_created_month || !row.date_created_day) continue;
-          const isoKey = `${row.date_created_year}-${String(row.date_created_month).padStart(2, '0')}-${String(row.date_created_day).padStart(2, '0')}`;
-          const cCount = extractAggregateCount(row.count);
-          const cSum = Number(row.sum?.contract_amount || 0);
-          const entry = ensureDayEntry(isoKey);
-          entry.contractsCount = cCount;
-          if (cSum > 0) entry.contractsAmount = cSum;
-        }
-      }
-
-      const daysList = Array.from(daysMap.values()).sort((a, b) => a.dateIso.localeCompare(b.dateIso));
-      const totalReports = daysList.reduce((acc, d) => acc + d.reportsCount, 0);
-      const totalContracts = daysList.reduce((acc, d) => acc + d.contractsCount, 0);
-      const totalAmount = daysList.reduce((acc, d) => acc + d.contractsAmount, 0);
-      const totalScoresSum = daysList.reduce((acc, d) => acc + d.scoresSum, 0);
-      const totalScoresCount = daysList.reduce((acc, d) => acc + d.scoresCount, 0);
-      const avgScore = totalScoresCount > 0 ? (totalScoresSum / totalScoresCount).toFixed(1) : '0';
-      const activeDaysCount = daysList.filter((d) => d.reportsCount > 0).length;
-      const avgPerActiveDay = activeDaysCount > 0 ? (totalReports / activeDaysCount).toFixed(1) : '0';
-      const peakDay = [...daysList].sort((a, b) => b.reportsCount - a.reportsCount)[0];
-
-      const totalAssignedCustomers = totalAssignedRes?.meta?.filter_count ?? totalAssignedRes?.meta?.total_count ?? 0;
-      let totalUniqueCustomersTouched = 0;
-      if (totalUniqueTouchedRes?.data && Array.isArray(totalUniqueTouchedRes.data) && totalUniqueTouchedRes.data.length > 0) {
-        const cDist = totalUniqueTouchedRes.data[0]?.countDistinct?.customer_id;
-        if (cDist !== undefined && cDist !== null) {
-          totalUniqueCustomersTouched = Number(cDist);
-        }
-      }
-      if (!totalUniqueCustomersTouched) {
-        totalUniqueCustomersTouched = totalReports;
-      }
-
-      const dailyPayload = {
-        daysList,
-        totalReports,
-        totalContracts,
-        totalAmount,
-        avgScore,
-        activeDaysCount,
-        avgPerActiveDay,
-        peakDay,
-        totalAssignedCustomers,
-        totalUniqueCustomersTouched,
-      };
-      analyticsCache.set(cacheKey, { timestamp: cacheNow, data: dailyPayload });
-      return res.json(dailyPayload);
     } catch (err: any) {
-      console.warn('Directus daily analytics aggregate error:', err.message);
+      console.warn('Directus daily analytics error:', err.message);
     }
   }
 
@@ -727,12 +855,11 @@ router.get(['/daily', '/api/analytics/daily'], async (req: Request, res: Respons
     if (c?.id) customerMap.set(String(c.id), c);
   }
 
-  const startMs = rangeStart.getTime();
-  const endMs = rangeEnd.getTime();
+  const dateKeySet = new Set(dateKeys);
   const scoped = rawReports.filter((r) => {
     if (!r.date_created) return false;
-    const t = new Date(r.date_created).getTime();
-    if (isNaN(t) || t < startMs || t > endMs) return false;
+    const key = getTehranIsoDateKey(r.date_created);
+    if (!key || !dateKeySet.has(key)) return false;
     return matchesStaffReportLocal(r, customerMap, {
       canViewAllAnalytics,
       targetNegotiator,
@@ -742,106 +869,194 @@ router.get(['/daily', '/api/analytics/daily'], async (req: Request, res: Respons
     });
   });
 
-  const daysMap = new Map<string, {
-    dateIso: string;
-    dateJalali: string;
-    dayName: string;
-    reportsCount: number;
-    scoresSum: number;
-    scoresCount: number;
-    contractsCount: number;
-    contractsAmount: number;
-    avgScore: string;
-    statusCounts: Record<string, number>;
-    uniqueCustIds: Set<string>;
-  }>();
+  return res.json(aggregateDailyReportsPayload(scoped, dateKeys, rawCustomers.length));
+});
 
-  const dayDiff = Math.max(1, Math.min(Math.round((endMs - startMs) / 86400000), 90));
-  for (let i = dayDiff - 1; i >= 0; i--) {
-    const d = new Date(endMs - i * 86400000);
-    const isoKey = d.toISOString().split('T')[0];
-    daysMap.set(isoKey, {
-      dateIso: isoKey,
-      dateJalali: gregorianIsoToJalali(isoKey),
-      dayName: new Intl.DateTimeFormat('fa-IR', { weekday: 'short' }).format(d),
-      reportsCount: 0,
-      scoresSum: 0,
-      scoresCount: 0,
-      contractsCount: 0,
-      contractsAmount: 0,
-      avgScore: '0',
-      statusCounts: {},
-      uniqueCustIds: new Set<string>(),
-    });
+// GET /api/analytics/day-reports
+// Returns the exact full list of reports for a given Tehran dateIso matching /api/analytics/daily 1-to-1
+router.get(['/day-reports', '/api/analytics/day-reports'], async (req: Request, res: Response) => {
+  const { date, negotiator } = req.query;
+  const dateIso = date ? String(date).trim() : '';
+
+  if (!DATE_ONLY_ISO_RE.test(dateIso)) {
+    return res.status(400).json({ error: 'فرمت تاریخ نامعتبر است (YYYY-MM-DD).' });
   }
 
-  const allUniqueTouched = new Set<string>();
-  scoped.forEach((r) => {
-    const isoKey = new Date(r.date_created!).toISOString().split('T')[0];
-    let entry = daysMap.get(isoKey);
-    if (!entry) {
-      const d = new Date(isoKey);
-      entry = {
-        dateIso: isoKey,
-        dateJalali: gregorianIsoToJalali(isoKey),
-        dayName: new Intl.DateTimeFormat('fa-IR', { weekday: 'short' }).format(d),
-        reportsCount: 0,
-        scoresSum: 0,
-        scoresCount: 0,
-        contractsCount: 0,
-        contractsAmount: 0,
-        avgScore: '0',
-        statusCounts: {},
-        uniqueCustIds: new Set<string>(),
-      };
-      daysMap.set(isoKey, entry);
-    }
-    entry.reportsCount += 1;
-    if (r.customer_id) {
-      entry.uniqueCustIds.add(String(r.customer_id));
-      allUniqueTouched.add(String(r.customer_id));
-    }
-    if (r.negotiation_score && r.negotiation_score > 0) {
-      entry.scoresSum += Number(r.negotiation_score);
-      entry.scoresCount += 1;
-    }
-    if (isContractReportRecord(r)) {
-      entry.contractsCount += 1;
-      if (r.contract_amount && !isNaN(Number(r.contract_amount))) {
-        entry.contractsAmount += Number(r.contract_amount);
+  const { userId, personnelId, isAdmin, isPersonnelAdmin, canViewAllCustomers, reportViewScope, userName, tenantId } = getRequestUser(req);
+  const canViewAllAnalytics = Boolean(isAdmin || isPersonnelAdmin || canViewAllCustomers || reportViewScope === 'all');
+
+  const targetNegotiator = !canViewAllAnalytics
+    ? userName || ''
+    : negotiator && negotiator !== 'all' && negotiator !== 'همه'
+    ? String(negotiator)
+    : '';
+
+  const { queryStartIso, queryEndIso } = getTehranQueryWindowUtc(dateIso, dateIso);
+
+  if (directusUrl && directusAdminToken) {
+    try {
+      const { filterParams } = buildAnalyticsReportFilter({
+        tenantId,
+        startDate: queryStartIso,
+        endDate: queryEndIso,
+        canViewAllAnalytics,
+        targetNegotiator,
+        userName,
+        personnelId,
+        userId,
+      });
+
+      const dayReportFields = [
+        '*',
+        'customer_id.id',
+        'customer_id.company_name',
+        'customer_id.manager_name',
+        'customer_id.negotiator_name',
+        'customer_id.status',
+        'customer_id.province',
+        'customer_id.city',
+        'customer_id.business_type',
+        'customer_id.mobile_numbers',
+        'customer_id.manager_phones',
+        'customer_id.negotiator_phones',
+        'customer_id.landline_numbers',
+        'customer_id.telegram_phone',
+        'customer_id.next_followup_date',
+        'customer_id.assignment_deadline',
+        'customer_id.is_expired',
+        'customer_id.assigned_marketer_id',
+        'customer_id.assigned_marketer_name',
+      ].join(',');
+
+      const reportsRes = await directusFetchAllPages(
+        `/items/customer_reports?fields=${encodeURIComponent(dayReportFields)}&sort=-date_created${filterParams}`,
+        {},
+        50000
+      ).catch((e) => {
+        console.warn('[Analytics /day-reports] Directus fetch error:', e?.message);
+        return null;
+      });
+
+      if (reportsRes && reportsRes.meta !== undefined && Array.isArray(reportsRes.data)) {
+        const dayItems = reportsRes.data.filter(
+          (r: any) => r?.date_created && getTehranIsoDateKey(r.date_created) === dateIso
+        );
+
+        // Identify any customers that still need a phone number lookup from customer_contacts
+        const custIdsMissingPhone = new Set<string>();
+        for (const r of dayItems) {
+          const custObj = typeof r.customer_id === 'object' && r.customer_id !== null ? r.customer_id : null;
+          const custIdStr = custObj ? String(custObj.id || '') : String(r.customer_id || '');
+          const immediatePhone = resolveCustomerPrimaryPhone(custObj, r.negotiation_phone);
+          if (!immediatePhone && custIdStr) {
+            custIdsMissingPhone.add(custIdStr);
+          }
+        }
+
+        const fallbackPhoneByCustId = new Map<string, string>();
+        if (custIdsMissingPhone.size > 0) {
+          const idsArr = Array.from(custIdsMissingPhone).slice(0, 200);
+          const contactsRes = await directusFetch(
+            `/items/customer_contacts?filter[customer_id][_in]=${encodeURIComponent(idsArr.join(','))}` +
+              `&filter[channel_type][_in]=mobile,landline,whatsapp,telegram` +
+              `&fields=customer_id,value,is_primary&limit=500`,
+            {},
+            1
+          ).catch(() => null);
+
+          if (contactsRes?.data && Array.isArray(contactsRes.data)) {
+            for (const ct of contactsRes.data) {
+              const cid = typeof ct.customer_id === 'object' && ct.customer_id !== null
+                ? String(ct.customer_id.id || '')
+                : String(ct.customer_id || '');
+              const val = typeof ct.value === 'string' ? ct.value.trim() : '';
+              if (!cid || !val) continue;
+              if (!fallbackPhoneByCustId.has(cid) || ct.is_primary) {
+                fallbackPhoneByCustId.set(cid, val);
+              }
+            }
+          }
+        }
+
+        const enriched = dayItems
+          .map((r: any) => {
+            const custObj = typeof r.customer_id === 'object' && r.customer_id !== null ? r.customer_id : null;
+            const custIdStr = custObj ? String(custObj.id || '') : String(r.customer_id || '');
+            const resolvedPhone = resolveCustomerPrimaryPhone(
+              custObj,
+              r.negotiation_phone,
+              fallbackPhoneByCustId.get(custIdStr)
+            );
+            return {
+              ...r,
+              customer_id: custIdStr,
+              customer: custObj || null,
+              customer_phone: resolvedPhone || null,
+            };
+          })
+          .sort(
+            (a: any, b: any) =>
+              (parseReportTimestamp(b.date_created)?.getTime() || 0) -
+              (parseReportTimestamp(a.date_created)?.getTime() || 0)
+          );
+
+        return res.json({
+          data: enriched,
+          total: enriched.length,
+          date: dateIso,
+        });
       }
+    } catch (err: any) {
+      console.warn('Directus day-reports error:', err.message);
     }
-  });
+  }
 
-  const daysList = Array.from(daysMap.values())
-    .sort((a, b) => a.dateIso.localeCompare(b.dateIso))
-    .map(({ uniqueCustIds, ...rest }) => ({
-      ...rest,
-      avgScore: rest.scoresCount > 0 ? (rest.scoresSum / rest.scoresCount).toFixed(1) : '0',
-      uniqueCount: uniqueCustIds.size,
-    }));
+  // Fallback to in-memory / cache
+  const [rawReports, rawCustomers] = await Promise.all([
+    ensureReportsCache().catch(() => reportsData),
+    ensureCustomersCache().catch(() => customersData),
+  ]);
+  const customerMap = new Map<string, any>();
+  for (const c of rawCustomers) {
+    if (c?.id) customerMap.set(String(c.id), c);
+  }
 
-  const totalReports = daysList.reduce((acc, d) => acc + d.reportsCount, 0);
-  const totalContracts = daysList.reduce((acc, d) => acc + d.contractsCount, 0);
-  const totalAmount = daysList.reduce((acc, d) => acc + d.contractsAmount, 0);
-  const totalScoresSum = daysList.reduce((acc, d) => acc + d.scoresSum, 0);
-  const totalScoresCount = daysList.reduce((acc, d) => acc + d.scoresCount, 0);
-  const avgScore = totalScoresCount > 0 ? (totalScoresSum / totalScoresCount).toFixed(1) : '0';
-  const activeDaysCount = daysList.filter((d) => d.reportsCount > 0).length;
-  const avgPerActiveDay = activeDaysCount > 0 ? (totalReports / activeDaysCount).toFixed(1) : '0';
-  const peakDay = [...daysList].sort((a, b) => b.reportsCount - a.reportsCount)[0];
+  const matched = rawReports
+    .filter((r) => {
+      if (!r?.date_created) return false;
+      if (getTehranIsoDateKey(r.date_created) !== dateIso) return false;
+      return matchesStaffReportLocal(r, customerMap, {
+        canViewAllAnalytics,
+        targetNegotiator,
+        userName,
+        personnelId,
+        userId,
+      });
+    })
+    .map((r) => {
+      const rawCustId =
+        typeof r.customer_id === 'object' && r.customer_id !== null
+          ? String((r.customer_id as any).id || '')
+          : String(r.customer_id || '');
+      const custObj = customerMap.get(rawCustId) || (typeof r.customer_id === 'object' ? r.customer_id : null);
+      const resolvedPhone = resolveCustomerPrimaryPhone(custObj, r.negotiation_phone);
+      return {
+        ...r,
+        customer_id: rawCustId,
+        customer: custObj || null,
+        customer_phone: resolvedPhone || null,
+      };
+    })
+    .sort(
+      (a, b) =>
+        (parseReportTimestamp(b.date_created)?.getTime() || 0) -
+        (parseReportTimestamp(a.date_created)?.getTime() || 0)
+    );
 
   return res.json({
-    daysList,
-    totalReports,
-    totalContracts,
-    totalAmount,
-    avgScore,
-    activeDaysCount,
-    avgPerActiveDay,
-    peakDay,
-    totalAssignedCustomers: rawCustomers.length,
-    totalUniqueCustomersTouched: allUniqueTouched.size || totalReports,
+    data: matched,
+    total: matched.length,
+    date: dateIso,
   });
 });
 

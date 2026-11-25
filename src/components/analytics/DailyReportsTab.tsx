@@ -7,8 +7,11 @@ import {
   Zap,
   TrendingUp,
   Layers,
+  Phone,
+  FolderOpen,
+  Loader2,
 } from 'lucide-react';
-import { Customer } from '../../types';
+import { Customer, CustomerReport } from '../../types';
 import { DailyReportStats } from './types';
 import {
   formatPersianDateTime,
@@ -26,6 +29,125 @@ interface DailyReportsTabProps {
   setSelectedDayDetail: (day: string | null) => void;
   dailyReportStats: DailyReportStats;
   customers: Customer[];
+  isLoadingDayReports?: boolean;
+  onSelectCustomer?: (customer: Customer) => void;
+}
+
+function extractFirstPhone(arr: unknown): string {
+  if (!arr) return '';
+  if (typeof arr === 'string') {
+    const trimmed = arr.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        return extractFirstPhone(JSON.parse(trimmed));
+      } catch {
+        return trimmed;
+      }
+    }
+    return trimmed;
+  }
+  if (Array.isArray(arr)) {
+    for (const item of arr) {
+      if (typeof item === 'string' && item.trim()) return item.trim();
+      if (item && typeof item === 'object' && typeof (item as any).value === 'string' && (item as any).value.trim()) {
+        return (item as any).value.trim();
+      }
+    }
+  }
+  return '';
+}
+
+function buildSelectableCustomer(rep: CustomerReport, customers: Customer[]): Customer | null {
+  const embeddedCust =
+    rep.customer && typeof rep.customer === 'object'
+      ? rep.customer
+      : typeof rep.customer_id === 'object' && rep.customer_id !== null
+      ? (rep.customer_id as unknown as Partial<Customer>)
+      : null;
+
+  const custId = embeddedCust?.id
+    ? String(embeddedCust.id)
+    : typeof rep.customer_id === 'string'
+    ? rep.customer_id
+    : '';
+
+  if (!custId) return null;
+
+  const fullFromState = customers.find((c) => String(c.id) === custId);
+  if (fullFromState) return fullFromState;
+
+  const resolvedPhone =
+    rep.customer_phone ||
+    rep.negotiation_phone ||
+    extractFirstPhone(embeddedCust?.mobile_numbers) ||
+    extractFirstPhone(embeddedCust?.manager_phones) ||
+    extractFirstPhone(embeddedCust?.negotiator_phones) ||
+    extractFirstPhone(embeddedCust?.landline_numbers) ||
+    embeddedCust?.telegram_phone ||
+    '';
+
+  return {
+    id: custId,
+    company_name: embeddedCust?.company_name || rep.customer_name || 'پرونده مشتری',
+    business_type: embeddedCust?.business_type || '',
+    province: embeddedCust?.province || '',
+    city: embeddedCust?.city || '',
+    manager_name: embeddedCust?.manager_name || '',
+    manager_phones: Array.isArray(embeddedCust?.manager_phones) ? embeddedCust.manager_phones : [],
+    negotiator_name: embeddedCust?.negotiator_name || '',
+    negotiator_phones: Array.isArray(embeddedCust?.negotiator_phones) ? embeddedCust.negotiator_phones : [],
+    mobile_numbers: Array.isArray(embeddedCust?.mobile_numbers)
+      ? embeddedCust.mobile_numbers
+      : resolvedPhone
+      ? [resolvedPhone]
+      : [],
+    landline_numbers: Array.isArray(embeddedCust?.landline_numbers) ? embeddedCust.landline_numbers : [],
+    telegram_phone: embeddedCust?.telegram_phone || '',
+    telegram_ids: Array.isArray(embeddedCust?.telegram_ids) ? embeddedCust.telegram_ids : [],
+    instagram_ids: Array.isArray(embeddedCust?.instagram_ids) ? embeddedCust.instagram_ids : [],
+    emails: Array.isArray(embeddedCust?.emails) ? embeddedCust.emails : [],
+    websites: Array.isArray(embeddedCust?.websites) ? embeddedCust.websites : [],
+    is_ecommerce: Boolean(embeddedCust?.is_ecommerce),
+    interview_status: embeddedCust?.interview_status || '',
+    interview_report: embeddedCust?.interview_report || '',
+    interview_score: Number(embeddedCust?.interview_score) || 0,
+    next_followup_date: embeddedCust?.next_followup_date ?? rep.next_followup_date ?? null,
+    assigned_marketer_id: embeddedCust?.assigned_marketer_id ?? null,
+    assigned_marketer_name: embeddedCust?.assigned_marketer_name || '',
+    assignment_deadline: embeddedCust?.assignment_deadline ?? null,
+    status: (embeddedCust?.status || rep.negotiation_status || 'پیگیری قبل از انقضا') as Customer['status'],
+    is_expired: embeddedCust?.is_expired,
+    date_created: embeddedCust?.date_created || rep.date_created,
+    date_updated: embeddedCust?.date_updated || rep.date_created,
+  };
+}
+
+function resolveReportPhone(rep: CustomerReport, cust: Customer | null): string {
+  if (rep.customer_phone && String(rep.customer_phone).trim()) {
+    return String(rep.customer_phone).trim();
+  }
+  if (rep.negotiation_phone && String(rep.negotiation_phone).trim()) {
+    return String(rep.negotiation_phone).trim();
+  }
+  const source = cust || rep.customer;
+  if (source && typeof source === 'object') {
+    const candidate =
+      extractFirstPhone(source.mobile_numbers) ||
+      extractFirstPhone(source.manager_phones) ||
+      extractFirstPhone(source.negotiator_phones) ||
+      extractFirstPhone(source.landline_numbers) ||
+      (typeof source.telegram_phone === 'string' ? source.telegram_phone.trim() : '');
+    if (candidate) return candidate;
+    if (Array.isArray(source.contacts)) {
+      const ct = source.contacts.find(
+        (item) =>
+          item?.value &&
+          ['mobile', 'landline', 'whatsapp', 'telegram'].includes(String(item.channel_type || ''))
+      );
+      if (ct?.value) return String(ct.value).trim();
+    }
+  }
+  return '';
 }
 
 export const DailyReportsTab: React.FC<DailyReportsTabProps> = ({
@@ -35,8 +157,13 @@ export const DailyReportsTab: React.FC<DailyReportsTabProps> = ({
   setSelectedDayDetail,
   dailyReportStats,
   customers,
+  isLoadingDayReports = false,
+  onSelectCustomer,
 }) => {
   const maxDailyReports = Math.max(...dailyReportStats.daysList.map((d) => d.reportsCount), 5);
+  const selectedDayEntry = selectedDayDetail
+    ? dailyReportStats.daysList.find((d) => d.dateIso === selectedDayDetail) || null
+    : null;
 
   return (
     <div className="space-y-6">
@@ -350,36 +477,114 @@ export const DailyReportsTab: React.FC<DailyReportsTabProps> = ({
         {/* List of reports for selected single day */}
         {selectedDayDetail && (
           <div className="pt-4 border-t border-slate-200 dark:border-[#282828] space-y-3">
-            <div className="font-bold text-xs text-slate-900 dark:text-white">
-              فهرست گزارش‌های ثبت شده در تاریخ {toPersianDigits(gregorianIsoToJalali(selectedDayDetail))}:
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-2">
+                <span>
+                  فهرست گزارش‌های ثبت شده در تاریخ {toPersianDigits(gregorianIsoToJalali(selectedDayDetail))}:
+                </span>
+                {!isLoadingDayReports && selectedDayEntry && (
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-[#1DB954] border border-emerald-500/30 font-mono text-[11px]">
+                    {toPersianDigits(selectedDayEntry.reports.length)} گزارش
+                  </span>
+                )}
+              </div>
             </div>
-            {dailyReportStats.daysList
-              .find((d) => d.dateIso === selectedDayDetail)
-              ?.reports.map((rep) => {
-                const cust = customers.find((c) => c.id === rep.customer_id);
+
+            {isLoadingDayReports ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500 dark:text-[#A7A7A7]">
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-600 dark:text-[#1DB954]" />
+                <span>در حال بارگذاری ریز گزارش‌های این تاریخ...</span>
+              </div>
+            ) : !selectedDayEntry || selectedDayEntry.reports.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-500 dark:text-[#888]">
+                گزارشی برای این تاریخ یافت نشد.
+              </div>
+            ) : (
+              selectedDayEntry.reports.map((rep) => {
+                const cust = buildSelectableCustomer(rep, customers);
+                const customerPhone = resolveReportPhone(rep, cust);
                 const stTheme = getStatusTheme(rep.negotiation_status);
+                const displayName =
+                  cust?.company_name ||
+                  cust?.manager_name ||
+                  rep.customer?.company_name ||
+                  rep.customer?.manager_name ||
+                  rep.customer_name ||
+                  'مشتری نامشخص';
+                const managerSubtitle =
+                  cust?.manager_name && cust.company_name && cust.manager_name !== cust.company_name
+                    ? cust.manager_name
+                    : '';
 
                 return (
                   <div
                     key={rep.id}
-                    className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#262626] space-y-2 hover:border-slate-300 dark:hover:border-[#3a3a3a] transition-all"
+                    className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#262626] space-y-2.5 hover:border-slate-300 dark:hover:border-[#3a3a3a] transition-all"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-bold text-xs text-slate-900 dark:text-white">
-                          {cust ? cust.company_name : 'مشتری نامشخص'}
-                        </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {cust && onSelectCustomer ? (
+                          <button
+                            type="button"
+                            onClick={() => onSelectCustomer(cust)}
+                            className="font-bold text-xs text-slate-900 dark:text-white hover:text-emerald-600 dark:hover:text-[#1DB954] transition-colors text-right cursor-pointer"
+                          >
+                            {displayName}
+                            {managerSubtitle && (
+                              <span className="font-normal text-slate-500 dark:text-[#888] mr-1">
+                                ({managerSubtitle})
+                              </span>
+                            )}
+                          </button>
+                        ) : (
+                          <span className="font-bold text-xs text-slate-900 dark:text-white">
+                            {displayName}
+                            {managerSubtitle && (
+                              <span className="font-normal text-slate-500 dark:text-[#888] mr-1">
+                                ({managerSubtitle})
+                              </span>
+                            )}
+                          </span>
+                        )}
+
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded-full border ${stTheme.bg} ${stTheme.color} font-medium`}
                         >
                           {formatStatusLabel(rep.negotiation_status)}
                         </span>
+
+                        {customerPhone ? (
+                          <a
+                            href={`tel:${customerPhone}`}
+                            dir="ltr"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white dark:bg-[#1b1b1b] border border-slate-200 dark:border-[#2e2e2e] text-[11px] font-mono font-bold text-slate-700 dark:text-slate-200 hover:border-emerald-500 dark:hover:border-[#1DB954] hover:text-emerald-600 dark:hover:text-[#1DB954] transition-colors"
+                            title="شماره تماس مشتری"
+                          >
+                            <Phone className="w-3 h-3 text-emerald-600 dark:text-[#1DB954]" />
+                            <span>{toPersianDigits(customerPhone)}</span>
+                          </a>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-[#1b1b1b] border border-slate-200 dark:border-[#2a2a2a] text-[10px] text-slate-400 dark:text-[#666]">
+                            <Phone className="w-3 h-3" />
+                            <span>بدون شماره</span>
+                          </span>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-[#888]">
+                      <div className="flex flex-wrap items-center gap-2.5 text-[11px] text-slate-500 dark:text-[#888]">
                         <span>کارشناس: {rep.negotiator_name}</span>
-                        <span>امتیاز: {toPersianDigits(rep.negotiation_score)}/10</span>
+                        <span>امتیاز: {toPersianDigits(rep.negotiation_score)}/۱۰</span>
                         <span className="font-mono">{formatPersianDateTime(rep.date_created)}</span>
+                        {cust && onSelectCustomer && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectCustomer(cust)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600/10 hover:bg-emerald-600 text-emerald-700 hover:text-white dark:bg-[#1DB954]/15 dark:hover:bg-[#1DB954] dark:text-[#1DB954] dark:hover:text-black border border-emerald-600/30 dark:border-[#1DB954]/30 font-bold text-[11px] transition-all cursor-pointer"
+                          >
+                            <FolderOpen className="w-3.5 h-3.5" />
+                            <span>مشاهده پرونده مشتری</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -395,7 +600,8 @@ export const DailyReportsTab: React.FC<DailyReportsTabProps> = ({
                     )}
                   </div>
                 );
-              })}
+              })
+            )}
           </div>
         )}
       </div>

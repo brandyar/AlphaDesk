@@ -16,10 +16,9 @@ import {
   normalizePersianText,
 } from '../utils';
 import {
-  fetchCustomerReports,
-  fetchCustomers,
   fetchAnalyticsStats,
   fetchAnalyticsDaily,
+  fetchAnalyticsDayReports,
   AnalyticsStatsResponse,
   DailyAnalyticsResponse,
 } from '../api';
@@ -86,7 +85,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   // Selected single day filter in daily views
   const [selectedDayDetail, setSelectedDayDetail] = useState<string | null>(null);
   const [selectedDayReports, setSelectedDayReports] = useState<CustomerReport[]>([]);
-  const [, setIsLoadingDayReports] = useState<boolean>(false);
+  const [isLoadingDayReports, setIsLoadingDayReports] = useState<boolean>(false);
 
   // Full analytics datasets
   const [allReportsData, setAllReportsData] = useState<CustomerReport[]>(reports);
@@ -205,29 +204,27 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     };
   }, [activeTab, queryStartDate, queryEndDate, dailyDaysCount, selectedPersonnelId, personnelList, activeTenantId, refreshTick]);
 
-  // On-demand fetch for single day report details when clicked by user
+  // On-demand fetch for single day report details matching /api/analytics/daily 1-to-1
   React.useEffect(() => {
     if (!selectedDayDetail) {
       setSelectedDayReports([]);
+      setIsLoadingDayReports(false);
       return;
     }
     let isMounted = true;
+    setSelectedDayReports([]);
     setIsLoadingDayReports(true);
-    const dayStart = `${selectedDayDetail}T00:00:00.000Z`;
-    const dayEnd = `${selectedDayDetail}T23:59:59.999Z`;
     const targetPersonnel = selectedPersonnelId !== 'all'
       ? personnelList.find((p) => p.id === selectedPersonnelId)?.name
       : undefined;
 
-    fetchCustomerReports(undefined, {
-      startDate: dayStart,
-      endDate: dayEnd,
+    fetchAnalyticsDayReports({
+      date: selectedDayDetail,
       negotiator: targetPersonnel,
-      limit: 50,
     })
-      .then((reps) => {
-        if (isMounted && Array.isArray(reps)) {
-          setSelectedDayReports(reps);
+      .then((res) => {
+        if (isMounted && res && Array.isArray(res.data)) {
+          setSelectedDayReports(res.data);
         }
       })
       .catch((err) => console.warn('Failed to load day reports:', err))
@@ -238,7 +235,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [selectedDayDetail, selectedPersonnelId, personnelList]);
+  }, [selectedDayDetail, selectedPersonnelId, personnelList, activeTenantId, refreshTick]);
 
   // Filtered active personnel list for admin selector & search
   const filteredPersonnelOptions = useMemo(() => {
@@ -443,10 +440,48 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         followupCount: 0,
         contractCount: d.contractsCount || 0,
         customersList: d.dateIso === selectedDayDetail
-          ? selectedDayReports.map((rep) => ({
-              customer: customers.find((c) => c.id === rep.customer_id) || null,
-              latestReport: rep,
-            }))
+          ? (() => {
+              const seen = new Set<string>();
+              const list: { customer: Customer | null; latestReport: CustomerReport }[] = [];
+              for (const rep of selectedDayReports) {
+                const cid = String(rep.customer_id || '');
+                if (cid && seen.has(cid)) continue;
+                if (cid) seen.add(cid);
+                const foundCust =
+                  customers.find((c) => String(c.id) === cid) ||
+                  (rep.customer && rep.customer.id
+                    ? ({
+                        id: String(rep.customer.id),
+                        company_name: rep.customer.company_name || 'مشتری',
+                        business_type: rep.customer.business_type || '',
+                        province: rep.customer.province || '',
+                        city: rep.customer.city || '',
+                        manager_name: rep.customer.manager_name || '',
+                        manager_phones: Array.isArray(rep.customer.manager_phones) ? rep.customer.manager_phones : [],
+                        negotiator_name: rep.customer.negotiator_name || '',
+                        negotiator_phones: Array.isArray(rep.customer.negotiator_phones) ? rep.customer.negotiator_phones : [],
+                        mobile_numbers: Array.isArray(rep.customer.mobile_numbers) ? rep.customer.mobile_numbers : [],
+                        landline_numbers: Array.isArray(rep.customer.landline_numbers) ? rep.customer.landline_numbers : [],
+                        telegram_phone: rep.customer.telegram_phone || '',
+                        telegram_ids: [],
+                        instagram_ids: [],
+                        emails: [],
+                        websites: [],
+                        is_ecommerce: false,
+                        interview_status: '',
+                        interview_report: '',
+                        interview_score: 0,
+                        assigned_marketer_id: rep.customer.assigned_marketer_id || null,
+                        assigned_marketer_name: rep.customer.assigned_marketer_name || '',
+                        status: (rep.customer.status || rep.negotiation_status) as Customer['status'],
+                        date_created: rep.customer.date_created || rep.date_created,
+                        date_updated: rep.customer.date_updated || rep.date_created,
+                      } as Customer)
+                    : null);
+                list.push({ customer: foundCust, latestReport: rep });
+              }
+              return list;
+            })()
           : [],
       }));
       const totalUniqueCustomersTouched = serverDailyStats.totalUniqueCustomersTouched || serverDailyStats.totalReports;
@@ -833,6 +868,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           setSelectedDayDetail={setSelectedDayDetail}
           dailyReportStats={dailyReportStats}
           customers={customers}
+          isLoadingDayReports={isLoadingDayReports}
+          onSelectCustomer={onSelectCustomer}
         />
       )}
 
