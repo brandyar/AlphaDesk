@@ -12,12 +12,16 @@ import {
   formatToman,
   getStatusTheme,
   toPersianDigits,
+  JalaliMonthOption,
 } from '../../utils';
 import { PersianDatePicker } from '../PersianDatePicker';
 
 interface TrendsLeaderboardTabProps {
   periodPreset: PeriodPreset;
   setPeriodPreset: (preset: PeriodPreset) => void;
+  jalaliMonths: JalaliMonthOption[];
+  selectedMonthKey: string;
+  setSelectedMonthKey: (key: string) => void;
   customStartDate: string;
   setCustomStartDate: (date: string) => void;
   customEndDate: string;
@@ -29,6 +33,9 @@ interface TrendsLeaderboardTabProps {
 export const TrendsLeaderboardTab: React.FC<TrendsLeaderboardTabProps> = ({
   periodPreset,
   setPeriodPreset,
+  jalaliMonths,
+  selectedMonthKey,
+  setSelectedMonthKey,
   customStartDate,
   setCustomStartDate,
   customEndDate,
@@ -36,10 +43,12 @@ export const TrendsLeaderboardTab: React.FC<TrendsLeaderboardTabProps> = ({
   periodicStats,
   userIsAdmin,
 }) => {
+  const quickMonths = jalaliMonths.slice(0, 3);
+
   return (
     <div className="space-y-6">
       {/* Period Preset & Custom Date Selector */}
-      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] p-4 rounded-2xl space-y-4 shadow-sm">
+      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] p-4 rounded-2xl space-y-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
@@ -59,8 +68,9 @@ export const TrendsLeaderboardTab: React.FC<TrendsLeaderboardTabProps> = ({
             ].map((item) => (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => setPeriodPreset(item.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   periodPreset === item.id
                     ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-md'
                     : 'text-slate-500 dark:text-[#888] hover:text-slate-900 dark:hover:text-white'
@@ -69,6 +79,62 @@ export const TrendsLeaderboardTab: React.FC<TrendsLeaderboardTabProps> = ({
                 {item.label}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Jalali Month Quick Filter Row */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-slate-200/70 dark:border-[#242424]">
+          <span className="text-[11px] font-semibold text-slate-500 dark:text-[#999]">فیلتر سریع بر اساس ماه شمسی:</span>
+          <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-[#121212] p-1 rounded-xl border border-slate-200 dark:border-[#282828]">
+            {quickMonths.map((m) => {
+              const isActive = periodPreset === 'jalali_month' && selectedMonthKey === m.key;
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => {
+                    setSelectedMonthKey(m.key);
+                    setPeriodPreset('jalali_month');
+                  }}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-sm'
+                      : 'text-slate-600 dark:text-[#999] hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                  title={m.label}
+                >
+                  {m.shortLabel}
+                </button>
+              );
+            })}
+
+            <select
+              aria-label="انتخاب ماه شمسی دوره"
+              value={periodPreset === 'jalali_month' ? selectedMonthKey : ''}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                setSelectedMonthKey(e.target.value);
+                setPeriodPreset('jalali_month');
+              }}
+              className={`h-7 px-2.5 rounded-lg text-xs font-bold border transition-all cursor-pointer focus:outline-none ${
+                periodPreset === 'jalali_month' && !quickMonths.some((qm) => qm.key === selectedMonthKey)
+                  ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black border-transparent'
+                  : 'bg-white dark:bg-[#1a1a1a] text-slate-700 dark:text-slate-200 border-slate-200 dark:border-[#333]'
+              }`}
+            >
+              <option value="" className="bg-white dark:bg-[#181818] text-slate-500">
+                انتخاب ماه دیگر...
+              </option>
+              {jalaliMonths.map((m) => (
+                <option
+                  key={m.key}
+                  value={m.key}
+                  className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white"
+                >
+                  {m.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

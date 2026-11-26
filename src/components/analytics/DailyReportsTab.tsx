@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Clock,
+  Calendar,
   MessageSquareText,
   FileCheck2,
   Star,
@@ -12,7 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { Customer, CustomerReport } from '../../types';
-import { DailyReportStats } from './types';
+import { DailyRangeSelection, DailyReportStats } from './types';
 import {
   formatPersianDateTime,
   formatToman,
@@ -20,11 +21,14 @@ import {
   getStatusTheme,
   toPersianDigits,
   gregorianIsoToJalali,
+  JalaliMonthOption,
 } from '../../utils';
 
 interface DailyReportsTabProps {
-  dailyDaysCount: number;
-  setDailyDaysCount: (days: number) => void;
+  dailyRange: DailyRangeSelection;
+  setDailyRange: (range: DailyRangeSelection) => void;
+  jalaliMonths: JalaliMonthOption[];
+  rangeLabel: string;
   selectedDayDetail: string | null;
   setSelectedDayDetail: (day: string | null) => void;
   dailyReportStats: DailyReportStats;
@@ -151,8 +155,10 @@ function resolveReportPhone(rep: CustomerReport, cust: Customer | null): string 
 }
 
 export const DailyReportsTab: React.FC<DailyReportsTabProps> = ({
-  dailyDaysCount,
-  setDailyDaysCount,
+  dailyRange,
+  setDailyRange,
+  jalaliMonths,
+  rangeLabel,
   selectedDayDetail,
   setSelectedDayDetail,
   dailyReportStats,
@@ -164,38 +170,102 @@ export const DailyReportsTab: React.FC<DailyReportsTabProps> = ({
   const selectedDayEntry = selectedDayDetail
     ? dailyReportStats.daysList.find((d) => d.dateIso === selectedDayDetail) || null
     : null;
+  const quickMonths = jalaliMonths.slice(0, 3);
+  const totalDaysInView = dailyReportStats.daysList.length || (dailyRange.type === 'days' ? dailyRange.days : 30);
 
   return (
     <div className="space-y-6">
       {/* Controls & Range Selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] p-3.5 rounded-2xl shadow-sm">
-        <div className="flex items-center gap-2">
-          <Clock className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
-          <span className="text-xs font-bold text-slate-900 dark:text-white">بازه تحلیل روزانه:</span>
-          <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-[#121212] p-1 rounded-xl border border-slate-200 dark:border-[#282828]">
-            {[7, 14, 30].map((days) => (
-              <button
-                key={days}
-                onClick={() => {
-                  setDailyDaysCount(days);
-                  setSelectedDayDetail(null);
-                }}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                  dailyDaysCount === days
-                    ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black font-mono shadow-sm'
-                    : 'text-slate-500 dark:text-[#888] hover:text-slate-900 dark:hover:text-white font-mono'
-                }`}
-              >
-                {days} روز گذشته
-              </button>
-            ))}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-1.5">
+            <Clock className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
+            <span className="text-xs font-bold text-slate-900 dark:text-white">بازه تحلیل:</span>
+          </div>
+
+          {/* Rolling days */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#121212] p-1 rounded-xl border border-slate-200 dark:border-[#282828]">
+            {[7, 14, 30].map((days) => {
+              const isActive = dailyRange.type === 'days' && dailyRange.days === days;
+              return (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => {
+                    setDailyRange({ type: 'days', days });
+                    setSelectedDayDetail(null);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black font-mono shadow-sm'
+                      : 'text-slate-500 dark:text-[#888] hover:text-slate-900 dark:hover:text-white font-mono'
+                  }`}
+                >
+                  {toPersianDigits(days)} روز
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Jalali Month Quick Filters + All Months Select */}
+          <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-[#121212] p-1 rounded-xl border border-slate-200 dark:border-[#282828]">
+            <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] mr-1.5 ml-0.5 hidden sm:block" />
+            {quickMonths.map((m) => {
+              const isActive = dailyRange.type === 'month' && dailyRange.monthKey === m.key;
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => {
+                    setDailyRange({ type: 'month', monthKey: m.key });
+                    setSelectedDayDetail(null);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    isActive
+                      ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-sm'
+                      : 'text-slate-600 dark:text-[#999] hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                  title={m.label}
+                >
+                  {m.shortLabel}
+                </button>
+              );
+            })}
+
+            <select
+              aria-label="انتخاب ماه شمسی"
+              value={dailyRange.type === 'month' ? dailyRange.monthKey : ''}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                setDailyRange({ type: 'month', monthKey: e.target.value });
+                setSelectedDayDetail(null);
+              }}
+              className={`h-7 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer focus:outline-none ${
+                dailyRange.type === 'month' && !quickMonths.some((qm) => qm.key === dailyRange.monthKey)
+                  ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black border-transparent'
+                  : 'bg-white dark:bg-[#1a1a1a] text-slate-700 dark:text-slate-200 border-slate-200 dark:border-[#333]'
+              }`}
+            >
+              <option value="" className="bg-white dark:bg-[#181818] text-slate-500">
+                سایر ماه‌ها...
+              </option>
+              {jalaliMonths.map((m) => (
+                <option
+                  key={m.key}
+                  value={m.key}
+                  className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white"
+                >
+                  {m.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
         <div className="text-xs text-slate-500 dark:text-[#888] flex items-center gap-2">
           <span>روزهای با فعالیت ثبت شده:</span>
           <span className="font-mono font-bold text-emerald-600 dark:text-[#1DB954] bg-slate-100 dark:bg-[#121212] px-2 py-0.5 rounded border border-slate-200 dark:border-[#282828]">
-            {toPersianDigits(dailyReportStats.activeDaysCount)} از {toPersianDigits(dailyDaysCount)} روز
+            {toPersianDigits(dailyReportStats.activeDaysCount)} از {toPersianDigits(totalDaysInView)} روز
           </span>
         </div>
       </div>
@@ -292,7 +362,7 @@ export const DailyReportsTab: React.FC<DailyReportsTabProps> = ({
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              نمودار ستونی و روند ثبت گزارش‌ها در {toPersianDigits(dailyDaysCount)} روز گذشته
+              نمودار ستونی و روند ثبت گزارش‌ها در {rangeLabel}
             </h3>
           </div>
           <div className="flex items-center gap-4 text-xs">

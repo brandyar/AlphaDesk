@@ -11,9 +11,11 @@ import {
 import { Customer, CustomerReport, Personnel, AuthUser } from '../types';
 import {
   formatStatusLabel,
+  getRecentJalaliMonths,
   gregorianIsoToJalali,
   isPersonnelActive,
   normalizePersianText,
+  toPersianDigits,
 } from '../utils';
 import {
   fetchAnalyticsStats,
@@ -27,6 +29,7 @@ import { CustomerCoverageTab } from './analytics/CustomerCoverageTab';
 import { TrendsLeaderboardTab } from './analytics/TrendsLeaderboardTab';
 import {
   AnalyticsTab,
+  DailyRangeSelection,
   PeriodPreset,
   DailyReportStats,
   DailyCustomerStats,
@@ -70,11 +73,30 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [selectedPersonnelId, setSelectedPersonnelId] = useState<string>('all');
   const [personnelSearch, setPersonnelSearch] = useState('');
 
-  // Daily views range (e.g. last 7, 14, 30 days) - default to 30 days to match monthly reporting
-  const [dailyDaysCount, setDailyDaysCount] = useState<number>(30);
+  // Recent 12 Jalali months for month filtering (ماه جاری، آبان ماه، مهر ماه، ...)
+  const jalaliMonths = useMemo(() => getRecentJalaliMonths(12), []);
+
+  // Daily views range (rolling 7/14/30 days OR specific Jalali month)
+  const [dailyRange, setDailyRange] = useState<DailyRangeSelection>({ type: 'days', days: 30 });
+  const selectedDailyMonth = useMemo(() => {
+    if (dailyRange.type !== 'month') return null;
+    return jalaliMonths.find((m) => m.key === dailyRange.monthKey) || jalaliMonths[0] || null;
+  }, [dailyRange, jalaliMonths]);
+  const dailyDaysCount = dailyRange.type === 'days' ? dailyRange.days : selectedDailyMonth?.daysInMonth || 30;
+  const dailyRangeLabel = useMemo(() => {
+    if (selectedDailyMonth) {
+      return selectedDailyMonth.isCurrentMonth
+        ? `ماه جاری (${selectedDailyMonth.monthName} ${toPersianDigits(selectedDailyMonth.jy)})`
+        : `${selectedDailyMonth.monthName} ماه ${toPersianDigits(selectedDailyMonth.jy)}`;
+    }
+    return `${toPersianDigits(dailyDaysCount)} روز گذشته`;
+  }, [selectedDailyMonth, dailyDaysCount]);
 
   // Periodic preset state
   const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('last_30_days');
+  const [selectedPeriodicMonthKey, setSelectedPeriodicMonthKey] = useState<string>(
+    () => jalaliMonths[0]?.key || ''
+  );
   const [customStartDate, setCustomStartDate] = useState<string>(
     new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
@@ -88,7 +110,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [isLoadingDayReports, setIsLoadingDayReports] = useState<boolean>(false);
 
   // Full analytics datasets
-  const [allReportsData, setAllReportsData] = useState<CustomerReport[]>(reports);
+  const [allReportsData] = useState<CustomerReport[]>(reports);
   const allCustomersData = customers;
   const [, setIsLoadingAnalytics] = useState<boolean>(false);
   const [serverPeriodicStats, setServerPeriodicStats] = useState<AnalyticsStatsResponse | null>(null);
@@ -119,6 +141,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       case 'last_30_days':
         start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         break;
+      case 'jalali_month': {
+        const targetMonth =
+          jalaliMonths.find((m) => m.key === selectedPeriodicMonthKey) || jalaliMonths[0];
+        if (targetMonth) {
+          start = new Date(`${targetMonth.startDateIso}T00:00:00+03:30`);
+          end = new Date(`${targetMonth.fullMonthEndIso}T23:59:59.999+03:30`);
+        }
+        break;
+      }
       case 'last_90_days':
         start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
         break;
@@ -130,16 +161,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         end = new Date(now.getTime() + 24 * 60 * 60 * 1000);
         break;
       case 'custom':
-        if (customStartDate) start = new Date(customStartDate);
+        if (customStartDate) start = new Date(`${customStartDate}T00:00:00+03:30`);
         if (customEndDate) {
-          end = new Date(customEndDate);
-          end.setHours(23, 59, 59, 999);
+          end = new Date(`${customEndDate}T23:59:59.999+03:30`);
         }
         break;
     }
 
     return { start, end };
-  }, [periodPreset, customStartDate, customEndDate]);
+  }, [periodPreset, selectedPeriodicMonthKey, jalaliMonths, customStartDate, customEndDate]);
 
   // Reactive, lightweight, date-scoped query bounds
   const queryStartDate = useMemo(() => {
@@ -147,17 +177,23 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       if (periodPreset === 'all_time') return undefined;
       return periodDateRange.start.toISOString();
     }
+    if (selectedDailyMonth) {
+      return new Date(`${selectedDailyMonth.startDateIso}T00:00:00+03:30`).toISOString();
+    }
     // Daily views: bounded to requested days window (7, 14, 30 days)
     return new Date(Date.now() - (dailyDaysCount + 1) * 24 * 60 * 60 * 1000).toISOString();
-  }, [activeTab, periodPreset, periodDateRange, dailyDaysCount]);
+  }, [activeTab, periodPreset, periodDateRange, selectedDailyMonth, dailyDaysCount]);
 
   const queryEndDate = useMemo(() => {
     if (activeTab === 'periodic') {
       if (periodPreset === 'all_time') return undefined;
       return periodDateRange.end.toISOString();
     }
+    if (selectedDailyMonth) {
+      return new Date(`${selectedDailyMonth.endDateIso}T23:59:59.999+03:30`).toISOString();
+    }
     return undefined;
-  }, [activeTab, periodPreset, periodDateRange]);
+  }, [activeTab, periodPreset, periodDateRange, selectedDailyMonth]);
 
   // Primary fast server aggregates loader
   React.useEffect(() => {
@@ -168,11 +204,24 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       ? personnelList.find((p) => p.id === selectedPersonnelId)?.name
       : undefined;
 
+    const dailyStartParam =
+      activeTab === 'periodic'
+        ? queryStartDate
+        : selectedDailyMonth
+        ? selectedDailyMonth.startDateIso
+        : undefined;
+    const dailyEndParam =
+      activeTab === 'periodic'
+        ? queryEndDate
+        : selectedDailyMonth
+        ? selectedDailyMonth.endDateIso
+        : undefined;
+
     const promises: Promise<any>[] = [
       fetchAnalyticsDaily({
         days: dailyDaysCount,
-        startDate: activeTab === 'periodic' ? queryStartDate : undefined,
-        endDate: activeTab === 'periodic' ? queryEndDate : undefined,
+        startDate: dailyStartParam,
+        endDate: dailyEndParam,
         negotiator: targetPersonnel,
       })
         .then((res) => {
@@ -202,7 +251,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [activeTab, queryStartDate, queryEndDate, dailyDaysCount, selectedPersonnelId, personnelList, activeTenantId, refreshTick]);
+  }, [activeTab, queryStartDate, queryEndDate, selectedDailyMonth, dailyDaysCount, selectedPersonnelId, personnelList, activeTenantId, refreshTick]);
 
   // On-demand fetch for single day report details matching /api/analytics/daily 1-to-1
   React.useEffect(() => {
@@ -862,8 +911,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       {/* 2. TAB 1: DAILY REPORT-CENTRIC PERFORMANCE */}
       {activeTab === 'daily_reports' && (
         <DailyReportsTab
-          dailyDaysCount={dailyDaysCount}
-          setDailyDaysCount={setDailyDaysCount}
+          dailyRange={dailyRange}
+          setDailyRange={setDailyRange}
+          jalaliMonths={jalaliMonths}
+          rangeLabel={dailyRangeLabel}
           selectedDayDetail={selectedDayDetail}
           setSelectedDayDetail={setSelectedDayDetail}
           dailyReportStats={dailyReportStats}
@@ -876,8 +927,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       {/* 3. TAB 2: DAILY CUSTOMER-CENTRIC PERFORMANCE */}
       {activeTab === 'daily_customers' && (
         <CustomerCoverageTab
-          dailyDaysCount={dailyDaysCount}
-          setDailyDaysCount={setDailyDaysCount}
+          dailyRange={dailyRange}
+          setDailyRange={setDailyRange}
+          jalaliMonths={jalaliMonths}
+          rangeLabel={dailyRangeLabel}
           selectedDayDetail={selectedDayDetail}
           setSelectedDayDetail={setSelectedDayDetail}
           dailyCustomerStats={dailyCustomerStats}
@@ -890,6 +943,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         <TrendsLeaderboardTab
           periodPreset={periodPreset}
           setPeriodPreset={setPeriodPreset}
+          jalaliMonths={jalaliMonths}
+          selectedMonthKey={selectedPeriodicMonthKey}
+          setSelectedMonthKey={setSelectedPeriodicMonthKey}
           customStartDate={customStartDate}
           setCustomStartDate={setCustomStartDate}
           customEndDate={customEndDate}

@@ -1,7 +1,19 @@
 import { Customer, CustomerReport } from '../../types';
 
 export type AnalyticsTab = 'daily_reports' | 'daily_customers' | 'periodic';
-export type PeriodPreset = 'today' | 'last_7_days' | 'last_30_days' | 'last_90_days' | 'this_year' | 'all_time' | 'custom';
+export type PeriodPreset =
+  | 'today'
+  | 'last_7_days'
+  | 'last_30_days'
+  | 'jalali_month'
+  | 'last_90_days'
+  | 'this_year'
+  | 'all_time'
+  | 'custom';
+
+export type DailyRangeSelection =
+  | { type: 'days'; days: number }
+  | { type: 'month'; monthKey: string };
 
 export interface DailyReportDayItem {
   dateIso: string;

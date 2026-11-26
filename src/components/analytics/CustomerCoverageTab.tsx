@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Users,
+  Calendar,
   UserCheck,
   Target,
   Award,
@@ -8,17 +9,20 @@ import {
   Building,
 } from 'lucide-react';
 import { Customer } from '../../types';
-import { DailyCustomerStats } from './types';
+import { DailyCustomerStats, DailyRangeSelection } from './types';
 import {
   formatStatusLabel,
   getStatusTheme,
   toPersianDigits,
   gregorianIsoToJalali,
+  JalaliMonthOption,
 } from '../../utils';
 
 interface CustomerCoverageTabProps {
-  dailyDaysCount: number;
-  setDailyDaysCount: (days: number) => void;
+  dailyRange: DailyRangeSelection;
+  setDailyRange: (range: DailyRangeSelection) => void;
+  jalaliMonths: JalaliMonthOption[];
+  rangeLabel: string;
   selectedDayDetail: string | null;
   setSelectedDayDetail: (day: string | null) => void;
   dailyCustomerStats: DailyCustomerStats;
@@ -26,39 +30,102 @@ interface CustomerCoverageTabProps {
 }
 
 export const CustomerCoverageTab: React.FC<CustomerCoverageTabProps> = ({
-  dailyDaysCount,
-  setDailyDaysCount,
+  dailyRange,
+  setDailyRange,
+  jalaliMonths,
+  rangeLabel,
   selectedDayDetail,
   setSelectedDayDetail,
   dailyCustomerStats,
   onSelectCustomer,
 }) => {
   const maxDailyCustomers = Math.max(...dailyCustomerStats.daysList.map((d) => d.uniqueCount), 5);
+  const quickMonths = jalaliMonths.slice(0, 3);
 
   return (
     <div className="space-y-6">
       {/* Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] p-3.5 rounded-2xl shadow-sm">
-        <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
-          <span className="text-xs font-bold text-slate-900 dark:text-white">بازه پایش تعامل با مشتریان:</span>
-          <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-[#121212] p-1 rounded-xl border border-slate-200 dark:border-[#282828]">
-            {[7, 14, 30].map((days) => (
-              <button
-                key={days}
-                onClick={() => {
-                  setDailyDaysCount(days);
-                  setSelectedDayDetail(null);
-                }}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                  dailyDaysCount === days
-                    ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black font-mono shadow-sm'
-                    : 'text-slate-500 dark:text-[#888] hover:text-slate-900 dark:hover:text-white font-mono'
-                }`}
-              >
-                {days} روز گذشته
-              </button>
-            ))}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-1.5">
+            <Users className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
+            <span className="text-xs font-bold text-slate-900 dark:text-white">بازه پایش:</span>
+          </div>
+
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#121212] p-1 rounded-xl border border-slate-200 dark:border-[#282828]">
+            {[7, 14, 30].map((days) => {
+              const isActive = dailyRange.type === 'days' && dailyRange.days === days;
+              return (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => {
+                    setDailyRange({ type: 'days', days });
+                    setSelectedDayDetail(null);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black font-mono shadow-sm'
+                      : 'text-slate-500 dark:text-[#888] hover:text-slate-900 dark:hover:text-white font-mono'
+                  }`}
+                >
+                  {toPersianDigits(days)} روز
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-[#121212] p-1 rounded-xl border border-slate-200 dark:border-[#282828]">
+            <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] mr-1.5 ml-0.5 hidden sm:block" />
+            {quickMonths.map((m) => {
+              const isActive = dailyRange.type === 'month' && dailyRange.monthKey === m.key;
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => {
+                    setDailyRange({ type: 'month', monthKey: m.key });
+                    setSelectedDayDetail(null);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    isActive
+                      ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black shadow-sm'
+                      : 'text-slate-600 dark:text-[#999] hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                  title={m.label}
+                >
+                  {m.shortLabel}
+                </button>
+              );
+            })}
+
+            <select
+              aria-label="انتخاب ماه شمسی"
+              value={dailyRange.type === 'month' ? dailyRange.monthKey : ''}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                setDailyRange({ type: 'month', monthKey: e.target.value });
+                setSelectedDayDetail(null);
+              }}
+              className={`h-7 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer focus:outline-none ${
+                dailyRange.type === 'month' && !quickMonths.some((qm) => qm.key === dailyRange.monthKey)
+                  ? 'bg-emerald-600 dark:bg-[#1DB954] text-white dark:text-black border-transparent'
+                  : 'bg-white dark:bg-[#1a1a1a] text-slate-700 dark:text-slate-200 border-slate-200 dark:border-[#333]'
+              }`}
+            >
+              <option value="" className="bg-white dark:bg-[#181818] text-slate-500">
+                سایر ماه‌ها...
+              </option>
+              {jalaliMonths.map((m) => (
+                <option
+                  key={m.key}
+                  value={m.key}
+                  className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white"
+                >
+                  {m.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -86,7 +153,7 @@ export const CustomerCoverageTab: React.FC<CustomerCoverageTabProps> = ({
             <span className="text-xs text-slate-500 dark:text-[#888]">مشتری یکتا</span>
           </div>
           <div className="text-[11px] text-slate-500 dark:text-[#A7A7A7] pt-1 border-t border-slate-200 dark:border-[#242424]">
-            در بازه {toPersianDigits(dailyDaysCount)} روز اخیر حداقل یک‌بار مذاکره شده‌اند
+            در بازه {rangeLabel} حداقل یک‌بار مذاکره شده‌اند
           </div>
         </div>
 

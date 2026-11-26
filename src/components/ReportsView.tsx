@@ -838,10 +838,62 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       ) : (
         <div className={`space-y-4 ${isLoading ? 'opacity-60 pointer-events-none transition-opacity duration-150' : ''}`}>
           {displayedReports.map((rep) => {
-            const customer =
+            const embeddedCust =
               typeof rep.customer_id === 'object' && rep.customer_id !== null
-                ? (rep.customer_id as any as Customer)
-                : customersMap.get(String(rep.customer_id));
+                ? (rep.customer_id as unknown as Partial<Customer>)
+                : null;
+            const custId = embeddedCust?.id
+              ? String(embeddedCust.id)
+              : rep.customer_id
+              ? String(rep.customer_id)
+              : '';
+            const fullCustomerFromMap = custId ? customersMap.get(custId) : undefined;
+            const customer: Customer | undefined = fullCustomerFromMap
+              ? {
+                  ...fullCustomerFromMap,
+                  ...(embeddedCust ? {
+                    company_name: fullCustomerFromMap.company_name || embeddedCust.company_name || '',
+                    manager_name: fullCustomerFromMap.manager_name || embeddedCust.manager_name || '',
+                  } : {}),
+                }
+              : custId
+              ? ({
+                  id: custId,
+                  company_name: embeddedCust?.company_name || rep.customer_name || 'پرونده مشتری',
+                  business_type: embeddedCust?.business_type || '',
+                  province: embeddedCust?.province || '',
+                  city: embeddedCust?.city || '',
+                  manager_name: embeddedCust?.manager_name || '',
+                  manager_phones: Array.isArray(embeddedCust?.manager_phones) ? embeddedCust.manager_phones : [],
+                  negotiator_name: embeddedCust?.negotiator_name || '',
+                  negotiator_phones: Array.isArray(embeddedCust?.negotiator_phones) ? embeddedCust.negotiator_phones : [],
+                  mobile_numbers: Array.isArray(embeddedCust?.mobile_numbers)
+                    ? embeddedCust.mobile_numbers
+                    : rep.negotiation_phone
+                    ? [rep.negotiation_phone]
+                    : [],
+                  landline_numbers: Array.isArray(embeddedCust?.landline_numbers) ? embeddedCust.landline_numbers : [],
+                  telegram_phone: embeddedCust?.telegram_phone || '',
+                  telegram_ids: Array.isArray(embeddedCust?.telegram_ids) ? embeddedCust.telegram_ids : [],
+                  instagram_ids: Array.isArray(embeddedCust?.instagram_ids) ? embeddedCust.instagram_ids : [],
+                  emails: Array.isArray(embeddedCust?.emails) ? embeddedCust.emails : [],
+                  websites: Array.isArray(embeddedCust?.websites) ? embeddedCust.websites : [],
+                  is_ecommerce: Boolean(embeddedCust?.is_ecommerce),
+                  interview_status: embeddedCust?.interview_status || '',
+                  interview_report: embeddedCust?.interview_report || '',
+                  interview_score: Number(embeddedCust?.interview_score) || 0,
+                  next_followup_date: embeddedCust?.next_followup_date ?? rep.next_followup_date ?? null,
+                  assigned_marketer_id: embeddedCust?.assigned_marketer_id ?? null,
+                  assigned_marketer_name: embeddedCust?.assigned_marketer_name || '',
+                  assignment_deadline: embeddedCust?.assignment_deadline ?? null,
+                  status: (embeddedCust?.status || rep.negotiation_status || 'تماس برقرار نشده') as Customer['status'],
+                  is_expired: embeddedCust?.is_expired,
+                  contacts: Array.isArray(embeddedCust?.contacts) ? embeddedCust.contacts : [],
+                  reports: Array.isArray(embeddedCust?.reports) ? embeddedCust.reports : [],
+                  date_created: embeddedCust?.date_created || rep.date_created,
+                  date_updated: embeddedCust?.date_updated || rep.date_created,
+                } as Customer)
+              : undefined;
             const statusTheme = getStatusTheme(rep.negotiation_status);
             const daysToFollowup = getDaysUntil(rep.next_followup_date || customer?.next_followup_date);
             const customerIsExpired = isExpired(customer);

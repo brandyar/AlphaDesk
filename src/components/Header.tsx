@@ -24,6 +24,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { useTheme } from '../context/ThemeContext';
 import { GlobalSearch } from './GlobalSearch';
 import { NavTab } from './Sidebar';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   searchQuery: string;
@@ -203,6 +204,9 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Action Controls & User Profile */}
       <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
+        {/* PWA Install Prompt Button */}
+        <PWAInstallButton />
+
         {/* Quick Action: Theme Mode Toggle */}
         <ThemeToggle />
 

@@ -37,6 +37,7 @@ import { AuthModal } from './components/AuthModal';
 import { TenantsManagementModal } from './components/TenantsManagementModal';
 import { TenantsManagementView } from './components/TenantsManagementView';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { OfflineIndicator } from './components/OfflineIndicator';
 
 import {
   Customer,
@@ -1175,7 +1176,80 @@ export default function App() {
     if (justClaimedCustomerId && justClaimedCustomerId !== cid) {
       setJustClaimedCustomerId(null);
     }
-    setCustomerModalCache((prev) => ({ ...prev, [cid]: customer }));
+
+    const existingFull =
+      customerModalCache[cid] || customers.find((c) => String(c.id) === cid);
+    const normalizedCustomer: Customer = {
+      ...(existingFull || {}),
+      ...customer,
+      id: cid,
+      company_name: customer.company_name || existingFull?.company_name || 'پرونده مشتری',
+      business_type: customer.business_type ?? existingFull?.business_type ?? '',
+      province: customer.province ?? existingFull?.province ?? '',
+      city: customer.city ?? existingFull?.city ?? '',
+      manager_name: customer.manager_name ?? existingFull?.manager_name ?? '',
+      manager_phones: Array.isArray(customer.manager_phones)
+        ? customer.manager_phones
+        : Array.isArray(existingFull?.manager_phones)
+        ? existingFull.manager_phones
+        : [],
+      negotiator_name: customer.negotiator_name ?? existingFull?.negotiator_name ?? '',
+      negotiator_phones: Array.isArray(customer.negotiator_phones)
+        ? customer.negotiator_phones
+        : Array.isArray(existingFull?.negotiator_phones)
+        ? existingFull.negotiator_phones
+        : [],
+      mobile_numbers: Array.isArray(customer.mobile_numbers)
+        ? customer.mobile_numbers
+        : Array.isArray(existingFull?.mobile_numbers)
+        ? existingFull.mobile_numbers
+        : [],
+      landline_numbers: Array.isArray(customer.landline_numbers)
+        ? customer.landline_numbers
+        : Array.isArray(existingFull?.landline_numbers)
+        ? existingFull.landline_numbers
+        : [],
+      telegram_phone: customer.telegram_phone ?? existingFull?.telegram_phone ?? '',
+      telegram_ids: Array.isArray(customer.telegram_ids)
+        ? customer.telegram_ids
+        : Array.isArray(existingFull?.telegram_ids)
+        ? existingFull.telegram_ids
+        : [],
+      instagram_ids: Array.isArray(customer.instagram_ids)
+        ? customer.instagram_ids
+        : Array.isArray(existingFull?.instagram_ids)
+        ? existingFull.instagram_ids
+        : [],
+      emails: Array.isArray(customer.emails)
+        ? customer.emails
+        : Array.isArray(existingFull?.emails)
+        ? existingFull.emails
+        : [],
+      websites: Array.isArray(customer.websites)
+        ? customer.websites
+        : Array.isArray(existingFull?.websites)
+        ? existingFull.websites
+        : [],
+      is_ecommerce: Boolean(customer.is_ecommerce ?? existingFull?.is_ecommerce),
+      interview_status: customer.interview_status ?? existingFull?.interview_status ?? '',
+      interview_report: customer.interview_report ?? existingFull?.interview_report ?? '',
+      interview_score: Number(customer.interview_score ?? existingFull?.interview_score ?? 0) || 0,
+      status: (customer.status || existingFull?.status || 'تماس برقرار نشده') as Customer['status'],
+      contacts: Array.isArray(customer.contacts)
+        ? customer.contacts
+        : Array.isArray(existingFull?.contacts)
+        ? existingFull.contacts
+        : [],
+      reports: Array.isArray(customer.reports)
+        ? customer.reports
+        : Array.isArray(existingFull?.reports)
+        ? existingFull.reports
+        : [],
+      date_created: customer.date_created || existingFull?.date_created || '',
+      date_updated: customer.date_updated || existingFull?.date_updated || '',
+    };
+
+    setCustomerModalCache((prev) => ({ ...prev, [cid]: normalizedCustomer }));
     // If it was minimized, remove from minimized list so it expands
     setMinimizedCustomerIds((prev) => prev.filter((id) => id !== cid));
     setActiveCustomerModalId(cid);
@@ -1716,6 +1790,9 @@ export default function App() {
         </nav>
       </div>
 
+      {/* Offline PWA Banner */}
+      <OfflineIndicator />
+
       {/* Active Customer Detail Modal (Full Popup) - smoothly swaps out while editing the same customer */}
       {(() => {
         if (!activeCustomerModalId) return null;
@@ -1731,37 +1808,39 @@ export default function App() {
         if (!activeCust) return null;
 
         return (
-          <CustomerDetailModal
-            customer={activeCust}
-            isOpen={true}
-            isMinimized={false}
-            isPopup={true}
-            onToggleMinimize={() => handleMinimizeCustomer(String(activeCust.id))}
-            onClose={() => handleCloseCustomerModal(String(activeCust.id))}
-            onAddReport={handleAddCustomerReport}
-            onReassign={handleReassignCustomer}
-            onAddContact={handleAddCustomerContact}
-            onClaimFreeCustomer={handleClaimAndOpenReports}
-            justClaimedFromDuplicate={justClaimedCustomerId === String(activeCust.id)}
-            onEdit={(cust) => {
-              setEditingCustomer(cust);
-              setIsCustomerModalOpen(true);
-            }}
-            onDelete={(custId) => {
-              handleDeleteCustomer(custId);
-              handleCloseCustomerModal(custId);
-            }}
-            onOpenMerge={(customerId) => {
-              setMergeInitialCustomerIds([customerId]);
-              setIsMergeModalOpen(true);
-            }}
-            personnelList={personnelList}
-            currentPersonnel={currentPersonnel}
-            currentUser={currentUser}
-            isAdmin={isCurrentUserAdmin}
-            enableUnitSalesCommission={activeTenantUnitSalesEnabled}
-            tenantUnitSalesMap={tenantUnitSalesMap}
-          />
+          <ErrorBoundary onReset={() => handleCloseCustomerModal(String(activeCust.id))}>
+            <CustomerDetailModal
+              customer={activeCust}
+              isOpen={true}
+              isMinimized={false}
+              isPopup={true}
+              onToggleMinimize={() => handleMinimizeCustomer(String(activeCust.id))}
+              onClose={() => handleCloseCustomerModal(String(activeCust.id))}
+              onAddReport={handleAddCustomerReport}
+              onReassign={handleReassignCustomer}
+              onAddContact={handleAddCustomerContact}
+              onClaimFreeCustomer={handleClaimAndOpenReports}
+              justClaimedFromDuplicate={justClaimedCustomerId === String(activeCust.id)}
+              onEdit={(cust) => {
+                setEditingCustomer(cust);
+                setIsCustomerModalOpen(true);
+              }}
+              onDelete={(custId) => {
+                handleDeleteCustomer(custId);
+                handleCloseCustomerModal(custId);
+              }}
+              onOpenMerge={(customerId) => {
+                setMergeInitialCustomerIds([customerId]);
+                setIsMergeModalOpen(true);
+              }}
+              personnelList={personnelList}
+              currentPersonnel={currentPersonnel}
+              currentUser={currentUser}
+              isAdmin={isCurrentUserAdmin}
+              enableUnitSalesCommission={activeTenantUnitSalesEnabled}
+              tenantUnitSalesMap={tenantUnitSalesMap}
+            />
+          </ErrorBoundary>
         );
       })()}
 

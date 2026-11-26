@@ -269,6 +269,68 @@ export function getTodayJalali(): { jy: number; jm: number; jd: number; str: str
   };
 }
 
+export interface JalaliMonthOption {
+  key: string;
+  jy: number;
+  jm: number;
+  monthName: string;
+  label: string;
+  shortLabel: string;
+  startDateIso: string;
+  endDateIso: string;
+  fullMonthEndIso: string;
+  daysInMonth: number;
+  isCurrentMonth: boolean;
+}
+
+export function getRecentJalaliMonths(count = 12): JalaliMonthOption[] {
+  const nowParts = getTehranDateParts(new Date());
+  const todayIso = `${nowParts.year}-${String(nowParts.month).padStart(2, '0')}-${String(nowParts.day).padStart(2, '0')}`;
+  const todayJ = gregorianToJalali(nowParts.year, nowParts.month, nowParts.day);
+
+  const result: JalaliMonthOption[] = [];
+  let jy = todayJ.jy;
+  let jm = todayJ.jm;
+
+  for (let i = 0; i < count; i++) {
+    const daysInMonth = getJalaliDaysInMonth(jy, jm);
+    const startG = jalaliToGregorian(jy, jm, 1);
+    const endG = jalaliToGregorian(jy, jm, daysInMonth);
+    const startDateIso = `${startG.gy}-${String(startG.gm).padStart(2, '0')}-${String(startG.gd).padStart(2, '0')}`;
+    const fullMonthEndIso = `${endG.gy}-${String(endG.gm).padStart(2, '0')}-${String(endG.gd).padStart(2, '0')}`;
+    const isCurrentMonth = i === 0;
+    const endDateIso =
+      isCurrentMonth && todayIso >= startDateIso && todayIso <= fullMonthEndIso
+        ? todayIso
+        : fullMonthEndIso;
+    const monthName = JALALI_MONTH_NAMES[jm - 1] || '';
+
+    result.push({
+      key: `${jy}-${String(jm).padStart(2, '0')}`,
+      jy,
+      jm,
+      monthName,
+      label: isCurrentMonth
+        ? `ماه جاری (${monthName} ${toPersianDigits(jy)})`
+        : `${monthName} ${toPersianDigits(jy)}`,
+      shortLabel: isCurrentMonth ? 'ماه جاری' : `${monthName} ماه`,
+      startDateIso,
+      endDateIso,
+      fullMonthEndIso,
+      daysInMonth,
+      isCurrentMonth,
+    });
+
+    jm -= 1;
+    if (jm < 1) {
+      jm = 12;
+      jy -= 1;
+    }
+  }
+
+  return result;
+}
+
 export function gregorianIsoToJalali(isoString?: string | null): string {
   if (!isoString) return '';
   try {

@@ -103,8 +103,6 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   enableUnitSalesCommission = false,
   tenantUnitSalesMap,
 }) => {
-  if (!isOpen || !customer) return null;
-
   const userIsAdmin = Boolean(
     isAdmin ||
     currentUser?.is_admin ||
@@ -114,7 +112,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
   // Compute latest report and effective next follow-up date (Single Source of Truth)
   const latestReport = React.useMemo(() => {
-    if (!customer?.reports || customer.reports.length === 0) return null;
+    if (!Array.isArray(customer?.reports) || customer.reports.length === 0) return null;
     return [...customer.reports].sort(
       (a, b) => new Date(b.date_created || 0).getTime() - new Date(a.date_created || 0).getTime()
     )[0];
@@ -133,18 +131,26 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   const customerPhoneOptions = React.useMemo(() => getCustomerPhoneOptions(customer), [customer]);
   const [customerNegotiatorName, setCustomerNegotiatorName] = useState(''); // EMPTY by default as requested
   const [staffNegotiatorName, setStaffNegotiatorName] = useState(
-    currentPersonnel?.name || currentUser?.name || customer.assigned_marketer_name || 'کارشناس'
+    currentPersonnel?.name || currentUser?.name || customer?.assigned_marketer_name || 'کارشناس'
   );
   const [negotiationPhone, setNegotiationPhone] = useState(customerPhoneOptions[0]?.number || '');
   const [isCustomPhone, setIsCustomPhone] = useState(customerPhoneOptions.length === 0);
   const [reportText, setReportText] = useState('');
   const [negotiationScore, setNegotiationScore] = useState<number>(7);
-  const [negotiationStatus, setNegotiationStatus] = useState<NegotiationStatus>(customer.status);
+  const [negotiationStatus, setNegotiationStatus] = useState<NegotiationStatus>(
+    (customer?.status || 'تماس برقرار نشده') as NegotiationStatus
+  );
   const [nextFollowupDate, setNextFollowupDate] = useState(() => {
     // Default to 2 hours from now
     return new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
   });
   const [reportError, setReportError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (customer?.status) {
+      setNegotiationStatus(customer.status);
+    }
+  }, [customer?.id, customer?.status]);
 
   // Sync phone when customer or phoneOptions change
   React.useEffect(() => {
@@ -263,12 +269,14 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   };
 
   // Reassignment state
-  const activePersonnelList = personnelList.filter((p) => isPersonnelActive(p));
+  const activePersonnelList = (Array.isArray(personnelList) ? personnelList : []).filter((p) => isPersonnelActive(p));
   const [showReassignBox, setShowReassignBox] = useState(false);
   const [selectedMarketerId, setSelectedMarketerId] = useState(activePersonnelList[0]?.id || '');
   const [reassignDays, setReassignDays] = useState(7);
   const [reassigning, setReassigning] = useState(false);
   const [copiedVal, setCopiedVal] = useState<string | null>(null);
+
+  if (!isOpen || !customer) return null;
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -278,6 +286,15 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
   const timer = formatTimeRemaining(customer.assignment_deadline);
   const statusTheme = getStatusTheme(customer.status);
+
+  const safeLandlineNumbers = Array.isArray(customer.landline_numbers) ? customer.landline_numbers : [];
+  const safeManagerPhones = Array.isArray(customer.manager_phones) ? customer.manager_phones : [];
+  const safeNegotiatorPhones = Array.isArray(customer.negotiator_phones) ? customer.negotiator_phones : [];
+  const safeTelegramIds = Array.isArray(customer.telegram_ids) ? customer.telegram_ids : [];
+  const safeInstagramIds = Array.isArray(customer.instagram_ids) ? customer.instagram_ids : [];
+  const safeWebsites = Array.isArray(customer.websites) ? customer.websites : [];
+  const safeContacts = Array.isArray(customer.contacts) ? customer.contacts : [];
+  const safeReports = Array.isArray(customer.reports) ? customer.reports : [];
 
   const handleReportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -423,7 +440,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
       <div className="p-4 sm:p-5 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-2xl shadow-sm flex flex-wrap items-center justify-between gap-3 sm:gap-4 sticky top-0 z-20 backdrop-blur-md">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-100 dark:bg-[#282828] border border-slate-300 dark:border-[#3e3e3e] flex items-center justify-center text-emerald-600 dark:text-[#1DB954] font-black text-xl flex-shrink-0">
-              {(customer.manager_name?.trim() || customer.negotiator_name?.trim() || customer.company_name).charAt(0)}
+              {(customer.manager_name?.trim() || customer.negotiator_name?.trim() || customer.company_name?.trim() || 'م').charAt(0)}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
@@ -821,15 +838,16 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
               </form>
             )}
 
-            {customer.contacts && customer.contacts.length > 0 ? (
+            {safeContacts.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                {customer.contacts.map((ct, idx) => {
+                {safeContacts.map((ct, idx) => {
+                  const ctVal = String(ct?.value || '');
                   let linkHref = '';
                   let channelIcon = <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />;
                   let typeLabel = 'موبایل';
 
                   if (ct.channel_type === 'mobile' || ct.channel_type === 'landline') {
-                    linkHref = `tel:${ct.value}`;
+                    linkHref = `tel:${ctVal}`;
                     channelIcon =
                       ct.channel_type === 'mobile' ? (
                         <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
@@ -838,32 +856,32 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       );
                     typeLabel = ct.channel_type === 'mobile' ? 'تلفن همراه' : 'تلفن ثابت';
                   } else if (ct.channel_type === 'telegram') {
-                    const cleanTid = ct.value.replace(/^@/, '');
-                    linkHref = /^09\d{9}$/.test(ct.value)
-                      ? `https://t.me/+98${ct.value.substring(1)}`
+                    const cleanTid = ctVal.replace(/^@/, '');
+                    linkHref = /^09\d{9}$/.test(ctVal)
+                      ? `https://t.me/+98${ctVal.substring(1)}`
                       : `https://t.me/${cleanTid}`;
                     channelIcon = <Send className="w-3.5 h-3.5 text-sky-500 dark:text-[#229ED9]" />;
                     typeLabel = 'تلگرام';
                   } else if (ct.channel_type === 'instagram') {
-                    const cleanInsta = ct.value.replace(/^@/, '');
+                    const cleanInsta = ctVal.replace(/^@/, '');
                     linkHref = `https://instagram.com/${cleanInsta}`;
                     channelIcon = <Instagram className="w-3.5 h-3.5 text-pink-500" />;
                     typeLabel = 'اینستاگرام';
                   } else if (ct.channel_type === 'whatsapp') {
-                    linkHref = `https://wa.me/98${ct.value.replace(/^0/, '')}`;
+                    linkHref = `https://wa.me/98${ctVal.replace(/^0/, '')}`;
                     channelIcon = <MessageSquare className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />;
                     typeLabel = 'واتساپ';
                   } else if (ct.channel_type === 'email') {
-                    linkHref = `mailto:${ct.value}`;
+                    linkHref = `mailto:${ctVal}`;
                     channelIcon = <Mail className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />;
                     typeLabel = 'ایمیل';
                   } else if (ct.channel_type === 'website') {
-                    linkHref = ct.value.startsWith('http') ? ct.value : `https://${ct.value}`;
+                    linkHref = ctVal.startsWith('http') ? ctVal : `https://${ctVal}`;
                     channelIcon = <Globe className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />;
                     typeLabel = 'وب‌سایت';
                   }
 
-                  const isCopied = copiedVal === ct.value;
+                  const isCopied = copiedVal === ctVal;
 
                   return (
                     <div
@@ -952,11 +970,11 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 </div>
 
                 {/* Landlines */}
-                {customer.landline_numbers.length > 0 && (
+                {safeLandlineNumbers.length > 0 && (
                   <div>
                     <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">تلفن‌های ثابت:</span>
                     <div className="flex flex-wrap gap-2 mt-1">
-                      {customer.landline_numbers.map((num, i) => (
+                      {safeLandlineNumbers.map((num, i) => (
                         <a
                           key={i}
                           href={`tel:${num}`}
@@ -975,18 +993,18 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   <div>
                     <span className="text-slate-500 dark:text-[#A7A7A7] block text-[11px]">مدیر:</span>
                     <span className="font-semibold text-slate-900 dark:text-white">{customer.manager_name || 'ثبت نشده'}</span>
-                    {customer.manager_phones.length > 0 && (
+                    {safeManagerPhones.length > 0 && (
                       <div className="text-[11px] font-mono text-emerald-600 dark:text-[#1DB954] mt-0.5" dir="ltr">
-                        {customer.manager_phones.join(' , ')}
+                        {safeManagerPhones.join(' , ')}
                       </div>
                     )}
                   </div>
                   <div>
                     <span className="text-slate-500 dark:text-[#A7A7A7] block text-[11px]">مذاکره‌کننده سمت مشتری:</span>
                     <span className="font-semibold text-slate-900 dark:text-white">{customer.negotiator_name || 'ثبت نشده'}</span>
-                    {customer.negotiator_phones.length > 0 && (
+                    {safeNegotiatorPhones.length > 0 && (
                       <div className="text-[11px] font-mono text-emerald-600 dark:text-[#1DB954] mt-0.5" dir="ltr">
-                        {customer.negotiator_phones.join(' , ')}
+                        {safeNegotiatorPhones.join(' , ')}
                       </div>
                     )}
                   </div>
@@ -1006,7 +1024,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                   <div className="flex flex-wrap gap-2 mt-1">
                     {customer.telegram_phone && (
                       <a
-                        href={`https://t.me/+${customer.telegram_phone.replace(/^0/, '98')}`}
+                        href={`https://t.me/+${String(customer.telegram_phone).replace(/^0/, '98')}`}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 dark:bg-[#229ED9]/15 border border-sky-200 dark:border-[#229ED9]/30 text-sky-600 dark:text-[#229ED9] text-xs font-mono hover:bg-sky-100 dark:hover:bg-[#229ED9]/25 transition-colors"
@@ -1016,19 +1034,22 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                       </a>
                     )}
 
-                    {customer.telegram_ids.map((tid, i) => (
-                      <a
-                        key={i}
-                        href={`https://t.me/${tid.replace(/^@/, '')}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white dark:bg-[#282828] hover:bg-slate-100 dark:hover:bg-[#333333] border border-slate-200 dark:border-transparent text-xs font-mono text-slate-900 dark:text-white transition-colors shadow-sm"
-                      >
-                        <Send className="w-3 h-3 text-sky-500 dark:text-[#229ED9]" />
-                        <span>@{tid.replace(/^@/, '')}</span>
-                      </a>
-                    ))}
-                    {!customer.telegram_phone && customer.telegram_ids.length === 0 && (
+                    {safeTelegramIds.map((tid, i) => {
+                      const cleanTid = String(tid || '').replace(/^@/, '');
+                      return (
+                        <a
+                          key={i}
+                          href={`https://t.me/${cleanTid}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white dark:bg-[#282828] hover:bg-slate-100 dark:hover:bg-[#333333] border border-slate-200 dark:border-transparent text-xs font-mono text-slate-900 dark:text-white transition-colors shadow-sm"
+                        >
+                          <Send className="w-3 h-3 text-sky-500 dark:text-[#229ED9]" />
+                          <span>@{cleanTid}</span>
+                        </a>
+                      );
+                    })}
+                    {!customer.telegram_phone && safeTelegramIds.length === 0 && (
                       <span className="text-xs text-slate-400 dark:text-[#535353]">-</span>
                     )}
                   </div>
@@ -1038,19 +1059,22 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 <div>
                   <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">اینستاگرام:</span>
                   <div className="flex flex-wrap gap-2 mt-1">
-                    {customer.instagram_ids.length > 0 ? (
-                      customer.instagram_ids.map((insta, i) => (
-                        <a
-                          key={i}
-                          href={`https://instagram.com/${insta.replace(/^@/, '')}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-50 dark:bg-[#E1306C]/15 border border-pink-200 dark:border-[#E1306C]/30 text-pink-600 dark:text-[#E1306C] text-xs font-mono hover:bg-pink-100 dark:hover:bg-[#E1306C]/25 transition-colors"
-                        >
-                          <Instagram className="w-3 h-3" />
-                          <span>@{insta.replace(/^@/, '')}</span>
-                        </a>
-                      ))
+                    {safeInstagramIds.length > 0 ? (
+                      safeInstagramIds.map((insta, i) => {
+                        const cleanInsta = String(insta || '').replace(/^@/, '');
+                        return (
+                          <a
+                            key={i}
+                            href={`https://instagram.com/${cleanInsta}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-50 dark:bg-[#E1306C]/15 border border-pink-200 dark:border-[#E1306C]/30 text-pink-600 dark:text-[#E1306C] text-xs font-mono hover:bg-pink-100 dark:hover:bg-[#E1306C]/25 transition-colors"
+                          >
+                            <Instagram className="w-3 h-3" />
+                            <span>@{cleanInsta}</span>
+                          </a>
+                        );
+                      })
                     ) : (
                       <span className="text-xs text-slate-400 dark:text-[#535353]">-</span>
                     )}
@@ -1058,24 +1082,27 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 </div>
 
                 {/* Websites */}
-                {customer.websites.length > 0 && (
+                {safeWebsites.length > 0 && (
                   <div>
                     <span className="text-[11px] text-slate-500 dark:text-[#A7A7A7]">وب‌سایت‌ها:</span>
                     <div className="flex flex-wrap gap-2 mt-1">
-                      {customer.websites.map((web, i) => (
-                        <a
-                          key={i}
-                          href={web.startsWith('http') ? web : `https://${web}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white dark:bg-[#282828] hover:bg-slate-100 dark:hover:bg-[#333333] border border-slate-200 dark:border-transparent text-xs text-emerald-600 dark:text-[#1DB954] hover:underline shadow-sm"
-                          dir="ltr"
-                        >
-                          <Globe className="w-3 h-3" />
-                          <span>{web.replace(/^https?:\/\//, '')}</span>
-                          <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                      ))}
+                      {safeWebsites.map((web, i) => {
+                        const webStr = String(web || '');
+                        return (
+                          <a
+                            key={i}
+                            href={webStr.startsWith('http') ? webStr : `https://${webStr}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white dark:bg-[#282828] hover:bg-slate-100 dark:hover:bg-[#333333] border border-slate-200 dark:border-transparent text-xs text-emerald-600 dark:text-[#1DB954] hover:underline shadow-sm"
+                            dir="ltr"
+                          >
+                            <Globe className="w-3 h-3" />
+                            <span>{webStr.replace(/^https?:\/\//, '')}</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1096,7 +1123,7 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
                 </span>
                 <span className="text-slate-500 dark:text-[#A7A7A7] mr-2">امتیاز:</span>
                 <span className="font-mono font-bold text-emerald-700 dark:text-[#1DB954] px-2 py-0.5 rounded bg-emerald-100 dark:bg-[#1DB954]/15">
-                  {customer.interview_score} / 10
+                  {customer.interview_score ?? 0} / 10
                 </span>
               </div>
             </div>
@@ -1528,8 +1555,8 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
 
             {/* Reports List */}
             <div className="space-y-3">
-              {customer.reports && customer.reports.length > 0 ? (
-                customer.reports.map((rep) => {
+              {safeReports.length > 0 ? (
+                safeReports.map((rep) => {
                   const repTheme = getStatusTheme(rep.negotiation_status);
                   return (
                     <div
