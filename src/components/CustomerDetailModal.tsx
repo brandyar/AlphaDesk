@@ -1723,9 +1723,9 @@ export const CustomerDetailModal: React.FC<CustomerDetailModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[75] overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center px-2 sm:px-4 md:px-6 pt-[calc(var(--safe-area-top)+0.5rem)] pb-[calc(var(--safe-area-bottom)+0.5rem)] animate-in fade-in duration-200">
       <div
-        className="w-full max-w-6xl max-h-[92vh] overflow-y-auto bg-white dark:bg-[#151515] rounded-3xl shadow-2xl border border-slate-200 dark:border-[#282828] p-3 sm:p-6 transition-all"
+        className="w-full max-w-6xl max-h-[calc(100dvh-var(--safe-area-top)-var(--safe-area-bottom)-1.5rem)] overflow-y-auto bg-white dark:bg-[#151515] rounded-3xl shadow-2xl border border-slate-200 dark:border-[#282828] p-3 sm:p-6 transition-all"
         onClick={(e) => e.stopPropagation()}
       >
         {content}

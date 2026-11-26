@@ -461,8 +461,8 @@ export const QuickAddCustomerModal: React.FC<QuickAddCustomerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col text-slate-900 dark:text-white animate-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-[75] flex items-center justify-center px-2.5 sm:px-4 pt-[calc(var(--safe-area-top)+0.5rem)] pb-[calc(var(--safe-area-bottom)+0.5rem)] bg-black/75 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[calc(100dvh-var(--safe-area-top)-var(--safe-area-bottom)-1.5rem)] flex flex-col text-slate-900 dark:text-white animate-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="p-4 sm:p-5 bg-slate-50 dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3 min-w-0">

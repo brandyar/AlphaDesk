@@ -230,15 +230,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {isOpenMobile && (
         <div
           onClick={onCloseMobile}
-          className="fixed inset-0 bg-black/75 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+          className="fixed inset-0 bg-black/75 backdrop-blur-xs z-[60] lg:hidden transition-opacity"
           aria-hidden="true"
         />
       )}
 
       {/* Main Sidebar Element */}
       <aside
-        className={`fixed top-0 bottom-0 right-0 z-50 w-72 max-w-[85vw] bg-white dark:bg-[#000000] h-screen flex flex-col border-l border-slate-200 dark:border-[#282828] select-none transition-transform duration-300 ease-in-out lg:static lg:w-64 lg:h-screen lg:flex-shrink-0 lg:translate-x-0 ${
-          isOpenMobile ? 'translate-x-0 shadow-2xl' : 'translate-x-full lg:translate-x-0'
+        className={`fixed top-0 bottom-0 right-0 z-[70] w-72 max-w-[85vw] bg-white dark:bg-[#000000] h-[100dvh] pt-safe pb-safe flex flex-col border-l border-slate-200 dark:border-[#282828] select-none transition-all duration-300 ease-in-out lg:static lg:z-auto lg:w-64 lg:h-[100dvh] lg:pt-0 lg:pb-0 lg:flex-shrink-0 lg:translate-x-0 lg:opacity-100 lg:visible lg:pointer-events-auto ${
+          isOpenMobile
+            ? 'translate-x-0 opacity-100 visible pointer-events-auto shadow-2xl'
+            : 'translate-x-full opacity-0 invisible pointer-events-none'
         }`}
       >
         {/* Brand Header */}
@@ -260,8 +262,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Close button on mobile */}
           <button
+            type="button"
             onClick={onCloseMobile}
-            className="lg:hidden p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#181818] text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white border border-slate-200 dark:border-transparent transition-colors cursor-pointer"
+            className="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#181818] text-slate-600 hover:text-slate-900 dark:text-[#A7A7A7] dark:hover:text-white border border-slate-200 dark:border-transparent transition-colors cursor-pointer"
             aria-label="بستن منو"
           >
             <X className="w-5 h-5" />

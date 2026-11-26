@@ -165,16 +165,22 @@ export const Header: React.FC<HeaderProps> = ({
 
 
   return (
-    <header className="h-16 sm:h-18 bg-white dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] sticky top-0 z-30 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 select-none shadow-xs transition-colors">
+    <header className="shrink-0 relative z-40 pt-safe bg-white dark:bg-[#121212] border-b border-slate-200 dark:border-[#282828] select-none shadow-xs transition-colors">
+      <div className="h-16 sm:h-18 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4">
       {/* Mobile Hamburger & Responsive Global Search */}
       <div className="flex items-center gap-2 flex-1 min-w-0">
         <button
-          onClick={onToggleMobileMenu}
-          className="lg:hidden p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#1e1e1e] dark:hover:bg-[#282828] text-slate-700 hover:text-slate-900 dark:text-white dark:hover:text-[#1DB954] focus:outline-none transition-colors border border-slate-200 dark:border-[#2e2e2e] shrink-0"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleMobileMenu?.();
+          }}
+          className="lg:hidden relative z-20 w-10 h-10 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 dark:bg-[#1e1e1e] dark:hover:bg-[#282828] text-slate-700 hover:text-slate-900 dark:text-white dark:hover:text-[#1DB954] focus:outline-none transition-all border border-slate-200 dark:border-[#2e2e2e] shrink-0 touch-manipulation cursor-pointer"
           aria-label={isMobileMenuOpen ? 'بستن منو' : 'باز کردن منو'}
+          aria-expanded={isMobileMenuOpen}
           title="منوی اصلی"
         >
-          {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          {isMobileMenuOpen ? <X className="w-5 h-5 pointer-events-none" /> : <Menu className="w-5 h-5 pointer-events-none" />}
         </button>
 
         {currentUser && (
@@ -492,6 +498,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span>ورود / عضویت</span>
           </button>
         )}
+      </div>
       </div>
     </header>
   );

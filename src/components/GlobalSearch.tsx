@@ -1636,7 +1636,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
 
       {/* Mobile / Tablet Full-Screen Responsive Search Overlay */}
       {isMobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-white dark:bg-[#121212] flex flex-col animate-in fade-in duration-150">
+        <div className="lg:hidden fixed inset-0 z-[80] pt-safe pb-safe bg-white dark:bg-[#121212] flex flex-col animate-in fade-in duration-150">
           {/* Mobile Search Top Bar */}
           <div className="p-3 border-b border-slate-200 dark:border-[#282828] flex items-center gap-2 bg-white dark:bg-[#121212] shrink-0">
             <div className="flex-1 flex items-center h-11 px-3 rounded-xl bg-slate-100 dark:bg-[#1e1e1e] border border-slate-200 dark:border-[#333] focus-within:border-[#1DB954]">

@@ -12,7 +12,7 @@
     <meta name="theme-color" content="#121212" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="آلفادسک" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
@@ -20,12 +20,15 @@
       (function() {
         try {
           var t = localStorage.getItem('alphadesk_theme');
+          var themeMeta = document.querySelector('meta[name="theme-color"]');
           if (t === 'light') {
             document.documentElement.classList.remove('dark');
             document.documentElement.classList.add('light');
+            if (themeMeta) themeMeta.setAttribute('content', '#ffffff');
           } else {
             document.documentElement.classList.add('dark');
             document.documentElement.classList.remove('light');
+            if (themeMeta) themeMeta.setAttribute('content', '#121212');
           }
         } catch (e) {
           document.documentElement.classList.add('dark');

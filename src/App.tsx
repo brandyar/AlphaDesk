@@ -1316,7 +1316,7 @@ export default function App() {
           onAuthSuccess={handleAuthSuccess}
         />
         {toast && (
-          <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] max-w-md w-full px-4 animate-in slide-in-from-top-4 duration-200">
+          <div className="fixed top-[calc(var(--safe-area-top)+1rem)] left-1/2 -translate-x-1/2 z-[100] max-w-md w-full px-4 animate-in slide-in-from-top-4 duration-200">
             <div
               className={`p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border ${
                 toast.type === 'success'
@@ -1346,10 +1346,10 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-[#121212] text-slate-900 dark:text-white overflow-hidden font-sans relative">
+    <div className="flex h-[100dvh] bg-slate-50 dark:bg-[#121212] text-slate-900 dark:text-white overflow-hidden font-sans relative">
       {/* Top glowing progress bar during tab switching */}
       {isTabPending && (
-        <div className="fixed top-0 left-0 right-0 h-1 z-50 overflow-hidden bg-black/40 pointer-events-none">
+        <div className="fixed top-[var(--safe-area-top)] left-0 right-0 h-1 z-50 overflow-hidden bg-black/40 pointer-events-none">
           <div className="h-full bg-gradient-to-r from-[#1DB954] via-[#1ED760] to-[#1DB954] w-full animate-pulse shadow-[0_0_12px_#1DB954]" />
         </div>
       )}
@@ -1388,7 +1388,7 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 h-[100dvh] overflow-hidden">
         {/* Top Header */}
         <Header
           searchQuery={globalSearchQuery}
@@ -1412,7 +1412,7 @@ export default function App() {
             setIsQuickAddModalOpen(true);
           }}
           isMobileMenuOpen={isMobileMenuOpen}
-          onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
           onNavigateToPortal={(sub) => {
             handleNavigateToTab('personal_portal', sub);
           }}
@@ -1455,7 +1455,7 @@ export default function App() {
         />
 
         {/* Dynamic Main View */}
-        <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 lg:p-8 pb-24 lg:pb-8 relative bg-slate-50 dark:bg-[#121212]">
+        <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 lg:p-8 pb-[calc(5.5rem+var(--safe-area-bottom))] lg:pb-8 relative bg-slate-50 dark:bg-[#121212]">
           {loading ? (
             activeTab === 'dashboard' ? (
               <DashboardSkeleton />
@@ -1706,7 +1706,8 @@ export default function App() {
         </main>
 
         {/* Mobile Bottom Navigation Bar (Phone-friendly) */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 h-16 bg-white/95 dark:bg-[#0c0c0c]/95 backdrop-blur-md border-t border-slate-200 dark:border-[#282828] flex items-center justify-around px-1 select-none shadow-lg">
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 pb-safe bg-white/95 dark:bg-[#0c0c0c]/95 backdrop-blur-md border-t border-slate-200 dark:border-[#282828] select-none shadow-lg">
+          <div className="h-16 flex items-center justify-around px-1">
           <button
             onClick={() => handleNavigateToTab('dashboard')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors cursor-pointer ${
@@ -1787,6 +1788,7 @@ export default function App() {
             <User className="w-4 h-4 mb-0.5" />
             <span>پنل من</span>
           </button>
+          </div>
         </nav>
       </div>
 
@@ -2010,7 +2012,7 @@ export default function App() {
 
       {/* Floating System Toast Notifications */}
       {toast && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] max-w-md w-full px-4 animate-in slide-in-from-top-4 duration-200">
+        <div className="fixed top-[calc(var(--safe-area-top)+1rem)] left-1/2 -translate-x-1/2 z-[100] max-w-md w-full px-4 animate-in slide-in-from-top-4 duration-200">
           <div
             className={`p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border ${
               toast.type === 'success'

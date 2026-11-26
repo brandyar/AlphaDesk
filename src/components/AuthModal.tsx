@@ -340,7 +340,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (isFullScreen) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#121212] text-slate-900 dark:text-white flex flex-col justify-center items-center p-4 relative overflow-hidden select-none">
+      <div className="min-h-[100dvh] bg-slate-50 dark:bg-[#121212] text-slate-900 dark:text-white flex flex-col justify-center items-center px-4 pt-[calc(var(--safe-area-top)+1rem)] pb-[calc(var(--safe-area-bottom)+1rem)] relative overflow-hidden select-none">
         {/* Background glow & subtle patterns */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#1DB954]/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-10 right-10 w-64 h-64 bg-blue-500/5 rounded-full blur-2xl pointer-events-none" />

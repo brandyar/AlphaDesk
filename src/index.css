@@ -34,6 +34,10 @@
     --accent-green: #16A34A;
     --accent-green-hover: #15803D;
     --accent-green-soft: rgba(22, 163, 74, 0.12);
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
     color-scheme: light;
   }
 
@@ -57,6 +61,11 @@
   * {
     font-family: 'Vazirmatn', sans-serif !important;
     box-sizing: border-box;
+  }
+
+  html,
+  body {
+    overscroll-behavior-y: none;
   }
 
   body {
@@ -123,5 +132,20 @@
   }
   ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
+  }
+}
+
+@layer utilities {
+  .pt-safe {
+    padding-top: var(--safe-area-top);
+  }
+  .pb-safe {
+    padding-bottom: var(--safe-area-bottom);
+  }
+  .pl-safe {
+    padding-left: var(--safe-area-left);
+  }
+  .pr-safe {
+    padding-right: var(--safe-area-right);
   }
 }
