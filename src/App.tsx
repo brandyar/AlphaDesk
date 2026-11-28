@@ -105,7 +105,7 @@ import {
   getMe,
   triggerDailyCheckinIfNeeded,
 } from './api';
-import { matchPersonnelToCustomer, matchPersonnelToReport, getUserAllowedTenants, getStatusTheme, formatStatusLabel, toPersianDigits } from './utils';
+import { matchPersonnelToCustomer, matchPersonnelToReport, getUserAllowedTenants, isTenantIdMatch, isSystemAdminUser, getStatusTheme, formatStatusLabel, toPersianDigits } from './utils';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
@@ -248,16 +248,15 @@ export default function App() {
       : Boolean(currentUser?.is_admin && currentUser?.app_role === 'admin')
   );
 
-  const canAccessTenantsTab =
-    isCurrentUserAdmin ||
-    (currentPersonnel?.permissions?.can_manage_tenants ?? false) ||
-    (currentPersonnel?.permissions?.allowed_menus?.includes('tenants') ?? false);
+  const isStrictAdmin = isSystemAdminUser(currentPersonnel, currentUser);
+
+  const canAccessTenantsTab = isStrictAdmin;
 
   const [isTabPending, startTabTransition] = React.useTransition();
 
   const handleNavigateToTab = (tab: NavTab, sub?: string) => {
     if (tab === 'tenants' && !canAccessTenantsTab) {
-      showToast('دسترسی به بخش سازمان‌ها برای حساب کاربری شما فعال نیست.', 'error');
+      showToast('فقط مدیر سیستم مجاز به مشاهده و مدیریت سازمان‌ها است.', 'error');
       return;
     }
     startTabTransition(() => {
@@ -269,18 +268,46 @@ export default function App() {
   };
 
   const handleSelectTenant = (tenantId: string) => {
-    const allowed = getUserAllowedTenants(currentPersonnel, currentUser, tenants);
-    const isAllowed = allowed.some((t) => String(t.id) === String(tenantId) || (tenantId === 'all' && currentUser?.is_admin));
-    if (!isAllowed) {
-      showToast('شما مجاز به دسترسی یا سوییچ به این سازمان نیستید.', 'error');
+    const cleanTenantId = String(tenantId || 'all').trim();
+    if (!isStrictAdmin) {
+      showToast('فقط مدیر سیستم مجاز به تغییر سازمان است.', 'error');
       return;
     }
-    setActiveTenantId(tenantId);
-    setActiveTenantIdState(tenantId);
-    const target = tenants.find((t) => String(t.id) === String(tenantId));
-    const name = tenantId === 'all' ? 'همه سازمان‌ها (تجمیعی)' : target?.name || 'سازمان منتخب';
-    showToast(`سازمان فعال: ${name}`, 'info');
-    loadAllData(currentPersonnel, currentUser);
+    const allowed = getUserAllowedTenants(currentPersonnel, currentUser, tenants);
+    const matchedTenant = allowed.find((t) => isTenantIdMatch(t.id, cleanTenantId, t.slug));
+    const isAllowed =
+      cleanTenantId === 'all' ||
+      Boolean(matchedTenant) ||
+      tenants.some((t) => isTenantIdMatch(t.id, cleanTenantId, t.slug));
+
+    if (!isAllowed) {
+      showToast('سازمان انتخاب‌شده معتبر نیست.', 'error');
+      return;
+    }
+
+    const normalizedTenantId =
+      cleanTenantId === 'all' ? 'all' : matchedTenant ? String(matchedTenant.id) : cleanTenantId;
+    const target = tenants.find((t) => isTenantIdMatch(t.id, normalizedTenantId, t.slug));
+    const name =
+      normalizedTenantId === 'all'
+        ? 'همه سازمان‌ها (تجمیعی)'
+        : target?.name || 'سازمان منتخب';
+
+    setActiveTenantId(normalizedTenantId, normalizedTenantId === 'all' ? undefined : name);
+    setActiveTenantIdState(normalizedTenantId);
+
+    // Immediately clear tenant-scoped state so stale records from the previous organization never linger
+    setCustomers([]);
+    setReports([]);
+    setAdminReports([]);
+    setLeaveRequests([]);
+    setAdvanceRequests([]);
+    setDashboardSummary(null);
+    setSelectedMarketerId('همه');
+
+    window.dispatchEvent(new CustomEvent('crm_tenant_changed', { detail: { tenantId: normalizedTenantId } }));
+    showToast(`سازمان فعال: ${name}`, 'success');
+    loadAllData(currentPersonnel, currentUser, { forceRefresh: true });
   };
 
   // Versioned fetch token to cancel stale concurrent requests cleanly
@@ -289,9 +316,15 @@ export default function App() {
   const hasCompletedInitialLoadRef = useRef(false);
 
   // Initial & Reactive Data Load with intelligent user-scoped querying and caching
-  const loadAllData = async (activeP?: Personnel | null, activeUser?: AuthUser | null): Promise<void> => {
-    // Reuse in-flight promise to avoid duplicate concurrent loading cascades
-    if (activeLoadPromiseRef.current) {
+  const loadAllData = async (
+    activeP?: Personnel | null,
+    activeUser?: AuthUser | null,
+    options?: { forceRefresh?: boolean }
+  ): Promise<void> => {
+    const forceRefresh = Boolean(options?.forceRefresh);
+
+    // Reuse in-flight promise to avoid duplicate concurrent loading cascades (unless force-refreshing e.g. tenant switch)
+    if (!forceRefresh && activeLoadPromiseRef.current) {
       return activeLoadPromiseRef.current;
     }
 
@@ -307,39 +340,42 @@ export default function App() {
 
         // 1. Fetch Core Metadata (personnel, tenants, status, summary, leave & advance requests, customers, reports)
         const [pData, tData, bStatus, dSummary, lData, aData, cData, rData] = await Promise.all([
-          fetchPersonnel().catch(() => []),
-          fetchTenants().catch(() => []),
+          fetchPersonnel().catch(() => null),
+          fetchTenants().catch(() => null),
           fetchBffStatus().catch(() => null),
           fetchDashboardSummary().catch(() => null),
-          fetchLeaveRequests().catch(() => []),
-          fetchAdvanceRequests().catch(() => []),
-          fetchCustomers({ limit: 50 }).catch(() => []),
-          fetchCustomerReports({ page: 1, limit: 10 }).catch(() => []),
+          fetchLeaveRequests().catch(() => null),
+          fetchAdvanceRequests().catch(() => null),
+          fetchCustomers({ limit: 50 }).catch(() => null),
+          fetchCustomerReports({ page: 1, limit: 10 }).catch(() => null),
         ]);
 
         // If a newer fetch was started, discard stale results
         if (currentVersion !== fetchVersionRef.current) return;
 
-        if (Array.isArray(pData) && pData.length > 0) setPersonnelList(pData);
+        const safePersonnel = Array.isArray(pData) ? pData : [];
+        const safeTenants = Array.isArray(tData) ? tData : [];
+
+        if (Array.isArray(pData) && (forceRefresh || pData.length > 0)) setPersonnelList(pData);
         if (Array.isArray(tData) && tData.length > 0) setTenants(tData);
         if (bStatus) setBffStatus(bStatus);
         if (dSummary) setDashboardSummary(dSummary);
-        if (Array.isArray(lData) && (lData.length > 0 || leaveRequests.length === 0)) setLeaveRequests(lData);
-        if (Array.isArray(aData) && (aData.length > 0 || advanceRequests.length === 0)) setAdvanceRequests(aData);
-        if (Array.isArray(cData) && (cData.length > 0 || customers.length === 0)) setCustomers(cData);
-        if (Array.isArray(rData) && (rData.length > 0 || reports.length === 0)) setReports(rData);
+        if (Array.isArray(lData) && (forceRefresh || lData.length > 0 || leaveRequests.length === 0)) setLeaveRequests(lData);
+        if (Array.isArray(aData) && (forceRefresh || aData.length > 0 || advanceRequests.length === 0)) setAdvanceRequests(aData);
+        if (Array.isArray(cData) && (forceRefresh || cData.length > 0 || customers.length === 0)) setCustomers(cData);
+        if (Array.isArray(rData) && (forceRefresh || rData.length > 0 || reports.length === 0)) setReports(rData);
 
         // Accurately match logged-in user to their specific personnel record
         let targetPersonnel = activeP !== undefined ? activeP : null;
         if (!targetPersonnel && targetUser) {
-          targetPersonnel = pData.find(
+          targetPersonnel = safePersonnel.find(
             (p) =>
               (targetUser.email && p.email?.toLowerCase() === targetUser.email?.toLowerCase()) ||
               (targetUser.id && (p.id === targetUser.id || p.user_id === targetUser.id))
           ) || null;
         }
         if (!targetPersonnel && currentPersonnel) {
-          targetPersonnel = pData.find((p) => p.id === currentPersonnel.id) || currentPersonnel;
+          targetPersonnel = safePersonnel.find((p) => p.id === currentPersonnel.id) || currentPersonnel;
         }
 
         if (targetPersonnel) {
@@ -368,24 +404,27 @@ export default function App() {
             setCurrentUser((prev) => (prev ? { ...prev, avatar: effectiveAvatar } : prev));
           }
 
-          const allowedTenants = getUserAllowedTenants(targetPersonnel, targetUser, tData);
+          const isAdminUser = isSystemAdminUser(targetPersonnel, targetUser);
+          const allowedTenants = getUserAllowedTenants(targetPersonnel, targetUser, safeTenants);
           const currentActive = getActiveTenantId();
-          const isCurrentAllowed = allowedTenants.some(
-            (t) => String(t.id) === String(currentActive) || (currentActive === 'all' && targetUser?.is_admin)
-          );
+          const isCurrentAllowed =
+            (currentActive === 'all' && isAdminUser) ||
+            allowedTenants.some((t) => isTenantIdMatch(t.id, currentActive, t.slug));
 
-          if (!isCurrentAllowed && allowedTenants.length > 0) {
+          if ((!isAdminUser || !isCurrentAllowed) && allowedTenants.length > 0) {
             const fallback = String(allowedTenants[0].id);
-            setActiveTenantId(fallback);
-            setActiveTenantIdState((prev) => (prev === fallback ? prev : fallback));
+            if (!isTenantIdMatch(currentActive, fallback, allowedTenants[0].slug)) {
+              setActiveTenantId(fallback, allowedTenants[0].name);
+              setActiveTenantIdState((prev) => (prev === fallback ? prev : fallback));
+            }
           }
         }
       } catch (e) {
         console.error('Error loading data:', e);
       } finally {
         hasCompletedInitialLoadRef.current = true;
-        activeLoadPromiseRef.current = null;
         if (currentVersion === fetchVersionRef.current) {
+          activeLoadPromiseRef.current = null;
           setLoading(false);
         }
       }
@@ -483,6 +522,7 @@ export default function App() {
     setCustomers([]);
     setReports([]);
     setAdminReports([]);
+    setTenants([]);
     setDashboardSummary(null);
     setActiveTab('dashboard');
     setIsAuthModalOpen(false);
@@ -490,19 +530,20 @@ export default function App() {
 
     // 2. Set user and personnel context
     setCurrentUser(authData.user);
+    const isLoginAdmin = isSystemAdminUser(authData.personnel, authData.user);
     if (authData.personnel) {
       setCurrentPersonnel(authData.personnel);
       setApiPersonnelContext(authData.personnel);
 
-      // Auto-set active tenant for personnel
-      if (!authData.user.is_admin && authData.personnel.tenant_id) {
+      // Auto-set active tenant for non-admin personnel
+      if (!isLoginAdmin && authData.personnel.tenant_id) {
         const pTenant = String(authData.personnel.tenant_id);
-        setActiveTenantId(pTenant);
+        setActiveTenantId(pTenant, authData.personnel.tenant_name);
         setActiveTenantIdState(pTenant);
       }
     }
-    showToast(`خوش آمدید ${authData.user.name} (${authData.user.is_admin ? 'مدیر سیستم' : 'کارشناس فروش'})`, 'success');
-    loadAllData(authData.personnel, authData.user);
+    showToast(`خوش آمدید ${authData.user.name} (${isLoginAdmin ? 'مدیر سیستم' : 'کارشناس فروش'})`, 'success');
+    loadAllData(authData.personnel, authData.user, { forceRefresh: true });
   };
 
   useEffect(() => {
@@ -1346,7 +1387,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-[100dvh] bg-slate-50 dark:bg-[#121212] text-slate-900 dark:text-white overflow-hidden font-sans relative">
+    <div className="fixed inset-0 flex bg-slate-50 dark:bg-[#121212] text-slate-900 dark:text-white overflow-hidden font-sans">
       {/* Top glowing progress bar during tab switching */}
       {isTabPending && (
         <div className="fixed top-[var(--safe-area-top)] left-0 right-0 h-1 z-50 overflow-hidden bg-black/40 pointer-events-none">
@@ -1373,22 +1414,18 @@ export default function App() {
         }}
         currentPersonnel={currentPersonnel}
         currentUser={currentUser}
-        isAdmin={Boolean(
-          currentUser?.is_admin ||
-          currentUser?.app_role === 'admin' ||
-          currentPersonnel?.role === 'admin'
-        )}
+        isAdmin={isStrictAdmin}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
         onLogout={handleLogout}
         tenants={tenants}
         activeTenantId={activeTenantId}
         onSelectTenant={handleSelectTenant}
-        onOpenTenantsManagement={() => setIsTenantsModalOpen(true)}
+        onOpenTenantsManagement={isStrictAdmin ? () => setIsTenantsModalOpen(true) : undefined}
       />
 
       {/* Main Container */}
-      <div className="flex-1 flex flex-col min-w-0 h-[100dvh] overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* Top Header */}
         <Header
           searchQuery={globalSearchQuery}
@@ -1419,7 +1456,7 @@ export default function App() {
           tenants={tenants}
           activeTenantId={activeTenantId}
           onSelectTenant={handleSelectTenant}
-          onOpenTenantsManagement={() => setIsTenantsModalOpen(true)}
+          onOpenTenantsManagement={isStrictAdmin ? () => setIsTenantsModalOpen(true) : undefined}
           customers={userScopedCustomers}
           allCustomers={customers}
           reports={userScopedReports}
@@ -1455,7 +1492,7 @@ export default function App() {
         />
 
         {/* Dynamic Main View */}
-        <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 lg:p-8 pb-[calc(5.5rem+var(--safe-area-bottom))] lg:pb-8 relative bg-slate-50 dark:bg-[#121212]">
+        <main className="flex-1 overflow-y-auto p-3.5 sm:p-5 lg:p-8 pb-4 lg:pb-8 relative bg-slate-50 dark:bg-[#121212]">
           {loading ? (
             activeTab === 'dashboard' ? (
               <DashboardSkeleton />
@@ -1574,6 +1611,7 @@ export default function App() {
 
                 {activeTab === 'admin_reports' && (
                   <AdminReportsView
+                    key={`admin_reports_${activeTenantId}`}
                     adminReports={adminReports}
                     personnelList={personnelList}
                     currentPersonnel={currentPersonnel}
@@ -1629,14 +1667,14 @@ export default function App() {
                   />
                 )}
 
-                {activeTab === 'tenants' && (
+                {activeTab === 'tenants' && isStrictAdmin && (
                   <TenantsManagementView
                     tenants={tenants}
                     activeTenantId={activeTenantId}
                     onSelectTenant={handleSelectTenant}
                     onRefreshTenants={loadTenants}
                     showToast={showToast}
-                    isAdmin={isCurrentUserAdmin}
+                    isAdmin={isStrictAdmin}
                     customers={customers}
                     personnelList={personnelList}
                   />
@@ -1644,6 +1682,7 @@ export default function App() {
 
                 {activeTab === 'payroll' && (
                   <PayrollView
+                    key={`payroll_${activeTenantId}`}
                     personnelList={personnelList}
                     currentPersonnel={currentPersonnel}
                     isAdmin={isCurrentUserAdmin}
@@ -1705,9 +1744,9 @@ export default function App() {
           )}
         </main>
 
-        {/* Mobile Bottom Navigation Bar (Phone-friendly) */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 pb-safe bg-white/95 dark:bg-[#0c0c0c]/95 backdrop-blur-md border-t border-slate-200 dark:border-[#282828] select-none shadow-lg">
-          <div className="h-16 flex items-center justify-around px-1">
+        {/* Mobile Bottom Navigation Bar (Pinned flush at bottom of viewport flex shell) */}
+        <nav className="lg:hidden shrink-0 z-30 w-full pb-safe bg-white dark:bg-[#0c0c0c] border-t border-slate-200 dark:border-[#282828] select-none shadow-[0_-4px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_16px_rgba(0,0,0,0.4)]">
+          <div className="h-14 flex items-center justify-around px-1">
           <button
             onClick={() => handleNavigateToTab('dashboard')}
             className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-[10px] transition-colors cursor-pointer ${
@@ -1869,7 +1908,7 @@ export default function App() {
 
       {/* Responsive Multi-Customer Minimized Dock Bar (Bottom Dock Tray - Placed above mobile bottom nav bar on mobile) */}
       {minimizedCustomerIds.length > 0 && (
-        <div className="fixed bottom-20 lg:bottom-4 left-3 sm:left-4 z-40 flex items-center gap-2 max-w-[calc(100vw-24px)] overflow-x-auto py-1 px-1 scrollbar-none animate-in slide-in-from-bottom-3 pointer-events-auto">
+        <div className="fixed bottom-[calc(4rem+var(--safe-area-bottom))] lg:bottom-4 left-3 sm:left-4 z-40 flex items-center gap-2 max-w-[calc(100vw-24px)] overflow-x-auto py-1 px-1 scrollbar-none animate-in slide-in-from-bottom-3 pointer-events-auto">
           {minimizedCustomerIds.map((cid) => {
             const cust = customerModalCache[cid] || customers.find((c) => String(c.id) === String(cid));
             if (!cust) return null;
@@ -1994,21 +2033,19 @@ export default function App() {
         onAuthSuccess={handleAuthSuccess}
       />
 
-      {/* Multi-Tenant Organization Management Modal */}
-      <TenantsManagementModal
-        isOpen={isTenantsModalOpen}
-        onClose={() => setIsTenantsModalOpen(false)}
-        tenants={tenants}
-        activeTenantId={activeTenantId}
-        onSelectTenant={handleSelectTenant}
-        onRefreshTenants={loadTenants}
-        showToast={showToast}
-        isAdmin={Boolean(
-          currentUser?.is_admin ||
-          currentUser?.app_role === 'admin' ||
-          currentPersonnel?.role === 'admin'
-        )}
-      />
+      {/* Multi-Tenant Organization Management Modal (Admin-only) */}
+      {isStrictAdmin && (
+        <TenantsManagementModal
+          isOpen={isTenantsModalOpen}
+          onClose={() => setIsTenantsModalOpen(false)}
+          tenants={tenants}
+          activeTenantId={activeTenantId}
+          onSelectTenant={handleSelectTenant}
+          onRefreshTenants={loadTenants}
+          showToast={showToast}
+          isAdmin={isStrictAdmin}
+        />
+      )}
 
       {/* Floating System Toast Notifications */}
       {toast && (

@@ -53,6 +53,30 @@ export function resolveDirectusTenantId(rawTenant: any): number | null {
   return validIds[0] || 1;
 }
 
+export function buildDirectusTenantFilter(
+  tenantId: string | null | undefined,
+  andIdx: number
+): { clause: string; consumed: boolean } {
+  if (!tenantId || tenantId === 'all') {
+    return { clause: '', consumed: false };
+  }
+  const tenantNum = resolveDirectusTenantId(tenantId);
+  if (!tenantNum || tenantNum < 1) {
+    return { clause: '', consumed: false };
+  }
+  const defaultTenantNum = resolveDirectusTenantId('default') || 1;
+  if (tenantNum === defaultTenantNum) {
+    return {
+      clause: `&filter[_and][${andIdx}][_or][0][tenant_id][_eq]=${tenantNum}&filter[_and][${andIdx}][_or][1][tenant_id][_null]=true`,
+      consumed: true,
+    };
+  }
+  return {
+    clause: `&filter[_and][${andIdx}][tenant_id][_eq]=${tenantNum}`,
+    consumed: true,
+  };
+}
+
 const TENANT_META_MARKER_RE = /\n?<!--alphadesk_meta:(\{[\s\S]*?\})-->$/;
 
 export function sanitizeTenantSlug(rawSlug: any, fallback: string): string {

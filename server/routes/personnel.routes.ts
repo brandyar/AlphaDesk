@@ -15,6 +15,7 @@ import {
   getRequestUser,
   formatAvatarUrl,
   extractFileId,
+  matchesTenant,
 } from '../middlewares/auth.middleware.ts';
 import { invalidateDashboardSummaryCache } from './system.routes.ts';
 import { invalidateAnalyticsCache } from './analytics.routes.ts';
@@ -39,11 +40,16 @@ export function enrichPersonnel(p: any): any {
     else tName = `سازمان / شعبه ${tid}`;
   }
 
-  const allowed = Array.isArray(p.allowed_tenant_ids)
+  const explicitAllowed = Array.isArray(p.allowed_tenant_ids) && p.allowed_tenant_ids.length > 0
     ? p.allowed_tenant_ids.map(String)
-    : p.permissions?.allowed_tenant_ids && Array.isArray(p.permissions.allowed_tenant_ids)
+    : p.permissions?.allowed_tenant_ids && Array.isArray(p.permissions.allowed_tenant_ids) && p.permissions.allowed_tenant_ids.length > 0
     ? p.permissions.allowed_tenant_ids.map(String)
-    : [tid];
+    : null;
+
+  const isAdminRole = String(p.role || '').toLowerCase() === 'admin';
+  const allowed = isAdminRole
+    ? ['all']
+    : explicitAllowed || [tid];
 
   const formattedAvatar = formatAvatarUrl(p.avatar) || (typeof p.avatar === 'string' ? p.avatar : '');
 
@@ -129,7 +135,12 @@ router.get('/', async (req: Request, res: Response) => {
 
         if (tenantId && tenantId !== 'all') {
           const filtered = mapped.filter(
-            (p: any) => p.tenant_id === tenantId || p.allowed_tenant_ids?.includes(tenantId)
+            (p: any) =>
+              matchesTenant(p.tenant_id, tenantId) ||
+              (Array.isArray(p.allowed_tenant_ids) &&
+                p.allowed_tenant_ids.some(
+                  (aid: string) => aid !== 'all' && matchesTenant(aid, tenantId)
+                ))
           );
           return res.json(filtered);
         }
@@ -150,7 +161,12 @@ router.get('/', async (req: Request, res: Response) => {
 
   if (tenantId && tenantId !== 'all') {
     list = list.filter(
-      (p: any) => p.tenant_id === tenantId || p.allowed_tenant_ids?.includes(tenantId)
+      (p: any) =>
+        matchesTenant(p.tenant_id, tenantId) ||
+        (Array.isArray(p.allowed_tenant_ids) &&
+          p.allowed_tenant_ids.some(
+            (aid: string) => aid !== 'all' && matchesTenant(aid, tenantId)
+          ))
     );
   }
 

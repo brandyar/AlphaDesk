@@ -156,7 +156,12 @@ try {
 
     const pTenant = parsed.personnel?.tenant_id || parsed.user?.tenant_id;
     const pTenantName = parsed.personnel?.tenant_name || parsed.user?.tenant_name;
-    if (pTenant && (!parsed.user?.is_admin || currentTenantId === 'all' || currentTenantId === 'default' || currentTenantId === '1')) {
+    const isAdminSession = Boolean(
+      currentPersonnelContext
+        ? currentPersonnelContext.role === 'admin'
+        : currentAuthUser?.is_admin
+    );
+    if (!isAdminSession && pTenant) {
       currentTenantId = String(pTenant);
       if (pTenantName) {
         currentTenantName = String(pTenantName);
@@ -195,7 +200,8 @@ export function setActiveTenantId(id: string, name?: string) {
 export function setApiPersonnelContext(p: Personnel | null) {
   currentPersonnelContext = p;
   enforceAuthRole();
-  if (p?.tenant_id && (!currentAuthUser?.is_admin || currentTenantId === 'all')) {
+  const isAdminCtx = Boolean(p ? p.role === 'admin' : currentAuthUser?.is_admin);
+  if (!isAdminCtx && p?.tenant_id) {
     currentTenantId = String(p.tenant_id);
     if (p.tenant_name) {
       currentTenantName = String(p.tenant_name);
@@ -245,7 +251,12 @@ export function saveAuthSession(
 
   const pTenant = data.personnel?.tenant_id || data.user?.tenant_id;
   const pTenantName = data.personnel?.tenant_name || data.user?.tenant_name;
-  if (pTenant && (!data.user?.is_admin || currentTenantId === 'all')) {
+  const isAdminCtx = Boolean(
+    currentPersonnelContext
+      ? currentPersonnelContext.role === 'admin'
+      : currentAuthUser?.is_admin
+  );
+  if (!isAdminCtx && pTenant) {
     currentTenantId = String(pTenant);
     if (pTenantName) {
       currentTenantName = String(pTenantName);

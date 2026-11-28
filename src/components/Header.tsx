@@ -17,9 +17,11 @@ import {
   Sun,
   Moon,
   Laptop,
+  Check,
+  Search,
 } from 'lucide-react';
 import { Personnel, AuthUser, Tenant, Customer, CustomerReport } from '../types';
-import { getAvatarUrl, getUserAllowedTenants } from '../utils';
+import { getAvatarUrl, getUserAllowedTenants, isTenantIdMatch, isSystemAdminUser } from '../utils';
 import { ThemeToggle } from './ThemeToggle';
 import { useTheme } from '../context/ThemeContext';
 import { GlobalSearch } from './GlobalSearch';
@@ -92,27 +94,14 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isOrgMenuOpen, setIsOrgMenuOpen] = useState(false);
+  const [isProfileOrgDropdownOpen, setIsProfileOrgDropdownOpen] = useState(false);
+  const [orgSearchQuery, setOrgSearchQuery] = useState('');
   const { theme, setTheme } = useTheme();
 
-  const isGlobalAdmin = Boolean(
-    currentUser?.is_admin &&
-      (!currentPersonnel ||
-        !currentPersonnel.tenant_id ||
-        currentPersonnel.tenant_id === 'default' ||
-        currentPersonnel.tenant_id === '1' ||
-        (currentPersonnel.allowed_tenant_ids && currentPersonnel.allowed_tenant_ids.includes('all')))
-  );
-
-  const isAdmin = Boolean(
-    currentUser?.is_admin ||
-    currentUser?.app_role === 'admin' ||
-    currentPersonnel?.role === 'admin'
-  );
-
-  const canAccessTenants =
-    isGlobalAdmin ||
-    (currentPersonnel?.permissions?.can_manage_tenants ?? false) ||
-    (currentPersonnel?.permissions?.allowed_menus?.includes('tenants') ?? false);
+  // Only system admins can view or switch between organizations
+  const isStrictAdmin = isSystemAdminUser(currentPersonnel, currentUser);
+  const isAdmin = isStrictAdmin;
+  const canAccessTenants = isStrictAdmin;
 
   const getCleanString = (val?: any): string => {
     if (!val) return '';
@@ -143,23 +132,28 @@ export const Header: React.FC<HeaderProps> = ({
           },
         ];
 
-  // Determine allowed tenants for current user dynamically
+  // Determine allowed tenants for current user (strictly all for admin, only own org for non-admin)
   const userAllowedTenants = getUserAllowedTenants(currentPersonnel, currentUser, effectiveTenants);
-  const canSwitchTenants = isAdmin || isGlobalAdmin || userAllowedTenants.length > 1;
+  const canSwitchTenants = isStrictAdmin;
 
-  const activeTenant = effectiveTenants.find(
-    (t) =>
-      String(t.id) === String(activeTenantId) ||
-      (t.slug && String(t.slug) === String(activeTenantId)) ||
-      ((activeTenantId === 'default' || activeTenantId === '1') && (String(t.id) === 'default' || String(t.id) === '1'))
+  const normalizedOrgSearch = orgSearchQuery.trim().toLowerCase();
+  const filteredAllowedTenants = normalizedOrgSearch
+    ? userAllowedTenants.filter(
+        (t) =>
+          String(t.name || '').toLowerCase().includes(normalizedOrgSearch) ||
+          String(t.slug || '').toLowerCase().includes(normalizedOrgSearch)
+      )
+    : userAllowedTenants;
+
+  const activeTenant = userAllowedTenants.find((t) =>
+    isTenantIdMatch(t.id, activeTenantId, t.slug)
   );
   const activeTenantName =
-    activeTenantId === 'all'
+    activeTenantId === 'all' && isStrictAdmin
       ? 'همه سازمان‌ها (تجمیعی)'
       : activeTenant?.name ||
         (String(currentPersonnel?.tenant_id) === String(activeTenantId) ? currentPersonnel?.tenant_name : null) ||
-        userAllowedTenants.find(t => String(t.id) === String(activeTenantId))?.name ||
-        tenants.find(t => String(t.id) === String(activeTenantId))?.name ||
+        userAllowedTenants[0]?.name ||
         currentPersonnel?.tenant_name ||
         (activeTenantId === 'default' || activeTenantId === '1' ? 'سازمان مرکزی آلفادسک' : 'سازمان مرکزی');
 
@@ -210,6 +204,146 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Action Controls & User Profile */}
       <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
+        {/* Header Quick Organization Switcher (admin-only dropdown on sm+) */}
+        {currentUser && canSwitchTenants && (
+          <div className="relative hidden sm:block">
+            <button
+              type="button"
+              onClick={() => {
+                setIsProfileMenuOpen(false);
+                setIsProfileOrgDropdownOpen(false);
+                setOrgSearchQuery('');
+                setIsOrgMenuOpen((prev) => !prev);
+              }}
+              className="flex items-center gap-1.5 h-8 sm:h-9 px-2.5 sm:px-3 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#181818] dark:hover:bg-[#242424] border border-slate-200 dark:border-[#2e2e2e] hover:border-emerald-500/50 dark:hover:border-[#1DB954]/50 text-xs font-bold text-slate-800 dark:text-white transition-all cursor-pointer max-w-[190px]"
+              title="تغییر سازمان فعال"
+            >
+              <Building2 className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] shrink-0" />
+              <span className="truncate">{activeTenantName}</span>
+              <ChevronDown
+                className={`w-3 h-3 text-slate-400 dark:text-[#888] shrink-0 transition-transform ${
+                  isOrgMenuOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {isOrgMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => {
+                    setIsOrgMenuOpen(false);
+                    setOrgSearchQuery('');
+                  }}
+                />
+                <div className="absolute left-0 mt-2 w-64 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#2e2e2e] rounded-2xl shadow-2xl shadow-slate-900/15 dark:shadow-black/80 py-2 z-50 text-right">
+                  <div className="px-3.5 py-2 border-b border-slate-200 dark:border-[#282828] flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-700 dark:text-[#ccc] flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
+                      <span>انتخاب سازمان فعال</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-emerald-600 dark:text-[#1DB954]">
+                      {userAllowedTenants.length} سازمان
+                    </span>
+                  </div>
+
+                  {userAllowedTenants.length > 5 && (
+                    <div className="px-2 pt-2 pb-1">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-400 dark:text-[#777] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={orgSearchQuery}
+                          onChange={(e) => setOrgSearchQuery(e.target.value)}
+                          placeholder="جستجوی سازمان..."
+                          className="w-full pr-8 pl-2.5 py-1.5 text-xs rounded-lg bg-slate-100 dark:bg-[#121212] border border-slate-200 dark:border-[#2e2e2e] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-[#666] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954]"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="max-h-60 overflow-y-auto p-1.5 space-y-0.5">
+                    {(!normalizedOrgSearch || 'همه سازمان‌ها (تجمیعی)'.includes(normalizedOrgSearch)) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectTenant?.('all');
+                          setIsOrgMenuOpen(false);
+                          setOrgSearchQuery('');
+                        }}
+                        className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-colors cursor-pointer ${
+                          activeTenantId === 'all'
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                            : 'text-slate-700 hover:bg-slate-100 dark:text-[#ccc] dark:hover:text-white dark:hover:bg-[#242424]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 truncate">
+                          <Layers className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] shrink-0" />
+                          <span className="truncate">همه سازمان‌ها (تجمیعی)</span>
+                        </span>
+                        {activeTenantId === 'all' && (
+                          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] shrink-0" />
+                        )}
+                      </button>
+                    )}
+
+                    {filteredAllowedTenants.map((t) => {
+                      const isSelected = isTenantIdMatch(activeTenantId, t.id, t.slug);
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            onSelectTenant?.(String(t.id));
+                            setIsOrgMenuOpen(false);
+                            setOrgSearchQuery('');
+                          }}
+                          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                              : 'text-slate-700 hover:bg-slate-100 dark:text-[#ccc] dark:hover:text-white dark:hover:bg-[#242424]'
+                          }`}
+                        >
+                          <span className="truncate">{t.name}</span>
+                          {isSelected && (
+                            <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+
+                    {filteredAllowedTenants.length === 0 && normalizedOrgSearch && (
+                      <div className="px-2.5 py-3 text-center text-[11px] text-slate-400 dark:text-[#777]">
+                        سازمانی با این نام یافت نشد
+                      </div>
+                    )}
+                  </div>
+
+                  {canAccessTenants && onOpenTenantsManagement && (
+                    <div className="px-2 pt-1.5 mt-1 border-t border-slate-200 dark:border-[#282828]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsOrgMenuOpen(false);
+                          setOrgSearchQuery('');
+                          onOpenTenantsManagement();
+                        }}
+                        className="w-full px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#A7A7A7] dark:hover:text-white dark:hover:bg-[#282828] rounded-xl flex items-center justify-between transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-slate-400 dark:text-[#888]" />
+                          <span>مدیریت سازمان‌ها و شعب</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400 dark:text-[#777]">⚙</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* PWA Install Prompt Button */}
         <PWAInstallButton />
 
@@ -253,7 +387,12 @@ export const Header: React.FC<HeaderProps> = ({
         {currentUser ? (
           <div className="relative">
             <button
-              onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+              onClick={() => {
+                setIsOrgMenuOpen(false);
+                setIsProfileOrgDropdownOpen(false);
+                setOrgSearchQuery('');
+                setIsProfileMenuOpen(!isProfileMenuOpen);
+              }}
               className="flex items-center gap-1.5 sm:gap-2 pl-2 pr-1.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-[#181818] dark:hover:bg-[#222222] border border-slate-200 dark:border-[#282828] rounded-full transition-colors cursor-pointer group"
               title="حساب کاربری و سازمان"
             >
@@ -295,7 +434,11 @@ export const Header: React.FC<HeaderProps> = ({
               <>
                 <div
                   className="fixed inset-0 z-40"
-                  onClick={() => setIsProfileMenuOpen(false)}
+                  onClick={() => {
+                    setIsProfileMenuOpen(false);
+                    setIsProfileOrgDropdownOpen(false);
+                    setOrgSearchQuery('');
+                  }}
                 />
                 <div className="absolute left-0 mt-2 w-64 bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#2e2e2e] rounded-2xl shadow-2xl shadow-slate-900/10 dark:shadow-black/80 py-2 z-50 animate-fade-in text-right">
                   <div className="px-3.5 py-2 border-b border-slate-200 dark:border-[#282828]">
@@ -318,12 +461,12 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                   </div>
 
-                  {/* Active Organization & Switcher */}
+                  {/* Active Organization & Dropdown Switcher */}
                   <div className="px-3.5 py-2 border-b border-slate-200 dark:border-[#282828] space-y-1.5">
                     <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-[#777777] font-medium">
                       <span className="flex items-center gap-1.5">
                         <Building2 className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954]" />
-                        <span>سازمان فعال:</span>
+                        <span>{canSwitchTenants ? 'سازمان فعال:' : 'سازمان شما:'}</span>
                       </span>
                       {canSwitchTenants && (
                         <span className="text-[9px] font-mono text-emerald-600 dark:text-[#1DB954]">
@@ -333,25 +476,106 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
 
                     {canSwitchTenants ? (
-                      <select
-                        aria-label="انتخاب سازمان فعال"
-                        value={activeTenantId}
-                        onChange={(e) => {
-                          onSelectTenant?.(e.target.value);
-                        }}
-                        className="w-full bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#282828] rounded-lg px-2 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954] cursor-pointer"
-                      >
-                        {isAdmin && (
-                          <option value="all" className="bg-white dark:bg-[#181818] text-emerald-600 dark:text-[#1DB954] font-bold">
-                            همه سازمان‌ها (تجمیعی)
-                          </option>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsProfileOrgDropdownOpen((prev) => !prev);
+                          }}
+                          className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-[#121212] dark:hover:bg-[#1e1e1e] border border-slate-200 dark:border-[#2e2e2e] hover:border-emerald-500/50 dark:hover:border-[#1DB954]/50 text-xs font-bold text-slate-900 dark:text-white transition-colors cursor-pointer"
+                          aria-expanded={isProfileOrgDropdownOpen}
+                        >
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-[#1DB954] shrink-0" />
+                            <span className="truncate">{activeTenantName}</span>
+                          </span>
+                          <ChevronDown
+                            className={`w-3.5 h-3.5 text-slate-400 dark:text-[#888] shrink-0 transition-transform duration-150 ${
+                              isProfileOrgDropdownOpen ? 'rotate-180 text-emerald-600 dark:text-[#1DB954]' : ''
+                            }`}
+                          />
+                        </button>
+
+                        {isProfileOrgDropdownOpen && (
+                          <div className="mt-1.5 bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#333333] rounded-xl shadow-lg overflow-hidden">
+                            {userAllowedTenants.length > 5 && (
+                              <div className="p-1.5 border-b border-slate-200 dark:border-[#242424]">
+                                <div className="relative">
+                                  <Search className="w-3 h-3 text-slate-400 dark:text-[#777] absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                  <input
+                                    type="text"
+                                    value={orgSearchQuery}
+                                    onChange={(e) => setOrgSearchQuery(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    placeholder="جستجوی سازمان..."
+                                    className="w-full pr-7 pl-2 py-1 text-[11px] rounded-lg bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#2e2e2e] text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-[#666] focus:outline-none focus:border-emerald-500 dark:focus:border-[#1DB954]"
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="max-h-44 overflow-y-auto p-1 space-y-0.5">
+                              {(!normalizedOrgSearch || 'همه سازمان‌ها (تجمیعی)'.includes(normalizedOrgSearch)) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onSelectTenant?.('all');
+                                    setIsProfileOrgDropdownOpen(false);
+                                    setIsProfileMenuOpen(false);
+                                    setOrgSearchQuery('');
+                                  }}
+                                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                                    activeTenantId === 'all'
+                                      ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                                      : 'text-slate-700 hover:bg-slate-200/70 dark:text-[#ccc] dark:hover:text-white dark:hover:bg-[#222222]'
+                                  }`}
+                                >
+                                  <span className="flex items-center gap-1.5 truncate">
+                                    <Layers className="w-3 h-3 text-emerald-600 dark:text-[#1DB954] shrink-0" />
+                                    <span className="truncate">همه سازمان‌ها (تجمیعی)</span>
+                                  </span>
+                                  {activeTenantId === 'all' && (
+                                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] shrink-0" />
+                                  )}
+                                </button>
+                              )}
+
+                              {filteredAllowedTenants.map((t) => {
+                                const isSelected = isTenantIdMatch(activeTenantId, t.id, t.slug);
+                                return (
+                                  <button
+                                    key={t.id}
+                                    type="button"
+                                    onClick={() => {
+                                      onSelectTenant?.(String(t.id));
+                                      setIsProfileOrgDropdownOpen(false);
+                                      setIsProfileMenuOpen(false);
+                                      setOrgSearchQuery('');
+                                    }}
+                                    className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-[#1DB954]/15 dark:text-[#1DB954] font-bold'
+                                        : 'text-slate-700 hover:bg-slate-200/70 dark:text-[#ccc] dark:hover:text-white dark:hover:bg-[#222222]'
+                                    }`}
+                                  >
+                                    <span className="truncate">{t.name}</span>
+                                    {isSelected && (
+                                      <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-[#1DB954] shrink-0" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+
+                              {filteredAllowedTenants.length === 0 && normalizedOrgSearch && (
+                                <div className="px-2 py-2.5 text-center text-[11px] text-slate-400 dark:text-[#777]">
+                                  سازمانی با این نام یافت نشد
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         )}
-                        {userAllowedTenants.map((t) => (
-                          <option key={t.id} value={t.id} className="bg-white dark:bg-[#181818] text-slate-900 dark:text-white">
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
+                      </div>
                     ) : (
                       <div className="text-xs font-bold text-slate-900 dark:text-white bg-slate-50 dark:bg-[#121212] px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-[#282828] flex items-center justify-between">
                         <span className="truncate">{activeTenantName}</span>
@@ -363,7 +587,9 @@ export const Header: React.FC<HeaderProps> = ({
                       <button
                         type="button"
                         onClick={() => {
+                          setIsProfileOrgDropdownOpen(false);
                           setIsProfileMenuOpen(false);
+                          setOrgSearchQuery('');
                           onOpenTenantsManagement();
                         }}
                         className="w-full mt-1 px-2.5 py-1.5 text-[11px] text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-[#A7A7A7] dark:hover:text-white dark:hover:bg-[#282828] rounded-lg flex items-center justify-between transition-colors border border-slate-200 dark:border-[#282828] cursor-pointer"

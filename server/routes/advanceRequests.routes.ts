@@ -41,10 +41,7 @@ const getAdvanceRequestsHandler = async (req: Request, res: Response) => {
   }
 
   if (tenantId && tenantId !== 'all') {
-    list = list.filter((r: any) => {
-      if (!r.tenant_id) return true;
-      return matchesTenant(r.tenant_id, tenantId) || matchesTenant(r.tenant_id, '1') || matchesTenant(r.tenant_id, 'default');
-    });
+    list = list.filter((r: any) => matchesTenant(r.tenant_id, tenantId));
   }
 
   if (!isAdmin) {

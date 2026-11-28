@@ -26,6 +26,7 @@ import {
   resolvePersonnelId,
   getSafeDirectusPersonnelForeignKey,
   resolveDirectusTenantId,
+  buildDirectusTenantFilter,
   syncAllCustomersFollowupFromReports,
 } from '../directus/sync.ts';
 import {
@@ -386,7 +387,7 @@ router.get('/', async (req: Request, res: Response) => {
     const cachedList = await ensureCustomersCache().catch(() => customersData);
     updateExpirationFlags();
     let list = cachedList.map((c) => computeCustomerExpiration(c));
-    if (tenantId && tenantId !== 'all' && (isAdmin || isFreeOnly)) {
+    if (tenantId && tenantId !== 'all') {
       list = list.filter((c) => matchesTenant(c.tenant_id, tenantId));
     }
     if (!isAdmin && !canViewAllCustomers && (userId || personnelId) && !isFreeOnly) {
@@ -614,12 +615,11 @@ router.get('/', async (req: Request, res: Response) => {
       let filterQuery = '';
       let andIdx = 0;
 
-      // Tenant filter (apply cleanly for all specific numeric tenant IDs including 1)
-      if (tenantId && tenantId !== 'all') {
-        const tenantNum = resolveDirectusTenantId(tenantId);
-        if (tenantNum && tenantNum >= 1) {
-          filterQuery += `&filter[_and][${andIdx++}][tenant_id][_eq]=${tenantNum}`;
-        }
+      // Tenant filter (apply cleanly for all specific tenants including primary org)
+      const tenantFilter = buildDirectusTenantFilter(tenantId, andIdx);
+      if (tenantFilter.consumed) {
+        filterQuery += tenantFilter.clause;
+        andIdx++;
       }
 
       // Marketer scoping
@@ -845,7 +845,7 @@ router.get('/', async (req: Request, res: Response) => {
 
   updateExpirationFlags();
   let list = customersData.map((c) => computeCustomerExpiration(c));
-  if (tenantId && tenantId !== 'all' && (isAdmin || isFreeOnly)) {
+  if (tenantId && tenantId !== 'all') {
     list = list.filter((c) => matchesTenant(c.tenant_id, tenantId));
   }
   if (!isAdmin && !canViewAllCustomers && (userId || personnelId) && !isFreeOnly) {

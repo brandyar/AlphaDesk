@@ -1198,6 +1198,34 @@ export async function compressImage(
   });
 }
 
+export function isTenantIdMatch(
+  a?: string | number | null,
+  b?: string | number | null,
+  slug?: string | null
+): boolean {
+  if (a === undefined || a === null || b === undefined || b === null) return false;
+  const sA = String(a).trim();
+  const sB = String(b).trim();
+  if (!sA || !sB) return false;
+  if (sA === sB) return true;
+  if (slug && (sA === String(slug).trim() || sB === String(slug).trim())) return true;
+  if ((sA === 'default' || sA === '1') && (sB === 'default' || sB === '1')) return true;
+  return false;
+}
+
+export function isSystemAdminUser(
+  currentPersonnel?: { role?: string | null } | null,
+  currentUser?: { is_admin?: boolean; app_role?: string | null } | null
+): boolean {
+  if (currentPersonnel) {
+    return currentPersonnel.role === 'admin';
+  }
+  if (currentUser?.app_role) {
+    return currentUser.app_role === 'admin';
+  }
+  return Boolean(currentUser?.is_admin);
+}
+
 export function getUserAllowedTenants(
   currentPersonnel: any | null,
   currentUser: any | null,
@@ -1216,53 +1244,34 @@ export function getUserAllowedTenants(
           },
         ];
 
-  const rawAllowed =
-    currentPersonnel?.allowed_tenant_ids ||
-    currentPersonnel?.permissions?.allowed_tenant_ids;
-
-  // If explicit allowed_tenant_ids array is provided and not containing 'all'
-  if (Array.isArray(rawAllowed) && rawAllowed.length > 0 && !rawAllowed.includes('all')) {
-    const allowedSet = new Set(rawAllowed.map(String));
-    const matched = effectiveTenants.filter((t) => {
-      const tid = String(t.id);
-      const tslug = t.slug ? String(t.slug) : '';
-      if (allowedSet.has(tid) || (tslug && allowedSet.has(tslug))) return true;
-      if ((tid === '1' || tid === 'default') && (allowedSet.has('1') || allowedSet.has('default'))) {
-        return true;
-      }
-      return false;
-    });
-    if (matched.length > 0) return matched;
-  }
-
-  // Admin users (system admin or personnel admin) can access all tenants unless explicitly restricted above
-  const isAdminUser = Boolean(
-    currentUser?.is_admin ||
-    currentUser?.app_role === 'admin' ||
-    currentPersonnel?.role === 'admin' ||
-    (rawAllowed && Array.isArray(rawAllowed) && rawAllowed.includes('all'))
-  );
-
-  if (isAdminUser) {
+  // Only system admins can view and switch across all organizations
+  if (isSystemAdminUser(currentPersonnel, currentUser)) {
     return effectiveTenants;
   }
 
-  // Regular personnel restricted to their assigned tenant
-  let allowedIds: string[] = [];
+  // Non-admins can ONLY see the single organization they belong to
+  const assignedTenantId = currentPersonnel?.tenant_id
+    ? String(currentPersonnel.tenant_id).trim()
+    : 'default';
+
+  const matched = effectiveTenants.find((t) =>
+    isTenantIdMatch(t.id, assignedTenantId, t.slug)
+  );
+  if (matched) return [matched];
+
   if (currentPersonnel?.tenant_id) {
-    allowedIds = [String(currentPersonnel.tenant_id)];
-  } else {
-    allowedIds = ['default', '1'];
+    return [
+      {
+        id: assignedTenantId,
+        name: currentPersonnel?.tenant_name || 'سازمان شما',
+        slug: '',
+        status: 'active',
+        date_created: '',
+      },
+    ];
   }
 
-  const allowedSet = new Set(allowedIds);
-  const matched = effectiveTenants.filter((t) => {
-    const tid = String(t.id);
-    const tslug = t.slug ? String(t.slug) : '';
-    return allowedSet.has(tid) || (tslug && allowedSet.has(tslug)) || ((tid === '1' || tid === 'default') && (allowedSet.has('1') || allowedSet.has('default')));
-  });
-
-  return matched.length > 0 ? matched : effectiveTenants;
+  return [effectiveTenants[0]];
 }
 
 const CP1252_REVERSE_MAP: Record<number, number> = {

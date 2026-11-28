@@ -17,7 +17,7 @@ import {
   mapDirectusTenant,
   extractDirectusTenantIdString,
 } from '../directus/sync.ts';
-import { getRequestUser } from '../middlewares/auth.middleware.ts';
+import { getRequestUser, matchesTenant } from '../middlewares/auth.middleware.ts';
 import { Tenant } from '../types.ts';
 
 const router = Router();
@@ -58,15 +58,38 @@ router.get('/', async (req: Request, res: Response) => {
       }
     } catch {}
   }
-  res.json(tenantsData);
+
+  const reqUser = getRequestUser(req);
+  if (!reqUser.isAuthenticated) {
+    return res.json([]);
+  }
+  if (reqUser.isAdmin) {
+    return res.json(tenantsData);
+  }
+
+  // Non-admin users can ONLY see the single organization they belong to
+  const ownTenant = tenantsData.find(
+    (t) =>
+      matchesTenant(t.id, reqUser.tenantId) ||
+      (t.slug && matchesTenant(t.slug, reqUser.tenantId))
+  );
+  if (ownTenant) {
+    return res.json([ownTenant]);
+  }
+  return res.json(tenantsData.length > 0 ? [tenantsData[0]] : []);
 });
 
 router.get('/stats', async (req: Request, res: Response) => {
-  const { isAuthenticated } = getRequestUser(req);
+  const { isAuthenticated, isAdmin } = getRequestUser(req);
   if (!isAuthenticated) {
     return res
       .status(401)
       .json({ error: 'UNAUTHORIZED', message: 'احراز هویت جهت دریافت آمار سازمان‌ها الزامی است.' });
+  }
+  if (!isAdmin) {
+    return res
+      .status(403)
+      .json({ error: 'FORBIDDEN', message: 'فقط مدیر سیستم مجاز به مشاهده آمار سازمان‌ها است.' });
   }
 
   // Ensure tenants list is hydrated

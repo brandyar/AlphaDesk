@@ -12,28 +12,42 @@ import { RequestUserContext } from '../types.ts';
 
 export function matchesTenant(itemTenantId: any, activeTenantId: string): boolean {
   if (!activeTenantId || activeTenantId === 'all') return true;
+  const activeStr = String(activeTenantId).trim();
+  const primaryId = tenantsData.length > 0 ? String(tenantsData[0].id) : '1';
+  const primarySlug = tenantsData.length > 0 && tenantsData[0].slug ? String(tenantsData[0].slug) : '';
+  const isActivePrimary =
+    activeStr === 'default' ||
+    activeStr === '1' ||
+    activeStr === primaryId ||
+    (Boolean(primarySlug) && activeStr === primarySlug);
+
   const itemStr =
     typeof itemTenantId === 'object' && itemTenantId !== null
-      ? String(itemTenantId.id)
+      ? String(itemTenantId.id ?? '')
       : itemTenantId !== null && itemTenantId !== undefined
-      ? String(itemTenantId)
-      : 'all';
+      ? String(itemTenantId).trim()
+      : '';
 
-  if (itemStr === 'all' || itemStr === 'null' || itemStr === 'undefined' || itemStr === '') return true;
-  if (itemStr === activeTenantId) return true;
-  if (activeTenantId === 'default' || activeTenantId === '1') {
-    if (itemStr === 'default' || itemStr === '1') return true;
-    if (tenantsData.length > 0) {
-      if (
-        itemStr === String(tenantsData[0].id) ||
-        (tenantsData[0].slug && itemStr === tenantsData[0].slug)
-      ) {
-        return true;
-      }
+  if (itemStr === 'all') return true;
+  // Legacy records without tenant_id belong to the primary/default organization only
+  if (itemStr === '' || itemStr === 'null' || itemStr === 'undefined') {
+    return isActivePrimary;
+  }
+  if (itemStr === activeStr) return true;
+
+  if (isActivePrimary) {
+    if (
+      itemStr === 'default' ||
+      itemStr === '1' ||
+      itemStr === primaryId ||
+      (Boolean(primarySlug) && itemStr === primarySlug)
+    ) {
+      return true;
     }
   }
+
   const activeTenant = tenantsData.find(
-    (t) => String(t.id) === activeTenantId || t.slug === activeTenantId
+    (t) => String(t.id) === activeStr || (t.slug && t.slug === activeStr)
   );
   if (activeTenant) {
     if (itemStr === String(activeTenant.id) || (activeTenant.slug && itemStr === activeTenant.slug)) {
@@ -255,8 +269,19 @@ export function getRequestUser(req: Request): RequestUserContext {
 
   // System admin or personnel with admin role
   const isSystemAdmin = Boolean(
-    hasUserContext && (isMwMasterAdmin || pMatch?.role === 'admin')
+    hasUserContext && (isMwMasterAdmin || pMatch?.role === 'admin' || (!pMatch && isDirectusSystemAdmin))
   );
+
+  // Enforce strict tenant isolation server-side: non-admins can ONLY access their own organization
+  let effectiveTenantId = tenantId;
+  if (hasUserContext && !isSystemAdmin) {
+    const assignedTid = pMatch?.tenant_id ? String(pMatch.tenant_id).trim() : '';
+    if (assignedTid && assignedTid !== 'all') {
+      effectiveTenantId = assignedTid;
+    } else {
+      effectiveTenantId = tenantsData.length > 0 ? String(tenantsData[0].id) : '1';
+    }
+  }
 
   // Personnel-level admin/manager (admin or sales_manager)
   const isPersonnelAdmin = Boolean(
@@ -293,7 +318,7 @@ export function getRequestUser(req: Request): RequestUserContext {
     visibleReportPersonnelIds,
     userName: isSessionRevoked || isInactive ? '' : userName,
     userEmail: isSessionRevoked || isInactive ? '' : userEmail,
-    tenantId,
+    tenantId: effectiveTenantId,
     isAuthenticated: hasUserContext,
     isSessionRevoked,
     isDayExpired,

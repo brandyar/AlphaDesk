@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Tenant } from '../types';
 import { createTenant, updateTenant, deleteTenant } from '../api';
+import { isTenantIdMatch } from '../utils';
 
 interface TenantsManagementModalProps {
   isOpen: boolean;
@@ -334,10 +335,8 @@ export const TenantsManagementModal: React.FC<TenantsManagementModalProps> = ({
 
             <div className="grid grid-cols-1 gap-3">
               {tenants.map((t) => {
-                const isActive =
-                  activeTenantId === String(t.id) ||
-                  (activeTenantId === 'default' && (t.id === 'default' || t.id === '1'));
-                const isDefaultOrg = t.id === 'default' || t.id === '1' || t.slug === 'alphadesk-hq';
+                const isActive = isTenantIdMatch(activeTenantId, t.id, t.slug);
+                const isDefaultOrg = String(t.id) === 'default' || String(t.id) === '1' || t.slug === 'alphadesk-hq';
                 return (
                   <div
                     key={t.id}
@@ -409,8 +408,8 @@ export const TenantsManagementModal: React.FC<TenantsManagementModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            onSelectTenant(t.id);
-                            showToast(`سازمان فعال به «${t.name}» تغییر یافت.`, 'success');
+                            onSelectTenant(String(t.id));
+                            onClose();
                           }}
                           className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 dark:bg-[#242424] dark:hover:bg-[#303030] text-slate-800 dark:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-200 dark:border-[#3a3a3a] cursor-pointer"
                         >

@@ -25,7 +25,7 @@ import {
   fetchTenantsStats,
   TenantsStatsResponse,
 } from '../api';
-import { toPersianDigits } from '../utils';
+import { toPersianDigits, isTenantIdMatch } from '../utils';
 
 interface TenantsManagementViewProps {
   tenants: Tenant[];
@@ -240,7 +240,7 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
     }
   };
 
-  const activeTenant = tenants.find((t) => String(t.id) === String(activeTenantId));
+  const activeTenant = tenants.find((t) => isTenantIdMatch(t.id, activeTenantId, t.slug));
   const activeTenantName =
     activeTenantId === 'all'
       ? 'همه سازمان‌ها (تجمیعی)'
@@ -288,19 +288,21 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={() => onSelectTenant('all')}
-              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer border ${
-                activeTenantId === 'all'
-                  ? 'bg-emerald-500/15 dark:bg-[#1DB954]/20 text-emerald-700 dark:text-[#1DB954] border-emerald-500/40 dark:border-[#1DB954]/40 shadow-sm'
-                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-[#222222] dark:hover:bg-[#2a2a2a] text-slate-700 hover:text-slate-900 dark:text-[#B3B3B3] dark:hover:text-white border-slate-200 dark:border-[#333333]'
-              }`}
-            >
-              <Layers className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
-              <span>دید کلان (همه سازمان‌ها)</span>
-              {activeTenantId === 'all' && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => onSelectTenant('all')}
+                className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer border ${
+                  activeTenantId === 'all'
+                    ? 'bg-emerald-500/15 dark:bg-[#1DB954]/20 text-emerald-700 dark:text-[#1DB954] border-emerald-500/40 dark:border-[#1DB954]/40 shadow-sm'
+                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-[#222222] dark:hover:bg-[#2a2a2a] text-slate-700 hover:text-slate-900 dark:text-[#B3B3B3] dark:hover:text-white border-slate-200 dark:border-[#333333]'
+                }`}
+              >
+                <Layers className="w-4 h-4 text-emerald-600 dark:text-[#1DB954]" />
+                <span>دید کلان (همه سازمان‌ها)</span>
+                {activeTenantId === 'all' && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+              </button>
+            )}
           </div>
         </div>
 
@@ -523,10 +525,8 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {tenants.map((t) => {
-              const isSelected =
-                activeTenantId === String(t.id) ||
-                (activeTenantId === 'default' && (t.id === 'default' || t.id === '1'));
-              const isDefaultOrg = t.id === 'default' || t.id === '1' || t.slug === 'alphadesk-hq';
+              const isSelected = isTenantIdMatch(activeTenantId, t.id, t.slug);
+              const isDefaultOrg = String(t.id) === 'default' || String(t.id) === '1' || t.slug === 'alphadesk-hq';
               const tenantMetrics =
                 stats?.per_tenant?.[String(t.id)] ||
                 (isDefaultOrg ? stats?.per_tenant?.['default'] || stats?.per_tenant?.['1'] : undefined);
@@ -669,7 +669,6 @@ export const TenantsManagementView: React.FC<TenantsManagementViewProps> = ({
                           type="button"
                           onClick={() => {
                             onSelectTenant(String(t.id));
-                            showToast(`سازمان فعال به «${t.name}» تغییر یافت.`, 'success');
                           }}
                           className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#222222] dark:hover:bg-[#2e2e2e] text-slate-800 hover:text-emerald-700 dark:text-white dark:hover:text-[#1DB954] text-xs font-bold flex items-center gap-1.5 transition-all border border-slate-200 dark:border-[#333333] cursor-pointer"
                         >

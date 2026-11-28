@@ -28,7 +28,7 @@ import {
   Award,
 } from 'lucide-react';
 import { Personnel, AuthUser, TeamSubTab, Tenant } from '../types';
-import { getAvatarUrl, getUserAllowedTenants } from '../utils';
+import { getAvatarUrl, getUserAllowedTenants, isTenantIdMatch, isSystemAdminUser } from '../utils';
 
 export type NavTab =
   | 'dashboard'
@@ -120,23 +120,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
           },
         ];
 
-  // Determine allowed tenants for current user dynamically
-  const userAllowedTenants = getUserAllowedTenants(currentPersonnel, isAdmin ? { is_admin: true } : null, effectiveTenants);
-  const canSwitchTenants = userAllowedTenants.length > 1;
+  // Only system admins can view or switch across organizations
+  const isStrictAdmin = isSystemAdminUser(
+    currentPersonnel,
+    currentUser || (isAdmin ? { is_admin: true, app_role: 'admin' } : null)
+  );
+  const userAllowedTenants = getUserAllowedTenants(
+    currentPersonnel,
+    currentUser || (isAdmin ? { is_admin: true, app_role: 'admin' } : null),
+    effectiveTenants
+  );
+  const canSwitchTenants = isStrictAdmin;
 
-  const activeTenant = effectiveTenants.find(
-    (t) =>
-      String(t.id) === String(activeTenantId) ||
-      (t.slug && String(t.slug) === String(activeTenantId)) ||
-      ((activeTenantId === 'default' || activeTenantId === '1') && (String(t.id) === 'default' || String(t.id) === '1'))
+  const activeTenant = userAllowedTenants.find((t) =>
+    isTenantIdMatch(t.id, activeTenantId, t.slug)
   );
   const activeTenantName =
-    activeTenantId === 'all'
+    activeTenantId === 'all' && isStrictAdmin
       ? 'همه سازمان‌ها (تجمیعی)'
       : activeTenant?.name ||
         (String(currentPersonnel?.tenant_id) === String(activeTenantId) ? currentPersonnel?.tenant_name : null) ||
-        userAllowedTenants.find(t => String(t.id) === String(activeTenantId))?.name ||
-        tenants.find(t => String(t.id) === String(activeTenantId))?.name ||
+        userAllowedTenants[0]?.name ||
         currentPersonnel?.tenant_name ||
         (activeTenantId === 'default' || activeTenantId === '1' ? 'سازمان مرکزی آلفادسک' : 'سازمان مرکزی');
 
@@ -199,6 +203,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Granular menu permission helper
   const isMenuAllowed = (menuId: string): boolean => {
+    if (menuId === 'tenants') {
+      return isStrictAdmin;
+    }
     if (isAdmin && !currentPersonnel) return true; // Global system admin
     if (menuId === 'payroll' && currentPersonnel?.permissions?.can_approve_bonuses) {
       return true;
@@ -206,7 +213,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (currentPersonnel?.permissions?.allowed_menus && Array.isArray(currentPersonnel.permissions.allowed_menus)) {
       return currentPersonnel.permissions.allowed_menus.includes(menuId);
     }
-    if (menuId === 'team' || menuId === 'tenants') {
+    if (menuId === 'team') {
       return Boolean(isAdmin || currentPersonnel?.role === 'admin' || currentPersonnel?.role === 'sales_manager');
     }
     if (menuId === 'payroll') {
@@ -219,10 +226,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const visibleNavItems = navItems.filter((item) => isMenuAllowed(item.id));
   const canAccessTeam = isMenuAllowed('team');
   const canAccessPortal = isMenuAllowed('personal_portal');
-  const canAccessTenants =
-    (isAdmin && !currentPersonnel) ||
-    isMenuAllowed('tenants') ||
-    (currentPersonnel?.permissions?.can_manage_tenants ?? false);
+  const canAccessTenants = isStrictAdmin;
 
   return (
     <>
@@ -237,7 +241,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Main Sidebar Element */}
       <aside
-        className={`fixed top-0 bottom-0 right-0 z-[70] w-72 max-w-[85vw] bg-white dark:bg-[#000000] h-[100dvh] pt-safe pb-safe flex flex-col border-l border-slate-200 dark:border-[#282828] select-none transition-all duration-300 ease-in-out lg:static lg:z-auto lg:w-64 lg:h-[100dvh] lg:pt-0 lg:pb-0 lg:flex-shrink-0 lg:translate-x-0 lg:opacity-100 lg:visible lg:pointer-events-auto ${
+        className={`fixed inset-y-0 right-0 z-[70] w-72 max-w-[85vw] bg-white dark:bg-[#000000] h-full pt-safe pb-safe flex flex-col border-l border-slate-200 dark:border-[#282828] select-none transition-all duration-300 ease-in-out lg:static lg:z-auto lg:w-64 lg:h-full lg:pt-0 lg:pb-0 lg:flex-shrink-0 lg:translate-x-0 lg:opacity-100 lg:visible lg:pointer-events-auto ${
           isOpenMobile
             ? 'translate-x-0 opacity-100 visible pointer-events-auto shadow-2xl'
             : 'translate-x-full opacity-0 invisible pointer-events-none'
@@ -327,7 +331,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
 
                 <div className="max-h-48 overflow-y-auto space-y-0.5 py-1">
-                  {isAdmin && (
+                  {isStrictAdmin && (
                     <button
                       onClick={() => {
                         onSelectTenant?.('all');
@@ -348,9 +352,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   )}
 
                   {userAllowedTenants.map((t) => {
-                    const isSelected =
-                      activeTenantId === String(t.id) ||
-                      (activeTenantId === 'default' && (t.id === 'default' || t.id === '1'));
+                    const isSelected = isTenantIdMatch(activeTenantId, t.id, t.slug);
                     return (
                       <button
                         key={t.id}

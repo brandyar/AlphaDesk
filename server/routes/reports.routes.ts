@@ -13,7 +13,7 @@ import {
   invalidateCustomersCache,
   invalidateReportsCache,
 } from '../directus/cache.ts';
-import { getSafeDirectusPersonnelForeignKey, resolveDirectusTenantId } from '../directus/sync.ts';
+import { getSafeDirectusPersonnelForeignKey, resolveDirectusTenantId, buildDirectusTenantFilter } from '../directus/sync.ts';
 import { cleanCustomerPayloadForDirectus, normalizePersianString } from '../services/phoneNormalizer.ts';
 import { getRequestUser, getRequestTenantId, matchesTenant } from '../middlewares/auth.middleware.ts';
 import {
@@ -317,12 +317,11 @@ router.get('/', async (req: Request, res: Response) => {
 
       let andIdx = 0;
 
-      // Tenant filter: Only apply if a specific secondary branch (tenantNum > 1) is active
-      if (tenantId && tenantId !== 'all') {
-        const tenantNum = resolveDirectusTenantId(tenantId);
-        if (tenantNum && tenantNum > 1) {
-          directusPath += `&filter[_and][${andIdx++}][tenant_id][_eq]=${tenantNum}`;
-        }
+      // Tenant filter: apply cleanly for all specific tenants including primary org
+      const tFilter = buildDirectusTenantFilter(tenantId, andIdx);
+      if (tFilter.consumed) {
+        directusPath += tFilter.clause;
+        andIdx++;
       }
 
       if (customer_id) {

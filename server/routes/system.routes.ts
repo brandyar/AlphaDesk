@@ -25,6 +25,7 @@ import { getRequestUser, getRequestTenantId, extractFileId, formatAvatarUrl } fr
 import { invalidateCustomersCache, invalidateReportsCache } from '../directus/cache.ts';
 import {
   resolveDirectusTenantId,
+  buildDirectusTenantFilter,
   backfillNullTenantsDirectus,
   parseSmsPhones,
   extractDirectusTenantIdString,
@@ -93,9 +94,8 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
 
   if (directusUrl && directusAdminToken && !isDirectusCircuitOpen()) {
     try {
-      const tenantNum = tenantId && tenantId !== 'all' ? resolveDirectusTenantId(tenantId) : null;
-      const hasSecondaryTenant = Boolean(tenantNum && tenantNum > 1);
-      const tenantFilterStr = hasSecondaryTenant ? `&filter[tenant_id][_eq]=${tenantNum}` : '';
+      const tenantFilterAt0 = buildDirectusTenantFilter(tenantId, 0);
+      const tenantFilterStr = tenantFilterAt0.consumed ? tenantFilterAt0.clause : '';
 
       const cleanPId = personnelId ? String(personnelId).trim().toLowerCase() : '';
       const rawUid = cleanPId.replace(/^p-/, '');
@@ -116,8 +116,10 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
       const buildCustFilter = (extraClauses: string[] = []): string => {
         let idx = 0;
         let out = '';
-        if (hasSecondaryTenant) {
-          out += `&filter[_and][${idx++}][tenant_id][_eq]=${tenantNum}`;
+        const tFilter = buildDirectusTenantFilter(tenantId, idx);
+        if (tFilter.consumed) {
+          out += tFilter.clause;
+          idx++;
         }
         if (!canViewAll) {
           let orIdx = 0;
@@ -149,8 +151,10 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
       const buildRepFilter = (includeContractClause = false): string => {
         let idx = 0;
         let out = '';
-        if (hasSecondaryTenant) {
-          out += `&filter[_and][${idx++}][tenant_id][_eq]=${tenantNum}`;
+        const tFilter = buildDirectusTenantFilter(tenantId, idx);
+        if (tFilter.consumed) {
+          out += tFilter.clause;
+          idx++;
         }
         if (!canViewAll) {
           let orIdx = 0;
@@ -174,13 +178,16 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
         return out;
       };
 
-      const marketerLeadFilter = !canViewAll && cleanPId ? `&filter[assigned_to][_eq]=${encodeURIComponent(cleanPId)}` : '';
-
       const baseCustFilter = buildCustFilter();
       const expiredCustFilter = buildCustFilter([`&filter[_and][__IDX__][is_expired][_eq]=true`]);
       const contractCustFilter = buildCustFilter([`&filter[_and][__IDX__][status][_in]=${contractStatusIn}`]);
       const baseRepFilter = buildRepFilter(false);
       const contractRepFilter = buildRepFilter(true);
+
+      const nextTenantIdx = tenantFilterAt0.consumed ? 1 : 0;
+      const freeCustFilter = `${tenantFilterStr}&filter[_and][${nextTenantIdx}][_or][0][assigned_marketer_id][_null]=true&filter[_and][${nextTenantIdx}][_or][1][is_expired][_eq]=true`;
+      const pendingStatusFilter = `${tenantFilterStr}&filter[_and][${nextTenantIdx}][status][_eq]=pending`;
+      const leadFilter = `${tenantFilterStr}${!canViewAll && cleanPId ? `&filter[_and][${nextTenantIdx}][assigned_to][_eq]=${encodeURIComponent(cleanPId)}` : ''}`;
 
       // Fast, lightweight parallel queries
       const [
@@ -196,7 +203,7 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
         pendingAdvancesRes,
       ] = await Promise.all([
         directusFetch(`/items/customers?limit=1&meta=filter_count${baseCustFilter}`).catch(() => null),
-        directusFetch(`/items/customers?limit=1&meta=filter_count&filter[_or][0][assigned_marketer_id][_null]=true&filter[_or][1][is_expired][_eq]=true${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/customers?limit=1&meta=filter_count${freeCustFilter}`).catch(() => null),
         directusFetch(`/items/customers?limit=1&meta=filter_count${expiredCustFilter}`).catch(() => null),
         directusFetch(`/items/customers?limit=1&meta=filter_count${contractCustFilter}`).catch(() => null),
         directusFetch(`/items/customer_reports?aggregate[count]=*&aggregate[sum]=contract_amount&aggregate[avg]=negotiation_score${baseRepFilter}`).catch((e) => {
@@ -207,10 +214,10 @@ const handleDashboardSummary = async (req: Request, res: Response) => {
           console.warn('[Dashboard Summary] contractReportsAggregateRes error:', e?.message);
           return null;
         }),
-        directusFetch(`/items/cold_leads?limit=1&meta=filter_count${tenantFilterStr}${marketerLeadFilter}`).catch(() => null),
+        directusFetch(`/items/cold_leads?limit=1&meta=filter_count${leadFilter}`).catch(() => null),
         directusFetch(`/items/administrative_reports?limit=1&meta=filter_count${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/leave_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
-        directusFetch(`/items/advance_requests?limit=1&meta=filter_count&filter[status][_eq]=pending${tenantFilterStr}`).catch(() => null),
+        directusFetch(`/items/leave_requests?limit=1&meta=filter_count${pendingStatusFilter}`).catch(() => null),
+        directusFetch(`/items/advance_requests?limit=1&meta=filter_count${pendingStatusFilter}`).catch(() => null),
       ]);
 
       const extractCount = (v: any): number => {

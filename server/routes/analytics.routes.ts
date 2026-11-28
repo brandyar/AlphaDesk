@@ -8,7 +8,7 @@ import {
 } from '../config.ts';
 import { directusFetch, directusFetchAllPages } from '../directus/client.ts';
 import { ensureReportsCache, ensureCustomersCache } from '../directus/cache.ts';
-import { resolveDirectusTenantId } from '../directus/sync.ts';
+import { resolveDirectusTenantId, buildDirectusTenantFilter } from '../directus/sync.ts';
 import { getRequestUser } from '../middlewares/auth.middleware.ts';
 import { normalizePersianString } from '../services/phoneNormalizer.ts';
 
@@ -68,12 +68,11 @@ function buildAnalyticsReportFilter(params: {
   let filterParams = '';
   let andIdx = 0;
 
-  // Tenant filter: only apply for secondary branches (tenantNum > 1), matching reports.routes.ts & system.routes.ts
-  if (params.tenantId && params.tenantId !== 'all') {
-    const tenantNum = resolveDirectusTenantId(params.tenantId);
-    if (tenantNum && tenantNum > 1) {
-      filterParams += `&filter[_and][${andIdx++}][tenant_id][_eq]=${tenantNum}`;
-    }
+  // Tenant filter: apply cleanly for all specific tenants including primary org
+  const tFilter = buildDirectusTenantFilter(params.tenantId, andIdx);
+  if (tFilter.consumed) {
+    filterParams += tFilter.clause;
+    andIdx++;
   }
 
   if (params.startDate) {
@@ -777,14 +776,13 @@ router.get(['/daily', '/api/analytics/daily'], async (req: Request, res: Respons
         userId,
       });
 
-      // Build customer assignment count filter with proper tenantNum > 1 and staff ownership matching
+      // Build customer assignment count filter with proper tenant isolation and staff ownership matching
       let custFilterParams = '';
       let custAndIdx = 0;
-      if (tenantId && tenantId !== 'all') {
-        const tenantNum = resolveDirectusTenantId(tenantId);
-        if (tenantNum && tenantNum > 1) {
-          custFilterParams += `&filter[_and][${custAndIdx++}][tenant_id][_eq]=${tenantNum}`;
-        }
+      const custTFilter = buildDirectusTenantFilter(tenantId, custAndIdx);
+      if (custTFilter.consumed) {
+        custFilterParams += custTFilter.clause;
+        custAndIdx++;
       }
       if (!canViewAllAnalytics) {
         let cOr = 0;
